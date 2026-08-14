@@ -1,24 +1,15 @@
 "use client";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useLayoutEffect, useRef } from "react";
+import { motion } from "framer-motion";
 import { useLocale } from "./LocaleProvider";
-import { config } from "../_generated/config";
+import { Crew } from "./Crew";
 
-const RSVP_KEY = "pixl-rsvped";
+const PLAY_URL = "https://pixl.hackclub.com/play";
 
 export function Hero() {
   const { dict } = useLocale();
   const t = dict.hero;
-  const [email, setEmail] = useState("");
-  const [shake, setShake] = useState(false);
-  const [msg, setMsg] = useState("");
-  const [rsvped, setRsvped] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
-  const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-
-  useEffect(() => {
-    if (localStorage.getItem(RSVP_KEY)) setRsvped(true);
-  }, []);
 
   useLayoutEffect(() => {
     const video = videoRef.current;
@@ -47,39 +38,6 @@ export function Hero() {
       events.forEach((e) => window.removeEventListener(e, onInteract));
     };
   }, []);
-
-  async function handleRSVP() {
-    if (rsvped) {
-      window.open(`https://rsvp.soon.it/pixl`, "_blank");
-      return;
-    }
-    if (!email) {
-      triggerError(t.errorNoEmail);
-      return;
-    }
-    if (!isValid) {
-      triggerError(t.errorInvalidEmail);
-      return;
-    }
-
-    await fetch("/api/rsvp", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-    });
-
-    localStorage.setItem(RSVP_KEY, "1");
-    setRsvped(true);
-
-    window.open(`https://rsvp.soon.it/pixl`, "_blank");
-  }
-
-  function triggerError(message: string) {
-    setMsg(message);
-    setShake(true);
-    setTimeout(() => setShake(false), 500);
-    setTimeout(() => setMsg(""), 3000);
-  }
 
   return (
     <div className="relative h-screen">
@@ -127,68 +85,20 @@ export function Hero() {
             Pixl
           </motion.p>
           <motion.div
-            className="flex flex-col w-full"
+            className="flex flex-col items-center w-full"
             initial={{ opacity: 0, y: 32 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1], delay: 0.7 }}
           >
-            {rsvped ? (
-              <div className="flex flex-col items-center self-center bg-[#ec3750] px-24 py-1.5 text-white border-black border-r-8 border-t-2 border-l-2 border-b-8">
-                <p className="text-base sm:text-lg text-center">
-                  {t.alreadyIn}
-                </p>
-                <button
-                  onClick={() => window.open(`https://rsvp.soon.it/pixl`, "_blank")}
-                  className="text-xs underline cursor-pointer opacity-80 hover:opacity-100"
-                >
-                  {t.viewYourRsvp}
-                </button>
-              </div>
-            ) : (
-              <motion.div
-                className="flex w-full"
-                animate={shake ? { x: [0, -10, 10, -8, 8, -4, 4, 0] } : {}}
-                transition={{ duration: 0.4 }}
-              >
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleRSVP()}
-                  className="w-full px-5 py-3 text-lg sm:text-2xl md:text-3xl focus:outline-0 bg-[#ec3750] text-white transition-all placeholder:text-white/60"
-                  placeholder={t.placeholder}
-                />
-                <motion.button
-                  onClick={handleRSVP}
-                  className="text-center w-[30%] px-5 py-3 text-lg sm:text-2xl md:text-3xl bg-[#ec3750] cursor-pointer text-white hover:-translate-y-1 hover:-translate-x-1 border-black border-r-8 border-t-2 border-l-2 hover:border-b-12 border-b-8 transition-all"
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                >
-                  {t.rsvp}
-                </motion.button>
-              </motion.div>
-            )}
-            {/* Straight into the Builder Terminal for anyone who already has an
-                account, so returning players don't have to hunt for it. */}
-            <a
-              href={`${config.urls.site}/dashboard`}
-              className="mt-3 self-center text-center px-6 py-2 text-base sm:text-lg md:text-xl bg-black text-white cursor-pointer hover:-translate-y-1 hover:-translate-x-1 border-black border-r-8 border-t-2 border-l-2 hover:border-b-12 border-b-8 transition-all"
+            <motion.a
+              href={PLAY_URL}
+              className="text-center font-pixel px-8 py-3 sm:px-12 sm:py-4 text-2xl sm:text-4xl md:text-5xl bg-[#F5EED2] cursor-pointer text-black border-black border-r-8 border-t-2 border-l-2 border-b-8 hover:border-b-12 hover:-translate-y-1 hover:-translate-x-1 transition-all"
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
             >
-              {t.openDash}
-            </a>
-            <AnimatePresence>
-              {msg && (
-                <motion.p
-                  className="text-black text-sm mt-2 pl-1"
-                  initial={{ opacity: 0, y: -6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  {msg}
-                </motion.p>
-              )}
-            </AnimatePresence>
+              enter the YSWS
+            </motion.a>
+            <Crew />
           </motion.div>
         </div>
         <motion.div

@@ -557,5 +557,9 @@
     "madeWithLove": "Pixl está hecho con ♥ por adolescentes para adolescentes",
     "addSomething": "¿quieres añadir algo? Haz un PR en",
     "github": "GitHub"
+  },
+  "team": {
+    "by": "creado por",
+    "sponsors": "patrocinadores"
   }
 }
