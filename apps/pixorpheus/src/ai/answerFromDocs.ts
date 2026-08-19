@@ -111,6 +111,7 @@ export async function answerQuestion(rawQuestion: string): Promise<DocsAnswer | 
             "You are pixo, the Pixl help bot. Answer the user's question using ONLY the Pixl docs provided below. " +
             "Be concise, friendly and clear (casual lowercase is fine, no markdown headers, 1-4 sentences). " +
             `If the docs do not contain the answer, reply with exactly ${NO_ANSWER} and nothing else. ` +
+            "If the question is something simple that is not in the docs due to it being too simple/too generalised, you may use this to answer too." +
             "Never invent facts that aren't in the docs.\n\n=== PIXL DOCS ===\n" +
             corpus,
         },
