@@ -101,7 +101,7 @@ export function renderPage({ doc, nav, siteUrl, prev, next }: PageInput): string
         ${prev ? `<a class="prev" href="/docs/${prev.slug}/"><span class="dir">Previous</span><span class="ttl">${esc(prev.title)}</span></a>` : ""}
         ${next ? `<a class="next" href="/docs/${next.slug}/"><span class="dir">Next</span><span class="ttl">${esc(next.title)}</span></a>` : ""}
       </div>
-      <div class="doc-sign">Built by the Pixl team</div>
+      <div class="doc-sign">${["Start here", "Resources", "Guides", "Setup"].includes(doc.meta.group) ? "Built by alexx" : "Built by the Pixl team"}</div>
     </article>
   </main>
 
