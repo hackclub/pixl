@@ -40,6 +40,8 @@
     { "source": "/refers/:path*", "destination": "https://play.pixl.rsvp/refers/:path*" },
     { "source": "/account", "destination": "https://play.pixl.rsvp/account/" },
     { "source": "/account/:path*", "destination": "https://play.pixl.rsvp/account/:path*" },
+    { "source": "/calc", "destination": "https://play.pixl.rsvp/calc/" },
+    { "source": "/calc/:path*", "destination": "https://play.pixl.rsvp/calc/:path*" },
 
     { "source": "/pixl.css", "destination": "https://play.pixl.rsvp/pixl.css" },
     { "source": "/pixl.js", "destination": "https://play.pixl.rsvp/pixl.js" },
