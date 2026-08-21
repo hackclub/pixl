@@ -1416,7 +1416,7 @@
     <div class="ht-bar panel">
       <span class="ht-dot on"></span>
       <span>HACKATIME CONNECTED</span>
-      <span class="teal">${Pixl.hours(stats.totalSeconds)} total</span>
+      <span class="teal">${Pixl.hours(stats.projects.reduce((s, h) => s + (h.secondsSinceCutoff ?? h.seconds), 0))} since ${HT_CUTOFF_LABEL}</span>
       <span class="faint">·</span>
       <span class="muted">${stats.projects.length} tracked</span>
       <button class="btn ghost" style="margin-left:auto" id="ht-toggle">TIME PER PROJECT ▾</button>
