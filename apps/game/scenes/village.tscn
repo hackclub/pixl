@@ -2707,7 +2707,7 @@ text = "Press E to open lobbies"
 
 [node name="DoorTrigger5" type="Area2D" parent="." unique_id=990011401]
 z_index = 13
-position = Vector2(20, -100)
+position = Vector2(-321, -45)
 collision_mask = 2
 script = ExtResource("44_ci1yp")
 target = "character"
