@@ -264,7 +264,7 @@ const Pixl = (() => {
     // Must match MAX_MODERATE_BYTES in apps/server/src/imageModeration.ts —
     // that's the hard server-side cap, so reject early instead of making the
     // caller wait on an upload that's guaranteed to 413.
-    if (file && file.size > 5_000_000) throw new Error("file_too_large");
+    if (file && file.size > 15_000_000) throw new Error("file_too_large");
     const res = await fetch(apiUrl("/api/uploads"), {
       method: "POST",
       headers: { "Content-Type": file.type || "image/png" },
