@@ -447,14 +447,18 @@ export default async function ReviewDetail({
                     </div>
                     <div>
                       <span className="text-muted-foreground">Age:</span>{" "}
-                      {builderAge != null ? `${builderAge}${birthday ? ` (born ${birthday})` : ""}` : "—"}
+                      {builderAge != null
+                        ? `${builderAge}${isFinalStage && birthday ? ` (born ${birthday})` : ""}`
+                        : "—"}
                     </div>
                     <div>
                       <span className="text-muted-foreground">Country:</span> {country || "—"}
                     </div>
-                    <div className="sm:col-span-2">
-                      <span className="text-muted-foreground">Address:</span> {address}
-                    </div>
+                    {isFinalStage && (
+                      <div className="sm:col-span-2">
+                        <span className="text-muted-foreground">Address:</span> {address}
+                      </div>
+                    )}
                   </div>
                 </details>
               </div>
