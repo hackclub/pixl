@@ -157,7 +157,7 @@ export default async function RootLayout({
               orderCount={orderCount}
             />
 
-            <main className="flex-1 min-w-0 overflow-x-hidden flex flex-col gap-4">
+            <main className="flex-1 min-w-0 overflow-x-clip flex flex-col gap-4">
               <div className="bg-command-background/40 backdrop-blur-xl backdrop-saturate-150 shadow-2xl shadow-black/30 w-full h-10 fixed z-100 p-2">
                 <SidebarTrigger />
               </div>
