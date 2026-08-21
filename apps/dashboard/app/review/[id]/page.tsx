@@ -94,7 +94,13 @@ export default async function ReviewDetail({
   const projectId = Number(id);
   if (!Number.isFinite(projectId)) notFound();
 
-  const data = await getProject(projectId);
+  // getProject and listCollaboratorsForProject don't depend on each other
+  // (the latter only needs projectId), so they run together instead of one
+  // after the other.
+  const [data, allCollaborators] = await Promise.all([
+    getProject(projectId),
+    listCollaboratorsForProject(projectId),
+  ]);
   if (!data) notFound();
   const { project: p, journals, verdicts } = data;
   // The Trial this project was shipped for, if the player flagged one at ship
@@ -107,10 +113,32 @@ export default async function ReviewDetail({
   const isOwn = !!p.users?.slack_id && p.users.slack_id === viewer && !access.isSuper;
   const canReview =
     (p.status === "shipped" && !isOwn) || (isFinalStage && canSecondPass);
+  const shippedAt = (p as { shipped_at?: string | null }).shipped_at ?? null;
 
-  const claim = canReview
-    ? await claimReview(projectId, viewer)
-    : { ok: true as const, by: undefined };
+  // Everything below only depends on `p` (already resolved above), not on
+  // each other, so they run concurrently rather than as a chain of
+  // sequential round-trips - same conditions and fallbacks as before, just
+  // not waited on one at a time.
+  const [claim, playerReBefore, firstPassAuditNote, bountyEventsResult] = await Promise.all([
+    canReview
+      ? claimReview(projectId, viewer)
+      : Promise.resolve({ ok: true as const, by: undefined }),
+    // The RE the player already holds, excluding this project — this is what
+    // sets the rate they'll be paid at, so the reviewer sees it before deciding.
+    lifetimeRe(p.user_id, projectId),
+    // So the final reviewer starts from what the first reviewer already wrote
+    // instead of a blank form - they can still edit or overturn any of it.
+    isFinalStage && p.first_pass_by ? getFirstPassAuditNote(projectId) : Promise.resolve(null),
+    shippedAt
+      ? db
+          .from("events")
+          .select("*")
+          .eq("type", "bounty")
+          .is("stopped_at", null)
+          .lte("starts_at", shippedAt)
+          .gt("ends_at", shippedAt)
+      : Promise.resolve({ data: [] as { id: number; name: string; config: Record<string, unknown> }[] }),
+  ]);
   const claimHandle = !claim.ok && claim.by ? await slackHandle(claim.by) : null;
 
   const journalHours =
@@ -119,14 +147,9 @@ export default async function ReviewDetail({
   const hours = Math.round((hackatimeHours + journalHours) * 10) / 10;
   const htPct = hours > 0 ? Math.round((hackatimeHours / hours) * 100) : 0;
 
-  // The RE the player already holds, excluding this project — this is what sets
-  // the rate they'll be paid at, so the reviewer sees it before deciding.
-  const playerReBefore = await lifetimeRe(p.user_id, projectId);
-
   // Same "hackatime if tracked, else journal" source-of-truth as
   // claimedHoursFor() in actions.ts uses for the owner — kept consistent so
   // the cap shown here matches what reviewProject actually enforces.
-  const allCollaborators = await listCollaboratorsForProject(projectId);
   const acceptedCollaborators = allCollaborators.filter((c) => c.status === "accepted");
   const collaboratorHours = acceptedCollaborators.map((c) => {
     const cJournalHours =
@@ -146,12 +169,7 @@ export default async function ReviewDetail({
   const formDefaultHours =
     isFinalStage && p.first_pass_hours != null ? p.first_pass_hours : hours;
 
-  // So the final reviewer starts from what the first reviewer already wrote
-  // instead of a blank form - they can still edit or overturn any of it.
-  const firstPassAudit =
-    isFinalStage && p.first_pass_by
-      ? parseAuditNote((await getFirstPassAuditNote(projectId)) ?? "")
-      : null;
+  const firstPassAudit = firstPassAuditNote ? parseAuditNote(firstPassAuditNote) : null;
 
   const firstPassDeflated =
     p.first_pass_hours != null ? Math.round((hours - p.first_pass_hours) * 10) / 10 : 0;
@@ -160,28 +178,17 @@ export default async function ReviewDetail({
       ? Math.round(((hours - p.first_pass_hours) / hours) * 100)
       : 0;
 
-  const shippedAt = (p as { shipped_at?: string | null }).shipped_at ?? null;
   const ageFlag = turnedNineteenSinceShipping(p.users?.birthday, shippedAt);
-  let bounties: BountyOption[] = [];
-  if (shippedAt) {
-    const { data: bountyEvents } = await db
-      .from("events")
-      .select("*")
-      .eq("type", "bounty")
-      .is("stopped_at", null)
-      .lte("starts_at", shippedAt)
-      .gt("ends_at", shippedAt);
-    bounties = ((bountyEvents ?? []) as {
-      id: number;
-      name: string;
-      config: Record<string, unknown>;
-    }[]).map((ev) => ({
-      id: ev.id,
-      name: ev.name,
-      reward: Number(ev.config.reward) || 0,
-      description: String(ev.config.description ?? ""),
-    }));
-  }
+  const bounties: BountyOption[] = ((bountyEventsResult.data ?? []) as {
+    id: number;
+    name: string;
+    config: Record<string, unknown>;
+  }[]).map((ev) => ({
+    id: ev.id,
+    name: ev.name,
+    reward: Number(ev.config.reward) || 0,
+    description: String(ev.config.description ?? ""),
+  }));
 
   // These calls hit GitHub, Hackatime, the YSWS archive, Slack and the DB.
   // They're independent, so run them concurrently , the page is only as slow as

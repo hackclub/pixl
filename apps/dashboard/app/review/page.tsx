@@ -42,14 +42,15 @@ export default async function ReviewListPage({
   const kind: "software" | "hardware" = rawKind === "hardware" ? "hardware" : "software";
   const kindQ = kind === "hardware" ? "&kind=hardware" : "";
 
-  const finalRows = access.canSecondPass ? await listSecondReviewProjects(viewer, kind) : [];
-  const fraudRows = access.canSecondPass ? await listFraudReviewProjects() : [];
-  const finalHandles = finalRows.length
-    ? await slackHandles(finalRows.map((p) => p.users?.slack_id))
-    : new Map<string, string>();
-
-  const myRecent = await listReviewAudits(5, viewer);
-  let rows = await listShippedProjects(viewer, kind);
+  // None of these four depend on each other's result, so they run together
+  // instead of as a chain of sequential round-trips.
+  const [finalRows, fraudRows, myRecent, rowsRaw] = await Promise.all([
+    access.canSecondPass ? listSecondReviewProjects(viewer, kind) : Promise.resolve([]),
+    access.canSecondPass ? listFraudReviewProjects() : Promise.resolve([]),
+    listReviewAudits(5, viewer),
+    listShippedProjects(viewer, kind),
+  ]);
+  let rows = rowsRaw;
   if (sort === "hours") rows = [...rows].sort((a, b) => b.hours - a.hours);
   else if (sort === "status") rows = [...rows].sort((a, b) => a.status.localeCompare(b.status));
 
@@ -58,7 +59,12 @@ export default async function ReviewListPage({
   const cur = Math.min(Math.max(parseInt(page ?? "1", 10) || 1, 1), pages);
   const start = (cur - 1) * PER;
   const slice = rows.slice(start, start + PER);
-  const handles = await slackHandles(slice.map((p) => p.users?.slack_id));
+  const [finalHandles, handles] = await Promise.all([
+    finalRows.length
+      ? slackHandles(finalRows.map((p) => p.users?.slack_id))
+      : Promise.resolve(new Map<string, string>()),
+    slackHandles(slice.map((p) => p.users?.slack_id)),
+  ]);
   const sortKey = SORTS.some((s) => s.key === sort) ? sort : "oldest";
   const qp = (p: number) =>
     `/review?page=${p}${sortKey !== "oldest" ? `&sort=${sortKey}` : ""}${kindQ}`;
