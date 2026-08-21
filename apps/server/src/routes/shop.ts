@@ -145,10 +145,12 @@ router.get("/api/shop/items", async (req, res) => {
         .eq("user_id", session.userId)
         .not("sidequest_id", "is", null)
         .in("status", ["shipped", "fraud_review", "second_review", "approved"]),
-      supabase.from("sidequests").select("id, name").in("id", gatedIds),
+      supabase.from("sidequests").select("id, name, active").in("id", gatedIds),
     ]);
     const done = new Set(((shipped ?? []) as { sidequest_id: number }[]).map((r) => Number(r.sidequest_id)));
-    const nameById = new Map(((trials ?? []) as { id: number; name: string }[]).map((t) => [Number(t.id), t.name]));
+    const trialRows = (trials ?? []) as { id: number; name: string; active: boolean }[];
+    const nameById = new Map(trialRows.map((t) => [Number(t.id), t.name]));
+    const activeById = new Map(trialRows.map((t) => [Number(t.id), !!t.active]));
     for (const i of items) {
       const ids = Array.isArray(i.unlock_trial_ids)
         ? (i.unlock_trial_ids as unknown[]).map(Number)
@@ -156,6 +158,12 @@ router.get("/api/shop/items", async (req, res) => {
       if (ids.length > 0) {
         i.locked = !ids.some((id) => done.has(id));
         i.unlock_trials = ids.map((id) => nameById.get(id)).filter((n): n is string => !!n);
+        // Distinguishes "go ship the trial, it's right there" (Music Grant)
+        // from "the trial doesn't exist yet, there's nothing to do" (a
+        // placeholder trial seeded for an unlaunched region) — the client
+        // shows a plain "coming soon" instead of a lock + call to action
+        // when none of the gating trials are active yet.
+        i.unlockPending = i.locked && !ids.some((id) => activeById.get(id));
       }
     }
   }

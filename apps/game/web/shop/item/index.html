@@ -607,6 +607,22 @@
 
         // Trial-gated item: locked until the player ships one of the unlocking
         // Trials (server also rejects a locked buy with error "locked").
+        // unlockPending means none of the gating Trials are live yet (e.g. a
+        // placeholder Trial for a region that hasn't launched) - nothing for
+        // the player to actually go do, so this reads as "coming soon"
+        // instead of a lock with a call to action.
+        if (selected.locked && selected.unlockPending) {
+          $("detail-options").innerHTML = "";
+          $("detail-limited").innerHTML = "";
+          $("detail-price").innerHTML = "NOT AVAILABLE";
+          $("detail-price").classList.add("cant");
+          $("buy-btn").textContent = "NOT AVAILABLE";
+          $("buy-btn").disabled = true;
+          $("afford-fill").style.width = "0%";
+          $("afford-label").textContent = "Available soon.";
+          return;
+        }
+
         if (selected.locked) {
           $("detail-options").innerHTML = "";
           $("detail-limited").innerHTML = "";

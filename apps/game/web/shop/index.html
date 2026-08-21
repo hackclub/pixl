@@ -553,7 +553,7 @@
           .map(
             (item, idx) => `
     <div class="card panel item-card ${item.limited ? "limited" : ""} ${item.locked ? "locked" : ""}" data-id="${item.id}" style="animation: toast-in .2s ease both; animation-delay:${Math.min(idx * 30, 400)}ms">
-      ${item.locked ? `<div class="locked-corner-tag">🔒 LOCKED</div>` : ""}
+      ${item.locked && !item.unlockPending ? `<div class="locked-corner-tag">🔒 LOCKED</div>` : ""}
       ${item.limited ? `<div class="limited-tag">LIMITED</div>` : ""}
       ${item.stock && item.stock.length ? `<div class="stock-corner-tag">${item.stock[0].total} ONLY</div>` : ""}
       <div class="item-img">${imgHtml(item)}</div>
@@ -561,7 +561,9 @@
       <div class="item-desc">${Pixl.esc(Pixl.bbstrip(item.description || ""))}</div>
       <div class="item-foot">
         ${
-          item.locked
+          item.locked && item.unlockPending
+            ? `<div class="price-wrap"><span class="price cant">NOT AVAILABLE</span><span class="price-hours">Available soon</span></div>`
+            : item.locked
             ? `<div class="price-wrap"><span class="price cant">🔒 LOCKED</span><span class="price-hours">Ship ${item.unlock_trials && item.unlock_trials.length ? item.unlock_trials.map((t) => `“${Pixl.esc(t)}”`).join(" or ") : "the required Trial"} to unlock this</span></div>`
             : isPending(item)
             ? `<div class="price-wrap"><span class="price cant">NOT AVAILABLE</span><span class="price-hours">Coming soon to this region</span></div>`
