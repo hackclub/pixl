@@ -100,6 +100,26 @@
       <div class="lbl">Pick a project</div>
       <select class="field" id="c-project"><option value="">Select a project</option></select>
     </div>
+
+    <div class="out-row" id="c-mine-out" hidden>
+      <div class="out">
+        <div class="out-k">Pixels</div>
+        <div class="out-v gold" id="c-mine-px">—</div>
+      </div>
+      <div class="out">
+        <div class="out-k">USD</div>
+        <div class="out-v" id="c-mine-usd">—</div>
+      </div>
+      <div class="out">
+        <div class="out-k">RE Earned</div>
+        <div class="out-v teal" id="c-mine-re">—</div>
+      </div>
+      <div class="out">
+        <div class="out-k">Avg $/hr</div>
+        <div class="out-v" id="c-mine-avg">—</div>
+      </div>
+    </div>
+
     <div class="mini-note">This is NOT your final payout. It's a live prediction off your currently tracked hours, and your hours may get deflated on review, which would lower the actual payout.</div>
   </div>
 
@@ -166,16 +186,20 @@ const $ = (id) => document.getElementById(id);
 const TIERS = ["T1 Spark", "T2 Signal", "T3 Grid", "T4 Nexus"];
 $("c-tier").innerHTML = TIERS.map((t, i) => `<option value="${i + 1}">${t}</option>`).join("");
 
-function recalc() {
-  const hours = Math.max(Number($("c-hours").value) || 0, 0);
-  const tier = Number($("c-tier").value) || 1;
+function writeStats(prefix, hours, tier) {
   const usd = Pixl.projectPayoutUsd(hours, tier, 0);
   const px = Pixl.projectPayoutPx(hours, tier, 0);
   const re = Pixl.reForHours(hours, tier);
-  $("c-px").textContent = Math.round(px).toLocaleString();
-  $("c-usd").textContent = `$${usd.toFixed(2)}`;
-  $("c-re").textContent = `${Math.round(re).toLocaleString()} RE`;
-  $("c-avg").textContent = hours > 0 ? `$${(usd / hours).toFixed(2)}` : "—";
+  $(`${prefix}px`).textContent = Math.round(px).toLocaleString();
+  $(`${prefix}usd`).textContent = `$${usd.toFixed(2)}`;
+  $(`${prefix}re`).textContent = `${Math.round(re).toLocaleString()} RE`;
+  $(`${prefix}avg`).textContent = hours > 0 ? `$${(usd / hours).toFixed(2)}` : "—";
+}
+
+function recalc() {
+  const hours = Math.max(Number($("c-hours").value) || 0, 0);
+  const tier = Number($("c-tier").value) || 1;
+  writeStats("c-", hours, tier);
 }
 
 function stepHours(dir) {
@@ -214,14 +238,21 @@ async function loadMyProjects() {
 $("c-project").addEventListener("change", async () => {
   const id = Number($("c-project").value);
   const project = myProjects.find((p) => p.id === id);
-  if (!project) return;
+  if (!project) {
+    $("c-mine-out").hidden = true;
+    return;
+  }
   $("c-project").disabled = true;
   try {
     const { trackedSeconds } = await Pixl.api(`/api/projects/${id}/hours`);
-    $("c-hours").value = Math.round((trackedSeconds / 3600) * 100) / 100;
-    $("c-tier").value = project.level || 1;
+    const hours = Math.round((trackedSeconds / 3600) * 100) / 100;
+    const tier = project.level || 1;
+    $("c-hours").value = hours;
+    $("c-tier").value = tier;
     $("c-tier").dispatchEvent(new Event("change"));
     recalc();
+    writeStats("c-mine-", hours, tier);
+    $("c-mine-out").hidden = false;
   } catch {
     Pixl.toast("Couldn't load that project's tracked hours.", true);
   } finally {
