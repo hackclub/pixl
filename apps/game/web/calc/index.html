@@ -71,6 +71,10 @@
 
   .out-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
     gap: 14px; margin-top: 22px; }
+  /* the [hidden] attribute loses to this class's own display:grid at equal
+     specificity (author rules always beat the UA default), so a hidden
+     .out-row would otherwise still render as an empty dashed-out grid. */
+  .out-row[hidden] { display: none; }
   .out { padding: 16px 18px; border: var(--bw) solid var(--stroke); background: var(--panel-2); }
   .out-k { font-family: var(--pixel); font-size: 11px; letter-spacing: 1px;
     text-transform: uppercase; color: var(--faint); }
@@ -236,8 +240,12 @@ async function loadMyProjects() {
 }
 
 $("c-project").addEventListener("change", async () => {
-  const id = Number($("c-project").value);
-  const project = myProjects.find((p) => p.id === id);
+  // project.id comes back from the API as a string - "id" is a bigint column,
+  // and Postgres/PostgREST serialize those as strings to dodge JS's 53-bit
+  // safe-integer ceiling. Number()-ing it and comparing with === against the
+  // string id always failed, silently, for every project.
+  const id = $("c-project").value;
+  const project = myProjects.find((p) => String(p.id) === id);
   if (!project) {
     $("c-mine-out").hidden = true;
     return;
