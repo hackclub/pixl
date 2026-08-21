@@ -2,6 +2,7 @@ import { Router } from "express";
 import { verifySessionToken } from "../auth/session.js";
 import { supabase } from "../db/client.js";
 import { addNotification } from "./notifications.js";
+import { fetchTrackedSecondsSince } from "../hackatime/api.js";
 
 const router = Router();
 
@@ -301,7 +302,25 @@ router.put("/api/collaborators/:id/hackatime", async (req, res) => {
     return res.status(500).json({ ok: false });
   }
   if (!data) return res.status(404).json({ ok: false });
-  res.json({ ok: true });
+
+  // Recompute their tracked seconds right away instead of leaving it stale
+  // until the owner's next ship — otherwise linking a project here has no
+  // visible effect until then, which reads as "save does nothing."
+  const { data: userRow } = await supabase
+    .from("users")
+    .select("hackatime_token, slack_id")
+    .eq("id", session.userId)
+    .single();
+  const hackatimeSeconds = await fetchTrackedSecondsSince(
+    (userRow as { slack_id?: string } | null)?.slack_id ?? null,
+    (userRow as { hackatime_token?: string } | null)?.hackatime_token ?? null,
+    hackatimeProjects,
+  );
+  await supabase
+    .from("project_collaborators")
+    .update({ hackatime_seconds: hackatimeSeconds })
+    .eq("id", id);
+  res.json({ ok: true, hackatimeSeconds });
 });
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I — easy to read aloud

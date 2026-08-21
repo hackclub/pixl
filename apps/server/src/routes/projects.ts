@@ -878,7 +878,11 @@ router.get("/api/projects/:id/journal", async (req, res) => {
   res.json({ ok: true, entries: data ?? [] });
 });
 
-// Total tracked hours for a project: owner's Hackatime since cutoff + everyone's journal hours.
+// Total tracked hours for a project. For the owner: their Hackatime since
+// cutoff + everyone's journal hours. For an accepted collaborator viewing
+// their own project page: THEIR linked Hackatime projects (on their own
+// account) + their own journal hours, not the owner's — a collaborator's own
+// Hackatime link would otherwise never show up as tracked time anywhere.
 router.get("/api/projects/:id/hours", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";
   const session = token ? verifySessionToken(token) : null;
@@ -896,20 +900,41 @@ router.get("/api/projects/:id/hours", async (req, res) => {
     .single();
   if (!project) return res.status(404).json({ ok: false });
 
-  const { data: owner } = await supabase
-    .from("users")
-    .select("hackatime_token, slack_id")
-    .eq("id", project.user_id as string)
-    .single();
+  const isOwner = project.user_id === session.userId;
+  let linked: string[];
+  let hackatimeSlackId: string | null;
+  let hackatimeToken: string | null;
+  let journalQuery = supabase.from("project_journals").select("hours").eq("project_id", id);
 
-  const linked = (project.hackatime_projects as string[]) ?? [];
+  if (isOwner) {
+    const { data: owner } = await supabase
+      .from("users")
+      .select("hackatime_token, slack_id")
+      .eq("id", project.user_id as string)
+      .single();
+    linked = (project.hackatime_projects as string[]) ?? [];
+    hackatimeSlackId = (owner as { slack_id?: string } | null)?.slack_id ?? null;
+    hackatimeToken = (owner as { hackatime_token?: string } | null)?.hackatime_token ?? null;
+  } else {
+    const [{ data: collab }, { data: viewer }] = await Promise.all([
+      supabase
+        .from("project_collaborators")
+        .select("hackatime_projects")
+        .eq("project_id", id)
+        .eq("user_id", session.userId)
+        .eq("status", "accepted")
+        .maybeSingle(),
+      supabase.from("users").select("hackatime_token, slack_id").eq("id", session.userId).single(),
+    ]);
+    linked = (collab?.hackatime_projects as string[]) ?? [];
+    hackatimeSlackId = (viewer as { slack_id?: string } | null)?.slack_id ?? null;
+    hackatimeToken = (viewer as { hackatime_token?: string } | null)?.hackatime_token ?? null;
+    journalQuery = journalQuery.eq("user_id", session.userId);
+  }
+
   const [hackatimeSeconds, { data: jrows }] = await Promise.all([
-    fetchTrackedSecondsSince(
-      (owner as { slack_id?: string } | null)?.slack_id ?? null,
-      (owner as { hackatime_token?: string } | null)?.hackatime_token ?? null,
-      linked,
-    ),
-    supabase.from("project_journals").select("hours").eq("project_id", id),
+    fetchTrackedSecondsSince(hackatimeSlackId, hackatimeToken, linked),
+    journalQuery,
   ]);
   const journalSeconds =
     ((jrows ?? []) as { hours: number | null }[]).reduce(
