@@ -58,57 +58,6 @@ const Pixl = (() => {
   // stranded in three places.
   const BASE_PX_PER_HOUR = Math.round(config.economy.basePayoutUsd / config.economy.pixelValueUsd);
 
-  // Payout math, ported from packages/config/sync.ts's TS template (the
-  // canonical formula generated into every TS app). pixl.js isn't one of that
-  // script's generated targets - like BASE_PX_PER_HOUR above, this is hand-kept
-  // in sync with the same source rather than sync-generated.
-  function rePerHour(tier) {
-    const E = config.economy;
-    const t = Math.min(Math.max(Math.trunc(tier) || 1, 1), E.tierRePerHour.length);
-    return E.tierRePerHour[t - 1];
-  }
-  function reForHours(hours, tier) {
-    const h = Number.isFinite(hours) ? Math.max(hours, 0) : 0;
-    return h * rePerHour(tier);
-  }
-  function payoutUsdPerHour(re) {
-    const E = config.economy;
-    const progress = Math.min(Math.max(re, 0) / E.reForMaxPayout, 1);
-    return E.basePayoutUsd + progress * (E.maxPayoutUsd - E.basePayoutUsd);
-  }
-  function payoutArea(re) {
-    const E = config.economy;
-    const cap = E.reForMaxPayout;
-    const span = E.maxPayoutUsd - E.basePayoutUsd;
-    const r = Math.max(re, 0);
-    if (r <= cap) return E.basePayoutUsd * r + (span * r * r) / (2 * cap);
-    return E.basePayoutUsd * cap + (span * cap) / 2 + E.maxPayoutUsd * (r - cap);
-  }
-  function averageUsdPerHourOver(reBefore, reAfter) {
-    const r0 = Math.max(reBefore, 0);
-    const r1 = Math.max(reAfter, r0);
-    if (r1 === r0) return payoutUsdPerHour(r0);
-    return (payoutArea(r1) - payoutArea(r0)) / (r1 - r0);
-  }
-  function tierKickerUsd(hours, tier) {
-    const E = config.economy;
-    const t = Math.min(Math.max(Math.trunc(tier) || 1, 1), E.tierRePerHour.length);
-    const h = Number.isFinite(hours) ? Math.max(hours, 0) : 0;
-    return E.tierKickerUsdPerStep * (t - 1) * Math.min(h, E.tierKickerHours);
-  }
-  // Everything a project pays, in dollars: the RE-driven rate plus the tier
-  // kicker. reBefore is the RE that ONE project has already earned itself
-  // before this stretch of hours - a fresh project always starts at 0.
-  function projectPayoutUsd(hours, tier, reBefore) {
-    const h = Number.isFinite(hours) ? Math.max(hours, 0) : 0;
-    const reAfter = reBefore + reForHours(h, tier);
-    return h * averageUsdPerHourOver(reBefore, reAfter) + tierKickerUsd(h, tier);
-  }
-  // The same total in pixels - what actually gets credited.
-  function projectPayoutPx(hours, tier, reBefore) {
-    return projectPayoutUsd(hours, tier, reBefore) / config.economy.pixelValueUsd;
-  }
-
   // play.pixl.rsvp is the raw game origin; there the canonical host is the apex
   // pixl.rsvp, which proxies these same pages through vercel.json. Bounce direct
   // visitors to the apex so every link lives on one host. This is client-side and
@@ -359,7 +308,6 @@ const Pixl = (() => {
         ["orders", "ORDERS"],
         ["collectibles", "COLLECT"],
         ["refers", "REFERS"],
-        ["calc", "CALC"],
       ],
     },
     {
@@ -409,8 +357,6 @@ const Pixl = (() => {
     account: `<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="5" y="2" width="6" height="5"/><rect x="3" y="9" width="10" height="5"/></svg>`,
     // vault door: hollow frame with a handwheel floating inside it
     vault: `<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="3" y="2" width="10" height="2"/><rect x="3" y="12" width="10" height="2"/><rect x="3" y="4" width="2" height="8"/><rect x="11" y="4" width="2" height="8"/><rect x="7" y="5" width="2" height="6"/><rect x="6" y="7" width="4" height="2"/></svg>`,
-    // calculator: hollow body frame, a filled display up top, four buttons below
-    calc: `<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="3" y="1" width="10" height="2"/><rect x="3" y="13" width="10" height="2"/><rect x="3" y="1" width="2" height="14"/><rect x="11" y="1" width="2" height="14"/><rect x="5" y="3" width="6" height="3"/><rect x="5" y="8" width="2" height="2"/><rect x="9" y="8" width="2" height="2"/><rect x="5" y="11" width="2" height="2"/><rect x="9" y="11" width="2" height="2"/></svg>`,
   };
   // Three-by-three grid, the "more" affordance on the mobile dock.
   const MORE_ICON = `<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="3" height="3"/><rect x="7" y="2" width="3" height="3"/><rect x="12" y="2" width="2" height="3"/><rect x="2" y="7" width="3" height="3"/><rect x="7" y="7" width="3" height="3"/><rect x="12" y="7" width="2" height="3"/><rect x="2" y="12" width="3" height="2"/><rect x="7" y="12" width="3" height="2"/><rect x="12" y="12" width="2" height="2"/></svg>`;
@@ -1336,5 +1282,5 @@ const Pixl = (() => {
     document.addEventListener("DOMContentLoaded", gate);
   }
 
-  return { API, config, token, api, apiUrl, send, upload, esc, bbcode, bbstrip, markdown, toast, mountTopbar, loadWallet, loadRestoration, timeAgo, countdown, hours, hasToken: !!token, runTour, maybeOnboard, ONBOARDING_STEPS, confirm: confirmDialog, setTheme, loginUrl, enhanceSelects, reForHours, projectPayoutUsd, projectPayoutPx };
+  return { API, config, token, api, apiUrl, send, upload, esc, bbcode, bbstrip, markdown, toast, mountTopbar, loadWallet, loadRestoration, timeAgo, countdown, hours, hasToken: !!token, runTour, maybeOnboard, ONBOARDING_STEPS, confirm: confirmDialog, setTheme, loginUrl, enhanceSelects };
 })();

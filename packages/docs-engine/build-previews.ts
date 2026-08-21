@@ -46,7 +46,6 @@ const pages: PageMeta[] = [
   { slug: "timeline", eyebrow: "Community", description: "The Chronicle: a running timeline of what's shipped across Pixl." },
   { slug: "vault", eyebrow: "Community", description: "The Core Vault: what the whole Pixl community has restored together." },
   { slug: "refers", eyebrow: "Community", description: "Invite friends to Pixl and earn a payout when they ship." },
-  { slug: "calc", eyebrow: "Economy", description: "See what a ship is worth before you ship it: pixels, dollars and RE by tier and hours." },
   { slug: "account", eyebrow: "Account", description: "Manage your Pixl profile, session and connected accounts." },
   { slug: "report", eyebrow: "Moderation", description: "Report a player or a piece of content to the Pixl moderation team." },
 ];
