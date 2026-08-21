@@ -42,7 +42,7 @@ export const CUSTOM_EMOJIS = [
   "brokenheart",
   "nyan",
   "cat-gun",
-  "isob",
+  "pixo-shrug",
   "sob-pray",
   "agadance",
   "cat-woah",
