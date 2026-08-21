@@ -11,7 +11,7 @@ const GAME_ORIGIN = "https://play.pixl.hackclub.com";
 const SHELL_PATHS = [
   "shop", "orders", "collectibles", "vault", "explore", "ideas", "quests",
   "timeline", "projects", "report", "dashboard", "docs", "hackatime",
-  "refers", "account",
+  "refers", "account", "calc",
 ];
 
 // The Godot export and the shell request these by absolute path, so they have to
