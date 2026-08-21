@@ -24,7 +24,7 @@ export function ticketBlocks(ticket: TicketRow): KnownBlock[] {
   if (status === "closed")
     statusText = closed_by_slack_id ? `✅ Resolved by <@${closed_by_slack_id}>` : "✅ Resolved";
   else if (claimed_by_slack_id) statusText = `🟡 Claimed by <@${claimed_by_slack_id}>`;
-  else statusText = "🔴 Open — not claimed";
+  else statusText = "🔴 Open - not claimed";
 
   const actionElements =
     status === "closed"

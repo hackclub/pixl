@@ -31,7 +31,7 @@ export async function checkFAQAndSimilar(event: PendingTicketEvent, client: WebC
       .select("description, permalink, title")
       .eq("status", "closed")
       .not("description", "is", null)
-      .neq("description", "[no text — see thread for attachments]")
+      .neq("description", "[no text - see thread for attachments]")
       .order("closed_at", { ascending: false })
       .limit(60);
     rows = result.data || [];
@@ -70,7 +70,7 @@ export async function checkFAQAndSimilar(event: PendingTicketEvent, client: WebC
     const match = rows[idx];
     const label = match.title || match.description.slice(0, 80);
     const linkPart = match.permalink
-      ? ` Check <${match.permalink}|this similar resolved question> — it might answer yours.`
+      ? ` Check <${match.permalink}|this similar resolved question> - it might answer yours.`
       : "";
 
     await client.chat.postEphemeral({
@@ -82,7 +82,7 @@ export async function checkFAQAndSimilar(event: PendingTicketEvent, client: WebC
           type: "section",
           text: {
             type: "mrkdwn",
-            text: `:mag: We found a similar question that was already resolved:\n*${label}*${linkPart}\n\nIf this doesn't answer your question, your ticket will still be created — a helper will follow up soon.`,
+            text: `:mag: We found a similar question that was already resolved:\n*${label}*${linkPart}\n\nIf this doesn't answer your question, your ticket will still be created - a helper will follow up soon.`,
           },
         },
         ...(process.env.SLACK_FAQ_URL
@@ -167,7 +167,7 @@ export async function createTicket(
 
   if (!ticketRow) {
     // Fallback: ticket wasn't pre-created, insert it now
-    const description = event.text || "[no text — see thread for attachments]";
+    const description = event.text || "[no text - see thread for attachments]";
     const r = await db()
       .from("tickets")
       .insert({
@@ -395,7 +395,7 @@ export async function handleNewQuestion(event: PendingTicketEvent, client: WebCl
       await client.chat.postMessage({
         channel: event.channel,
         thread_ts: event.ts,
-        text: "the docs don't cover this one — just wait for a helper to respond to this one :D",
+        text: "the docs don't cover this one - just wait for a helper to respond to this one :D",
       });
       checkFAQAndSimilar(event, client).catch(() => {});
     }

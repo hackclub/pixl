@@ -377,7 +377,7 @@ func submit_display_name(name: String) -> void:
 			emit_signal("logged_in", display_name)
 			emit_signal("name_result", true, display_name)
 		else:
-			var reason := "Couldn't save that name — try again."
+			var reason := "Couldn't save that name - try again."
 			if typeof(json) == TYPE_DICTIONARY and json.has("reason"):
 				reason = String(json["reason"])
 			emit_signal("name_result", false, reason)

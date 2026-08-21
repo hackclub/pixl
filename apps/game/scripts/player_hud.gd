@@ -175,7 +175,7 @@ func _build_ui() -> void:
 	_pixels_label = Label.new()
 	_ssize(_pixels_label, 26)
 	_pixels_label.add_theme_color_override("font_color", PixlTheme.color("gold"))
-	_pixels_label.text = "— pixels"
+	_pixels_label.text = "- pixels"
 	pixels_row.add_child(_pixels_label)
 
 	_hours_label = Label.new()
@@ -435,7 +435,7 @@ func _open_tx_history() -> void:
 		if txs.is_empty():
 			var none := Label.new()
 			none.theme_type_variation = &"SubText"
-			none.text = "No pixel activity yet — ship a project!"
+			none.text = "No pixel activity yet - ship a project!"
 			_tx_box.add_child(none)
 			return
 		for t in txs:

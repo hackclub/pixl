@@ -9,8 +9,8 @@
     "openDocs": "docs"
   },
   "easterEgg": {
-    "title": "PIXLIFY — convertisseur de texte secret",
-    "hint": "tu as trouvé le secret — transforme ton texte en emojis pixl pour Slack",
+    "title": "PIXLIFY - convertisseur de texte secret",
+    "hint": "tu as trouvé le secret - transforme ton texte en emojis pixl pour Slack",
     "close": "Fermer",
     "dialogLabel": "Convertisseur Pixlify"
   },
@@ -326,7 +326,7 @@
       },
       {
         "name": "Fer à souder",
-        "description": "Un kit de fer à souder avec des pointes neuves et du flux — utile pour le kit Tamagotchi et d'autres montages hardware."
+        "description": "Un kit de fer à souder avec des pointes neuves et du flux - utile pour le kit Tamagotchi et d'autres montages hardware."
       },
       {
         "name": "Crédit nourriture",

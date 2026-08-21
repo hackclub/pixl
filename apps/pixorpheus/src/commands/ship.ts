@@ -18,7 +18,7 @@ app.command("/pixl-ship", async ({ command, ack, client }) => {
   const safeDesc = escapeMrkdwn(desc);
   await client.chat.postMessage({
     channel: command.channel_id,
-    text: `🚀 <@${command.user_id}> just shipped: *${safeDesc}* — let's go!!`,
+    text: `🚀 <@${command.user_id}> just shipped: *${safeDesc}* - let's go!!`,
     blocks: [
       {
         type: "section",
@@ -57,7 +57,7 @@ app.command("/pixl-lastship", async ({ command, ack, client }) => {
     }
 
     if (!entries.length) {
-      const hint = githubArg ? "" : " — or use `/pixl-lastship your_github_username` if your Slack isn't linked";
+      const hint = githubArg ? "" : " - or use `/pixl-lastship your_github_username` if your Slack isn't linked";
       await client.chat.postEphemeral({
         channel: command.channel_id,
         user: command.user_id,

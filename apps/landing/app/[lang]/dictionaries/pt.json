@@ -9,8 +9,8 @@
     "openDocs": "docs"
   },
   "easterEgg": {
-    "title": "PIXLIFY — conversor de texto secreto",
-    "hint": "você achou o segredo — transforme seu texto em emojis pixl para o Slack",
+    "title": "PIXLIFY - conversor de texto secreto",
+    "hint": "você achou o segredo - transforme seu texto em emojis pixl para o Slack",
     "close": "Fechar",
     "dialogLabel": "Conversor Pixlify"
   },
@@ -326,7 +326,7 @@
       },
       {
         "name": "Ferro de solda",
-        "description": "Um kit de ferro de solda com pontas novas e fluxo — útil para o kit Tamagotchi e outros projetos de hardware."
+        "description": "Um kit de ferro de solda com pontas novas e fluxo - útil para o kit Tamagotchi e outros projetos de hardware."
       },
       {
         "name": "Crédito de comida",

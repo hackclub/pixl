@@ -148,7 +148,7 @@ app.message(async ({ message, client }) => {
         await saveStyleMemory(style);
         await client.chat.postMessage({
           channel: TRAINING_CHANNEL,
-          text: `got it, i've absorbed your vibe :brain: i'll talk more like you now\n\n_style notes saved — ${trainingMessages.length} messages analyzed_`,
+          text: `got it, i've absorbed your vibe :brain: i'll talk more like you now\n\n_style notes saved - ${trainingMessages.length} messages analyzed_`,
         });
       } else {
         await client.chat.postMessage({
@@ -257,7 +257,7 @@ app.message(async ({ message, client }) => {
         channel: m.channel,
         user: m.user,
         text: kawaiiMode
-          ? `kawaii mode is ON in <#${kawaiiChannel}> — ${kawaiiMessages.length} messages collected :eyes:`
+          ? `kawaii mode is ON in <#${kawaiiChannel}> - ${kawaiiMessages.length} messages collected :eyes:`
           : "kawaii mode is OFF rn",
       });
       return;
@@ -492,7 +492,7 @@ app.message(async ({ message, client }) => {
       await client.chat.postMessage({
         channel: m.channel,
         thread_ts: m.thread_ts,
-        text: "i'm on mute rn — type PIXOSTART to let me back in",
+        text: "i'm on mute rn - type PIXOSTART to let me back in",
       });
     }
     return;

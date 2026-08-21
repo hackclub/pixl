@@ -386,7 +386,7 @@ func _do_search() -> void:
 func _on_search(code: int, json: Variant) -> void:
 	_clear_search_results()
 	if code != 200 or typeof(json) != TYPE_DICTIONARY or not json.get("ok", false):
-		_search_results.add_child(_muted("Search failed — try again."))
+		_search_results.add_child(_muted("Search failed - try again."))
 		return
 	var found: Array = json.get("players", [])
 	if found.is_empty():

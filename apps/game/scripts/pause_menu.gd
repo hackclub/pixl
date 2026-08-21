@@ -399,7 +399,7 @@ func _upload_card_photo(path: String) -> void:
 
 func _upload_card_bytes(bytes: PackedByteArray, mime: String) -> void:
 	if bytes.size() > 7_500_000:
-		_card_note("That image is too big — keep it under 7 MB.", false)
+		_card_note("That image is too big - keep it under 7 MB.", false)
 		return
 	_card_note("Uploading…", true)
 	var req := HTTPRequest.new()
@@ -409,22 +409,22 @@ func _upload_card_bytes(bytes: PackedByteArray, mime: String) -> void:
 		req.queue_free()
 		var json = JSON.parse_string(data.get_string_from_utf8()) if data.size() > 0 else null
 		if code != 200 or typeof(json) != TYPE_DICTIONARY or not json.get("ok", false):
-			_card_note("Upload failed — try again.", false)
+			_card_note("Upload failed - try again.", false)
 			return
 		_card_api(HTTPClient.METHOD_POST, "/api/profile/card-image", JSON.stringify({"url": String(json.get("url", ""))}), func(code2, json2):
 			if code2 == 200 and typeof(json2) == TYPE_DICTIONARY and json2.get("ok", false):
 				_card_note("Photo saved! It shows on your player card.", true)
 			else:
-				_card_note("Couldn't save the photo — try again.", false))
+				_card_note("Couldn't save the photo - try again.", false))
 	)
 	req.request_raw(url, PackedStringArray(["Content-Type: " + mime]), HTTPClient.METHOD_POST, bytes)
 
 func _on_pixfy_toggled(on: bool) -> void:
 	_card_api(HTTPClient.METHOD_POST, "/api/profile/card-pixelate", JSON.stringify({"pixelate": on}), func(code, json):
 		if code == 200 and typeof(json) == TYPE_DICTIONARY and json.get("ok", false):
-			_card_note("Pixfy on — pixel-art style." if on else "Pixfy off — original photo.", true)
+			_card_note("Pixfy on - pixel-art style." if on else "Pixfy off - original photo.", true)
 		else:
-			_card_note("Couldn't save that — try again.", false))
+			_card_note("Couldn't save that - try again.", false))
 
 func _card_note(text: String, ok: bool) -> void:
 	_card_status.text = text

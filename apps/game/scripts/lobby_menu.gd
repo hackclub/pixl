@@ -114,7 +114,7 @@ func _on_list(lobbies: Array) -> void:
 	if lobbies.is_empty():
 		var empty := Label.new()
 		empty.theme_type_variation = &"InfoText"
-		empty.text = "No lobbies yet — create one!"
+		empty.text = "No lobbies yet - create one!"
 		empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		empty.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		list_box.add_child(empty)
@@ -257,7 +257,7 @@ func _on_row_join(id: String, is_public: bool, mine: bool) -> void:
 	var pw := password_edit.text.strip_edges()
 	if pw == "":
 		code_edit.text = id
-		status_label.text = "Private lobby — type its password below, then press Join."
+		status_label.text = "Private lobby - type its password below, then press Join."
 		password_edit.grab_focus()
 		return
 	status_label.text = "Joining " + id

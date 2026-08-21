@@ -411,12 +411,12 @@ const Pixl = (() => {
     const rail = token
       ? `<div class="rest-chip" id="pixl-rest" title="Core Integrity: the community's Restoration progress" hidden>
             <span class="slot">${RE_ICON}</span>
-            <span class="re">—</span>
+            <span class="re">-</span>
             <span class="rl">CORE</span>
           </div>
           <div class="wallet-chip" id="pixl-wallet" title="Your pixels">
             <span class="slot"><img src="/img/pixel.png" alt="px"></span>
-            <span class="px">—</span>
+            <span class="px">-</span>
             <span class="lv"></span>
           </div>
           <button class="rail-btn" id="pixl-help-btn" type="button" title="New here? Replay the tour" aria-label="Replay the tour">${HELP_ICON}</button>

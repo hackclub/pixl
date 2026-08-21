@@ -29,7 +29,7 @@ export function schedulePollClose(
       const lines = options.map((opt, i) => {
         const r = reactions.find((r: any) => r.name === EMOJI_NAMES[i]);
         const count = r ? r.count - 1 : 0;
-        return `${EMOJIS[i]} ${escapeMrkdwn(opt)} — *${count}* vote${count !== 1 ? "s" : ""}`;
+        return `${EMOJIS[i]} ${escapeMrkdwn(opt)} - *${count}* vote${count !== 1 ? "s" : ""}`;
       });
       await app.client.chat.postMessage({
         channel,
@@ -63,7 +63,7 @@ app.command("/pixl-poll", async ({ command, ack, client }) => {
     await client.chat.postEphemeral({
       channel: command.channel_id,
       user: command.user_id,
-      text: "Usage: `/pixl-poll Question | Option1, Option2` — add a timer at the end: `Option1, Option2, 10min`",
+      text: "Usage: `/pixl-poll Question | Option1, Option2` - add a timer at the end: `Option1, Option2, 10min`",
     });
     return;
   }
@@ -106,7 +106,7 @@ app.command("/pixl-poll", async ({ command, ack, client }) => {
   }
 
   const body = options.map((o, i) => `${EMOJIS[i]} ${escapeMrkdwn(o)}`).join("\n");
-  const timerNote = durationLabel ? ` — closes in ${durationLabel}` : "";
+  const timerNote = durationLabel ? ` - closes in ${durationLabel}` : "";
 
   const msg = await client.chat.postMessage({
     channel: command.channel_id,

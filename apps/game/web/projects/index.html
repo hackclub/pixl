@@ -1233,7 +1233,7 @@
         trial_hours_below_minimum: "This Trial needs more tracked hours before you can ship it.",
         eligibility_attestation_required: "Confirm this isn't a school assignment or paid Hack Club work before shipping.",
         trial_not_accepted: "Accept that Trial in the game first (talk to its NPC), then you can pick it.",
-        project_hours_required: "Log at least an hour — journal your work (Hackatime optional for hardware).",
+        project_hours_required: "Log at least an hour - journal your work (Hackatime optional for hardware).",
       };
       const err = (e) => ERRORS[e] || "Something went wrong, try again.";
 
@@ -1742,18 +1742,18 @@
       <div class="form-row">
         <label>TRIAL (build for a Trial, or your own idea)</label>
         <select class="field" id="f-trial">
-          <option value="">None — my own idea</option>
+          <option value="">None - my own idea</option>
           ${(() => {
             const linkedId = p.sidequest_id != null ? Number(p.sidequest_id) : null;
             const accepted = allTrials.filter((t) => t.unlocked && !t.completed);
             const locked = allTrials.filter((t) => !t.unlocked);
             let html = "";
             if (accepted.length)
-              html += `<optgroup label="Accepted — ready to build">${accepted
+              html += `<optgroup label="Accepted - ready to build">${accepted
                 .map((t) => `<option value="${t.id}" ${linkedId === Number(t.id) ? "selected" : ""}>${Pixl.esc(t.name)}</option>`)
                 .join("")}</optgroup>`;
             if (locked.length)
-              html += `<optgroup label="Not accepted — accept in-game first">${locked
+              html += `<optgroup label="Not accepted - accept in-game first">${locked
                 .map((t) => `<option value="${t.id}" data-locked="1">🔒 ${Pixl.esc(t.name)}</option>`)
                 .join("")}</optgroup>`;
             return html;
@@ -1866,7 +1866,7 @@
           const kindNote = () => {
             $("f-kind-note").textContent =
               $("f-kind").value === "hardware"
-                ? "Hardware: Hackatime is optional — journal your hours and they count too. Goes to the hardware review queue."
+                ? "Hardware: Hackatime is optional - journal your hours and they count too. Goes to the hardware review queue."
                 : "Software: needs Hackatime hours to ship.";
           };
           $("f-kind").addEventListener("change", kindNote);
@@ -1876,7 +1876,7 @@
           const trialNote = () => {
             const opt = $("f-trial").selectedOptions[0];
             if (opt && opt.dataset.locked) {
-              $("f-trial-note").textContent = `You haven't accepted “${opt.textContent.replace(/^🔒\s*/, "")}” yet — go talk to its NPC in the game to accept it, then pick it here.`;
+              $("f-trial-note").textContent = `You haven't accepted “${opt.textContent.replace(/^🔒\s*/, "")}” yet - go talk to its NPC in the game to accept it, then pick it here.`;
               $("f-trial-note").style.color = "var(--bad)";
             } else {
               $("f-trial-note").textContent = "";

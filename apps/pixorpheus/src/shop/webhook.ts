@@ -156,20 +156,20 @@ function render(b: Bucket): string {
     const uniquePrices = new Set(b.prices.values());
     if (uniquePrices.size <= 1) {
       const p = [...uniquePrices][0];
-      return `🆕 *New shop item* — *${b.name}* · ${px(p)} · ${n} ${regionWord}: ${tags}`;
+      return `🆕 *New shop item* - *${b.name}* · ${px(p)} · ${n} ${regionWord}: ${tags}`;
     }
     const list = sortRegions(b.regions)
-      .map((r) => `• \`${r}\` — ${px(b.prices.get(r))}`)
+      .map((r) => `• \`${r}\` - ${px(b.prices.get(r))}`)
       .join("\n");
-    return `🆕 *New shop item* — *${b.name}* · added to ${n} ${regionWord}:\n${list}`;
+    return `🆕 *New shop item* - *${b.name}* · added to ${n} ${regionWord}:\n${list}`;
   }
 
   if (b.kind === "DELETE") {
-    return `🗑️ *Shop item removed* — *${b.name}* · ${n} ${regionWord}: ${tags}`;
+    return `🗑️ *Shop item removed* - *${b.name}* · ${n} ${regionWord}: ${tags}`;
   }
 
   // UPDATE
-  return `✏️ *Shop item updated* — *${b.name}* · ${n} ${regionWord}: ${tags}\n${b.lines.join("\n")}`;
+  return `✏️ *Shop item updated* - *${b.name}* · ${n} ${regionWord}: ${tags}\n${b.lines.join("\n")}`;
 }
 
 function handleShopChange(payload: WebhookPayload): void {

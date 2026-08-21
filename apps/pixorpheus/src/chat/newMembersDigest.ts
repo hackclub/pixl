@@ -43,8 +43,8 @@ export async function postNewMembersDigest(): Promise<void> {
   const header =
     ids.length === 1 ? "a new member joined today" : `${ids.length} new members joined today`;
   const text = hasLaunched()
-    ? `:pixel_heart: *${header}!* welcome ${mentions} — go ship something and earn your first pixels in <#${PIXL_MAIN_CHANNEL}> !!`
-    : `:pixel_heart: *${header}!* welcome ${mentions} — pixl launches soon, you're early :yay:`;
+    ? `:pixel_heart: *${header}!* welcome ${mentions} - go ship something and earn your first pixels in <#${PIXL_MAIN_CHANNEL}> !!`
+    : `:pixel_heart: *${header}!* welcome ${mentions} - pixl launches soon, you're early :yay:`;
 
   const posted = await app.client.chat.postMessage({ channel: PIXL_MAIN_CHANNEL, text });
   if (posted.ts) {

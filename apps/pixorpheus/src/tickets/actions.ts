@@ -30,7 +30,7 @@ app.action("mark_resolved", async ({ ack, body, client }) => {
       channel: channelId,
       thread_ts: msgTs,
       user: resolver,
-      text: "Database error — could not load the ticket.",
+      text: "Database error - could not load the ticket.",
     });
     return;
   }
@@ -117,7 +117,7 @@ app.action("reopen_ticket", async ({ ack, body, client }) => {
       channel: channelId,
       thread_ts: msgTs,
       user: reopener,
-      text: "Database error — could not load the ticket.",
+      text: "Database error - could not load the ticket.",
     });
     return;
   }

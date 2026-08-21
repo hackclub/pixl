@@ -549,7 +549,7 @@ async function showPlayer(id) {
   const collectibles = data.collectibles || [];
   const xp = xpProgress(p);
   const activity = recentActivity(projects, collectibles);
-  const joinedYear = p.created_at ? new Date(p.created_at).getFullYear() : "—";
+  const joinedYear = p.created_at ? new Date(p.created_at).getFullYear() : "-";
 
   view.innerHTML = `
     <button class="btn dark back-btn" onclick="location.hash='#players'">← ALL PLAYERS</button>

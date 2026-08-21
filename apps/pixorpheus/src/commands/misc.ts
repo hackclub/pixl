@@ -15,30 +15,30 @@ app.command("/pixl-help", async ({ command, ack, respond }) => {
   const promo = PIXL_CHANNELS.includes(command.channel_id) ? "" : PIXL_PROMO;
   await respond({
     text: `*Pixl Bot Commands*\n
-*/pixl [@user]* — Pixelate a user's profile picture
-*/pixl-roast [@user]* — Roast someone (or yourself)
-*/pixl-urban [word]* — Urban Dictionary definition
-*/pixl-remind [time] [message]* — Set a reminder (e.g. /pixl-remind 10min lunch)
-*/pixl-countdown [time] [label]* — Countdown timer that posts when it hits zero
-*/pixl-ping* — Check bot latency
-*/pixl-help* — Show this help message
-*/pixl-joke* — Get a random joke
-*/pixl-coinflip* — Flip a coin
-*/pixl-fact* — Get a random surprising fact
-*/pixl-ask [question]* — Ask Pixorpheus anything publicly
-*/pixl-poll Question; Option1, Option2 [, 10min]* — Create a poll, add a timer at the end to auto-post results
-*/pixl-ship [description]* — Announce a project you shipped
-*/pixl-lastship [github_username]* — Show your last ship on Hackclub Ships (or someone else's)
-*/pixl-leaderboard* — Who does Pixorpheus know the most about
-*/pixl-mymemory [@user]* — See what Pixorpheus remembers about you (or someone else)
-*/pixl-stats* — Bot activity stats
-*/pixl-helpstats* — Ticket stats
-*/pixl-addhelper [@user]* — Add a helper (support team only)
-*/pixl-removehelper [@user]* — Remove a helper (support team only)
-*/pixl-helpers* — List all helpers
-*/pixl-remember [fact]* — Teach Pixorpheus something about this server (support team only)
-*/pixl-forget [number]* — Remove a memory entry (support team only)
-*/pixl-memories* — List stored program memories (support team only)
+*/pixl [@user]* - Pixelate a user's profile picture
+*/pixl-roast [@user]* - Roast someone (or yourself)
+*/pixl-urban [word]* - Urban Dictionary definition
+*/pixl-remind [time] [message]* - Set a reminder (e.g. /pixl-remind 10min lunch)
+*/pixl-countdown [time] [label]* - Countdown timer that posts when it hits zero
+*/pixl-ping* - Check bot latency
+*/pixl-help* - Show this help message
+*/pixl-joke* - Get a random joke
+*/pixl-coinflip* - Flip a coin
+*/pixl-fact* - Get a random surprising fact
+*/pixl-ask [question]* - Ask Pixorpheus anything publicly
+*/pixl-poll Question; Option1, Option2 [, 10min]* - Create a poll, add a timer at the end to auto-post results
+*/pixl-ship [description]* - Announce a project you shipped
+*/pixl-lastship [github_username]* - Show your last ship on Hackclub Ships (or someone else's)
+*/pixl-leaderboard* - Who does Pixorpheus know the most about
+*/pixl-mymemory [@user]* - See what Pixorpheus remembers about you (or someone else)
+*/pixl-stats* - Bot activity stats
+*/pixl-helpstats* - Ticket stats
+*/pixl-addhelper [@user]* - Add a helper (support team only)
+*/pixl-removehelper [@user]* - Remove a helper (support team only)
+*/pixl-helpers* - List all helpers
+*/pixl-remember [fact]* - Teach Pixorpheus something about this server (support team only)
+*/pixl-forget [number]* - Remove a memory entry (support team only)
+*/pixl-memories* - List stored program memories (support team only)
 _Mention @pixorpheus in any channel or DM the bot to chat with it. Ask it to "summarize this thread" to get a recap!_${promo}`,
   });
 });
@@ -110,7 +110,7 @@ app.command("/pixl-countdown", async ({ command, ack, respond, client }) => {
     try {
       await client.chat.postMessage({
         channel: command.channel_id,
-        text: `⏰ <@${command.user_id}> *${escapeMrkdwn(label)}* — time's up!`,
+        text: `⏰ <@${command.user_id}> *${escapeMrkdwn(label)}* - time's up!`,
       });
     } catch (_) {}
   }, ms);

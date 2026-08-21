@@ -13,7 +13,7 @@ func _ready() -> void:
 		status_label.text = NetworkManager.ban_message
 		NetworkManager.ban_message = ""
 	elif NetworkManager.display_name != "":
-		status_label.text = "Logged in as: " + NetworkManager.display_name + " — connecting..."
+		status_label.text = "Logged in as: " + NetworkManager.display_name + " - connecting..."
 	else:
 		status_label.text = "Not logged in"
 

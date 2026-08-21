@@ -165,7 +165,7 @@ app.command("/pixl-leaderboard", async ({ command, ack, client }) => {
       return;
     }
     const medals = ["🥇", "🥈", "🥉"];
-    const lines = leaderboard.map((r, i) => `${medals[i] || `${i + 1}.`} <@${r.slack_user_id}> — ${r.cnt} facts remembered`);
+    const lines = leaderboard.map((r, i) => `${medals[i] || `${i + 1}.`} <@${r.slack_user_id}> - ${r.cnt} facts remembered`);
     await client.chat.postMessage({
       channel: command.channel_id,
       text: `*🏆 most known by pixorpheus:*\n${lines.join("\n")}`,
