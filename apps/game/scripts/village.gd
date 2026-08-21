@@ -192,4 +192,9 @@ func _process(delta: float) -> void:
 			_save_npcs()
 			get_tree().change_scene_to_file("res://scenes/lobby_menu.tscn")
 			return
+		if global.active_door_target == "character":
+			global.editor_return_scene = "res://scenes/village.tscn"
+			_save_npcs()
+			get_tree().change_scene_to_file("res://scenes/character_editor.tscn")
+			return
 	_dialogue_was_open = Dialogue.is_open

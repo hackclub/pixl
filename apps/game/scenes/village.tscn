@@ -2705,6 +2705,31 @@ theme_override_constants/outline_size = 2
 theme_override_font_sizes/font_size = 11
 text = "Press E to open lobbies"
 
+[node name="DoorTrigger5" type="Area2D" parent="." unique_id=990011401]
+z_index = 13
+position = Vector2(20, -100)
+collision_mask = 2
+script = ExtResource("44_ci1yp")
+target = "character"
+sign_name = "CUSTOMIZE"
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="DoorTrigger5" unique_id=990011402]
+position = Vector2(2, 6)
+shape = SubResource("RectangleShape2D_05nbr")
+
+[node name="Label" type="Label" parent="DoorTrigger5" unique_id=990011403]
+visible = false
+offset_left = -38.0
+offset_top = -32.0
+offset_right = 46.0
+offset_bottom = -9.0
+theme_override_colors/font_color = Color(0.77315557, 0.55160576, 0.26933688, 1)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 2
+theme_override_fonts/font = ExtResource("5_o0j8d")
+theme_override_font_sizes/font_size = 11
+text = "Press E to customize"
+
 [node name="LobbyBoat" type="Sprite2D" parent="." unique_id=990011300]
 z_index = 6
 position = Vector2(280, 46)
@@ -2823,3 +2848,5 @@ route_path = NodePath("../Sheep3Route")
 [connection signal="body_exited" from="DoorTrigger2" to="DoorTrigger2" method="_on_body_exited"]
 [connection signal="body_entered" from="DoorTrigger4" to="DoorTrigger4" method="_on_body_entered"]
 [connection signal="body_exited" from="DoorTrigger4" to="DoorTrigger4" method="_on_body_exited"]
+[connection signal="body_entered" from="DoorTrigger5" to="DoorTrigger5" method="_on_body_entered"]
+[connection signal="body_exited" from="DoorTrigger5" to="DoorTrigger5" method="_on_body_exited"]
