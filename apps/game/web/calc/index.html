@@ -34,6 +34,11 @@
   .hero-sticker.sticker-red { width: 36px; top: 6px; right: 20px; rotate: -20deg; z-index: 3; }
   .hero-sticker.sticker-gold-sm { width: 26px; top: 44px; right: 90px; rotate: 24deg; z-index: 1; }
   .card { position: relative; border: var(--bw) solid var(--stroke); border-radius: 0; background: var(--panel); padding: 20px; margin-top: 22px; }
+  /* an open .csel dropdown (see pixl.css) sits inside this card at z-index:60,
+     but the next card in flow is also position:relative with z-index:auto -
+     lift the whole card above it while its picker is open so the menu never
+     paints under the following card's border/fields. */
+  #c-mine-card:has(.csel.open) { z-index: 10; }
   /* same bundled trio, hanging off the card's bottom edge under the note text */
   .card-sticker { position: absolute; image-rendering: pixelated; pointer-events: none; user-select: none; }
   .card-sticker.gold-lg { width: 52px; bottom: -26px; left: 26px; rotate: -12deg; z-index: 2; }
@@ -215,6 +220,7 @@ $("c-project").addEventListener("change", async () => {
     const { trackedSeconds } = await Pixl.api(`/api/projects/${id}/hours`);
     $("c-hours").value = Math.round((trackedSeconds / 3600) * 100) / 100;
     $("c-tier").value = project.level || 1;
+    $("c-tier").dispatchEvent(new Event("change"));
     recalc();
   } catch {
     Pixl.toast("Couldn't load that project's tracked hours.", true);
