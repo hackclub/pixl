@@ -111,10 +111,6 @@
         <div class="out-v gold" id="c-mine-px">—</div>
       </div>
       <div class="out">
-        <div class="out-k">USD</div>
-        <div class="out-v" id="c-mine-usd">—</div>
-      </div>
-      <div class="out">
         <div class="out-k">RE Earned</div>
         <div class="out-v teal" id="c-mine-re">—</div>
       </div>
@@ -159,10 +155,6 @@
         <div class="out-v gold" id="c-px">—</div>
       </div>
       <div class="out">
-        <div class="out-k">USD</div>
-        <div class="out-v" id="c-usd">—</div>
-      </div>
-      <div class="out">
         <div class="out-k">RE Earned</div>
         <div class="out-v teal" id="c-re">—</div>
       </div>
@@ -195,7 +187,6 @@ function writeStats(prefix, hours, tier) {
   const px = Pixl.projectPayoutPx(hours, tier, 0);
   const re = Pixl.reForHours(hours, tier);
   $(`${prefix}px`).textContent = Math.round(px).toLocaleString();
-  $(`${prefix}usd`).textContent = `$${usd.toFixed(2)}`;
   $(`${prefix}re`).textContent = `${Math.round(re).toLocaleString()} RE`;
   $(`${prefix}avg`).textContent = hours > 0 ? `$${(usd / hours).toFixed(2)}` : "—";
 }
