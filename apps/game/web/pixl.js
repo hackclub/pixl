@@ -334,6 +334,7 @@ const Pixl = (() => {
         ["explore", "EXPLORE"],
         ["ideas", "IDEAS"],
         ["vault", "GOALS"],
+        ["trials", "TRIALS"],
         // QUESTS is hidden from the dash for now — not ready for players.
         // Re-enable when it is.
         // ["quests", "QUESTS"],
@@ -403,6 +404,8 @@ const Pixl = (() => {
     vault: `<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="3" y="2" width="10" height="2"/><rect x="3" y="12" width="10" height="2"/><rect x="3" y="4" width="2" height="8"/><rect x="11" y="4" width="2" height="8"/><rect x="7" y="5" width="2" height="6"/><rect x="6" y="7" width="4" height="2"/></svg>`,
     // calculator: hollow body frame, a filled display up top, four buttons below
     calc: `<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="3" y="1" width="10" height="2"/><rect x="3" y="13" width="10" height="2"/><rect x="3" y="1" width="2" height="14"/><rect x="11" y="1" width="2" height="14"/><rect x="5" y="3" width="6" height="3"/><rect x="5" y="8" width="2" height="2"/><rect x="9" y="8" width="2" height="2"/><rect x="5" y="11" width="2" height="2"/><rect x="9" y="11" width="2" height="2"/></svg>`,
+    // raffle ticket: hollow frame with a dashed tear-line down the middle
+    trials: `<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="2" y="3" width="12" height="2"/><rect x="2" y="11" width="12" height="2"/><rect x="2" y="3" width="2" height="10"/><rect x="12" y="3" width="2" height="10"/><rect x="7" y="5" width="2" height="1"/><rect x="7" y="7" width="2" height="1"/><rect x="7" y="9" width="2" height="1"/></svg>`,
   };
   // Three-by-three grid, the "more" affordance on the mobile dock.
   const MORE_ICON = `<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="3" height="3"/><rect x="7" y="2" width="3" height="3"/><rect x="12" y="2" width="2" height="3"/><rect x="2" y="7" width="3" height="3"/><rect x="7" y="7" width="3" height="3"/><rect x="12" y="7" width="2" height="3"/><rect x="2" y="12" width="3" height="2"/><rect x="7" y="12" width="3" height="2"/><rect x="12" y="12" width="2" height="2"/></svg>`;
