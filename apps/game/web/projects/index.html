@@ -2957,8 +2957,7 @@
       // visible in the raw text you're editing, not just a toast or a button
       // state — then swaps it for the real markdown once the upload resolves,
       // or removes it cleanly if the upload fails.
-      async function attachImageToJournal(file) {
-        const ta = $("j-content");
+      async function attachImageToJournal(file, ta = $("j-content")) {
         setImageBtnBusy(true);
         const marker = "![Uploading image…]()";
         const inserted = (ta.value ? "\n" : "") + marker;
@@ -3230,9 +3229,10 @@
           .find((i) => i.type.startsWith("image/"))
           ?.getAsFile();
         if (!file) return;
-        if (document.activeElement === $("j-content")) {
+        const active = document.activeElement;
+        if (active === $("j-content") || active?.classList?.contains("jedit-content")) {
           e.preventDefault();
-          attachImageToJournal(file);
+          attachImageToJournal(file, active);
         } else if ($("f-thumb-btn")) {
           e.preventDefault();
           setThumb(file);
