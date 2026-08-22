@@ -2635,50 +2635,66 @@ function readOptions(raw: string): string[] {
   return serializeGroups([{ name: "", choices: s.split(",") }]);
 }
 
+// Adds one item, optionally to several regions at once. `regions` is a
+// comma-separated list from the form (falls back to the single `region`
+// field so old bookmarked/scripted submits with just that field still work);
+// each region can override the shared `price` via a `price_<REGION>` field,
+// e.g. `price_INDIA` — a region with no such field just uses `price`.
 export async function addShopItem(formData: FormData): Promise<void> {
   const access = await requirePerm("shop");
   const name = String(formData.get("name") ?? "").trim().slice(0, 60);
   const description = String(formData.get("description") ?? "").trim().slice(0, 300);
-  const price = Math.max(0, Math.round(Number(formData.get("price") ?? 0)));
+  const basePrice = Math.max(0, Math.round(Number(formData.get("price") ?? 0)));
   const options = readOptions(String(formData.get("options") ?? ""));
-  const region = readRegion(String(formData.get("region") ?? ""));
   const category = readCategory(String(formData.get("category") ?? ""));
-  if (!name) return;
-  // Double-submit guard: an identical name created in the last minute is the
-  // same click arriving twice, not a new item.
-  const { data: recent } = await db
-    .from("shop_items")
-    .select("id")
-    .eq("name", name)
-    .eq("region", region)
-    .gte("created_at", new Date(Date.now() - 60_000).toISOString())
-    .limit(1);
-  if (recent && recent.length > 0) {
-    revalidatePath("/shop");
-    return;
-  }
+  const regionsRaw = String(formData.get("regions") ?? formData.get("region") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const regions = [...new Set(regionsRaw.map(readRegion))];
+  if (!name || regions.length === 0) return;
+
   let imageUrl = "";
   const image = formData.get("image");
   if (image instanceof File && image.size > 0) {
     if (image.size > 4 * 1024 * 1024) throw new Error("Image too big (max 4 MB).");
     imageUrl = await uploadShopImage(image);
   }
-  const { data: inserted, error } = await db
-    .from("shop_items")
-    .insert({
-      name,
-      description,
-      price,
-      image_url: imageUrl,
-      options,
-      region,
-      category,
-      created_by: actorName(access),
-    })
-    .select("*")
-    .single();
-  if (error) throw new Error(error.message);
-  if (inserted) await notifyShopInsert(inserted as ShopRowSnapshot);
+
+  const cutoff = new Date(Date.now() - 60_000).toISOString();
+  for (const region of regions) {
+    const regionPriceRaw = formData.get(`price_${region}`);
+    const price =
+      regionPriceRaw != null ? Math.max(0, Math.round(Number(regionPriceRaw))) : basePrice;
+
+    // Double-submit guard: an identical name+region created in the last
+    // minute is the same click arriving twice, not a new item.
+    const { data: recent } = await db
+      .from("shop_items")
+      .select("id")
+      .eq("name", name)
+      .eq("region", region)
+      .gte("created_at", cutoff)
+      .limit(1);
+    if (recent && recent.length > 0) continue;
+
+    const { data: inserted, error } = await db
+      .from("shop_items")
+      .insert({
+        name,
+        description,
+        price,
+        image_url: imageUrl,
+        options,
+        region,
+        category,
+        created_by: actorName(access),
+      })
+      .select("*")
+      .single();
+    if (error) throw new Error(`${region}: ${error.message}`);
+    if (inserted) await notifyShopInsert(inserted as ShopRowSnapshot);
+  }
   revalidatePath("/shop");
 }
 

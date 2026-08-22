@@ -22,14 +22,25 @@ export function AddShopItemForm({
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
   const [image, setImage] = useState<string | null>(null);
+  const [regions, setRegions] = useState<ShopRegion[]>([region]);
+  // Per-region price overrides, keyed by region. A region with no entry here
+  // just uses the shared `price` field when the form submits.
+  const [regionPrices, setRegionPrices] = useState<Partial<Record<ShopRegion, string>>>({});
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     setImage(f ? URL.createObjectURL(f) : null);
   }
 
+  function toggleRegion(r: ShopRegion) {
+    setRegions((prev) => (prev.includes(r) ? prev.filter((x) => x !== r) : [...prev, r]));
+  }
+
+  const allSelected = regions.length === SHOP_REGIONS.length;
+
   return (
     <form action={action} className="grid lg:grid-cols-[1fr_15rem] gap-6">
+      <input type="hidden" name="regions" value={regions.join(",")} />
       <div className="space-y-5 min-w-0">
         <div className="grid sm:grid-cols-[1fr_9rem] gap-4">
           <Label className="block font-normal">
@@ -56,40 +67,71 @@ export function AddShopItemForm({
               onChange={(e) => setPrice(e.target.value)}
               className="w-full text-sm"
             />
+            <span className="block text-xs text-muted-foreground mt-1">Default for any region below with no override.</span>
           </Label>
         </div>
 
-        <div className="grid sm:grid-cols-2 gap-4">
-          <Label className="block font-normal">
-            <span className="block text-sm font-medium mb-1.5">Region</span>
-            <select
-              name="region"
-              defaultValue={region}
-              className="w-full h-9 text-sm rounded-md border border-border bg-background px-3"
+        <div className="block">
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="block text-sm font-medium">Regions</span>
+            <button
+              type="button"
+              onClick={() => setRegions(allSelected ? [region] : [...SHOP_REGIONS])}
+              className="text-xs text-brand hover:underline"
             >
-              {SHOP_REGIONS.map((r) => (
-                <option key={r} value={r}>
-                  {SHOP_REGION_LABELS[r]}
-                </option>
-              ))}
-            </select>
-          </Label>
-
-          <Label className="block font-normal">
-            <span className="block text-sm font-medium mb-1.5">Category</span>
-            <select
-              name="category"
-              defaultValue="other"
-              className="w-full h-9 text-sm rounded-md border border-border bg-background px-3"
-            >
-              {SHOP_CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {SHOP_CATEGORY_LABELS[c]}
-                </option>
-              ))}
-            </select>
-          </Label>
+              {allSelected ? "Just this region" : "Select all regions"}
+            </button>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-x-4 gap-y-2 rounded-md border border-border p-3">
+            {SHOP_REGIONS.map((r) => {
+              const checked = regions.includes(r);
+              return (
+                <div key={r} className="flex items-center gap-2">
+                  <label className="flex items-center gap-2 text-sm flex-1 min-w-0 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleRegion(r)}
+                      className="size-4 shrink-0"
+                    />
+                    <span className="truncate">{SHOP_REGION_LABELS[r]}</span>
+                  </label>
+                  {checked && (
+                    <Input
+                      type="number"
+                      min={0}
+                      placeholder={price || "px"}
+                      value={regionPrices[r] ?? ""}
+                      onChange={(e) =>
+                        setRegionPrices((prev) => ({ ...prev, [r]: e.target.value }))
+                      }
+                      name={regionPrices[r] ? `price_${r}` : undefined}
+                      className="w-20 h-7 text-xs shrink-0"
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <span className="block text-xs text-muted-foreground mt-1">
+            Pick the regions to add this to. Type a price next to a region to override the default for it.
+          </span>
         </div>
+
+        <Label className="block font-normal">
+          <span className="block text-sm font-medium mb-1.5">Category</span>
+          <select
+            name="category"
+            defaultValue="other"
+            className="w-full h-9 text-sm rounded-md border border-border bg-background px-3"
+          >
+            {SHOP_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {SHOP_CATEGORY_LABELS[c]}
+              </option>
+            ))}
+          </select>
+        </Label>
 
         <Label className="block font-normal">
           <span className="block text-sm font-medium mb-1.5">Description</span>
