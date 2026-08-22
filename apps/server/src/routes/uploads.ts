@@ -18,16 +18,29 @@ router.post(
     if (!session) return res.status(401).json({ ok: false });
 
     const key = process.env.HACKCLUB_CDN_KEY;
-    if (!key)
+    if (!key) {
+      console.error("[uploads] HACKCLUB_CDN_KEY is not set, refusing upload");
       return res.status(503).json({ ok: false, error: "cdn_not_configured" });
+    }
 
     // express.json() runs globally before this router, so a request sent with a
     // JSON content-type reaches here with req.body already parsed into an object
     // or array — express.raw() only populates a Buffer for IMAGE_TYPES. Narrow
     // rather than asserting `as Buffer`, which is a lie on that path.
+    const contentType = String(req.headers["content-type"] ?? "").split(";")[0].trim();
     const buf = Buffer.isBuffer(req.body) ? req.body : null;
-    if (!buf || buf.length === 0)
+    if (!buf || buf.length === 0) {
+      // This is the one failure mode with no signal at all on the client side
+      // (Pixl.upload just throws "upload_failed" -> a generic toast), so log
+      // enough here to tell "wrong file type" apart from "no body sent".
+      console.error(
+        "[uploads] no image body parsed, content-type was",
+        JSON.stringify(contentType || "(none)"),
+      );
+      if (contentType && !IMAGE_TYPES.includes(contentType))
+        return res.status(415).json({ ok: false, error: "unsupported_type" });
       return res.status(400).json({ ok: false, error: "empty_body" });
+    }
 
     const type = String(req.headers["content-type"] ?? "image/png");
 
