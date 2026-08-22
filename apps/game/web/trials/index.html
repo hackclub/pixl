@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pixl · Trials</title>
+    <!-- <pixl-preview> -->
+    <meta name="description" content="Every trial from the villagers, laid out as a card, with the story and the reward on it.">
+    <link rel="canonical" href="https://pixl.hackclub.com/trials/">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Pixl">
+    <meta property="og:title" content="Pixl · Trials">
+    <meta property="og:description" content="Every trial from the villagers, laid out as a card, with the story and the reward on it.">
+    <meta property="og:url" content="https://pixl.hackclub.com/trials/">
+    <meta property="og:image" content="https://pixl.hackclub.com/trials/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Pixl · Trials">
+    <meta name="twitter:description" content="Every trial from the villagers, laid out as a card, with the story and the reward on it.">
+    <meta name="twitter:image" content="https://pixl.hackclub.com/trials/og.png">
+    <!-- <pixl-preview:end> -->
+<link rel="icon" href="/index.icon.png">
+<link rel="stylesheet" href="/pixl.css?v=2">
+<style>
+  .hero {
+    padding: 26px 28px;
+    margin-top: 8px;
+    display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap;
+    background: var(--gold);
+    color: var(--ink);
+    border: var(--bw-heavy) solid var(--stroke); border-radius: 0;
+    box-shadow: var(--drop-lg);
+  }
+  .hero .page-title, .hero .page-sub { color: var(--ink); }
+
+  .trial-grid { display: flex; flex-wrap: wrap; gap: 32px; justify-content: center; margin-top: 30px; }
+
+  /* ---- trial card: the same ticket_frame.png raffle-ticket used for the
+     Explore player card, repurposed to show one Trial's story + reward. ---- */
+  .ticket-frame {
+    position: relative; width: 460px; height: 599px; flex-shrink: 0;
+    background: url(../img/ticket_frame.png) no-repeat; background-size: 460px 599px;
+    animation: toast-in .2s ease both;
+  }
+  .ticket-head { position: absolute; left: 28px; top: 57.6px; width: 278px; height: 77.4px;
+    display: flex; align-items: center; overflow: hidden; }
+  .ticket-head .tname { font-family: var(--pixel); font-size: 23px; color: #fff; letter-spacing: .5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    text-shadow: 1.5px 0 var(--stroke), -1.5px 0 var(--stroke), 0 1.5px var(--stroke), 0 -1.5px var(--stroke); }
+  .ticket-avatar { position: absolute; left: 49.5px; top: 177px; width: 148.5px; height: 150px;
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+    font-family: var(--pixel); font-size: 56px; color: var(--ink); }
+  .ticket-avatar.locked { filter: grayscale(1) brightness(.55); }
+  .tstat-v { position: absolute; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; text-align: center; gap: 3px; overflow: hidden; padding: 0 4px; }
+  .tstat-v .tlabel { font-size: 9px; color: var(--dim); letter-spacing: .5px; }
+  .tstat-v .tval { font-family: var(--pixel); font-size: 16px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+  .ts-level  { left: 232.3px; top: 177.2px; width: 83.9px; height: 69.2px; }
+  .ts-hours  { left: 334.6px; top: 178px;   width: 84.6px; height: 68.4px; }
+  .ts-proj   { left: 232.3px; top: 263.3px; width: 83.9px; height: 69.2px; }
+  .ts-joined { left: 334.6px; top: 263.3px; width: 84.6px; height: 69.2px; }
+  /* The baked art has "EXPERIENCE" + an empty XP-track box here (it's the
+     player card's XP bar) — nothing about a Trial belongs on top of that
+     label, so patch it over with paper before laying the brief text down. */
+  .ticket-mask { position: absolute; left: 34px; top: 348px; width: 392px; height: 88px;
+    background: var(--panel); border: 2px solid var(--panel-2); box-sizing: border-box; }
+  .ticket-brief { position: absolute; left: 39.3px; top: 356px; width: 381.5px; height: 148px;
+    font-size: 12.5px; line-height: 1.55; color: var(--ink); overflow: hidden; }
+  .ticket-brief.locked-text { color: var(--muted); font-style: italic; }
+  .ticket-foot { position: absolute; left: 39.3px; top: 508.3px; width: 384px; height: 46.8px;
+    display: flex; flex-direction: column; justify-content: center; gap: 4px; padding-left: 14px; box-sizing: border-box; overflow: hidden; }
+  .ticket-foot .tf-class { font-family: var(--pixel); font-size: 17px; color: var(--ink); line-height: 1.15;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ticket-foot .tf-sub { font-size: 11px; color: var(--faint); letter-spacing: .3px; line-height: 1; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <section class="hero">
+    <div>
+      <h1 class="page-title">TRIALS</h1>
+      <div class="page-sub">EVERY TRIAL FROM THE VILLAGERS, STORY AND REWARD ON THE CARD.</div>
+    </div>
+  </section>
+
+  <div class="spin" id="loading"></div>
+  <div class="trial-grid" id="trials"></div>
+  <div class="empty-note" id="empty" hidden>NO TRIALS POSTED RIGHT NOW.<br>THE VILLAGERS ARE THINKING…</div>
+</main>
+
+<script src="/pixl.js?v=6"></script>
+<script>
+Pixl.mountTopbar("trials");
+Pixl.loadWallet();
+
+function trialCard(q) {
+  const letter = Pixl.esc((q.npc_name || q.npc || "?").trim().charAt(0).toUpperCase() || "?");
+  const status = q.completed ? "DONE" : q.unlocked ? "UNLOCKED" : "LOCKED";
+  const brief = q.unlocked
+    ? Pixl.bbcode(q.brief || q.description || "No brief written for this trial yet.")
+    : Pixl.esc("Find the right villager in the world to unlock this trial's story.");
+  return `
+    <div class="ticket-frame">
+      <div class="ticket-head"><div class="tname">${Pixl.esc(q.name)}</div></div>
+      <div class="ticket-avatar${q.unlocked ? "" : " locked"}">${letter}</div>
+      <div class="tstat-v ts-level"><span class="tlabel">REGION</span><span class="tval">${Pixl.esc(q.region || "-")}</span></div>
+      <div class="tstat-v ts-hours"><span class="tlabel">MIN HRS</span><span class="tval">${q.min_hours ? q.min_hours + "h" : "-"}</span></div>
+      <div class="tstat-v ts-proj"><span class="tlabel">GIVEN BY</span><span class="tval">${Pixl.esc(q.npc_name || q.npc || "-")}</span></div>
+      <div class="tstat-v ts-joined"><span class="tlabel">STATUS</span><span class="tval">${status}</span></div>
+      <div class="ticket-mask"></div>
+      <div class="ticket-brief${q.unlocked ? "" : " locked-text"}">${brief}</div>
+      <div class="ticket-foot">
+        <div class="tf-class">${q.reward ? Pixl.esc(q.reward) : "No reward listed"}</div>
+        <div class="tf-sub">REWARD ON COMPLETION</div>
+      </div>
+    </div>`;
+}
+
+async function boot() {
+  if (!Pixl.hasToken) return;
+  let quests = [];
+  try {
+    const data = await Pixl.api("/api/sidequests");
+    quests = data.quests || [];
+  } catch (e) {
+    if (e.message !== "unauthorized") Pixl.toast("Couldn't load trials.", true);
+  }
+  document.getElementById("loading").remove();
+
+  if (quests.length === 0) {
+    document.getElementById("empty").hidden = false;
+    return;
+  }
+  const sorted = [...quests].sort((a, b) => Number(b.unlocked) - Number(a.unlocked));
+  document.getElementById("trials").innerHTML = sorted.map(trialCard).join("");
+}
+boot();
+</script>
+</body>
+</html>
