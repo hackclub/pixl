@@ -14,7 +14,7 @@ const PORT = Number(process.env.PORT ?? 3000);
 // isolation, but the shell pages embed third-party images that require-corp
 // would block. Same split as the negative lookahead in vercel.json.
 const NO_ISOLATION =
-  /^\/(shop|orders|collectibles|vault|explore|quests|timeline|projects|report|hackatime|fonts|img|pixl)/;
+  /^\/(shop|orders|collectibles|vault|explore|quests|trials|timeline|projects|report|hackatime|fonts|img|pixl)/;
 
 function withIsolation(headers: Headers, pathname: string): Headers {
   if (!NO_ISOLATION.test(pathname)) {
