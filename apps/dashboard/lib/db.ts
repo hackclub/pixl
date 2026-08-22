@@ -2335,7 +2335,7 @@ export async function getProject(id: number) {
       .from("mod_actions")
       .select("*")
       .eq("user_id", project.user_id)
-      .in("action", ["project_approved", "project_needs_changes", "review_reverted"])
+      .in("action", ["project_approved", "project_first_pass", "project_needs_changes", "review_reverted"])
       .order("created_at", { ascending: false }),
   ]);
   const verdicts = ((actions.data ?? []) as ModActionRow[]).filter((a) =>

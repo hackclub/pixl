@@ -490,7 +490,9 @@ export default async function ProjectPage({
                   ? "success"
                   : v.action === "review_reverted"
                     ? "info"
-                    : "destructive"
+                    : v.action === "project_first_pass"
+                      ? "secondary"
+                      : "destructive"
               }
               className="shrink-0"
             >
@@ -498,7 +500,9 @@ export default async function ProjectPage({
                 ? "approved"
                 : v.action === "review_reverted"
                   ? "reverted"
-                  : "sent back"}
+                  : v.action === "project_first_pass"
+                    ? "first pass"
+                    : "sent back"}
             </Badge>
             <div className="flex-1 min-w-48">
               <span className="font-bold">{v.actor}</span>
