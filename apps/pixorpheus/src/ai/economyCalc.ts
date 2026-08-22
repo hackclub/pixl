@@ -29,6 +29,21 @@ function money(usd: number, px: number): string {
   return `$${usd.toFixed(2)} (${Math.round(px)}px)`;
 }
 
+// projectPayoutUsd(hours, tier, 0) is monotonically increasing in hours, so a target
+// dollar amount ("how many hours for $500 at T4") can be inverted by bisection instead
+// of leaving Pixo to guess — this is exactly the gap that let it hallucinate "55 hours"
+// for a T4/$500 question by pattern-matching onto an unrelated persona example.
+function hoursForTarget(usdTarget: number, tier: number): number {
+  let lo = 0;
+  let hi = 100_000;
+  for (let i = 0; i < 60; i++) {
+    const mid = (lo + hi) / 2;
+    if (projectPayoutUsd(mid, tier, 0) < usdTarget) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
 /**
  * Returns a trusted fact block with exact pay figures for the question, or null when
  * the message isn't a pay question. Meant to be passed to getAIReply as trusted
@@ -43,6 +58,12 @@ export function economyBrief(texts: string[]): string | null {
   const tier = tierM ? parseInt(tierM[1], 10) : undefined;
   const hoursM = lc.match(/(\d+(?:[.,]\d+)?)\s*(?:h\b|hr|hrs|hour|hours|heure|heures|hs)\b/);
   const hours = hoursM ? parseFloat(hoursM[1].replace(",", ".")) : undefined;
+  // A bare "$500" or "500 dollars" — never has an hour unit, so this can't collide
+  // with the hours match above.
+  const targetM = lc.match(/\$\s*(\d+(?:[.,]\d+)?)|(\d+(?:[.,]\d+)?)\s*(?:usd|dollars?|bucks)\b/);
+  const dollarTarget = targetM
+    ? parseFloat((targetM[1] ?? targetM[2]).replace(",", "."))
+    : undefined;
 
   const head =
     `PIXL PAY CALCULATOR (exact, authoritative — computed from the real payout formula, not a guess). ` +
@@ -58,6 +79,22 @@ export function economyBrief(texts: string[]): string | null {
       `A Tier ${tier} project shipped at ${hours}h pays ${money(usd, px)} TOTAL, ` +
         `which averages ${money(usd / hours, px / hours)} per hour (it earns ${reForHours(hours, tier)} RE).`,
     );
+  } else if (dollarTarget !== undefined) {
+    // They asked "how many hours for $X" — no hours given, so solve the inverse
+    // instead of falling through to a generic table that never touches their number.
+    if (tier !== undefined) {
+      const h = hoursForTarget(dollarTarget, tier);
+      lines.push(
+        `To hit ${money(dollarTarget, toPx(dollarTarget))} on a single Tier ${tier} project takes about ` +
+          `${h.toFixed(1)}h shipped (computed by solving the real payout ramp, not a flat rate — it's not linear).`,
+      );
+    } else {
+      lines.push(`Hours needed to hit ${money(dollarTarget, toPx(dollarTarget))} on one project, by tier:`);
+      for (let t = 1; t <= 4; t++) {
+        const h = hoursForTarget(dollarTarget, t);
+        lines.push(`  T${t}: ~${h.toFixed(1)}h`);
+      }
+    }
   } else if (hours !== undefined) {
     lines.push(`A ${hours}h project pays, by tier (they didn't say the tier, so give the range):`);
     for (let t = 1; t <= 4; t++) {
