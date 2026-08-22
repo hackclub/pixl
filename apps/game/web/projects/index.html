@@ -2206,11 +2206,15 @@
         });
         $("j-post").addEventListener("click", () => postJournal(p.id));
         $("p-delete").addEventListener("click", () => deleteProject(p));
+        currentJournalProjectId = p.id;
+        loadJournalDraft(p.id);
         $("j-content").addEventListener("input", updateJournalHint);
         $("j-content").addEventListener("input", () =>
           autoGrow($("j-content")),
         );
+        $("j-content").addEventListener("input", saveJournalDraft);
         $("j-hours").addEventListener("input", updateJournalHint);
+        $("j-hours").addEventListener("input", saveJournalDraft);
         loadTimeline(p.id);
         updateJournalHint();
         autoGrow($("j-content"));
@@ -2399,9 +2403,13 @@
           attachImageToJournal(f);
         });
         $("j-post").addEventListener("click", () => postJournal(p.id));
+        currentJournalProjectId = p.id;
+        loadJournalDraft(p.id);
         $("j-content").addEventListener("input", updateJournalHint);
         $("j-content").addEventListener("input", () => autoGrow($("j-content")));
+        $("j-content").addEventListener("input", saveJournalDraft);
         $("j-hours").addEventListener("input", updateJournalHint);
+        $("j-hours").addEventListener("input", saveJournalDraft);
         updateJournalHint();
         autoGrow($("j-content"));
         loadJournal(p.id);
@@ -2953,16 +2961,52 @@
         }
       }
 
+      // Autosaves the new-entry composer to localStorage as the player types,
+      // so a reload/crash/tab-close mid-journal doesn't lose it — restored
+      // the next time this project's composer is opened, cleared once the
+      // entry actually posts. Scoped to the "new entry" composer only, not
+      // the inline edit-existing-entry textareas.
+      let currentJournalProjectId = null;
+      function journalDraftKey(id) {
+        return `pixl:journal-draft:${id}`;
+      }
+      function saveJournalDraft() {
+        const id = currentJournalProjectId;
+        if (id == null) return;
+        const content = $("j-content")?.value ?? "";
+        const hours = $("j-hours")?.value ?? "0";
+        try {
+          if (!content.trim()) localStorage.removeItem(journalDraftKey(id));
+          else localStorage.setItem(journalDraftKey(id), JSON.stringify({ content, hours }));
+        } catch {}
+      }
+      function loadJournalDraft(id) {
+        try {
+          const raw = localStorage.getItem(journalDraftKey(id));
+          if (!raw) return;
+          const draft = JSON.parse(raw);
+          if (draft?.content) $("j-content").value = draft.content;
+          if (draft?.hours != null) $("j-hours").value = draft.hours;
+        } catch {}
+      }
+      function clearJournalDraft(id) {
+        try {
+          localStorage.removeItem(journalDraftKey(id));
+        } catch {}
+      }
+
       // Drops a literal placeholder line into the journal textarea itself —
       // visible in the raw text you're editing, not just a toast or a button
       // state — then swaps it for the real markdown once the upload resolves,
-      // or removes it cleanly if the upload fails.
+      // or removes it cleanly if the upload fails. Dispatches "input" after
+      // each mutation (same convention as mdApply) so the hint/autosave/grow
+      // listeners all pick it up without special-casing this path.
       async function attachImageToJournal(file, ta = $("j-content")) {
         setImageBtnBusy(true);
         const marker = "![Uploading image…]()";
         const inserted = (ta.value ? "\n" : "") + marker;
         ta.value += inserted;
-        autoGrow(ta);
+        ta.dispatchEvent(new Event("input", { bubbles: true }));
         try {
           const url = await Pixl.upload(file);
           ta.value = ta.value.replace(marker, `![](${url})`);
@@ -2971,7 +3015,7 @@
           ta.value = ta.value.replace(inserted, "");
           Pixl.toast(err(e.message), true);
         } finally {
-          autoGrow(ta);
+          ta.dispatchEvent(new Event("input", { bubbles: true }));
           setImageBtnBusy(false);
         }
       }
@@ -3192,6 +3236,7 @@
         $("j-content").value = "";
         $("j-hours").value = "0";
         autoGrow($("j-content"));
+        clearJournalDraft(id);
         Pixl.toast("Entry posted!");
         loadJournal(id);
       }
