@@ -33,6 +33,32 @@ import {
   seedThreadHistory,
   seedDMHistory,
 } from "./thread.js";
+import { getStoredCompact, computeCompactSince, compactDateStr } from "./dailyCompact.js";
+
+// Matches "pixo:compact", "pixo /compact", "pixorpheus /compact", and
+// "@pixorpheus /compact" — always requires a leading bot reference (mention
+// or "pixo"/"pixorpheus"), same discipline as pixo:recap, so a bare
+// "/compact" typed with no bot reference never fires this. Optional trailing
+// arg like "yesterday". Returns the lowercased arg (possibly "") or null.
+function matchCompactCommand(rawText: string, botUserId: string | null): string | null {
+  let t = rawText.trim();
+  let hadPrefix = false;
+  if (botUserId) {
+    const stripped = t.replace(new RegExp(`^<@${botUserId}>\\s*`), "");
+    if (stripped !== t) {
+      hadPrefix = true;
+      t = stripped;
+    }
+  }
+  const strippedName = t.replace(/^pixo(?:rpheus)?[\s:]+/i, "");
+  if (strippedName !== t) {
+    hadPrefix = true;
+    t = strippedName;
+  }
+  if (!hadPrefix) return null;
+  const m = t.match(/^\/?compact\b\s*(.*)$/i);
+  return m ? m[1].trim().toLowerCase() : null;
+}
 
 const processedMsgTs = new Set<string>();
 
@@ -216,6 +242,36 @@ app.message(async ({ message, client }) => {
           channel: m.channel,
           user: m.user,
           text: "recap failed ngl",
+        });
+      }
+      return;
+    }
+
+    const compactArg = matchCompactCommand(text, botIdentity.userId);
+    if (compactArg !== null) {
+      const threadTs = m.thread_ts || m.ts;
+      try {
+        let label = "today";
+        let result: { summary: string; messageCount: number } | null;
+        if (compactArg === "yesterday") {
+          label = "yesterday";
+          result = await getStoredCompact(compactDateStr(1), m.channel);
+          if (!result) result = await computeCompactSince(1, m.channel);
+        } else {
+          result = await computeCompactSince(0, m.channel);
+        }
+        await client.chat.postMessage({
+          channel: m.channel,
+          thread_ts: threadTs,
+          text: result
+            ? `*compact for ${label}* (${result.messageCount} messages)\n${result.summary}`
+            : `nothing to compact for ${label} yet`,
+        });
+      } catch (e) {
+        await client.chat.postMessage({
+          channel: m.channel,
+          thread_ts: threadTs,
+          text: "compact failed ngl",
         });
       }
       return;

@@ -111,6 +111,7 @@ These are typed directly in a message (not slash commands). They only work in ch
 | `pixo:notkawaii` | Same channel | Stop listening mode - processes the collected messages and saves the speaking style |
 | `pixo:kawaii?` | Anywhere | Check if listening mode is active - shows the channel and how many messages have been collected (ephemeral) |
 | `pixo:recap` | Any channel | Summarize the last 6 hours of messages in the channel, shown only to you (ephemeral). Use `pixo:recap today` to summarize since midnight, `pixo:recap 2h` for a custom timeframe (supports `min`, `h`, `d`). In a thread, it summarizes the thread instead. |
+| `pixo:compact` (also `pixo /compact`, `@Pixorpheus /compact`) | Any channel | Compact the day: summarizes everything since local midnight in that channel, posted as a real threaded reply (visible to everyone, not ephemeral). Use `pixo:compact yesterday` for the previous day's compact — pulled from the stored daily compact if one exists, computed live otherwise. Every day, right after midnight, Pixorpheus also silently generates and stores a compact of #pixl for the day that just ended (nothing is posted); this is what `pixo:compact yesterday` reads back. |
 
 > Only one listening session can be active at a time. Starting a new one in a different channel resets the previous one.
 
