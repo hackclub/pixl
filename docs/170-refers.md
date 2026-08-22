@@ -26,6 +26,8 @@ An extra **5 pixels an hour**, roughly 35 cents an hour, on top of their normal 
 
 A one time reward once the person you referred lands their first qualifying ship, sized by how many hours that ship was approved for:
 
+- 2h+ → 10px, 5h+ → 19px, 10h+ → 33px, 25h+ → 71px, 50h+ → 105px, 100h+ → 190px
+
 Once that pays out, the referral is closed and settled. You're rewarded for the person actually getting somewhere, not for the signup.
 
 ## Milestones

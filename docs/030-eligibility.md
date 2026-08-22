@@ -27,10 +27,7 @@ They go to Hack Club's YSWS Unified Database, which is how the program tracks wh
 
 ## Projects that don't count
 
-Two hard exclusions, both from Hack Club's YSWS project exceptions:
-
-- **School assignments.** If it was set as coursework, it can't be shipped here
-- **Paid Hack Club work.** If you were already paid for it by Hack Club, it can't be shipped here
+Two hard exclusions, both from Hack Club's YSWS project exceptions: anything set as **school coursework**, and anything Hack Club has **already paid you for**. Either one, and it can't be shipped here.
 
 You confirm both with a checkbox every time you ship. It isn't a formality: shipping without ticking it fails, and misusing it is the kind of thing that gets a project banned rather than sent back.
 

@@ -12,10 +12,10 @@ Getting stuck happens to literally everyone, here's what to do about it.
 - search first, whatever you're stuck on has probably already been answered
 - still stuck after that? just ask, nobody's going to judge you for it
 
-::: note Tip
-The single best skill any builder can have is knowing how to search. Someone has almost always already solved your problem.
+::: note Searching is the actual skill
+Someone has almost always already solved your problem. Getting fast at finding that out beats knowing everything yourself.
 :::
 
-::: warn Warning
-Don't ship a straight copy of a tutorial project. Take inspiration from it, sure, but make the final thing yours. That's exactly what reviewers are looking for.
+::: warn Tutorials are a starting point, not the ship
+Take inspiration from a tutorial all you want, but the thing you submit needs to end up yours. That's exactly what reviewers are looking for.
 :::
