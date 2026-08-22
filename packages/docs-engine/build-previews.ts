@@ -41,7 +41,6 @@ const pages: PageMeta[] = [
   { slug: "collectibles", eyebrow: "Shop", description: "Spend Restoration Energy on collectibles for your village." },
   { slug: "projects", eyebrow: "Ships", description: "Every project you've shipped, its hours, tier and payout." },
   { slug: "quests", eyebrow: "Progress", description: "Trials and sidequests on the way to your next reward." },
-  { slug: "trials", eyebrow: "Progress", description: "Every trial from the villagers, laid out as a card, with the story and the reward on it." },
   { slug: "hackatime", eyebrow: "Projects", description: "Connect Hackatime and track the coding hours behind your ships." },
   { slug: "explore", eyebrow: "World", description: "Browse villages and see what other players are building." },
   { slug: "timeline", eyebrow: "Community", description: "The Chronicle: a running timeline of what's shipped across Pixl." },

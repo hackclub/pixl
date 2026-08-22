@@ -10,7 +10,7 @@ const GAME_ORIGIN = "https://play.pixl.hackclub.com";
 // Shell pages, mounted at the same path on the apex as on the game host.
 const SHELL_PATHS = [
   "shop", "orders", "collectibles", "vault", "explore", "ideas", "quests",
-  "trials", "timeline", "projects", "report", "dashboard", "docs", "hackatime",
+  "timeline", "projects", "report", "dashboard", "docs", "hackatime",
   "refers", "account", "calc",
 ];
 
