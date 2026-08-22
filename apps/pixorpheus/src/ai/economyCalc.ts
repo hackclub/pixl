@@ -6,8 +6,8 @@ import {
 } from "../config.generated.js";
 
 // Pixo is an LLM: ask it "tier 2, 50h, how much do I make" and it will confidently
-// invent a number, because the real answer is an integral under the RE ramp plus a
-// capped tier kicker — not something to eyeball from the prose in the persona. So we
+// invent a number, because the real answer is the RE-driven rate at this project's
+// own ending RE plus a capped tier kicker — not something to eyeball from the persona. So we
 // detect pay/rate questions, pull the tier and hours out of the text, and hand Pixo
 // the EXACT figures from the same payout functions the server credits with. Pixo then
 // just relays them in its own voice. If we can't pull concrete numbers, we still give

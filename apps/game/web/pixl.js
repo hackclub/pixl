@@ -76,19 +76,11 @@ const Pixl = (() => {
     const progress = Math.min(Math.max(re, 0) / E.reForMaxPayout, 1);
     return E.basePayoutUsd + progress * (E.maxPayoutUsd - E.basePayoutUsd);
   }
-  function payoutArea(re) {
-    const E = config.economy;
-    const cap = E.reForMaxPayout;
-    const span = E.maxPayoutUsd - E.basePayoutUsd;
-    const r = Math.max(re, 0);
-    if (r <= cap) return E.basePayoutUsd * r + (span * r * r) / (2 * cap);
-    return E.basePayoutUsd * cap + (span * cap) / 2 + E.maxPayoutUsd * (r - cap);
-  }
+  // The rate for a project's own reBefore -> reAfter span: the RE-driven rate
+  // at reAfter, so crossing reForMaxPayout on one project pays the max rate
+  // for that project's hours immediately rather than only approaching it.
   function averageUsdPerHourOver(reBefore, reAfter) {
-    const r0 = Math.max(reBefore, 0);
-    const r1 = Math.max(reAfter, r0);
-    if (r1 === r0) return payoutUsdPerHour(r0);
-    return (payoutArea(r1) - payoutArea(r0)) / (r1 - r0);
+    return payoutUsdPerHour(Math.max(reAfter, reBefore, 0));
   }
   function tierKickerUsd(hours, tier) {
     const E = config.economy;
