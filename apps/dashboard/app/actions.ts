@@ -739,6 +739,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
       .update({
         status: joeEnabled() ? "fraud_review" : "second_review",
         review_note: note,
+        review_note_by: reviewer,
         approved_hours: approvedHours,
         reviewing_by: "",
         reviewing_at: null,
@@ -818,6 +819,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
       .update({
         status: "needs_changes",
         review_note: note,
+        review_note_by: reviewer,
         reviewing_by: "",
         reviewing_at: null,
         first_pass_by: "",
@@ -913,6 +915,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
     .update({
       status: "approved",
       review_note: note,
+      review_note_by: reviewer,
       approved_hours: approvedHours,
       reviewing_by: "",
       reviewing_at: null,
@@ -1232,7 +1235,7 @@ export async function reReviewProject(formData: FormData): Promise<void> {
 
   const { data: project, error } = await db
     .from("projects")
-    .update({ status: "shipped", review_note: "", approved_hours: null })
+    .update({ status: "shipped", review_note: "", review_note_by: "", approved_hours: null })
     .eq("id", projectId)
     .in("status", ["approved", "needs_changes"])
     .select("id, name, user_id")
@@ -1337,6 +1340,7 @@ export async function sendBackToFirstPass(formData: FormData): Promise<void> {
     .update({
       status: "shipped",
       review_note: "",
+      review_note_by: "",
       approved_hours: null,
       reviewing_by: "",
       reviewing_at: null,

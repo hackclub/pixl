@@ -255,7 +255,9 @@ export default async function ProjectPage({
         )}
         {project.review_note && (
           <div className="mt-4 border border-border rounded-lg bg-muted p-3 text-sm">
-            <span className="font-pixel">reviewer note</span>
+            <span className="font-pixel">
+              reviewer note{project.review_note_by ? ` , by ${project.review_note_by}` : ""}
+            </span>
             <div className="mt-1 break-words">{project.review_note}</div>
           </div>
         )}

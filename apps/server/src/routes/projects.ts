@@ -628,6 +628,7 @@ router.post("/api/projects/:id/ship", async (req, res) => {
       status: "shipped",
       shipped_at: new Date().toISOString(),
       review_note: "",
+      review_note_by: "",
       rejected_at: null,
       reject_reason: "",
       reject_by: "",
@@ -681,6 +682,7 @@ router.post("/api/projects/:id/unship", async (req, res) => {
       status: "draft",
       shipped_at: null,
       review_note: "",
+      review_note_by: "",
       reviewing_by: "",
       reviewing_at: null,
     })

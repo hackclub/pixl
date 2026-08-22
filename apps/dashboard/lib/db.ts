@@ -100,6 +100,7 @@ export interface ProjectRow {
   hackatime_seconds: number;
   status: string;
   review_note: string;
+  review_note_by: string;
   approved_hours: number | null;
   image_url: string;
   level: number;
