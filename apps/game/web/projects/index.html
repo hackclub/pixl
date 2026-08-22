@@ -2775,6 +2775,40 @@
   </div>`;
       }
 
+      // Same shell as tlItem, but for a pipeline stage that has no per-event
+      // timestamp of its own (a step still pending, or one only tracked as a
+      // status field rather than a review_audits row) — takes a plain label
+      // instead of computing timeAgo from an ISO date.
+      function tlStageItem(dotClass, title, timeLabel) {
+        return `<div class="tl-item">
+    <span class="tl-dot ${dotClass}"></span>
+    <div class="tl-content">
+      <div class="tl-head"><span class="tl-title">${title}</span><span class="tl-time">${timeLabel}</span></div>
+    </div>
+  </div>`;
+      }
+
+      // After a first pass proposes approve/ban, the project still has to
+      // clear the fraud pass (only if it was actually submitted there) and a
+      // different final reviewer's second pass before anything is credited.
+      // Rendered only while that's still in flight — once a final verdict
+      // lands it becomes its own event in the list above.
+      function tlPipelineRows(d) {
+        const rows = [];
+        if (d.joeUsed) {
+          if (!d.fraudReviewDoneAt) {
+            rows.push(tlStageItem("", "Waiting on fraud review", "in progress"));
+            rows.push(tlStageItem("", "Second review", "not started yet"));
+            return rows.join("");
+          }
+          rows.push(
+            tlStageItem("rev", "Passed fraud review", Pixl.timeAgo(d.fraudReviewDoneAt)),
+          );
+        }
+        rows.push(tlStageItem("", "Second review", "in progress"));
+        return rows.join("");
+      }
+
       function tlRow(e) {
         if (e.kind === "created")
           return tlItem("", "Project created", e.at, "", "");
@@ -2944,17 +2978,31 @@
       }
 
       async function loadTimeline(id) {
-        let events = [];
+        let d = null;
         try {
-          const d = await Pixl.api(`/api/projects/${id}/timeline`);
-          events = d.events || [];
+          d = await Pixl.api(`/api/projects/${id}/timeline`);
         } catch {}
+        const events = (d && d.events) || [];
         const list = $("tl-list");
         if (!list) return;
-        list.innerHTML =
-          events.length === 0
-            ? `<div class="faint" style="font-size:13px;padding:8px">No history yet, ship it to start the timeline.</div>`
-            : events.map(tlRow).join("");
+        if (events.length === 0) {
+          list.innerHTML = `<div class="faint" style="font-size:13px;padding:8px">No history yet, ship it to start the timeline.</div>`;
+          return;
+        }
+        let html = events.map(tlRow).join("");
+        const last = events[events.length - 1];
+        // A first-pass approve/ban is only a proposal, not the final word —
+        // show what's still ahead until a final verdict event replaces this.
+        if (
+          d &&
+          last &&
+          last.kind === "review" &&
+          typeof last.verdict === "string" &&
+          last.verdict.startsWith("first_pass_") &&
+          last.verdict !== "first_pass_needs_changes"
+        )
+          html += tlPipelineRows(d);
+        list.innerHTML = html;
       }
 
       let journalEditingId = null; // entry id currently expanded into an inline editor, if any

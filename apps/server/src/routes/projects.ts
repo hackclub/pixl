@@ -964,7 +964,13 @@ router.get("/api/projects/:id/timeline", async (req, res) => {
     return res.status(404).json({ ok: false });
 
   const [{ data: proj }, { data: audits }] = await Promise.all([
-    supabase.from("projects").select("created_at, shipped_at, status").eq("id", id).single(),
+    supabase
+      .from("projects")
+      .select(
+        "created_at, shipped_at, status, joe_project_id, joe_submitted_at, joe_reviewed_at",
+      )
+      .eq("id", id)
+      .single(),
     supabase
       .from("review_audits")
       .select("verdict, note, claimed_hours, approved_hours, created_at")
@@ -981,7 +987,9 @@ router.get("/api/projects/:id/timeline", async (req, res) => {
       verdict: a.verdict,
       note: a.note ?? "",
       claimedHours: a.claimed_hours ?? null,
-      approvedHours: a.approved_hours ?? null,
+      // First-pass hours are only a proposal until a different second-pass
+      // reviewer confirms them — don't leak that number to the player early.
+      approvedHours: a.verdict?.startsWith("first_pass_") ? null : (a.approved_hours ?? null),
     });
   if (proj?.shipped_at && ["shipped", "fraud_review", "second_review"].includes(proj.status))
     events.push({ kind: "shipped", at: proj.shipped_at });
@@ -989,7 +997,16 @@ router.get("/api/projects/:id/timeline", async (req, res) => {
   events.sort(
     (a, b) => new Date(a.at as string).getTime() - new Date(b.at as string).getTime(),
   );
-  res.json({ ok: true, events });
+  res.json({
+    ok: true,
+    events,
+    status: proj?.status ?? null,
+    // Joe (the fraud pass) is optional per event — a project only ever goes
+    // through it if it was actually submitted there.
+    joeUsed: Boolean(proj?.joe_project_id),
+    fraudReviewAt: proj?.joe_submitted_at ?? null,
+    fraudReviewDoneAt: proj?.joe_reviewed_at ?? null,
+  });
 });
 
 // Add a journal entry (markdown content + optional hours) to an own project.
