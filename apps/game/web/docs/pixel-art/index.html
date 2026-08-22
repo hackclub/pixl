@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+  try {
+    document.documentElement.dataset.theme = localStorage.getItem("pixl_theme_v2") || "light";
+  } catch (e) {
+    document.documentElement.dataset.theme = "light";
+  }
+</script>
+<title>Pixl · Pixel art guide</title>
+<meta name="description" content="Trials like Loot's item shop icons come down to producing a batch of small, clean, consistent sprites, which is its own skill separate from just drawing.">
+<link rel="canonical" href="https://pixl.hackclub.com/docs/pixel-art/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Pixl">
+<meta property="og:title" content="Pixel art guide">
+<meta property="og:description" content="Trials like Loot's item shop icons come down to producing a batch of small, clean, consistent sprites, which is its own skill separate from just drawing.">
+<meta property="og:url" content="https://pixl.hackclub.com/docs/pixel-art/">
+<meta property="og:image" content="https://pixl.hackclub.com/docs/pixel-art/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Pixel art guide">
+<meta name="twitter:description" content="Trials like Loot's item shop icons come down to producing a batch of small, clean, consistent sprites, which is its own skill separate from just drawing.">
+<meta name="twitter:image" content="https://pixl.hackclub.com/docs/pixel-art/og.png">
+<link rel="icon" href="/index.icon.png">
+<link rel="stylesheet" href="/pixl.css?v=2">
+<link rel="stylesheet" href="/docs/docs.css?v=2">
+</head>
+<body>
+<div class="docs">
+  <aside class="docs-nav">
+    <div class="docs-nav-head">
+      <a class="docs-brand" id="docs-brand" title="Back to the game"><img src="/index.icon.png" alt="">PIXL <span>DOCS</span></a>
+    </div>
+    <button class="btn dark" id="docs-back" type="button" style="margin:0 6px 16px;justify-content:center">◄ BACK</button>
+    <nav id="docs-nav-list">
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Start here</span><span class="count">2</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/welcome/">Welcome to Pixl</a>
+            <a class="section-link" href="/docs/get/">What do you actually get</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Rules</span><span class="count">3</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/eligibility/">Who can join</a>
+            <a class="section-link" href="/docs/rules/">Ship requirements</a>
+            <a class="section-link" href="/docs/moderation/">Reports, warnings and bans</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">The Restoration</span><span class="count">3</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/restoration/">How the Restoration works</a>
+            <a class="section-link" href="/docs/sidequest/">Your trial</a>
+            <a class="section-link" href="/docs/vault/">The Core Vault</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Build &amp; ship</span><span class="count">8</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/building/">Building</a>
+            <a class="section-link" href="/docs/first-project/">Build your first project</a>
+            <a class="section-link" href="/docs/first-site/">Your first site, line by line</a>
+            <a class="section-link" href="/docs/shipping/">Shipping</a>
+            <a class="section-link" href="/docs/rewards/">Rewards</a>
+            <a class="section-link" href="/docs/shop/">The shop and your orders</a>
+            <a class="section-link" href="/docs/energy/">Restoration Energy and levels</a>
+            <a class="section-link" href="/docs/collab/">Building with other people</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Community</span><span class="count">4</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/refers/">Referrals</a>
+            <a class="section-link" href="/docs/upvotes/">Upvotes and collectibles</a>
+            <a class="section-link" href="/docs/ideas/">The ideas board</a>
+            <a class="section-link" href="/docs/social/">Friends, villages and keeping up</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Resources</span><span class="count">2</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/free/">Free stuff to help you build</a>
+            <a class="section-link" href="/docs/help/">Need help?</a>
+          </div>
+        </div>
+        <div class="docs-group">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Guides</span><span class="count">5</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/html/">HTML guide</a>
+            <a class="section-link" href="/docs/slack/">Slack app guide</a>
+            <a class="section-link" href="/docs/roblox/">Roblox guide</a>
+            <a class="section-link" href="/docs/react-native/">React Native app guide</a>
+            <a class="section-link active" href="/docs/pixel-art/">Pixel art guide</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Setup</span><span class="count">3</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/hackatime/">Hackatime setup</a>
+            <a class="section-link" href="/docs/submitting/">Submitting your project</a>
+            <a class="section-link" href="/docs/git/">Git and GitHub</a>
+          </div>
+        </div>
+    </nav>
+  </aside>
+
+  <main class="docs-main">
+    <article class="doc">
+      <div class="eyebrow">Guides</div>
+      <h1>Pixel art guide</h1>
+<p>Trials like Loot's item shop icons come down to producing a batch of small, clean, consistent sprites, which is its own skill separate from just drawing.</p>
+<h2 id="h-picking-a-tool">Picking a tool</h2>
+<p>Aseprite is the standard for this kind of work, it's built specifically for pixel art and animation, and it's cheap for what it does. Piskel is a solid free browser based alternative if you don't want to buy anything yet.</p>
+<h2 id="h-starting-a-sprite">Starting a sprite</h2>
+<p>Set your canvas small on purpose, something like 32x32 or 16x16 for icons. Working small forces you to make clean, deliberate choices instead of getting lost in detail that won't even read at that size.</p>
+<h2 id="h-keeping-a-consistent-palette">Keeping a consistent palette</h2>
+<p>Pick a small color palette before you start, somewhere around 8 to 16 colors, and stick to it across every sprite in the set. This is the single biggest thing that makes a batch of icons look like they belong together instead of like they were made on different days.</p>
+<h2 id="h-outlining-and-shading">Outlining and shading</h2>
+<p>A dark outline around the edge of each sprite helps it read clearly against different backgrounds. For shading, pick one light source direction and stay consistent, usually top left, and use it the same way on every sprite so the whole set feels like one lighting setup.</p>
+<h2 id="h-exporting-the-set">Exporting the set</h2>
+<p>Export each sprite as a PNG at its native pixel size, don't scale it up in the export, scale it up with CSS or in whatever engine you're using instead so it stays crisp. If you're building a whole set, keep them in one folder with clear names like <code>potion_health.png</code>, <code>sword_iron.png</code>, that kind of thing.</p>
+<h2 id="h-building-the-storefront-around-them">Building the storefront around them</h2>
+<p>Loot's trial also wants a website to show the icons off, so treat it as two halves: the sprite sheet itself, and a simple gallery style page that displays each icon with its name, similar in spirit to the HTML guide above. Remember art can only count for half your submitted time on this one, the website half matters just as much.</p>
+      <div class="doc-foot">
+        <a class="prev" href="/docs/react-native/"><span class="dir">Previous</span><span class="ttl">React Native app guide</span></a>
+        <a class="next" href="/docs/hackatime/"><span class="dir">Next</span><span class="ttl">Hackatime setup</span></a>
+      </div>
+      <div class="doc-sign">Built by alexx</div>
+    </article>
+  </main>
+
+  <aside class="docs-toc">
+    <div class="docs-toc-h">On this page</div><a href="#h-picking-a-tool" data-h="h-picking-a-tool">Picking a tool</a><a href="#h-starting-a-sprite" data-h="h-starting-a-sprite">Starting a sprite</a><a href="#h-keeping-a-consistent-palette" data-h="h-keeping-a-consistent-palette">Keeping a consistent palette</a><a href="#h-outlining-and-shading" data-h="h-outlining-and-shading">Outlining and shading</a><a href="#h-exporting-the-set" data-h="h-exporting-the-set">Exporting the set</a><a href="#h-building-the-storefront-around-them" data-h="h-building-the-storefront-around-them">Building the storefront around them</a>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha512-D9gUyxqja7hBtkWpPWGt9wfbfaMGVt9gnyCvYa+jojwwPHLCzUm5i8rpk7vD7wNee9bA35eYIjobYPaQuKS1MQ==" crossorigin="anonymous"></script>
+<script src="/docs/docs.js?v=2"></script>
+</body>
+</html>

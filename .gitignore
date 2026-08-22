@@ -4,11 +4,6 @@ out
 dist
 *.tgz
 
-# Built from docs/*.md by `bun run docs:build` during the deploy workflow.
-# docs.css and docs.js next to these are hand-maintained and stay tracked.
-apps/game/web/docs/*/
-apps/game/web/docs/index.html
-
 # Link-preview cards built by `bun run previews:build` during the deploy
 # workflow. The index.html files next to these stay tracked - the build only
 # injects a marked meta block into them.

@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+  try {
+    document.documentElement.dataset.theme = localStorage.getItem("pixl_theme_v2") || "light";
+  } catch (e) {
+    document.documentElement.dataset.theme = "light";
+  }
+</script>
+<title>Pixl · Your first site, line by line</title>
+<meta name="description" content="This is the actual code for a tiny personal page you can ship as your very first project.">
+<link rel="canonical" href="https://pixl.hackclub.com/docs/first-site/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Pixl">
+<meta property="og:title" content="Your first site, line by line">
+<meta property="og:description" content="This is the actual code for a tiny personal page you can ship as your very first project.">
+<meta property="og:url" content="https://pixl.hackclub.com/docs/first-site/">
+<meta property="og:image" content="https://pixl.hackclub.com/docs/first-site/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Your first site, line by line">
+<meta name="twitter:description" content="This is the actual code for a tiny personal page you can ship as your very first project.">
+<meta name="twitter:image" content="https://pixl.hackclub.com/docs/first-site/og.png">
+<link rel="icon" href="/index.icon.png">
+<link rel="stylesheet" href="/pixl.css?v=2">
+<link rel="stylesheet" href="/docs/docs.css?v=2">
+</head>
+<body>
+<div class="docs">
+  <aside class="docs-nav">
+    <div class="docs-nav-head">
+      <a class="docs-brand" id="docs-brand" title="Back to the game"><img src="/index.icon.png" alt="">PIXL <span>DOCS</span></a>
+    </div>
+    <button class="btn dark" id="docs-back" type="button" style="margin:0 6px 16px;justify-content:center">◄ BACK</button>
+    <nav id="docs-nav-list">
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Start here</span><span class="count">2</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/welcome/">Welcome to Pixl</a>
+            <a class="section-link" href="/docs/get/">What do you actually get</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Rules</span><span class="count">3</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/eligibility/">Who can join</a>
+            <a class="section-link" href="/docs/rules/">Ship requirements</a>
+            <a class="section-link" href="/docs/moderation/">Reports, warnings and bans</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">The Restoration</span><span class="count">3</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/restoration/">How the Restoration works</a>
+            <a class="section-link" href="/docs/sidequest/">Your trial</a>
+            <a class="section-link" href="/docs/vault/">The Core Vault</a>
+          </div>
+        </div>
+        <div class="docs-group">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Build &amp; ship</span><span class="count">8</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/building/">Building</a>
+            <a class="section-link" href="/docs/first-project/">Build your first project</a>
+            <a class="section-link active" href="/docs/first-site/">Your first site, line by line</a>
+            <a class="section-link" href="/docs/shipping/">Shipping</a>
+            <a class="section-link" href="/docs/rewards/">Rewards</a>
+            <a class="section-link" href="/docs/shop/">The shop and your orders</a>
+            <a class="section-link" href="/docs/energy/">Restoration Energy and levels</a>
+            <a class="section-link" href="/docs/collab/">Building with other people</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Community</span><span class="count">4</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/refers/">Referrals</a>
+            <a class="section-link" href="/docs/upvotes/">Upvotes and collectibles</a>
+            <a class="section-link" href="/docs/ideas/">The ideas board</a>
+            <a class="section-link" href="/docs/social/">Friends, villages and keeping up</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Resources</span><span class="count">2</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/free/">Free stuff to help you build</a>
+            <a class="section-link" href="/docs/help/">Need help?</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Guides</span><span class="count">5</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/html/">HTML guide</a>
+            <a class="section-link" href="/docs/slack/">Slack app guide</a>
+            <a class="section-link" href="/docs/roblox/">Roblox guide</a>
+            <a class="section-link" href="/docs/react-native/">React Native app guide</a>
+            <a class="section-link" href="/docs/pixel-art/">Pixel art guide</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Setup</span><span class="count">3</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/hackatime/">Hackatime setup</a>
+            <a class="section-link" href="/docs/submitting/">Submitting your project</a>
+            <a class="section-link" href="/docs/git/">Git and GitHub</a>
+          </div>
+        </div>
+    </nav>
+  </aside>
+
+  <main class="docs-main">
+    <article class="doc">
+      <div class="eyebrow">Build &amp; ship</div>
+      <h1>Your first site, line by line</h1>
+<p class="lead">This is the actual code for a tiny personal page you can ship as your very first project. Copy it, change the words to be about you, and you've built something real. No experience needed.</p>
+<h2 id="h-1-make-the-files">1. Make the files</h2>
+<p>Open VS Code, make a new folder (call it whatever, e.g. <code>my-page</code>), and inside it create two files: <code>index.html</code> and <code>style.css</code>.</p>
+<h2 id="h-2-the-page-index-html">2. The page: <code>index.html</code></h2>
+<p>Paste this in. It's a whole webpage: a heading, a line about you, and a couple of links.</p>
+<pre><code class="language-html">&lt;!DOCTYPE html&gt;
+&lt;html lang="en"&gt;
+&lt;head&gt;
+  &lt;meta charset="utf-8"&gt;
+  &lt;meta name="viewport" content="width=device-width, initial-scale=1"&gt;
+  &lt;title&gt;Your Name&lt;/title&gt;
+  &lt;link rel="stylesheet" href="style.css"&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;main&gt;
+    &lt;h1&gt;Hi, I'm Your Name&lt;/h1&gt;
+    &lt;p&gt;I'm a builder on Pixl. I like making things and I'm just getting started.&lt;/p&gt;
+    &lt;ul&gt;
+      &lt;li&gt;&lt;a href="https://github.com/yourname"&gt;My GitHub&lt;/a&gt;&lt;/li&gt;
+      &lt;li&gt;&lt;a href="https://pixl.rsvp"&gt;Pixl&lt;/a&gt;&lt;/li&gt;
+    &lt;/ul&gt;
+  &lt;/main&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+<h2 id="h-3-the-style-style-css">3. The style: <code>style.css</code></h2>
+<p>HTML on its own looks plain. This makes it look intentional.</p>
+<pre><code class="language-css">body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  font-family: system-ui, sans-serif;
+  background: #16130d;
+  color: #f4e3c2;
+}
+main { max-width: 32rem; padding: 2rem; }
+h1 { font-size: 2.2rem; margin: 0 0 .5rem; }
+a { color: #f4b942; }
+ul { list-style: none; padding: 0; display: flex; gap: 1rem; }</code></pre>
+<p>Double-click <code>index.html</code> to open it in your browser. That's your site, live on your own machine.</p>
+<h2 id="h-4-make-it-yours">4. Make it yours</h2>
+<p>Change the name, the sentence, and the links. Add a second paragraph, a photo (<code>&lt;img src="me.png"&gt;</code>), a list of things you've made, whatever. It only has to be real and yours. If you want more tags to play with, the <a href="/docs/html/">HTML guide</a> covers the basics.</p>
+<h2 id="h-5-track-push-ship">5. Track, push, ship</h2>
+<p>Before you spend real time on it, get <a href="/docs/hackatime/">Hackatime</a> installed so your hours count. Then push the folder to GitHub (the <a href="/docs/git/">Git guide</a> has the commands), create the project in your Builder Terminal, and ship it. Full checklist in <a href="/docs/first-project/">Build your first project</a>.</p>
+<div class="callout">
+          <span class="k">Stuck?</span>
+          <p>That's normal, everyone is at first. Ask in the Pixl help channel, or just ship the simplest version that works. Finished beats perfect.</p>
+        </div>
+      <div class="doc-foot">
+        <a class="prev" href="/docs/first-project/"><span class="dir">Previous</span><span class="ttl">Build your first project</span></a>
+        <a class="next" href="/docs/shipping/"><span class="dir">Next</span><span class="ttl">Shipping</span></a>
+      </div>
+      <div class="doc-sign">Built by the Pixl team</div>
+    </article>
+  </main>
+
+  <aside class="docs-toc">
+    <div class="docs-toc-h">On this page</div><a href="#h-1-make-the-files" data-h="h-1-make-the-files">1. Make the files</a><a href="#h-2-the-page-index-html" data-h="h-2-the-page-index-html">2. The page: index.html</a><a href="#h-3-the-style-style-css" data-h="h-3-the-style-style-css">3. The style: style.css</a><a href="#h-4-make-it-yours" data-h="h-4-make-it-yours">4. Make it yours</a><a href="#h-5-track-push-ship" data-h="h-5-track-push-ship">5. Track, push, ship</a>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha512-D9gUyxqja7hBtkWpPWGt9wfbfaMGVt9gnyCvYa+jojwwPHLCzUm5i8rpk7vD7wNee9bA35eYIjobYPaQuKS1MQ==" crossorigin="anonymous"></script>
+<script src="/docs/docs.js?v=2"></script>
+</body>
+</html>

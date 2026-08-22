@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+  try {
+    document.documentElement.dataset.theme = localStorage.getItem("pixl_theme_v2") || "light";
+  } catch (e) {
+    document.documentElement.dataset.theme = "light";
+  }
+</script>
+<title>Pixl · Git and GitHub</title>
+<meta name="description" content="Almost every trial you ship should end up on GitHub somewhere, both because reviewers want to see your code and because it's just how you avoid losing your work.">
+<link rel="canonical" href="https://pixl.hackclub.com/docs/git/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Pixl">
+<meta property="og:title" content="Git and GitHub">
+<meta property="og:description" content="Almost every trial you ship should end up on GitHub somewhere, both because reviewers want to see your code and because it's just how you avoid losing your work.">
+<meta property="og:url" content="https://pixl.hackclub.com/docs/git/">
+<meta property="og:image" content="https://pixl.hackclub.com/docs/git/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Git and GitHub">
+<meta name="twitter:description" content="Almost every trial you ship should end up on GitHub somewhere, both because reviewers want to see your code and because it's just how you avoid losing your work.">
+<meta name="twitter:image" content="https://pixl.hackclub.com/docs/git/og.png">
+<link rel="icon" href="/index.icon.png">
+<link rel="stylesheet" href="/pixl.css?v=2">
+<link rel="stylesheet" href="/docs/docs.css?v=2">
+</head>
+<body>
+<div class="docs">
+  <aside class="docs-nav">
+    <div class="docs-nav-head">
+      <a class="docs-brand" id="docs-brand" title="Back to the game"><img src="/index.icon.png" alt="">PIXL <span>DOCS</span></a>
+    </div>
+    <button class="btn dark" id="docs-back" type="button" style="margin:0 6px 16px;justify-content:center">◄ BACK</button>
+    <nav id="docs-nav-list">
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Start here</span><span class="count">2</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/welcome/">Welcome to Pixl</a>
+            <a class="section-link" href="/docs/get/">What do you actually get</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Rules</span><span class="count">3</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/eligibility/">Who can join</a>
+            <a class="section-link" href="/docs/rules/">Ship requirements</a>
+            <a class="section-link" href="/docs/moderation/">Reports, warnings and bans</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">The Restoration</span><span class="count">3</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/restoration/">How the Restoration works</a>
+            <a class="section-link" href="/docs/sidequest/">Your trial</a>
+            <a class="section-link" href="/docs/vault/">The Core Vault</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Build &amp; ship</span><span class="count">8</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/building/">Building</a>
+            <a class="section-link" href="/docs/first-project/">Build your first project</a>
+            <a class="section-link" href="/docs/first-site/">Your first site, line by line</a>
+            <a class="section-link" href="/docs/shipping/">Shipping</a>
+            <a class="section-link" href="/docs/rewards/">Rewards</a>
+            <a class="section-link" href="/docs/shop/">The shop and your orders</a>
+            <a class="section-link" href="/docs/energy/">Restoration Energy and levels</a>
+            <a class="section-link" href="/docs/collab/">Building with other people</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Community</span><span class="count">4</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/refers/">Referrals</a>
+            <a class="section-link" href="/docs/upvotes/">Upvotes and collectibles</a>
+            <a class="section-link" href="/docs/ideas/">The ideas board</a>
+            <a class="section-link" href="/docs/social/">Friends, villages and keeping up</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Resources</span><span class="count">2</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/free/">Free stuff to help you build</a>
+            <a class="section-link" href="/docs/help/">Need help?</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Guides</span><span class="count">5</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/html/">HTML guide</a>
+            <a class="section-link" href="/docs/slack/">Slack app guide</a>
+            <a class="section-link" href="/docs/roblox/">Roblox guide</a>
+            <a class="section-link" href="/docs/react-native/">React Native app guide</a>
+            <a class="section-link" href="/docs/pixel-art/">Pixel art guide</a>
+          </div>
+        </div>
+        <div class="docs-group">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Setup</span><span class="count">3</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/hackatime/">Hackatime setup</a>
+            <a class="section-link" href="/docs/submitting/">Submitting your project</a>
+            <a class="section-link active" href="/docs/git/">Git and GitHub</a>
+          </div>
+        </div>
+    </nav>
+  </aside>
+
+  <main class="docs-main">
+    <article class="doc">
+      <div class="eyebrow">Setup</div>
+      <h1>Git and GitHub</h1>
+<p>Almost every trial you ship should end up on GitHub somewhere, both because reviewers want to see your code and because it's just how you avoid losing your work.</p>
+<h2 id="h-getting-git-installed">Getting Git installed</h2>
+<p>If you're on Mac, Git is usually already there, open your terminal and type <code>git --version</code> to check. On Windows, grab Git for Windows from git-scm.com and install it with the default options. On Linux it's normally <code>sudo apt install git</code> or whatever your package manager uses.</p>
+<h2 id="h-setting-up-your-identity">Setting up your identity</h2>
+<p>Before your first commit, tell Git who you are:</p>
+<pre><code class="language-bash">git config --global user.name "Your Name"
+git config --global user.email "you@example.com"</code></pre>
+<p>Use the same email as your GitHub account so your commits actually get linked to your profile.</p>
+<h2 id="h-starting-a-new-project">Starting a new project</h2>
+<p>Inside your project folder:</p>
+<pre><code class="language-bash">git init
+git add .
+git commit -m "first commit"</code></pre>
+<p>Then head to GitHub, make a new repo, and it'll give you a couple lines to run that connect your local folder to it, something like:</p>
+<pre><code class="language-bash">git remote add origin https://github.com/yourusername/yourproject.git
+git branch -M main
+git push -u origin main</code></pre>
+<h2 id="h-the-everyday-loop">The everyday loop</h2>
+<p>Once it's set up, the loop you'll use constantly is:</p>
+<pre><code class="language-bash">git add .
+git commit -m "what you changed"
+git push</code></pre>
+<p>Commit often, and write messages that actually describe what changed, "fixed navbar overflow on mobile" is a lot more useful later than "update."</p>
+<h2 id="h-a-gitignore-is-worth-setting-up-early">A .gitignore is worth setting up early</h2>
+<p>You don't want to accidentally commit API keys, node_modules, or build files. Create a .gitignore file in your project root and add lines like:</p>
+<pre><code class="language-plaintext">node_modules/
+.env
+dist/</code></pre>
+<p>GitHub has starter .gitignore templates for pretty much every language if you search "gitignore [your language] github."</p>
+<h2 id="h-why-this-matters-for-trials">Why this matters for trials</h2>
+<p>A lot of submissions ask for a repo link, and reviewers do actually look at your commit history sometimes, it's one of the ways they can tell a project was built over real hours instead of dumped in all at once right before a deadline.</p>
+      <div class="doc-foot">
+        <a class="prev" href="/docs/submitting/"><span class="dir">Previous</span><span class="ttl">Submitting your project</span></a>
+        
+      </div>
+      <div class="doc-sign">Built by alexx</div>
+    </article>
+  </main>
+
+  <aside class="docs-toc">
+    <div class="docs-toc-h">On this page</div><a href="#h-getting-git-installed" data-h="h-getting-git-installed">Getting Git installed</a><a href="#h-setting-up-your-identity" data-h="h-setting-up-your-identity">Setting up your identity</a><a href="#h-starting-a-new-project" data-h="h-starting-a-new-project">Starting a new project</a><a href="#h-the-everyday-loop" data-h="h-the-everyday-loop">The everyday loop</a><a href="#h-a-gitignore-is-worth-setting-up-early" data-h="h-a-gitignore-is-worth-setting-up-early">A .gitignore is worth setting up early</a><a href="#h-why-this-matters-for-trials" data-h="h-why-this-matters-for-trials">Why this matters for trials</a>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha512-D9gUyxqja7hBtkWpPWGt9wfbfaMGVt9gnyCvYa+jojwwPHLCzUm5i8rpk7vD7wNee9bA35eYIjobYPaQuKS1MQ==" crossorigin="anonymous"></script>
+<script src="/docs/docs.js?v=2"></script>
+</body>
+</html>

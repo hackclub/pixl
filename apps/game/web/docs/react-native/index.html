@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+  try {
+    document.documentElement.dataset.theme = localStorage.getItem("pixl_theme_v2") || "light";
+  } catch (e) {
+    document.documentElement.dataset.theme = "light";
+  }
+</script>
+<title>Pixl · React Native app guide</title>
+<meta name="description" content="Marco's traveler app is a good example of what this guide is for, a mobile app that actually does something, tracks stuff, sends notifications, works on your phone.">
+<link rel="canonical" href="https://pixl.hackclub.com/docs/react-native/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Pixl">
+<meta property="og:title" content="React Native app guide">
+<meta property="og:description" content="Marco's traveler app is a good example of what this guide is for, a mobile app that actually does something, tracks stuff, sends notifications, works on your phone.">
+<meta property="og:url" content="https://pixl.hackclub.com/docs/react-native/">
+<meta property="og:image" content="https://pixl.hackclub.com/docs/react-native/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="React Native app guide">
+<meta name="twitter:description" content="Marco's traveler app is a good example of what this guide is for, a mobile app that actually does something, tracks stuff, sends notifications, works on your phone.">
+<meta name="twitter:image" content="https://pixl.hackclub.com/docs/react-native/og.png">
+<link rel="icon" href="/index.icon.png">
+<link rel="stylesheet" href="/pixl.css?v=2">
+<link rel="stylesheet" href="/docs/docs.css?v=2">
+</head>
+<body>
+<div class="docs">
+  <aside class="docs-nav">
+    <div class="docs-nav-head">
+      <a class="docs-brand" id="docs-brand" title="Back to the game"><img src="/index.icon.png" alt="">PIXL <span>DOCS</span></a>
+    </div>
+    <button class="btn dark" id="docs-back" type="button" style="margin:0 6px 16px;justify-content:center">◄ BACK</button>
+    <nav id="docs-nav-list">
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Start here</span><span class="count">2</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/welcome/">Welcome to Pixl</a>
+            <a class="section-link" href="/docs/get/">What do you actually get</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Rules</span><span class="count">3</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/eligibility/">Who can join</a>
+            <a class="section-link" href="/docs/rules/">Ship requirements</a>
+            <a class="section-link" href="/docs/moderation/">Reports, warnings and bans</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">The Restoration</span><span class="count">3</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/restoration/">How the Restoration works</a>
+            <a class="section-link" href="/docs/sidequest/">Your trial</a>
+            <a class="section-link" href="/docs/vault/">The Core Vault</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Build &amp; ship</span><span class="count">8</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/building/">Building</a>
+            <a class="section-link" href="/docs/first-project/">Build your first project</a>
+            <a class="section-link" href="/docs/first-site/">Your first site, line by line</a>
+            <a class="section-link" href="/docs/shipping/">Shipping</a>
+            <a class="section-link" href="/docs/rewards/">Rewards</a>
+            <a class="section-link" href="/docs/shop/">The shop and your orders</a>
+            <a class="section-link" href="/docs/energy/">Restoration Energy and levels</a>
+            <a class="section-link" href="/docs/collab/">Building with other people</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Community</span><span class="count">4</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/refers/">Referrals</a>
+            <a class="section-link" href="/docs/upvotes/">Upvotes and collectibles</a>
+            <a class="section-link" href="/docs/ideas/">The ideas board</a>
+            <a class="section-link" href="/docs/social/">Friends, villages and keeping up</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Resources</span><span class="count">2</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/free/">Free stuff to help you build</a>
+            <a class="section-link" href="/docs/help/">Need help?</a>
+          </div>
+        </div>
+        <div class="docs-group">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Guides</span><span class="count">5</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/html/">HTML guide</a>
+            <a class="section-link" href="/docs/slack/">Slack app guide</a>
+            <a class="section-link" href="/docs/roblox/">Roblox guide</a>
+            <a class="section-link active" href="/docs/react-native/">React Native app guide</a>
+            <a class="section-link" href="/docs/pixel-art/">Pixel art guide</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Setup</span><span class="count">3</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/hackatime/">Hackatime setup</a>
+            <a class="section-link" href="/docs/submitting/">Submitting your project</a>
+            <a class="section-link" href="/docs/git/">Git and GitHub</a>
+          </div>
+        </div>
+    </nav>
+  </aside>
+
+  <main class="docs-main">
+    <article class="doc">
+      <div class="eyebrow">Guides</div>
+      <h1>React Native app guide</h1>
+<p>Marco's traveler app is a good example of what this guide is for, a mobile app that actually does something, tracks stuff, sends notifications, works on your phone.</p>
+<h2 id="h-setting-up-your-project">Setting up your project</h2>
+<p>The fastest way to get moving is Expo, it skips a lot of the native setup pain. Install it and start a new project:</p>
+<pre><code class="language-bash">npx create-expo-app my-app
+cd my-app
+npx expo start</code></pre>
+<p>That last command gives you a QR code, scan it with the Expo Go app on your phone and your app shows up live, and updates as you save files.</p>
+<h2 id="h-the-basic-structure">The basic structure</h2>
+<p>Expo projects come with a file based router by default, every file inside the app folder becomes a screen. A simple screen looks like:</p>
+<pre><code class="language-javascript">import { View, Text, StyleSheet } from 'react-native';
+
+export default function HomeScreen() {
+  return (
+    &lt;View style={styles.container}&gt;
+      &lt;Text style={styles.title}&gt;Marco's Routes&lt;/Text&gt;
+    &lt;/View&gt;
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, padding: 20, paddingTop: 60 },
+  title: { fontSize: 24, fontWeight: 'bold' }
+});</code></pre>
+<h2 id="h-storing-data-locally">Storing data locally</h2>
+<p>For something like tracking routes or logging inventory, AsyncStorage is the easiest starting point, it's basically a simple key value store on the device:</p>
+<pre><code class="language-javascript">import AsyncStorage from '@react-native-async-storage/async-storage';
+
+await AsyncStorage.setItem('routes', JSON.stringify(routeList));
+const saved = await AsyncStorage.getItem('routes');</code></pre>
+<h2 id="h-notifications">Notifications</h2>
+<p>Expo has a notifications module built in. After asking the user for permission, you can schedule a local notification like this:</p>
+<pre><code class="language-javascript">import * as Notifications from 'expo-notifications';
+
+await Notifications.scheduleNotificationAsync({
+  content: { title: "New region reached", body: "You've arrived somewhere new" },
+  trigger: null
+});</code></pre>
+<h2 id="h-getting-it-onto-your-phone-for-real">Getting it onto your phone for real</h2>
+<p>While you're building, Expo Go is fine. Once it's finished, you can either keep it as an Expo Go project for your submission, or build a real standalone app with <code>eas build</code> if you want something closer to a real App Store style release.</p>
+      <div class="doc-foot">
+        <a class="prev" href="/docs/roblox/"><span class="dir">Previous</span><span class="ttl">Roblox guide</span></a>
+        <a class="next" href="/docs/pixel-art/"><span class="dir">Next</span><span class="ttl">Pixel art guide</span></a>
+      </div>
+      <div class="doc-sign">Built by alexx</div>
+    </article>
+  </main>
+
+  <aside class="docs-toc">
+    <div class="docs-toc-h">On this page</div><a href="#h-setting-up-your-project" data-h="h-setting-up-your-project">Setting up your project</a><a href="#h-the-basic-structure" data-h="h-the-basic-structure">The basic structure</a><a href="#h-storing-data-locally" data-h="h-storing-data-locally">Storing data locally</a><a href="#h-notifications" data-h="h-notifications">Notifications</a><a href="#h-getting-it-onto-your-phone-for-real" data-h="h-getting-it-onto-your-phone-for-real">Getting it onto your phone for real</a>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha512-D9gUyxqja7hBtkWpPWGt9wfbfaMGVt9gnyCvYa+jojwwPHLCzUm5i8rpk7vD7wNee9bA35eYIjobYPaQuKS1MQ==" crossorigin="anonymous"></script>
+<script src="/docs/docs.js?v=2"></script>
+</body>
+</html>

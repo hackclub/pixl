@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+  try {
+    document.documentElement.dataset.theme = localStorage.getItem("pixl_theme_v2") || "light";
+  } catch (e) {
+    document.documentElement.dataset.theme = "light";
+  }
+</script>
+<title>Pixl · HTML guide</title>
+<meta name="description" content="If you've never built a website before, this is the place to start.">
+<link rel="canonical" href="https://pixl.hackclub.com/docs/html/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Pixl">
+<meta property="og:title" content="HTML guide">
+<meta property="og:description" content="If you've never built a website before, this is the place to start.">
+<meta property="og:url" content="https://pixl.hackclub.com/docs/html/">
+<meta property="og:image" content="https://pixl.hackclub.com/docs/html/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="HTML guide">
+<meta name="twitter:description" content="If you've never built a website before, this is the place to start.">
+<meta name="twitter:image" content="https://pixl.hackclub.com/docs/html/og.png">
+<link rel="icon" href="/index.icon.png">
+<link rel="stylesheet" href="/pixl.css?v=2">
+<link rel="stylesheet" href="/docs/docs.css?v=2">
+</head>
+<body>
+<div class="docs">
+  <aside class="docs-nav">
+    <div class="docs-nav-head">
+      <a class="docs-brand" id="docs-brand" title="Back to the game"><img src="/index.icon.png" alt="">PIXL <span>DOCS</span></a>
+    </div>
+    <button class="btn dark" id="docs-back" type="button" style="margin:0 6px 16px;justify-content:center">◄ BACK</button>
+    <nav id="docs-nav-list">
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Start here</span><span class="count">2</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/welcome/">Welcome to Pixl</a>
+            <a class="section-link" href="/docs/get/">What do you actually get</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Rules</span><span class="count">3</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/eligibility/">Who can join</a>
+            <a class="section-link" href="/docs/rules/">Ship requirements</a>
+            <a class="section-link" href="/docs/moderation/">Reports, warnings and bans</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">The Restoration</span><span class="count">3</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/restoration/">How the Restoration works</a>
+            <a class="section-link" href="/docs/sidequest/">Your trial</a>
+            <a class="section-link" href="/docs/vault/">The Core Vault</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Build &amp; ship</span><span class="count">8</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/building/">Building</a>
+            <a class="section-link" href="/docs/first-project/">Build your first project</a>
+            <a class="section-link" href="/docs/first-site/">Your first site, line by line</a>
+            <a class="section-link" href="/docs/shipping/">Shipping</a>
+            <a class="section-link" href="/docs/rewards/">Rewards</a>
+            <a class="section-link" href="/docs/shop/">The shop and your orders</a>
+            <a class="section-link" href="/docs/energy/">Restoration Energy and levels</a>
+            <a class="section-link" href="/docs/collab/">Building with other people</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Community</span><span class="count">4</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/refers/">Referrals</a>
+            <a class="section-link" href="/docs/upvotes/">Upvotes and collectibles</a>
+            <a class="section-link" href="/docs/ideas/">The ideas board</a>
+            <a class="section-link" href="/docs/social/">Friends, villages and keeping up</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Resources</span><span class="count">2</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/free/">Free stuff to help you build</a>
+            <a class="section-link" href="/docs/help/">Need help?</a>
+          </div>
+        </div>
+        <div class="docs-group">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Guides</span><span class="count">5</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link active" href="/docs/html/">HTML guide</a>
+            <a class="section-link" href="/docs/slack/">Slack app guide</a>
+            <a class="section-link" href="/docs/roblox/">Roblox guide</a>
+            <a class="section-link" href="/docs/react-native/">React Native app guide</a>
+            <a class="section-link" href="/docs/pixel-art/">Pixel art guide</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Setup</span><span class="count">3</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/hackatime/">Hackatime setup</a>
+            <a class="section-link" href="/docs/submitting/">Submitting your project</a>
+            <a class="section-link" href="/docs/git/">Git and GitHub</a>
+          </div>
+        </div>
+    </nav>
+  </aside>
+
+  <main class="docs-main">
+    <article class="doc">
+      <div class="eyebrow">Guides</div>
+      <h1>HTML guide</h1>
+<p>If you've never built a website before, this is the place to start. HTML is the skeleton of every website you'll ever see, it's what tells the browser "this is a heading, this is a paragraph, this is a button."</p>
+<h2 id="h-getting-set-up">Getting set up</h2>
+<p>You don't need anything fancy. Open VS Code, make a new folder for your project, and create a file called <code>index.html</code>. That's it, that's your website.</p>
+<h2 id="h-the-basics">The basics</h2>
+<p>Every HTML page starts with a bit of boilerplate:</p>
+<pre><code class="language-html">&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+  &lt;title&gt;My Site&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;h1&gt;Hello world&lt;/h1&gt;
+  &lt;p&gt;This is my first page.&lt;/p&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+<p>Save that file and open it in your browser. Congrats, you just built a website.</p>
+<h2 id="h-a-few-tags-worth-knowing">A few tags worth knowing</h2>
+<ul>
+<li><code>&lt;h1&gt;</code> through <code>&lt;h6&gt;</code> for headings, biggest to smallest</li>
+<li><code>&lt;p&gt;</code> for paragraphs</li>
+<li><code>&lt;a href="..."&gt;</code> for links</li>
+<li><code>&lt;img src="..."&gt;</code> for images</li>
+<li><code>&lt;button&gt;</code> for buttons</li>
+<li><code>&lt;div&gt;</code> for grouping stuff together</li>
+</ul>
+<h2 id="h-making-it-not-look-terrible">Making it not look terrible</h2>
+<p>HTML alone gives you the structure but no style. That's what CSS is for. You can either put styles in a separate <code>style.css</code> file and link it, or just throw a <code>&lt;style&gt;</code> tag in the <code>&lt;head&gt;</code>. Something like:</p>
+<pre><code class="language-html">&lt;style&gt;
+  body {
+    font-family: sans-serif;
+    background: #111;
+    color: white;
+  }
+&lt;/style&gt;</code></pre>
+<p>That alone already looks better than plain HTML.</p>
+<h2 id="h-for-a-zara-style-storefront-trial">For a Zara style storefront trial</h2>
+<p>Think about what a real storefront needs: a header with the merchant's name, a list of items with images and prices, and a contact form at the bottom. Build it section by section instead of trying to do the whole page at once. Ship something simple and working before you try to make it fancy.</p>
+      <div class="doc-foot">
+        <a class="prev" href="/docs/help/"><span class="dir">Previous</span><span class="ttl">Need help?</span></a>
+        <a class="next" href="/docs/slack/"><span class="dir">Next</span><span class="ttl">Slack app guide</span></a>
+      </div>
+      <div class="doc-sign">Built by alexx</div>
+    </article>
+  </main>
+
+  <aside class="docs-toc">
+    <div class="docs-toc-h">On this page</div><a href="#h-getting-set-up" data-h="h-getting-set-up">Getting set up</a><a href="#h-the-basics" data-h="h-the-basics">The basics</a><a href="#h-a-few-tags-worth-knowing" data-h="h-a-few-tags-worth-knowing">A few tags worth knowing</a><a href="#h-making-it-not-look-terrible" data-h="h-making-it-not-look-terrible">Making it not look terrible</a><a href="#h-for-a-zara-style-storefront-trial" data-h="h-for-a-zara-style-storefront-trial">For a Zara style storefront trial</a>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha512-D9gUyxqja7hBtkWpPWGt9wfbfaMGVt9gnyCvYa+jojwwPHLCzUm5i8rpk7vD7wNee9bA35eYIjobYPaQuKS1MQ==" crossorigin="anonymous"></script>
+<script src="/docs/docs.js?v=2"></script>
+</body>
+</html>

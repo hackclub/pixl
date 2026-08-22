@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>
+  try {
+    document.documentElement.dataset.theme = localStorage.getItem("pixl_theme_v2") || "light";
+  } catch (e) {
+    document.documentElement.dataset.theme = "light";
+  }
+</script>
+<title>Pixl · Restoration Energy and levels</title>
+<meta name="description" content="Every hour you ship becomes Restoration Energy, or RE.">
+<link rel="canonical" href="https://pixl.hackclub.com/docs/energy/">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Pixl">
+<meta property="og:title" content="Restoration Energy and levels">
+<meta property="og:description" content="Every hour you ship becomes Restoration Energy, or RE.">
+<meta property="og:url" content="https://pixl.hackclub.com/docs/energy/">
+<meta property="og:image" content="https://pixl.hackclub.com/docs/energy/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Restoration Energy and levels">
+<meta name="twitter:description" content="Every hour you ship becomes Restoration Energy, or RE.">
+<meta name="twitter:image" content="https://pixl.hackclub.com/docs/energy/og.png">
+<link rel="icon" href="/index.icon.png">
+<link rel="stylesheet" href="/pixl.css?v=2">
+<link rel="stylesheet" href="/docs/docs.css?v=2">
+</head>
+<body>
+<div class="docs">
+  <aside class="docs-nav">
+    <div class="docs-nav-head">
+      <a class="docs-brand" id="docs-brand" title="Back to the game"><img src="/index.icon.png" alt="">PIXL <span>DOCS</span></a>
+    </div>
+    <button class="btn dark" id="docs-back" type="button" style="margin:0 6px 16px;justify-content:center">◄ BACK</button>
+    <nav id="docs-nav-list">
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Start here</span><span class="count">2</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/welcome/">Welcome to Pixl</a>
+            <a class="section-link" href="/docs/get/">What do you actually get</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Rules</span><span class="count">3</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/eligibility/">Who can join</a>
+            <a class="section-link" href="/docs/rules/">Ship requirements</a>
+            <a class="section-link" href="/docs/moderation/">Reports, warnings and bans</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">The Restoration</span><span class="count">3</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/restoration/">How the Restoration works</a>
+            <a class="section-link" href="/docs/sidequest/">Your trial</a>
+            <a class="section-link" href="/docs/vault/">The Core Vault</a>
+          </div>
+        </div>
+        <div class="docs-group">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Build &amp; ship</span><span class="count">8</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/building/">Building</a>
+            <a class="section-link" href="/docs/first-project/">Build your first project</a>
+            <a class="section-link" href="/docs/first-site/">Your first site, line by line</a>
+            <a class="section-link" href="/docs/shipping/">Shipping</a>
+            <a class="section-link" href="/docs/rewards/">Rewards</a>
+            <a class="section-link" href="/docs/shop/">The shop and your orders</a>
+            <a class="section-link active" href="/docs/energy/">Restoration Energy and levels</a>
+            <a class="section-link" href="/docs/collab/">Building with other people</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Community</span><span class="count">4</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/refers/">Referrals</a>
+            <a class="section-link" href="/docs/upvotes/">Upvotes and collectibles</a>
+            <a class="section-link" href="/docs/ideas/">The ideas board</a>
+            <a class="section-link" href="/docs/social/">Friends, villages and keeping up</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Resources</span><span class="count">2</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/free/">Free stuff to help you build</a>
+            <a class="section-link" href="/docs/help/">Need help?</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Guides</span><span class="count">5</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/html/">HTML guide</a>
+            <a class="section-link" href="/docs/slack/">Slack app guide</a>
+            <a class="section-link" href="/docs/roblox/">Roblox guide</a>
+            <a class="section-link" href="/docs/react-native/">React Native app guide</a>
+            <a class="section-link" href="/docs/pixel-art/">Pixel art guide</a>
+          </div>
+        </div>
+        <div class="docs-group collapsed">
+          <button class="docs-group-head" type="button">
+            <span class="g-title">Setup</span><span class="count">3</span><span class="chev">▼</span>
+          </button>
+          <div class="docs-group-items">
+            <a class="section-link" href="/docs/hackatime/">Hackatime setup</a>
+            <a class="section-link" href="/docs/submitting/">Submitting your project</a>
+            <a class="section-link" href="/docs/git/">Git and GitHub</a>
+          </div>
+        </div>
+    </nav>
+  </aside>
+
+  <main class="docs-main">
+    <article class="doc">
+      <div class="eyebrow">Build &amp; ship</div>
+      <h1>Restoration Energy and levels</h1>
+<p class="lead">Every hour you ship becomes <b>Restoration Energy</b>, or RE. It's the number the whole economy runs on: RE decides what an hour of your work pays, and your level is a readout of how much of it you've built up.</p>
+<p>You never spend RE. It only goes up, nothing decays, and nothing anyone else ships takes any of it away from you. Pixels are the thing you spend; RE is the thing that decides how many pixels an hour is worth.</p>
+<h2 id="h-tiers-decide-what-an-hour-is-worth">Tiers decide what an hour is worth</h2>
+<p>When a reviewer approves your project they also give it a <b>tier</b>, 1 to 4, based on how ambitious the build actually is. The tier sets how much RE each shipped hour on that project earns.</p>
+<div class="fact-grid">
+          <div>T1 Spark</div>
+          <div>A first spark of Restoration: a simple site, script or tiny tool.</div>
+          <div>5 RE / hour</div>
+          <div>T2 Signal</div>
+          <div>A focused app, CLI or game with real polish, one system back online.</div>
+          <div>10 RE / hour</div>
+          <div>T3 Grid</div>
+          <div>Several systems working together: backend, state, infrastructure.</div>
+          <div>15 RE / hour</div>
+          <div>T4 Nexus</div>
+          <div>Deep systems work: complex architecture and serious scope.</div>
+          <div>25 RE / hour</div>
+        </div>
+<p>Tier is about the project, not about you. A first timer who ships something genuinely hard gets the high tier for it. Padding a simple site out with hours doesn't move it up either, since reviewers look at the actual repo.</p>
+<h2 id="h-re-decides-your-rate-one-project-at-a-time">RE decides your rate, one project at a time</h2>
+<p>Each project's own RE, its tier weighted by its hours, is what sets <i>that project's</i> hourly rate. It starts at $3.50 an hour and climbs in a straight line to $6.00 an hour once the project alone earns 5,000 RE. In pixels, that's 50 px an hour rising to 86 px.</p>
+<p>The climb counts for the project that's earning it, and only that project. Its rate rises <i>while</i> its hours land, so it gets paid the average rate across the RE it earned, from zero. Whatever RE you've already banked from other projects doesn't carry over: every project starts its own climb from the bottom, so splitting your work across several projects or bundling it into one pays about the same either way, and no single big build inflates the rate on everything you ship afterwards.</p>
+<p>For example, a 200 hour T4 project earns the full 5,000 RE by itself, so its rate runs the entire ramp start to finish and it's paid $1010.00 (14429 px) total. Ship a 5 hour T1 project right after it and that one earns barely any RE on its own, so it's paid close to base: around $3.51 an hour (250 px total), not the $6.00 the big project just finished at.</p>
+<div class="callout">
+          <span class="k">The short version</span>
+          <p>On any one project, ship more, and ship something more ambitious, and every hour of it is worth more than the one before it. That project's own rate has a ceiling; your lifetime RE, below, does not.</p>
+        </div>
+<h2 id="h-the-tier-bonus">The tier bonus</h2>
+<p>That climb is deliberately slow, because 5,000 RE is a lot of shipping for one project. On a short project it would barely register, and a tier 4 weekend build would pay about the same as a tier 1 one. So tier also pays a flat bonus on top: $0.50 an hour for every tier above T1, on the first 40 hours of a project.</p>
+<p>So a 10 hour T4 project earns $15.00, about 214 px, on top of whatever its normal rate pays. Put together: 10 hours at T4 earns $35.63 off the RE ramp (its own RE barely dents 5,000, so the ramp alone is still close to base) plus the $15.00 kicker, for $50.63 total, about 723 px.</p>
+<p>After that the bonus stops, because by then a high tier project is already earning RE several times faster than a low tier one, so its own rate has already climbed a long way up the ramp without needing the flat bonus's help.</p>
+<h2 id="h-levels">Levels</h2>
+<p>Your level is a display of lifetime RE and nothing more. Levels run 1 to 100, each one costs more RE than the last, and they have <b>no effect on what you get paid</b>: the rate comes straight off RE. Level is just there so the shipping shows up somewhere.</p>
+<div class="fact-grid">
+          <div>Levels 1-10</div>
+          <div>10 RE per level</div>
+          <div>100 RE total</div>
+          <div>Levels 11-50</div>
+          <div>35 RE per level</div>
+          <div>1,500 RE total</div>
+          <div>Levels 51-100</div>
+          <div>70 RE per level</div>
+          <div>5,000 RE total</div>
+        </div>
+<p>Early levels are cheap on purpose: a couple of hours on your first project already moves you a level or two. The last level and the top pay rate land on the same amount of RE, so you hit both at once. RE keeps stacking past that, it just runs out of levels to show for it.</p>
+<h2 id="h-where-to-see-all-this">Where to see all this</h2>
+<p>The bar at the top of your Builder Terminal shows your level, your lifetime RE and your current rate in pixels per hour. It updates as soon as a project is approved.</p>
+      <div class="doc-foot">
+        <a class="prev" href="/docs/shop/"><span class="dir">Previous</span><span class="ttl">The shop and your orders</span></a>
+        <a class="next" href="/docs/collab/"><span class="dir">Next</span><span class="ttl">Building with other people</span></a>
+      </div>
+      <div class="doc-sign">Built by the Pixl team</div>
+    </article>
+  </main>
+
+  <aside class="docs-toc">
+    <div class="docs-toc-h">On this page</div><a href="#h-tiers-decide-what-an-hour-is-worth" data-h="h-tiers-decide-what-an-hour-is-worth">Tiers decide what an hour is worth</a><a href="#h-re-decides-your-rate-one-project-at-a-time" data-h="h-re-decides-your-rate-one-project-at-a-time">RE decides your rate, one project at a time</a><a href="#h-the-tier-bonus" data-h="h-the-tier-bonus">The tier bonus</a><a href="#h-levels" data-h="h-levels">Levels</a><a href="#h-where-to-see-all-this" data-h="h-where-to-see-all-this">Where to see all this</a>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" integrity="sha512-D9gUyxqja7hBtkWpPWGt9wfbfaMGVt9gnyCvYa+jojwwPHLCzUm5i8rpk7vD7wNee9bA35eYIjobYPaQuKS1MQ==" crossorigin="anonymous"></script>
+<script src="/docs/docs.js?v=2"></script>
+</body>
+</html>
