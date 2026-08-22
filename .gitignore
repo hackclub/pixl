@@ -37,6 +37,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 .DS_Store
 
+# Scratch mockups from the superpowers brainstorming visual companion
+.superpowers/
+
 samples/
 # per-machine Claude Code config (permissions, MCP toggles)
 .claude/settings.local.json
