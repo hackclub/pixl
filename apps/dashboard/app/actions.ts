@@ -1512,19 +1512,22 @@ export async function sendProjectToAirtable(formData: FormData): Promise<void> {
     redirect(`${back}?error=${encodeURIComponent("Only approved projects can be sent to Airtable.")}`);
   }
 
-  const { data: user } = await db
+  const { data: user, error: userError } = await db
     .from("users")
     .select(
       "first_name, last_name, real_name, email, birthday, address_line1, address_line2, address_city, address_state, address_country, address_postal",
     )
     .eq("id", project.user_id)
     .maybeSingle();
+  if (userError) {
+    redirect(`${back}?error=${encodeURIComponent("Could not look up this project's owner - try again.")}`);
+  }
 
   const [fallbackFirst, ...fallbackRest] = (user?.real_name ?? "").split(" ");
   const firstName = user?.first_name || fallbackFirst || "";
   const lastName = user?.last_name || fallbackRest.join(" ") || "";
 
-  const { data: audit } = await db
+  const { data: audit, error: auditError } = await db
     .from("review_audits")
     .select("audit_note")
     .eq("project_id", projectId)
@@ -1532,6 +1535,9 @@ export async function sendProjectToAirtable(formData: FormData): Promise<void> {
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  if (auditError) {
+    redirect(`${back}?error=${encodeURIComponent("Could not look up the approval note - try again.")}`);
+  }
   const auditSections = parseAuditNote(audit?.audit_note ?? "");
 
   const fields = buildAirtableFields({
@@ -1561,10 +1567,16 @@ export async function sendProjectToAirtable(formData: FormData): Promise<void> {
     redirect(`${back}?error=${encodeURIComponent(`Airtable push failed: ${result.error}`)}`);
   }
 
-  await db
+  const { error: updateError } = await db
     .from("projects")
     .update({ airtable_record_id: result.recordId })
     .eq("id", projectId);
+  if (updateError) {
+    console.error("sendProjectToAirtable: airtable_record_id save failed", updateError.message);
+    redirect(
+      `${back}?error=${encodeURIComponent("Pushed to Airtable, but failed to save the record link - check Airtable for a duplicate before pushing again.")}`,
+    );
+  }
 
   revalidatePath(back);
 }
