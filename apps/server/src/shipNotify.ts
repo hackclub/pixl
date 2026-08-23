@@ -75,7 +75,7 @@ export async function postShipToSlack(
   });
 
   try {
-    await fetch("https://slack.com/api/chat.postMessage", {
+    const r = await fetch("https://slack.com/api/chat.postMessage", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -89,6 +89,12 @@ export async function postShipToSlack(
       }),
       signal: AbortSignal.timeout(8000),
     });
+    // Slack answers chat.postMessage with HTTP 200 even on failure (wrong
+    // channel, bot not invited, etc.) , the real result is in the JSON body,
+    // so this must be checked or a broken channel fails completely silently.
+    const json = (await r.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+    if (!json?.ok)
+      console.error("postShipToSlack: slack rejected the message", json?.error ?? "no response body");
   } catch (e) {
     console.error("postShipToSlack failed", e);
   }
