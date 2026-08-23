@@ -13,6 +13,7 @@
 // (it only wires up a `url` getter), throwing inside path.join. Deriving
 // the directory from import.meta.url via fileURLToPath is the one form
 // that resolves correctly in Bun, plain Node, and under Turbopack.
+import { cache } from "react";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -54,10 +55,10 @@ export async function getFirstSlug(): Promise<string> {
   return docs[0]!.slug;
 }
 
-export async function getNav(): Promise<NavItem[]> {
+export const getNav = cache(async function getNav(): Promise<NavItem[]> {
   const { nav } = await loadAll();
   return nav;
-}
+});
 
 export async function getDoc(
   slug: string,
@@ -67,3 +68,8 @@ export async function getDoc(
   if (i === -1) return null;
   return { doc: docs[i]!, prev: nav[i - 1] ?? null, next: nav[i + 1] ?? null };
 }
+
+// Wrapped in React's cache() so a single request/render pass (the [slug]
+// layout and page.tsx both calling getDoc(slug)) only reads the file off
+// disk once, instead of once per caller.
+export const cachedGetDoc = cache(getDoc);

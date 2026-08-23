@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import Script from "next/script";
-import { getAllSlugs } from "@/lib/docs";
+import { getAllSlugs, cachedGetDoc } from "@/lib/docs";
 import { config } from "@/app/_generated/config";
-import { cachedGetDoc } from "./layout";
 import { CodeBlocks } from "./code-blocks";
 
 export async function generateStaticParams() {
@@ -76,12 +74,6 @@ export default async function DocPage({
       <div className="doc-sign">
         {SIGN_GROUPS.includes(doc.meta.group) ? "Built by alexx" : "Built by the Pixl team"}
       </div>
-      <Script
-        src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"
-        integrity="sha512-D9gUyxqja7hBtkWpPWGt9wfbfaMGVt9gnyCvYa+jojwwPHLCzUm5i8rpk7vD7wNee9bA35eYIjobYPaQuKS1MQ=="
-        crossOrigin="anonymous"
-        strategy="afterInteractive"
-      />
       <CodeBlocks slug={slug} />
     </article>
   );

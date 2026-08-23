@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import Script from "next/script";
 
 declare global {
   interface Window {
@@ -10,6 +11,10 @@ declare global {
 
 export function CodeBlocks({ slug }: { slug: string }) {
   useEffect(() => {
+    // Covers the fast path: hljs was already loaded by an earlier doc page
+    // in this client-side session, so it's ready the instant this mounts.
+    // The Script below's onLoad covers the other path (first page load,
+    // hljs still in flight when this effect runs).
     if (window.hljs) window.hljs.highlightAll();
 
     const cleanups: (() => void)[] = [];
@@ -43,5 +48,13 @@ export function CodeBlocks({ slug }: { slug: string }) {
     return () => cleanups.forEach((fn) => fn());
   }, [slug]);
 
-  return null;
+  return (
+    <Script
+      src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"
+      integrity="sha512-D9gUyxqja7hBtkWpPWGt9wfbfaMGVt9gnyCvYa+jojwwPHLCzUm5i8rpk7vD7wNee9bA35eYIjobYPaQuKS1MQ=="
+      crossOrigin="anonymous"
+      strategy="afterInteractive"
+      onLoad={() => window.hljs?.highlightAll()}
+    />
+  );
 }
