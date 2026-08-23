@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { cachedGetDoc, getNav } from "@/lib/docs";
 import { DocsShell } from "./docs-shell";
+import "../docs.css";
 
 export default async function DocsSlugLayout({
   children,

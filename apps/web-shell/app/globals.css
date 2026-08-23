@@ -2,6 +2,24 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+html { font-size: 15px; -webkit-text-size-adjust: 100%; }
+
+body, html {
+  cursor: url(/img/cursor/cursor-arrow.png) 2 0, auto;
+}
+a, button, .btn, .section-link, .docs-group-head, .theme-toggle, .copy-btn {
+  cursor: url(/img/cursor/cursor-pointer.png) 16 16, pointer !important;
+}
+
+body {
+  background-color: var(--panel-deep);
+  color: var(--ink);
+  font-family: var(--sans);
+  line-height: 1.5;
+}
+a { color: var(--gold); text-decoration: none; }
+a:hover { color: var(--gold-soft); }
+
 :root {
   /* <pixl-theme:light> */
   --ink:#16161e;--dim:#4a4a52;--faint:#6f6f78;--muted:#9a9aa2;--panel:#faf4de;--panel-2:#ece0bd;--panel-deep:#f5eed2;--gold:#ff8c37;--gold-soft:#ffa45c;--accent:#ec3750;--teal:#52aeb9;--teal-hover:#6bc3cd;--good:#3faa5f;--bad:#ec3750;--stroke:#16161e;--btn-ink:#f5eed2;
