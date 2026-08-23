@@ -267,13 +267,12 @@ body.has-sidebar{padding-left:var(--sidebar);padding-top:var(--toprail)}
 .wallet-chip .slot{background:var(--gold)}
 .wallet-chip .slot img{width:16px;height:16px}
 .wallet-chip .px{color:var(--ink);font-family:var(--sans);font-weight:700;font-size:16px;letter-spacing:.2px;font-variant-numeric:tabular-nums}
-.wallet-chip .lv{color:var(--dim);font-size:11px;letter-spacing:.5px}
 .rest-chip .slot{background:var(--teal)}
 .rest-chip .slot svg{width:15px;height:15px}
 .rest-chip .re{color:var(--ink);font-family:var(--sans);font-weight:700;font-size:16px;letter-spacing:.2px;font-variant-numeric:tabular-nums}
 .rest-chip .rl{color:var(--dim);font-size:11px;letter-spacing:.5px}
 @media (max-width:560px){
-  .wallet-chip .lv,.rest-chip .rl{display:none}
+  .rest-chip .rl{display:none}
   .rest-chip{display:none}
 }
 

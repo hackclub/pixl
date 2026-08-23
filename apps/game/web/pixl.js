@@ -466,7 +466,6 @@ const Pixl = (() => {
           <div class="wallet-chip" id="pixl-wallet" title="Your pixels">
             <span class="slot"><img src="/img/pixel.png" alt="px"></span>
             <span class="px">-</span>
-            <span class="lv"></span>
           </div>
           <button class="rail-btn" id="pixl-help-btn" type="button" title="New here? Replay the tour" aria-label="Replay the tour">${HELP_ICON}</button>
           ${themeBtn}`
@@ -537,10 +536,6 @@ const Pixl = (() => {
       const w = await api("/api/profile/wallet");
       if (!w.ok) return null;
       el.querySelector(".px").textContent = Math.round(w.pixels).toLocaleString();
-      // pxPerHour is a continuous ramp off RE now, not a step table, so it
-      // arrives fractional - round it for display.
-      el.querySelector(".lv").textContent =
-        `LVL ${w.level} · ${Math.round(w.re ?? 0).toLocaleString()} RE · ${Math.round(w.pxPerHour)} px/h`;
       return w;
     } catch {
       return null;
