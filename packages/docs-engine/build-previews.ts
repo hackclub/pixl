@@ -75,6 +75,11 @@ for (const page of pages) {
     process.exit(1);
   }
   const title = titleMatch[1]!;
+  // The card's bitmap font has no "·" glyph - it falls back to a blank space
+  // but still advances the cursor a full character, leaving a huge gap where
+  // the separator sat. Strip the brand prefix, same as build.ts's doc cards
+  // (which only ever get the bare page title, no "Pixl · ").
+  const cardTitle = title.replace(/^Pixl\s*·\s*/, "");
   const url = `${SITE}/${page.slug}/`;
   const image = `${url}og.png`;
 
@@ -105,7 +110,7 @@ for (const page of pages) {
 
   await writeFile(
     `${dir}/og.png`,
-    renderCard({ title, eyebrow: page.eyebrow, url: `${SITE_HOST}/${page.slug}` }),
+    renderCard({ title: cardTitle, eyebrow: page.eyebrow, url: `${SITE_HOST}/${page.slug}` }),
   );
   count++;
 }
