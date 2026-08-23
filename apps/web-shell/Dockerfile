@@ -20,22 +20,32 @@ RUN bun run packages/docs-engine/build.ts
 RUN cd apps/web-shell && bun run build
 
 FROM node:22-slim AS runtime
-WORKDIR /repo/apps/web-shell
+WORKDIR /repo
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 
-# apps/web-shell/node_modules is mostly symlinks into /repo/node_modules/.bun
-# (bun's workspace store, since this install runs against the root
-# package.json) - copying the app-level node_modules alone leaves those
-# symlinks dangling, so the store has to come along too, at the same
-# repo-root-relative path the symlinks point at.
-COPY --from=build --chown=node:node /repo/node_modules /repo/node_modules
-COPY --from=build --chown=node:node /repo/apps/web-shell/node_modules ./node_modules
-COPY --from=build --chown=node:node /repo/apps/web-shell/.next ./.next
-COPY --from=build --chown=node:node /repo/apps/web-shell/public ./public
-COPY --from=build --chown=node:node /repo/apps/web-shell/next.config.ts /repo/apps/web-shell/package.json ./
+# output: "standalone" (next.config.ts) makes `next build` run @vercel/nft to
+# trace the real runtime dependency graph and write it as concrete files
+# under .next/standalone, instead of the app-level node_modules' symlinks
+# into bun's workspace store - that's what let the old approach's ~900MB
+# /repo/node_modules copy be dropped entirely.
+#
+# In this monorepo the tracer nests its output to mirror the workspace
+# layout rather than flattening it: .next/standalone/apps/web-shell/server.js
+# is the real entry point, sitting next to a *root*-level
+# .next/standalone/node_modules (hoisted deps) as well as its own
+# apps/web-shell/node_modules (symlinks back into that root node_modules,
+# relative to the standalone folder - both must be copied together,
+# preserving this structure, for the symlinks to resolve).
+COPY --from=build --chown=node:node /repo/apps/web-shell/.next/standalone ./
+
+# Standalone mode does not copy .next/static or public/ (Next's docs say
+# these are meant to be handled by a CDN) - both have to be added back
+# manually, at the paths server.js expects relative to its own directory.
+COPY --from=build --chown=node:node /repo/apps/web-shell/.next/static ./apps/web-shell/.next/static
+COPY --from=build --chown=node:node /repo/apps/web-shell/public ./apps/web-shell/public
 
 USER node
 EXPOSE 3000
-CMD ["node", "node_modules/next/dist/bin/next", "start"]
+CMD ["node", "apps/web-shell/server.js"]
