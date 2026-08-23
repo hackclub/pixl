@@ -104,7 +104,16 @@ export default async function ReviewListPage({
             </h2>
           </div>
           <p className="text-xs text-muted-foreground mb-3">
-            Joe is scoring these. They move to your final pass on their own.
+            Joe is scoring these. They move to your final pass on their own.{" "}
+            {/* first_pass_hours is what the first-pass reviewer proposed crediting
+                (post-deduction), not the raw hours the player claimed. */}
+            <span className="font-medium text-foreground">
+              {fraudRows
+                .reduce((sum, p) => sum + (Number(p.first_pass_hours) || 0), 0)
+                .toLocaleString(undefined, { maximumFractionDigits: 1 })}
+              h
+            </span>{" "}
+            approved by first pass sitting in this queue.
           </p>
           <ul className="text-sm space-y-1">
             {fraudRows.map((p) => (
@@ -112,6 +121,9 @@ export default async function ReviewListPage({
                 <a href={`/review/${p.id}`} className="hover:underline">
                   {p.name}
                 </a>
+                {p.first_pass_hours != null && (
+                  <span className="text-xs text-muted-foreground">{p.first_pass_hours}h</span>
+                )}
                 <span className="text-xs text-muted-foreground">
                   {p.first_pass_at
                     ? `waiting ${Math.floor((Date.now() - new Date(p.first_pass_at).getTime()) / 86_400_000)}d`
