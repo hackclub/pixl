@@ -23,6 +23,12 @@ a { color: var(--gold); text-decoration: none; }
 a:hover { color: var(--gold-soft); }
 
 :root {
+  /* --sans/--pixel were never actually declared here (only *used* below and
+     throughout docs.css) - every heading/nav label was silently falling back
+     to the browser default font in production. Wired to next/font/google's
+     generated variables from app/layout.tsx. */
+  --sans: var(--font-poppins), system-ui, -apple-system, sans-serif;
+  --pixel: var(--font-pixelify-sans), ui-monospace, system-ui, sans-serif;
   /* <pixl-theme:light> */
   --ink:#16161e;--dim:#4a4a52;--faint:#6f6f78;--muted:#9a9aa2;--panel:#faf4de;--panel-2:#ece0bd;--panel-deep:#f5eed2;--gold:#ff8c37;--gold-soft:#ffa45c;--accent:#ec3750;--teal:#52aeb9;--teal-hover:#6bc3cd;--good:#3faa5f;--bad:#ec3750;--stroke:#16161e;--btn-ink:#f5eed2;
   /* <pixl-theme:light:end> */

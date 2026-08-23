@@ -34,29 +34,43 @@ export function DocsShell({
   const groups = groupNav(nav);
   const activeGroup = groups.find((g) => g.items.some((i) => i.slug === activeSlug))?.label;
 
-  const [open, setOpen] = useState<Set<string>>(() => new Set(activeGroup ? [activeGroup] : []));
+  // Only groups opened by hand live in this state - the active group is
+  // never written in here (see isGroupOpen below). Starts empty (not from
+  // localStorage) because localStorage isn't available during SSR and
+  // reading it in the initializer would desync the server-rendered HTML
+  // from the first client render; the effect below hydrates it right after
+  // mount instead.
+  const [open, setOpen] = useState<Set<string>>(() => new Set());
   const [backHref, setBackHref] = useState("/dashboard/");
   const [theme, setThemeState] = useState("light");
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeHeading, setActiveHeading] = useState(headings[0]?.id ?? "");
 
-  // Groups opened by hand persist across a fresh page load via localStorage;
-  // the group holding the CURRENT page is always forced open on top of that
-  // saved set, regardless of history — this state lives in a layout that
-  // doesn't remount on client-side navigation between doc pages, which is
-  // the actual fix for the bug this migration exists to fix (the old static
-  // site had no client router, so this same localStorage read had to run
-  // fresh on every single full page load).
+  // Whether a group renders expanded: manually opened (persisted in `open`)
+  // OR it's the group holding the page you're currently on. The active-group
+  // half is a plain derivation, not state written by an effect - on the old
+  // static site (no client router) this only had to work once per full page
+  // load; a client router (and layouts that don't remount between sibling
+  // routes) makes an effect based version prone to a visible flash where the
+  // page's own group renders collapsed for a frame after navigating before
+  // an effect catches up and reopens it. Deriving it at render time instead
+  // means the current page's group is correct on the very first paint,
+  // every time, full reload or client-side navigation alike.
+  function isGroupOpen(label: string): boolean {
+    return open.has(label) || label === activeGroup;
+  }
+
+  // Manually-opened groups persist across a fresh page load via localStorage
+  // - hydrated once after mount (see the empty state above for why not in
+  // the initializer).
   useEffect(() => {
     try {
-      const saved = new Set<string>(JSON.parse(localStorage.getItem(OPEN_KEY) || "[]"));
-      if (activeGroup) saved.add(activeGroup);
-      setOpen(saved);
+      setOpen(new Set(JSON.parse(localStorage.getItem(OPEN_KEY) || "[]")));
     } catch {
-      // malformed storage - fall back to just the active group
-      if (activeGroup) setOpen(new Set([activeGroup]));
+      // malformed storage - leave `open` empty, isGroupOpen still covers
+      // the active group correctly
     }
-  }, [activeGroup]);
+  }, []);
 
   useEffect(() => {
     try {
@@ -200,7 +214,7 @@ export function DocsShell({
         </button>
         <nav>
           {groups.map((g) => (
-            <div key={g.label} className={`docs-group${open.has(g.label) ? "" : " collapsed"}`}>
+            <div key={g.label} className={`docs-group${isGroupOpen(g.label) ? "" : " collapsed"}`}>
               <button className="docs-group-head" type="button" onClick={() => toggleGroup(g.label)}>
                 <span className="g-title">{g.label}</span>
                 <span className="count">{g.items.length}</span>
