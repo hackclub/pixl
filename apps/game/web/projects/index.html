@@ -2255,6 +2255,18 @@
         </label>
         ${
           inReview
+            ? ""
+            : `
+        <div class="form-row" id="s-note-row">
+          <label>NOTE TO REVIEWER (optional)</label>
+          <div class="ta-wrap">
+            <textarea class="field" id="s-note" maxlength="2000" placeholder="Anything a reviewer should know: demo quirks, where to look, hardware that's hard to film...">${Pixl.esc(p.ship_note || "")}</textarea>
+            <span class="ta-count" id="s-note-count">0 / 2000</span>
+          </div>
+        </div>`
+        }
+        ${
+          inReview
             ? `
         <div class="note-strip teal">This project is in the review queue, you can't edit it until it's reviewed. Unship it if you need to make changes.</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -2331,6 +2343,7 @@
           $("tr-px").addEventListener("click", () => claimTrialReward(p, "pixels", prize, total, beyond));
         }
         wireTrialPicker();
+        wireCount("s-note", "s-note-count", 2000);
         $("share-btn").addEventListener("click", async () => {
           const link = location.origin + "/explore/#project=" + p.id;
           try {
@@ -2909,6 +2922,7 @@
         const body = {
           otherYsws: $("s-ysws") ? $("s-ysws").checked : false,
           eligibilityAttested: $("s-eligible") ? $("s-eligible").checked : false,
+          shipNote: $("s-note") ? $("s-note").value.trim() : "",
         };
         if (isUpdate && $("f-update") && $("f-update").checked)
           body.updateNotes = $("f-update-notes").value.trim();

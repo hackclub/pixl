@@ -381,6 +381,16 @@ export default async function ReviewDetail({
               </div>
             </div>
           )}
+          {p.ship_note && (
+            <div className="rounded-xl border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 p-4 text-sm">
+              <div className="font-semibold mb-1 text-amber-700 dark:text-amber-300">
+                Note from the builder
+              </div>
+              <div className="whitespace-pre-wrap break-words text-amber-900/90 dark:text-amber-200/90">
+                {p.ship_note}
+              </div>
+            </div>
+          )}
           {p.used_ai && (
             <div className="rounded-xl border border-violet-300 dark:border-violet-500/40 bg-violet-50 dark:bg-violet-500/10 p-4 text-sm">
               <div className="font-semibold mb-1 text-violet-700 dark:text-violet-300">

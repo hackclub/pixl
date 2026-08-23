@@ -579,6 +579,7 @@ router.post("/api/projects/:id/ship", async (req, res) => {
 
   const isUpdate = project.status === "approved" && !project.rejected_at;
   const updateNotes = String(req.body?.updateNotes ?? "").trim().slice(0, 2000);
+  const shipNote = String(req.body?.shipNote ?? "").trim().slice(0, 2000);
   if (isUpdate && !updateNotes)
     return res.status(400).json({ ok: false, error: "update_notes_required" });
   if (isUpdate && updateNotes.length < 100)
@@ -667,6 +668,7 @@ router.post("/api/projects/:id/ship", async (req, res) => {
       hackatime_seconds: trackedSeconds,
       is_update: isUpdate,
       update_notes: isUpdate ? updateNotes : "",
+      ship_note: shipNote,
       other_ysws: otherYsws,
       system_note: systemNote,
       sidequest_id: sidequestId,
