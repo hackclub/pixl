@@ -24,6 +24,15 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Pixl HQ",
   description: "The Pixl team's home for reviews, players, and pixels",
+  // Internal admin tool , keep it out of search entirely so it never competes
+  // with pixl.hackclub.com (the actual landing page) for "pixl hackclub".
+  // Deliberately not paired with a robots.txt disallow: that would stop
+  // Google from crawling the page at all, which means it can never see this
+  // noindex tag and drop an already-indexed URL from its results.
+  robots: {
+    index: false,
+    follow: false,
+  },
 };
 
 export const viewport = {
