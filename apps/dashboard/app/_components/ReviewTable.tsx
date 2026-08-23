@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ShippedProject } from "@/lib/db";
-import { LevelBadge, StatusBadge } from "@/app/_components/ProjectBadges";
+import { LevelBadge, StatusBadge, FundingBadge } from "@/app/_components/ProjectBadges";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import {
@@ -131,6 +131,7 @@ export function ReviewTable({
                           #{p.id}
                         </span>
                         <LevelBadge level={p.level} />
+                        <FundingBadge needsFunding={p.needs_funding} fundingUsd={p.funding_usd} />
                       </div>
                     </div>
                   </div>

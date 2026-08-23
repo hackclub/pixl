@@ -22,7 +22,7 @@ import { ReviewForm, type BountyOption } from "@/app/_components/ReviewForm";
 import { banProject, setProjectLevel, sendBackToFirstPass, forceAdvanceFraud, toggleProjectPeak } from "@/app/actions";
 import { PendingButton } from "@/app/_components/PendingButton";
 import { ReviewDetailTabs } from "@/app/_components/ReviewDetailTabs";
-import { LevelBadge, TypeBadge, ShipBadges, StatusBadge, BeaconBadge } from "@/app/_components/ProjectBadges";
+import { LevelBadge, TypeBadge, ShipBadges, StatusBadge, BeaconBadge, FundingBadge } from "@/app/_components/ProjectBadges";
 import { slackHandle } from "@/lib/slack";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -264,6 +264,7 @@ export default async function ReviewDetail({
               <LevelBadge level={p.level} />
               <TypeBadge type={p.project_type} />
               <ShipBadges project={p} />
+              <FundingBadge needsFunding={p.needs_funding} fundingUsd={p.funding_usd} />
               {p.is_peak && <BeaconBadge />}
               {trial?.name && (
                 <Badge variant="secondary" className="font-bold">
@@ -307,6 +308,49 @@ export default async function ReviewDetail({
               alt=""
               className="w-full max-h-96 object-contain rounded-xl border border-border bg-black/40"
             />
+          )}
+
+          {p.needs_funding && (
+            <div className="rounded-xl border border-emerald-300 dark:border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/10 p-4 text-sm space-y-3">
+              <div className="font-semibold text-emerald-800 dark:text-emerald-300">
+                Funding requested: ${Number(p.funding_usd ?? 0).toFixed(2)}
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground mb-1">Bill of Materials</div>
+                {p.bom_url ? (
+                  <a
+                    href={p.bom_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-brand font-medium hover:underline"
+                  >
+                    Download BOM (.csv) ↗
+                  </a>
+                ) : (
+                  <span className="text-muted-foreground">Not uploaded.</span>
+                )}
+              </div>
+              <div>
+                <div className="text-xs font-medium text-muted-foreground mb-1">
+                  Cart screenshot{(p.cart_screenshot_urls ?? []).length === 1 ? "" : "s"}
+                </div>
+                {(p.cart_screenshot_urls ?? []).length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {(p.cart_screenshot_urls ?? []).map((url, i) => (
+                      <a key={i} href={url} target="_blank" rel="noreferrer">
+                        <img
+                          src={url}
+                          alt={`Cart screenshot ${i + 1}`}
+                          className="w-24 h-24 object-cover rounded-lg border border-border"
+                        />
+                      </a>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-muted-foreground">None uploaded.</span>
+                )}
+              </div>
+            </div>
           )}
 
           {p.system_note && (

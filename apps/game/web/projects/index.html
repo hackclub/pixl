@@ -1238,6 +1238,9 @@
         eligibility_attestation_required: "Confirm this isn't a school assignment or paid Hack Club work before shipping.",
         trial_not_accepted: "Accept that Trial in the game first (talk to its NPC), then you can pick it.",
         project_hours_required: "Log at least an hour - journal your work (Hackatime optional for hardware).",
+        bom_required: "Upload a Bill of Materials (.csv) before shipping a funded project.",
+        cart_screenshot_required: "Upload at least one cart screenshot (with shipping) before shipping a funded project.",
+        funding_amount_required: "Enter how much funding you need before shipping.",
       };
       const err = (e) => ERRORS[e] || "Something went wrong, try again.";
 
@@ -1250,6 +1253,10 @@
       let activeTrial = null; // the Trial the player arrived to build for, if any
       let hasBirthday = true; // assume yes until we hear otherwise — avoids a flash of the banner
       let form = null;
+      // The player's current $/hour ship rate (from /api/profile/wallet), used
+      // only for the funding "~Xh to cover this" estimate below — falls back to
+      // the base rate from config if the wallet fetch hasn't landed yet.
+      let walletUsdPerHour = Pixl.config.economy ? Pixl.config.economy.basePayoutUsd : 3.5;
 
       function statusInfo(p) {
         if (p.banned_at) return ["BANNED", "status-needs"];
@@ -1743,6 +1750,40 @@
         </select>
         <span class="faint" id="f-kind-note" style="font-size:11px;line-height:1.5;margin-top:4px"></span>
       </div>
+      <div class="disclosure" id="f-funding-block" ${p.kind === "hardware" ? "" : "hidden"}>
+        <label class="disclosure-check">
+          <input type="checkbox" id="f-funding" ${p.needs_funding ? "checked" : ""}>
+          I need funding for this build
+        </label>
+        <p class="disclosure-desc">
+          Ask for money toward parts and shipping. Upload your Bill of Materials, your cart screenshot(s)
+          (with shipping included), and how much you need — all required to ship a funded project.
+        </p>
+        <div id="f-funding-fields" ${p.needs_funding ? "" : "hidden"}>
+          <div class="form-row">
+            <label>BILL OF MATERIALS (.csv)</label>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <button class="btn dark" id="f-bom-btn" type="button">${p.bom_url ? "REPLACE BOM CSV" : "UPLOAD BOM CSV"}</button>
+              <input type="file" id="f-bom-file" accept=".csv,text/csv" hidden>
+              <span class="faint" id="f-bom-status" style="font-size:11px">${p.bom_url ? `<a class="open-link" href="${Pixl.esc(p.bom_url)}" target="_blank" rel="noopener">↗ current BOM</a>` : "Required to ship a funded project."}</span>
+            </div>
+          </div>
+          <div class="form-row">
+            <label>CART SCREENSHOT(S) — WITH SHIPPING</label>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <button class="btn dark" id="f-cart-btn" type="button">ADD SCREENSHOT</button>
+              <input type="file" id="f-cart-file" accept="image/png,image/jpeg,image/webp" hidden>
+              <div id="f-cart-list" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+              <span class="faint" style="font-size:11px">Screenshot your cart(s) at the final step, shipping included. At least one required.</span>
+            </div>
+          </div>
+          <div class="form-row">
+            <label>AMOUNT NEEDED (USD)</label>
+            <input class="field" id="f-funding-usd" type="number" min="0" max="100000" step="0.01" value="${p.funding_usd ? p.funding_usd : ""}" placeholder="0.00">
+            <span class="faint" id="f-funding-hours" style="font-size:11px;line-height:1.5;margin-top:4px"></span>
+          </div>
+        </div>
+      </div>
       <div class="form-row">
         <label>TRIAL (build for a Trial, or your own idea)</label>
         <select class="field" id="f-trial">
@@ -1847,7 +1888,11 @@
       }
 
       function bindForm(p) {
-        form = { imageUrl: p.image_url || "" };
+        form = {
+          imageUrl: p.image_url || "",
+          bomUrl: p.bom_url || "",
+          cartUrls: [...(p.cart_screenshot_urls || [])],
+        };
         $("f-ai").addEventListener("change", () => {
           $("f-ai-notes-row").hidden = !$("f-ai").checked;
         });
@@ -1872,10 +1917,12 @@
               $("f-kind").value === "hardware"
                 ? "Hardware: Hackatime is optional - journal your hours and they count too. Goes to the hardware review queue."
                 : "Software: needs Hackatime hours to ship.";
+            if ($("f-funding-block")) $("f-funding-block").hidden = $("f-kind").value !== "hardware";
           };
           $("f-kind").addEventListener("change", kindNote);
           kindNote();
         }
+        bindFundingForm(p);
         if ($("f-trial")) {
           const trialNote = () => {
             const opt = $("f-trial").selectedOptions[0];
@@ -1939,6 +1986,91 @@
         return upload;
       }
 
+      // Same race-guard as thumbUpload, but a list since several screenshots
+      // can be uploading (or the BOM + a screenshot) at once.
+      let fundingUploads = [];
+
+      function fundingHoursText(usd) {
+        if (!(usd > 0) || !(walletUsdPerHour > 0)) return "";
+        const hours = usd / walletUsdPerHour;
+        return `~${hours.toFixed(1)}h shipped at your current rate ($${walletUsdPerHour.toFixed(2)}/hr) covers this. Rate rises as you earn more Restoration Energy, so this is an estimate.`;
+      }
+
+      function renderCartList() {
+        const el = $("f-cart-list");
+        if (!el) return;
+        el.innerHTML = form.cartUrls
+          .map(
+            (url, i) => `
+      <div class="cart-shot" style="position:relative">
+        <img src="${Pixl.esc(url)}" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--border)">
+        <button type="button" class="cart-shot-x" data-idx="${i}" title="Remove" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:none;background:var(--bad);color:#fff;cursor:pointer;line-height:1">×</button>
+      </div>`,
+          )
+          .join("");
+        el.querySelectorAll(".cart-shot-x").forEach((btn) =>
+          btn.addEventListener("click", () => {
+            form.cartUrls.splice(Number(btn.dataset.idx), 1);
+            renderCartList();
+          }),
+        );
+      }
+
+      function bindFundingForm(p) {
+        if (!$("f-funding")) return;
+        const toggleFields = () => {
+          if ($("f-funding-fields")) $("f-funding-fields").hidden = !$("f-funding").checked;
+        };
+        $("f-funding").addEventListener("change", toggleFields);
+        toggleFields();
+        renderCartList();
+        const updateHoursNote = () => {
+          if ($("f-funding-hours"))
+            $("f-funding-hours").textContent = fundingHoursText(Number($("f-funding-usd").value) || 0);
+        };
+        updateHoursNote();
+        if ($("f-funding-usd")) $("f-funding-usd").addEventListener("input", updateHoursNote);
+        if ($("f-bom-btn")) $("f-bom-btn").addEventListener("click", () => $("f-bom-file").click());
+        if ($("f-bom-file"))
+          $("f-bom-file").addEventListener("change", () => {
+            const file = $("f-bom-file").files[0];
+            if (!file) return;
+            Pixl.toast("Uploading BOM…");
+            const task = Pixl.upload(file, { kind: "bom" })
+              .then((url) => {
+                form.bomUrl = url;
+                if ($("f-bom-status"))
+                  $("f-bom-status").innerHTML = `<a class="open-link" href="${Pixl.esc(url)}" target="_blank" rel="noopener">↗ current BOM</a>`;
+                if ($("f-bom-btn")) $("f-bom-btn").textContent = "REPLACE BOM CSV";
+                Pixl.toast("BOM uploaded!");
+              })
+              .catch((e) => Pixl.toast(err(e.message), true))
+              .finally(() => {
+                fundingUploads = fundingUploads.filter((t) => t !== task);
+              });
+            fundingUploads.push(task);
+          });
+        if ($("f-cart-btn")) $("f-cart-btn").addEventListener("click", () => $("f-cart-file").click());
+        if ($("f-cart-file"))
+          $("f-cart-file").addEventListener("change", () => {
+            const file = $("f-cart-file").files[0];
+            if (!file) return;
+            Pixl.toast("Uploading screenshot…");
+            const task = Pixl.upload(file)
+              .then((url) => {
+                form.cartUrls.push(url);
+                renderCartList();
+                Pixl.toast("Screenshot added!");
+              })
+              .catch((e) => Pixl.toast(err(e.message), true))
+              .finally(() => {
+                fundingUploads = fundingUploads.filter((t) => t !== task);
+                $("f-cart-file").value = "";
+              });
+            fundingUploads.push(task);
+          });
+      }
+
       async function saveProject(p, opts = {}) {
         const silent = !!opts.silent;
         clearTimeout(autosaveTimer);
@@ -1950,6 +2082,10 @@
         if (thumbUpload) {
           if (!silent) Pixl.toast("Still uploading the thumbnail, hang on…");
           await thumbUpload;
+        }
+        if (fundingUploads.length) {
+          if (!silent) Pixl.toast("Still uploading funding files, hang on…");
+          await Promise.all(fundingUploads);
         }
         const reenable = () => { if ($("f-save")) $("f-save").disabled = false; };
         // Trial chosen at creation — a locked (not-accepted) pick can't be saved.
@@ -1978,6 +2114,10 @@
           projectType: $("f-type") ? $("f-type").value : "other",
           level: $("f-level") ? Number($("f-level").value) : undefined,
           kind: $("f-kind") ? $("f-kind").value : "software",
+          needsFunding: $("f-funding") ? $("f-funding").checked : false,
+          fundingUsd: $("f-funding-usd") ? Number($("f-funding-usd").value) || 0 : 0,
+          bomUrl: form.bomUrl || "",
+          cartScreenshotUrls: form.cartUrls || [],
           sidequestId,
           hackatimeProjects: [
             ...document.querySelectorAll('input[name="ht"]:checked'),
@@ -2084,6 +2224,14 @@
           <div class="ship-item"><span class="${p.demo_url ? "ok" : "no"}">${p.demo_url ? "+" : "-"}</span> Demo link added</div>
           <div class="ship-item"><span class="${p.image_url ? "ok" : "no"}">${p.image_url ? "+" : "-"}</span> Thumbnail uploaded</div>
           <div class="ship-item" id="ship-ht">${shipHtLine()}</div>
+          ${
+            p.kind === "hardware" && p.needs_funding
+              ? `
+          <div class="ship-item"><span class="${p.bom_url ? "ok" : "no"}">${p.bom_url ? "+" : "-"}</span> BOM (.csv) uploaded</div>
+          <div class="ship-item"><span class="${(p.cart_screenshot_urls || []).length ? "ok" : "no"}">${(p.cart_screenshot_urls || []).length ? "+" : "-"}</span> Cart screenshot(s) added</div>
+          <div class="ship-item"><span class="${Number(p.funding_usd) > 0 ? "ok" : "no"}">${Number(p.funding_usd) > 0 ? "+" : "-"}</span> Funding amount entered</div>`
+              : ""
+          }
         </div>
         <div class="journal-note compact">
           <strong>Journal entries are optional, not required to ship.</strong> They're also what reviewers use to
@@ -2717,6 +2865,15 @@
         // so don't gate it on the Hackatime picker here.
         const isHw = ($("f-kind") ? $("f-kind").value : p.kind) === "hardware";
         if (!isHw && checkedHtSeconds() < 3600) b.push(htBlockerText());
+        const wantsFunding = isHw && ($("f-funding") ? $("f-funding").checked : p.needs_funding);
+        if (wantsFunding) {
+          const bomUrl = (form && form.bomUrl) || p.bom_url || "";
+          const cartUrls = (form && form.cartUrls) || p.cart_screenshot_urls || [];
+          const fundingUsd = $("f-funding-usd") ? Number($("f-funding-usd").value) || 0 : Number(p.funding_usd) || 0;
+          if (!bomUrl) b.push("upload a BOM (.csv)");
+          if (!cartUrls.length) b.push("add a cart screenshot (with shipping)");
+          if (!(fundingUsd > 0)) b.push("enter how much funding you need");
+        }
         if (!$("s-eligible") || !$("s-eligible").checked)
           b.push("confirm this isn't a school assignment or paid Hack Club work");
         if (isUpdate) {
@@ -3436,15 +3593,17 @@
       async function boot() {
         if (!Pixl.hasToken) return;
         try {
-          const [s, elig] = await Promise.all([
+          const [s, elig, wallet] = await Promise.all([
             Pixl.api("/api/hackatime/stats"),
             Pixl.api("/api/profile/eligibility"),
+            Pixl.api("/api/profile/wallet"),
             loadProjects(),
             loadTrials(),
             loadFeeds(),
           ]);
           stats = s.stats || null;
           hasBirthday = !!(elig && elig.ok && elig.birthday);
+          if (wallet && wallet.ok && wallet.usdPerHour > 0) walletUsdPerHour = wallet.usdPerHour;
         } catch (e) {
           if (e.message !== "unauthorized")
             Pixl.toast("Couldn't reach the server.", true);
