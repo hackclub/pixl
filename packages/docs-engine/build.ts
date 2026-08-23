@@ -9,6 +9,12 @@ const OUT = `${ROOT}apps/game/web/docs`;
 const config = JSON.parse(
   await Bun.file(`${ROOT}packages/config/pixl.json`).text(),
 );
+// Light is the default theme (pixl.js falls back to it before localStorage
+// is read), used here so the /docs redirect stub doesn't flash pure white
+// before pixl.css ever loads.
+const LEDGER = JSON.parse(
+  await Bun.file(`${ROOT}packages/theme/palette.json`).text(),
+).web.light;
 
 // Canonical host for absolute links and card URLs. Off packages/config so a
 // domain move is one edit, not a hunt through two builders - these were
@@ -162,6 +168,11 @@ await Bun.write(
 <title>Pixl · Docs</title>
 <link rel="canonical" href="${SITE}/docs/${first}/">
 <meta http-equiv="refresh" content="0; url=/docs/${first}/">
+<style>
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
+    background:${LEDGER["panel-deep"]};color:${LEDGER.ink};font-family:system-ui,sans-serif}
+  a{color:${LEDGER.gold}}
+</style>
 </head>
 <body><a href="/docs/${first}/">Pixl docs</a></body>
 </html>

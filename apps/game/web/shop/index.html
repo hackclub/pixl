@@ -392,6 +392,7 @@
       <div class="marquee"><div id="marquee-inner"></div></div>
     </main>
 
+    <script>window.PIXL_PUBLIC = true;</script>
     <script src="/pixl.js?v=6"></script>
     <script>
       Pixl.mountTopbar("shop");
@@ -405,6 +406,7 @@
       let activeCategory = "all";
       let unlockedOnly = false;
       let loadingRegion = false;
+      let guestRegion = "US";
 
       const CATEGORIES = [
         ["all", "ALL"],
@@ -646,7 +648,9 @@
 
       async function loadItems() {
         try {
-          const data = await Pixl.api("/api/shop/items");
+          const data = Pixl.hasToken
+            ? await Pixl.api("/api/shop/items")
+            : await fetch(Pixl.API + "/api/shop/items/public?region=" + encodeURIComponent(guestRegion)).then((r) => r.json());
           items = (data.items || []).map((i) => ({
             ...i,
             id: Number(i.id),
@@ -671,8 +675,7 @@
       }
 
       async function boot() {
-        if (!Pixl.hasToken) return;
-        wallet = await Pixl.loadWallet();
+        if (Pixl.hasToken) wallet = await Pixl.loadWallet();
         await loadItems();
         $("loading").remove();
         if (wallet)
@@ -686,6 +689,16 @@
         const region = e.target.value;
         e.target.disabled = true;
         const label = e.target.selectedOptions[0]?.textContent || region;
+        if (!Pixl.hasToken) {
+          // Nothing to save server-side while signed out — just re-browse
+          // that region's shelves locally.
+          guestRegion = region;
+          await loadItems();
+          say(`BROWSING ${label}. NEW SHELVES!`, 3500);
+          e.target.disabled = false;
+          loadingRegion = false;
+          return;
+        }
         const r = await Pixl.send("POST", "/api/shop/region", { region });
         if (r.ok) {
           say(`SWITCHED TO ${label}. NEW SHELVES!`, 3500);

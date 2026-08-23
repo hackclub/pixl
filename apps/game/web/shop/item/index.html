@@ -276,6 +276,7 @@
       </div>
     </main>
 
+    <script>window.PIXL_PUBLIC = true;</script>
     <script src="/pixl.js?v=6"></script>
     <script>
       Pixl.mountTopbar("shop");
@@ -391,8 +392,8 @@
         $("detail-price").innerHTML =
           `<img src="/img/pixel.png" style="width:20px;height:20px" alt="">${price.toLocaleString()} PIXELS<span class="price-hours">${hoursOf(price)}</span>`;
         $("detail-price").classList.toggle("cant", !afford);
-        $("buy-btn").disabled = !afford;
-        $("buy-btn").textContent = "BUY";
+        $("buy-btn").disabled = Pixl.hasToken && !afford;
+        $("buy-btn").textContent = Pixl.hasToken ? "BUY" : "LOG IN TO BUY";
         const have = wallet ? wallet.pixels : 0;
         const pct = Math.max(0, Math.min(100, (have / Math.max(1, price)) * 100));
         $("afford-fill").style.width = pct + "%";
@@ -699,8 +700,8 @@
           `<img src="/img/pixel.png" style="width:20px;height:20px" alt="">${total.toLocaleString()} PIXELS<span class="price-hours">${hoursOf(total)}</span>` +
           (quantity > 1 ? ` <span class="price-hours">(${Number(selected.price).toLocaleString()} × ${quantity})</span>` : "");
         $("detail-price").classList.toggle("cant", !afford);
-        $("buy-btn").textContent = !inStock ? "SOLD OUT" : "BUY";
-        $("buy-btn").disabled = !afford || !inStock;
+        $("buy-btn").textContent = !inStock ? "SOLD OUT" : Pixl.hasToken ? "BUY" : "LOG IN TO BUY";
+        $("buy-btn").disabled = !inStock || (Pixl.hasToken && !afford);
         const have = wallet ? wallet.pixels : 0;
         const pct = Math.max(0, Math.min(100, (have / Math.max(1, total)) * 100));
         $("afford-fill").style.width = pct + "%";
@@ -840,6 +841,10 @@
 
       $("buy-btn").addEventListener("click", () => {
         if (!selected) return;
+        if (!Pixl.hasToken) {
+          location.href = Pixl.loginUrl();
+          return;
+        }
         if (isTrophy(selected)) {
           if (trophyState(selected) === "claimable") claimTrophy(selected.id);
           return;
@@ -880,14 +885,11 @@
       setInterval(refreshStock, 8000);
 
       async function boot() {
-        if (!Pixl.hasToken) {
-          $("loading").remove();
-          $("notfound").hidden = false;
-          return;
-        }
-        wallet = await Pixl.loadWallet();
+        if (Pixl.hasToken) wallet = await Pixl.loadWallet();
         try {
-          const data = await Pixl.api("/api/shop/items");
+          const data = Pixl.hasToken
+            ? await Pixl.api("/api/shop/items")
+            : await fetch(Pixl.API + "/api/shop/items/public").then((r) => r.json());
           const items = (data.items || []).map((i) => ({
             ...i,
             id: Number(i.id),

@@ -171,6 +171,65 @@ router.get("/api/shop/items", async (req, res) => {
   res.json({ ok: true, items, xp, claimed, region });
 });
 
+// Unauthenticated catalog browse: same shape as /api/shop/items but with no
+// player to scope to, so trophies show as locked (nobody's claimed anything
+// yet), trial-gated items show as locked (nobody's shipped anything yet), and
+// region comes from a query param instead of the player's saved one. Lets the
+// shop page be browsable before login — actually buying still requires a
+// session, same as every /api/shop/buy|claim/:id route.
+router.get("/api/shop/items/public", async (req, res) => {
+  const region = SHOP_REGIONS.includes(String(req.query.region)) ? String(req.query.region) : "US";
+
+  const { data, error } = await fetchItems(undefined, region);
+  if (error) {
+    console.error("[shop] public items failed", error);
+    return res.status(500).json({ ok: false });
+  }
+  const items: Record<string, unknown>[] = data.map((i) => ({ ...i, limited: false }));
+
+  const merchants = await activeEvents(["mystery_merchant"]);
+  const limitedIds = [
+    ...new Set(
+      merchants.flatMap((ev) =>
+        Array.isArray(ev.config.itemIds) ? ev.config.itemIds.map(Number) : [],
+      ),
+    ),
+  ].filter((id) => Number.isFinite(id) && !items.some((i) => i.id === id));
+  if (limitedIds.length > 0) {
+    const { data: limited } = await fetchItems(limitedIds, region);
+    const endsAt = merchants.map((m) => m.ends_at).sort()[0];
+    for (const i of limited ?? []) items.unshift({ ...i, limited: true, limited_until: endsAt });
+  }
+
+  await attachStock(items);
+
+  const gatedIds = [
+    ...new Set(
+      items.flatMap((i) =>
+        Array.isArray(i.unlock_trial_ids) ? (i.unlock_trial_ids as unknown[]).map(Number) : [],
+      ),
+    ),
+  ].filter((id) => Number.isFinite(id) && id > 0);
+  if (gatedIds.length > 0) {
+    const { data: trials } = await supabase.from("sidequests").select("id, name, active").in("id", gatedIds);
+    const trialRows = (trials ?? []) as { id: number; name: string; active: boolean }[];
+    const nameById = new Map(trialRows.map((t) => [Number(t.id), t.name]));
+    const activeById = new Map(trialRows.map((t) => [Number(t.id), !!t.active]));
+    for (const i of items) {
+      const ids = Array.isArray(i.unlock_trial_ids)
+        ? (i.unlock_trial_ids as unknown[]).map(Number)
+        : [];
+      if (ids.length > 0) {
+        i.locked = true; // nobody's shipped anything while logged out
+        i.unlock_trials = ids.map((id) => nameById.get(id)).filter((n): n is string => !!n);
+        i.unlockPending = !ids.some((id) => activeById.get(id));
+      }
+    }
+  }
+
+  res.json({ ok: true, items, xp: 0, claimed: [], region });
+});
+
 // Switch which regional catalog the player shops from.
 router.post("/api/shop/region", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";
