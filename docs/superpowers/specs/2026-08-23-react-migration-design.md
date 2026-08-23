@@ -26,12 +26,14 @@ root.
   Tailwind 4 on Vercel — established conventions to follow, not a first
   React app in the monorepo. Both have (or should follow) the "this Next.js
   is very new, read `node_modules/next/dist/docs/` first" warning.
-- The web shell (`apps/game/web/`) is **not** Vercel-hosted. `apps/game`'s
-  `Dockerfile` bakes the Godot web export and the web shell into one
-  container, served by a hand-rolled `apps/game/serve.ts` (Bun) deployed to
-  Orchard k8s as `play.pixl.rsvp`. `apps/landing`'s `vercel.json` proxies
-  `pixl.hackclub.com/<page>` paths to that Orchard-hosted origin — it isn't
-  itself serving that content.
+- Nothing in this repo is Vercel-hosted anymore. All five apps (including
+  `apps/landing` and `apps/dashboard`) moved to Orchard k8s on 2026-08-11,
+  each with its own committed `Dockerfile`. `apps/game`'s bakes the Godot web
+  export and the web shell into one container, served by a hand-rolled
+  `apps/game/serve.ts` (Bun), live at `play.pixl.hackclub.com`. The proxy
+  that makes `pixl.hackclub.com/<page>` reach that origin is
+  `apps/landing/next.config.ts`'s `rewrites()` — `vercel.json` is inert on
+  Orchard and kept only as a fossil from the Vercel era.
 - `packages/theme/palette.json` and `packages/config/pixl.json` are the
   single sources of truth for design tokens and program facts respectively.
   Nothing imports them at runtime (Railway/Vercel/Orchard each build an
@@ -71,15 +73,16 @@ conventions and docs/MDX tooling).
 
 Old static shell and new Next app run side by side for the duration of the
 migration. Cutover is per-page-family, driven from `apps/landing`'s
-`vercel.json` + `proxy.ts`: today every web-shell path rewrites to
-`play.pixl.rsvp`. Migrating a page family means repointing *only that
-family's* rewrite rule to the new `apps/web-shell` Orchard URL — `/docs` and
-`/docs/:path*` move first; `/shop`, `/dashboard`, `/vault`, etc. keep
-pointing at `play.pixl.rsvp` until their own later slices land. Nothing on
-the old side is deleted until its last consumer (the proxy rule pointing at
-it) is gone. `proxy.ts`'s locale-redirect matcher only needs updating for a
-migrated path family if that family should start getting locale redirects —
-docs isn't locale-aware today, so no matcher change for the docs slice.
+`next.config.ts`: today every web-shell path rewrites to
+`play.pixl.hackclub.com`. Migrating a page family means repointing *only
+that family's* rewrite rule to the new `apps/web-shell` Orchard URL —
+`/docs` and `/docs/:path*` move first; `/shop`, `/dashboard`, `/vault`, etc.
+keep pointing at `play.pixl.hackclub.com` until their own later slices land.
+Nothing on the old side is deleted until its last consumer (the rewrite
+pointing at it) is gone. `apps/landing/proxy.ts`'s locale-redirect matcher
+only needs updating for a migrated path family if that family should start
+getting locale redirects — docs isn't locale-aware today, so no matcher
+change for the docs slice.
 
 Sequencing after docs: dashboard/shop and the rest, in an order to be
 decided when that slice is planned — not decided as part of this design.
@@ -143,8 +146,8 @@ token-in-localStorage flow unmodified — this redesign is scoped to
   `og.ts` card generation carried over (as-is or ported to a Next OG image
   route).
 - No auth work required for this slice.
-- Repoint `/docs` and `/docs/:path*` in `apps/landing/vercel.json` +
-  `proxy.ts` at the new Orchard deployment.
+- Repoint `/docs` and `/docs/:path*` in `apps/landing/next.config.ts` at the
+  new Orchard deployment.
 - `apps/game`'s `Dockerfile` stops running `docs:build`/copying
   `apps/game/web/docs/` once the cutover is live.
 - **Done when:** all 30 doc pages render correctly in the new app,
