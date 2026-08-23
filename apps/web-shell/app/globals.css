@@ -22,6 +22,42 @@ body {
 a { color: var(--gold); text-decoration: none; }
 a:hover { color: var(--gold-soft); }
 
+/* Landing's button, verbatim from pixl.css: filled face, black rule that's
+   heavy on the right/bottom, hover lifts the block up-left while the bottom
+   edge grows. No box-shadow, the thick border IS the shadow. Only the base
+   and .dark variant are ported - the docs shell is the only current caller
+   (the "BACK" button), and it only ever passes "btn dark". */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  border-radius: 0;
+  border: var(--bw) solid var(--stroke);
+  border-right-width: var(--bw-heavy);
+  border-bottom-width: var(--bw-heavy);
+  background: var(--gold);
+  color: var(--btn-ink);
+  font-family: var(--pixel);
+  font-size: 15px;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  padding: 9px 17px;
+  transition: background .13s ease, color .13s ease, border-color .13s ease,
+    border-bottom-width .13s ease, transform .13s ease;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.btn:hover {
+  background: var(--gold-soft);
+  color: var(--btn-ink);
+  border-bottom-width: var(--bw-lift);
+  transform: translate(-2px, -2px);
+}
+.btn:active { border-bottom-width: var(--bw); transform: translate(0, 2px); }
+.btn.dark { background: var(--ink); color: var(--panel-deep); }
+.btn.dark:hover { background: var(--ink); color: var(--gold); }
+
 :root {
   /* --sans/--pixel were never actually declared here (only *used* below and
      throughout docs.css) - every heading/nav label was silently falling back
@@ -29,6 +65,15 @@ a:hover { color: var(--gold-soft); }
      generated variables from app/layout.tsx. */
   --sans: var(--font-poppins), system-ui, -apple-system, sans-serif;
   --pixel: var(--font-pixelify-sans), ui-monospace, system-ui, sans-serif;
+  /* Same gap: docs.css's borders (.docs-nav, .docs-toc a.active, .fact-grid,
+     .callout, pre, .doc-foot a...) all reference these, but they were never
+     declared here either - Tailwind's own --radius-sm (.25rem, rounded)
+     silently won instead of the square 0px pixl.css defines. */
+  --radius: 0px;
+  --radius-sm: 0px;
+  --bw: 2px;
+  --bw-heavy: 4px;
+  --bw-lift: 8px;
   /* <pixl-theme:light> */
   --ink:#16161e;--dim:#4a4a52;--faint:#6f6f78;--muted:#9a9aa2;--panel:#faf4de;--panel-2:#ece0bd;--panel-deep:#f5eed2;--gold:#ff8c37;--gold-soft:#ffa45c;--accent:#ec3750;--teal:#52aeb9;--teal-hover:#6bc3cd;--good:#3faa5f;--bad:#ec3750;--stroke:#16161e;--btn-ink:#f5eed2;
   /* <pixl-theme:light:end> */
