@@ -54,6 +54,11 @@ await write(
 const CSS_TARGET = `${ROOT}apps/game/web/pixl.css`;
 let css = await readFile(CSS_TARGET, "utf8");
 
+// apps/web-shell/app/globals.css carries its own hand-authored Tailwind
+// setup around the same <pixl-theme:...> markers, injected the same way.
+const WEB_SHELL_CSS_TARGET = `${ROOT}apps/web-shell/app/globals.css`;
+let webShellCss = await readFile(WEB_SHELL_CSS_TARGET, "utf8");
+
 for (const theme of Object.keys(palette.web)) {
   const { effects, ...tokens } = palette.web[theme];
   css = replaceBetween(
@@ -62,6 +67,13 @@ for (const theme of Object.keys(palette.web)) {
     `/* <pixl-theme:${theme}:end> */`,
     cssDecls(tokens),
     CSS_TARGET,
+  );
+  webShellCss = replaceBetween(
+    webShellCss,
+    `/* <pixl-theme:${theme}> */`,
+    `/* <pixl-theme:${theme}:end> */`,
+    cssDecls(tokens),
+    WEB_SHELL_CSS_TARGET,
   );
   const effectDecls = Object.entries(effects as Record<string, string>)
     .map(([name, value]) => `--${name === "dropLg" ? "drop-lg" : name}:${value};`)
@@ -73,8 +85,16 @@ for (const theme of Object.keys(palette.web)) {
     effectDecls,
     CSS_TARGET,
   );
+  webShellCss = replaceBetween(
+    webShellCss,
+    `/* <pixl-theme:${theme}:effects> */`,
+    `/* <pixl-theme:${theme}:effects:end> */`,
+    effectDecls,
+    WEB_SHELL_CSS_TARGET,
+  );
 }
 
 await write(CSS_TARGET, css);
+await write(WEB_SHELL_CSS_TARGET, webShellCss);
 
 console.log(`[theme:sync] wrote:\n  ${written.join("\n  ")}`);

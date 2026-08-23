@@ -1,3 +1,21 @@
 @import "tailwindcss";
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* <pixl-theme:light> */
+  --ink:#16161e;--dim:#4a4a52;--faint:#6f6f78;--muted:#9a9aa2;--panel:#faf4de;--panel-2:#ece0bd;--panel-deep:#f5eed2;--gold:#ff8c37;--gold-soft:#ffa45c;--accent:#ec3750;--teal:#52aeb9;--teal-hover:#6bc3cd;--good:#3faa5f;--bad:#ec3750;--stroke:#16161e;--btn-ink:#f5eed2;
+  /* <pixl-theme:light:end> */
+  /* <pixl-theme:light:effects> */
+  --drop:4px 4px 0 #16161e;--drop-lg:8px 8px 0 #16161e;--dither:none;
+  /* <pixl-theme:light:effects:end> */
+}
+
+:root[data-theme="dark"] {
+  /* <pixl-theme:dark> */
+  --ink:#ece8e2;--dim:#b3ada2;--faint:#847e72;--muted:#5c574c;--panel:#211f1e;--panel-2:#2a2724;--panel-deep:#171615;--gold:#ff6b4a;--gold-soft:#ff8a6b;--accent:#ff4763;--teal:#5fc2cd;--teal-hover:#7ad4de;--good:#4ade80;--bad:#ff4763;--stroke:#4a453d;--btn-ink:#171615;
+  /* <pixl-theme:dark:end> */
+  /* <pixl-theme:dark:effects> */
+  --drop:4px 4px 0 #000000;--drop-lg:8px 8px 0 #000000;--dither:none;
+  /* <pixl-theme:dark:effects:end> */
+}
