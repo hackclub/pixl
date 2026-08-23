@@ -340,7 +340,7 @@ export default async function ProjectPage({
                 </PendingButton>
               </form>
             )}
-            {canModerate && project.status === "approved" && (
+            {canModerate && project.status === "approved" && !project.banned_at && !project.rejected_at && (
               <form action={sendProjectToAirtable}>
                 <input type="hidden" name="projectId" value={project.id} />
                 <PendingButton

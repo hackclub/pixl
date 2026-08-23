@@ -1501,14 +1501,14 @@ export async function sendProjectToAirtable(formData: FormData): Promise<void> {
   const { data: project, error: projectError } = await db
     .from("projects")
     .select(
-      "id, status, repo_url, demo_url, description, image_url, approved_hours, system_note, user_id, airtable_record_id",
+      "id, status, banned_at, rejected_at, repo_url, demo_url, description, image_url, approved_hours, system_note, user_id, airtable_record_id",
     )
     .eq("id", projectId)
     .single();
   if (projectError || !project) {
     redirect(`${back}?error=${encodeURIComponent("Project not found.")}`);
   }
-  if (project.status !== "approved") {
+  if (project.status !== "approved" || project.banned_at || project.rejected_at) {
     redirect(`${back}?error=${encodeURIComponent("Only approved projects can be sent to Airtable.")}`);
   }
 
