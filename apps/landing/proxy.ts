@@ -11,6 +11,7 @@ const COUNTRY_LOCALE: Record<string, string> = {
   EC: "es", GT: "es", CU: "es", BO: "es", DO: "es", HN: "es", PY: "es",
   SV: "es", NI: "es", CR: "es", PA: "es", UY: "es", PR: "es",
   PT: "pt", BR: "pt", AO: "pt", MZ: "pt",
+  IN: "hi",
 };
 
 function getLocale(request: NextRequest): string {

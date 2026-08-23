@@ -9,6 +9,7 @@ const LANGS: [string, string][] = [
   ["fr", "Français"],
   ["es", "Español"],
   ["pt", "Português"],
+  ["hi", "हिन्दी"],
 ];
 
 export function LanguageSwitcher() {
