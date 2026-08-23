@@ -11,6 +11,7 @@ import {
   banProject,
   unbanProject,
   toggleProjectPeak,
+  sendProjectToAirtable,
 } from "@/app/actions";
 import {
   LevelBadge,
@@ -336,6 +337,17 @@ export default async function ProjectPage({
                   pendingText="Lifting…"
                 >
                   Lift ban
+                </PendingButton>
+              </form>
+            )}
+            {canModerate && project.status === "approved" && (
+              <form action={sendProjectToAirtable}>
+                <input type="hidden" name="projectId" value={project.id} />
+                <PendingButton
+                  variant="outline"
+                  pendingText="Sending…"
+                >
+                  {project.airtable_record_id ? "Re-send to Airtable" : "Send to Airtable"}
                 </PendingButton>
               </form>
             )}
