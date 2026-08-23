@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { buildAirtableFields, githubUsernameFromRepoUrl } from "./airtable";
+import { afterEach, describe, expect, mock, test } from "bun:test";
+import { buildAirtableFields, githubUsernameFromRepoUrl, pushProjectRecord } from "./airtable";
 
 const baseInput = {
   repoUrl: "https://github.com/octocat/spoon-knife",
@@ -116,5 +116,90 @@ describe("buildAirtableFields", () => {
     expect(fields).not.toHaveProperty("Justification - Submitter Hackatime ID");
     expect(fields).not.toHaveProperty("Justification - Lapse Links, comma-separated");
     expect(fields).not.toHaveProperty("Justification - Alternate Tracking Method");
+  });
+});
+
+describe("pushProjectRecord", () => {
+  const originalFetch = global.fetch;
+  const originalToken = process.env.AIRTABLE_PIXL_YSWS_UNIFIED_TOKEN;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    if (originalToken === undefined) delete process.env.AIRTABLE_PIXL_YSWS_UNIFIED_TOKEN;
+    else process.env.AIRTABLE_PIXL_YSWS_UNIFIED_TOKEN = originalToken;
+  });
+
+  test("fails clearly when the token is not set", async () => {
+    delete process.env.AIRTABLE_PIXL_YSWS_UNIFIED_TOKEN;
+    const result = await pushProjectRecord({ "Code URL": "https://github.com/a/b" }, null);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain("AIRTABLE_PIXL_YSWS_UNIFIED_TOKEN");
+  });
+
+  test("POSTs to create a new record when no existing ID is given", async () => {
+    process.env.AIRTABLE_PIXL_YSWS_UNIFIED_TOKEN = "test-token";
+    let capturedUrl = "";
+    let capturedMethod = "";
+    global.fetch = mock(async (url: string, init?: RequestInit) => {
+      capturedUrl = url;
+      capturedMethod = init?.method ?? "";
+      return new Response(JSON.stringify({ id: "recNEW123" }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const result = await pushProjectRecord({ "Code URL": "https://github.com/a/b" }, null);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.recordId).toBe("recNEW123");
+    expect(capturedMethod).toBe("POST");
+    expect(capturedUrl).not.toContain("recNEW123");
+  });
+
+  test("PATCHes the existing record when an ID is given", async () => {
+    process.env.AIRTABLE_PIXL_YSWS_UNIFIED_TOKEN = "test-token";
+    let capturedUrl = "";
+    let capturedMethod = "";
+    global.fetch = mock(async (url: string, init?: RequestInit) => {
+      capturedUrl = url;
+      capturedMethod = init?.method ?? "";
+      return new Response(JSON.stringify({ id: "recEXISTING" }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const result = await pushProjectRecord({ "Code URL": "https://github.com/a/b" }, "recEXISTING");
+    expect(result.ok).toBe(true);
+    expect(capturedMethod).toBe("PATCH");
+    expect(capturedUrl).toContain("recEXISTING");
+  });
+
+  test("surfaces a network failure without throwing", async () => {
+    process.env.AIRTABLE_PIXL_YSWS_UNIFIED_TOKEN = "test-token";
+    global.fetch = mock(async () => {
+      throw new Error("network unreachable");
+    }) as unknown as typeof fetch;
+    const result = await pushProjectRecord({ "Code URL": "https://github.com/a/b" }, null);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain("network unreachable");
+  });
+
+  test("handles a non-JSON error body from Airtable without throwing", async () => {
+    process.env.AIRTABLE_PIXL_YSWS_UNIFIED_TOKEN = "test-token";
+    global.fetch = mock(async () => new Response("<html>502 Bad Gateway</html>", { status: 502 })) as unknown as typeof fetch;
+    const result = await pushProjectRecord({ "Code URL": "https://github.com/a/b" }, null);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toContain("502");
+  });
+
+  test("treats a 2xx response missing an id as a failure", async () => {
+    process.env.AIRTABLE_PIXL_YSWS_UNIFIED_TOKEN = "test-token";
+    global.fetch = mock(async () => new Response(JSON.stringify({}), { status: 200 })) as unknown as typeof fetch;
+    const result = await pushProjectRecord({ "Code URL": "https://github.com/a/b" }, null);
+    expect(result.ok).toBe(false);
+  });
+
+  test("surfaces Airtable's own error message on a 4xx response", async () => {
+    process.env.AIRTABLE_PIXL_YSWS_UNIFIED_TOKEN = "test-token";
+    global.fetch = mock(
+      async () =>
+        new Response(JSON.stringify({ error: { message: "Invalid field name" } }), { status: 422 }),
+    ) as unknown as typeof fetch;
+    const result = await pushProjectRecord({ "Code URL": "https://github.com/a/b" }, null);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe("Invalid field name");
   });
 });

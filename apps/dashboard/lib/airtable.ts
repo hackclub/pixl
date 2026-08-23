@@ -57,10 +57,40 @@ export interface AirtableProjectInput {
   auditSections: AuditSections;
 }
 
+// Every field name buildAirtableFields is allowed to set. Deliberately a
+// closed literal union, not `string` - adding an "Automation - *" key (or
+// any other key) requires editing this type, which a reviewer will see in
+// the diff, rather than being one silent line change away.
+type AirtableFieldName =
+  | "Code URL"
+  | "Playable URL"
+  | "First Name"
+  | "Last Name"
+  | "Email"
+  | "Description"
+  | "GitHub Username"
+  | "Address (Line 1)"
+  | "Address (Line 2)"
+  | "City"
+  | "State / Province"
+  | "Country"
+  | "ZIP / Postal Code"
+  | "Birthday"
+  | "Justification - Specific Technical Features"
+  | "Justification - Deflation Justification"
+  | "Optional - Override Age Justification"
+  | "Justification - Additional Justification"
+  | "Optional - Override Hours Spent Justification"
+  | "Optional - Override Hours Spent"
+  | "Screenshot"
+  | "Optional - Override Duplicate Justification";
+
 // Airtable's create/update API takes field NAMES as keys (not the fld...
 // IDs), matching exactly what /v0/meta/bases/{base}/tables returns.
-export function buildAirtableFields(input: AirtableProjectInput): Record<string, unknown> {
-  const fields: Record<string, unknown> = {
+export function buildAirtableFields(
+  input: AirtableProjectInput,
+): Partial<Record<AirtableFieldName, unknown>> {
+  const fields: Partial<Record<AirtableFieldName, unknown>> = {
     "Code URL": input.repoUrl,
     "Playable URL": input.demoUrl,
     "First Name": input.firstName,
