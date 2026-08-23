@@ -1233,6 +1233,8 @@
         empty_body: "That upload came through empty, try again.",
         journal_too_short:
           "Log more detail: journals need ~100 characters per hour.",
+        journal_images_required:
+          "Add at least one image to this entry, more for longer sessions.",
         not_in_review: "This project isn't in review.",
         trial_hours_below_minimum: "This Trial needs more tracked hours before you can ship it.",
         eligibility_attestation_required: "Confirm this isn't a school assignment or paid Hack Club work before shipping.",
@@ -2831,19 +2833,36 @@
         return hours > 0 ? Math.max(100, Math.round(hours * 100)) : 0;
       }
 
+      // Mirrors journalImagesNeeded/countJournalImages in
+      // apps/server/src/routes/projects.ts , at least 1 image always, plus
+      // one more per 4h on top of that.
+      function journalImagesNeed(hours) {
+        return Math.max(1, Math.ceil(hours / 4));
+      }
+      function countJournalImages(content) {
+        return (content.match(/!\[[^\]]*\]\([^)]+\)/g) || []).length;
+      }
+
       function updateJournalHint() {
         const hint = $("j-hint");
         if (!hint) return;
-        const len = $("j-content").value.trim().length;
-        const need = journalNeed(Number($("j-hours").value) || 0);
+        const content = $("j-content").value.trim();
+        const len = content.length;
+        const hours = Number($("j-hours").value) || 0;
+        const need = journalNeed(hours);
+        const imagesNeed = journalImagesNeed(hours);
+        const imagesHave = countJournalImages(content);
+        const imagesOk = imagesHave >= imagesNeed;
+        const imagesPart = `${imagesHave} / ${imagesNeed} image${imagesNeed === 1 ? "" : "s"}`;
         if (need === 0) {
-          hint.textContent = len ? `${len} chars` : "";
-          hint.classList.remove("bad", "ok");
+          hint.textContent = len || content ? `${len} chars · ${imagesPart}` : imagesPart;
+          hint.classList.toggle("bad", !imagesOk);
+          hint.classList.toggle("ok", imagesOk);
           return;
         }
-        hint.textContent = `${len} / ${need} chars`;
-        hint.classList.toggle("bad", len < need);
-        hint.classList.toggle("ok", len >= need);
+        hint.textContent = `${len} / ${need} chars · ${imagesPart}`;
+        hint.classList.toggle("bad", len < need || !imagesOk);
+        hint.classList.toggle("ok", len >= need && imagesOk);
       }
 
       function lockForm() {
@@ -3352,16 +3371,23 @@
         const hoursInput = editRow.querySelector(".jedit-hours");
         const hint = editRow.querySelector(".jedit-hint");
         const updateHint = () => {
-          const len = ta.value.trim().length;
-          const need = journalNeed(Number(hoursInput.value) || 0);
+          const content = ta.value.trim();
+          const len = content.length;
+          const hours = Number(hoursInput.value) || 0;
+          const need = journalNeed(hours);
+          const imagesNeed = journalImagesNeed(hours);
+          const imagesHave = countJournalImages(content);
+          const imagesOk = imagesHave >= imagesNeed;
+          const imagesPart = `${imagesHave} / ${imagesNeed} image${imagesNeed === 1 ? "" : "s"}`;
           if (need === 0) {
-            hint.textContent = len ? `${len} chars` : "";
-            hint.classList.remove("bad", "ok");
+            hint.textContent = len || content ? `${len} chars · ${imagesPart}` : imagesPart;
+            hint.classList.toggle("bad", !imagesOk);
+            hint.classList.toggle("ok", imagesOk);
             return;
           }
-          hint.textContent = `${len} / ${need} chars`;
-          hint.classList.toggle("bad", len < need);
-          hint.classList.toggle("ok", len >= need);
+          hint.textContent = `${len} / ${need} chars · ${imagesPart}`;
+          hint.classList.toggle("bad", len < need || !imagesOk);
+          hint.classList.toggle("ok", len >= need && imagesOk);
         };
         ta.addEventListener("input", () => { autoGrow(ta); updateHint(); });
         hoursInput.addEventListener("input", updateHint);
@@ -3393,6 +3419,11 @@
                 `Logging ${r.hours}h needs ≥ ${r.need} characters (you have ${content.length}).`,
                 true,
               );
+            if (r.error === "journal_images_required")
+              return Pixl.toast(
+                `This entry needs ${r.need} image${r.need === 1 ? "" : "s"} (you have ${r.have}).`,
+                true,
+              );
             return Pixl.toast(err(r.error), true);
           }
           // Close and re-render straight from the PATCH response instead of
@@ -3419,6 +3450,11 @@
           if (r.error === "journal_too_short")
             return Pixl.toast(
               `Logging ${r.hours}h needs ≥ ${r.need} characters (you have ${content.length}).`,
+              true,
+            );
+          if (r.error === "journal_images_required")
+            return Pixl.toast(
+              `This entry needs ${r.need} image${r.need === 1 ? "" : "s"} (you have ${r.have}).`,
               true,
             );
           return Pixl.toast(err(r.error), true);

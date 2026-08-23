@@ -1044,6 +1044,19 @@ router.get("/api/projects/:id/timeline", async (req, res) => {
   });
 });
 
+// How many images a journal entry's content needs, by the hours logged: at
+// least 1 always (even a 0h entry), plus one more per 4h on top of that.
+function journalImagesNeeded(hours: number): number {
+  return Math.max(1, Math.ceil(hours / 4));
+}
+
+// Images are embedded as markdown image syntax (![alt](url)) by the client's
+// IMAGE toolbar button (attachImageToJournal in apps/game/web/projects) , this
+// just counts how many are actually in the saved content.
+function countJournalImages(content: string): number {
+  return (content.match(/!\[[^\]]*\]\([^)]+\)/g) ?? []).length;
+}
+
 // Add a journal entry (markdown content + optional hours) to an own project.
 router.post("/api/projects/:id/journal", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";
@@ -1069,6 +1082,12 @@ router.post("/api/projects/:id/journal", async (req, res) => {
     if (content.length < need)
       return res.status(400).json({ ok: false, error: "journal_too_short", need, hours });
   }
+  const imagesNeed = journalImagesNeeded(hours);
+  const imagesHave = countJournalImages(content);
+  if (imagesHave < imagesNeed)
+    return res
+      .status(400)
+      .json({ ok: false, error: "journal_images_required", need: imagesNeed, have: imagesHave, hours });
 
   const { data, error } = await supabase
     .from("project_journals")
@@ -1105,6 +1124,12 @@ router.patch("/api/projects/:id/journal/:entryId", async (req, res) => {
     if (content.length < need)
       return res.status(400).json({ ok: false, error: "journal_too_short", need, hours });
   }
+  const imagesNeed = journalImagesNeeded(hours);
+  const imagesHave = countJournalImages(content);
+  if (imagesHave < imagesNeed)
+    return res
+      .status(400)
+      .json({ ok: false, error: "journal_images_required", need: imagesNeed, have: imagesHave, hours });
 
   const { data, error } = await supabase
     .from("project_journals")
