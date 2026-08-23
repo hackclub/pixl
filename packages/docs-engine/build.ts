@@ -1,3 +1,7 @@
+// Only OG preview cards now — docs/*.md rendering itself moved into
+// apps/web-shell/lib/docs.ts. Still runs from the repo root via
+// `bun run docs:build`, but now writes into apps/web-shell/public/docs/
+// instead of static HTML pages under apps/game/web/docs/.
 import { mkdir, readdir } from "node:fs/promises";
 import { render } from "./src/markdown.ts";
 import { renderCard } from "./src/og.ts";
