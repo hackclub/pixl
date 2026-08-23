@@ -7,10 +7,18 @@ import type { NextConfig } from "next";
 // Keep this in sync with vercel.json for as long as both deploys exist.
 const GAME_ORIGIN = "https://play.pixl.hackclub.com";
 
+// pixl-web-shell has no public hostname of its own - both this app and it run
+// as Orchard deployments in the same "ysws-pixl" k8s namespace, so the proxy
+// reaches it over the cluster's internal service DNS instead of round-tripping
+// through the public internet for a same-cluster hop. No DNS record needed.
+const WEB_SHELL_ORIGIN = "http://pixl-web-shell.ysws-pixl.svc.cluster.local:3000";
+
 // Shell pages, mounted at the same path on the apex as on the game host.
+// "docs" moved to WEB_SHELL_ORIGIN as the React migration's first slice -
+// everything else here still serves off the old static site.
 const SHELL_PATHS = [
   "shop", "orders", "collectibles", "vault", "explore", "ideas", "quests",
-  "trials", "timeline", "projects", "report", "dashboard", "docs", "hackatime",
+  "trials", "timeline", "projects", "report", "dashboard", "hackatime",
   "refers", "account", "calc",
 ];
 
@@ -38,6 +46,8 @@ const nextConfig: NextConfig = {
     return [
       { source: "/play", destination: `${GAME_ORIGIN}/` },
       { source: "/play/:path*", destination: `${GAME_ORIGIN}/:path*` },
+      { source: "/docs", destination: `${WEB_SHELL_ORIGIN}/docs` },
+      { source: "/docs/:path*", destination: `${WEB_SHELL_ORIGIN}/docs/:path*` },
       ...SHELL_PATHS.flatMap((p) => [
         { source: `/${p}`, destination: `${GAME_ORIGIN}/${p}/` },
         { source: `/${p}/:path*`, destination: `${GAME_ORIGIN}/${p}/:path*` },
