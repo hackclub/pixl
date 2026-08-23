@@ -12,6 +12,7 @@ Pixl is a Bun/Turborepo monorepo (`bun` workspaces: `apps/*`, `packages/*`) for 
 | `apps/game` | Godot 4 | The 2D multiplayer game client (not TypeScript — GDScript/Godot project) |
 | `apps/landing` | Next.js 16, React 19, Tailwind 4 | Marketing site (pixl.rsvp) |
 | `apps/dashboard` | Next.js 16, React 19, Tailwind 4, shadcn/radix, Supabase | Admin/review dashboard — moderation, tickets, review queue, stats |
+| `apps/web-shell` | Next.js 16, React 19 | React migration of the player-facing web shell — docs (`/docs`) so far, `/shop`/`/dashboard`/etc. still on the old static site. See below. |
 | `apps/pixorpheus` | Bun, TypeScript, Slack Bolt v4, Express, Supabase | Slack bot — tickets, AI chat, moderation DMs, slash commands |
 | `apps/pixo-dm` | Node (CommonJS), Express | Standalone Railway service that relays dashboard-initiated player DMs through Slack as Pixo — plain `node index.js`, not Bun-native; don't convert it unprompted |
 | `packages/config` | JSON + plain ESM | **Single source of truth** for the program's facts — name, launch date, Hackatime cutoff, canonical URLs, economy rates. See below. |
@@ -31,10 +32,11 @@ bun install                                  # install all workspaces
 bun run dev                                  # run all apps' dev servers concurrently
 bun run landing                              # turbo dev --filter=@pixl/landing
 bun run dashboard                             # turbo dev --filter=@pixl/dashboard
+bun run web-shell                            # turbo dev --filter=@pixl/web-shell
 bun run build                                # turbo build (all apps)
 bun run config:sync                          # regenerate committed config copies (packages/config)
 bun run theme:sync                           # regenerate committed theme/palette copies (packages/theme)
-bun run docs:build                           # regenerate apps/game/web/docs/* from docs/*.md (packages/docs-engine)
+bun run docs:build                           # regenerate apps/web-shell/public/<slug>/og.png from docs/*.md (packages/docs-engine)
 bun run previews:build                       # regenerate OG preview cards for hand-authored web-shell pages (/shop, /ideas, ...)
 
 # Per-app (cd into the app, or use --cwd)
@@ -83,7 +85,7 @@ color tokens the game, the web shell, and the docs previews all read.
 
 ### `packages/docs-engine` (docs build)
 
-`bun run docs:build` turns `docs/*.md` into one static page per doc under `apps/game/web/docs/<slug>/` (own `<head>`, OG tags, preview card), wiping and regenerating that output directory each run. Source files are named `<order>-<slug>.md` (order sets nav position, slug sets the URL). `{{token}}` placeholders pull from `packages/config/pixl.json` at build time — re-run after editing `pixl.json`; unknown tokens fail the build. `docs.css`/`docs.js` alongside the output are hand-maintained, not generated.
+Doc *pages* now render in `apps/web-shell` (see below) — this package only still generates OG preview cards. `bun run docs:build` writes one `og.png` per doc into `apps/web-shell/public/<slug>/` (no `docs/` nesting there on purpose — `apps/web-shell` sets `basePath: "/docs"`, which already prefixes everything under `public/`). Source files are named `<order>-<slug>.md` (order sets nav position, slug sets the URL). `{{token}}` placeholders pull from `packages/config/pixl.json` at build time via `packages/docs-engine/src/tokens.ts`'s `buildTokens()` — re-run after editing `pixl.json`; unknown tokens fail the build. `packages/docs-engine/src/markdown.ts`'s `render()` (the actual markdown-to-HTML parser) is imported directly by `apps/web-shell/lib/docs.ts` as a workspace package — this is the one place in the repo that happens, since `apps/web-shell`'s Dockerfile uses a repo-root build context specifically to make that resolve (see below).
 
 ## Architecture notes
 
@@ -103,6 +105,14 @@ color tokens the game, the web shell, and the docs previews all read.
 - Both run **Next.js 16** with React 19 and Tailwind 4 (very recent — training-data knowledge of Next.js APIs/conventions is likely stale). `apps/landing` has an `AGENTS.md` flagging this explicitly: **read the relevant guide in `node_modules/next/dist/docs/` before writing Next.js code in either app**, and heed deprecation notices.
 - `dashboard` runs on port 4900 (`next dev -p 4900` / `next start -p 4900`) since multiple apps run concurrently in dev. It uses shadcn/radix-ui components and talks to Supabase directly plus Slack OAuth (`app/api/auth/*`) for admin login.
 - Page routes follow Next App Router conventions (`app/<route>/page.tsx`); shared page-local components live in `app/_components/`.
+
+### `apps/web-shell` (React migration of the player-facing web shell)
+- Next.js 16 App Router, first slice is docs-only (`/docs/*`) — see `docs/superpowers/specs/2026-08-23-react-migration-design.md` for the full migration design and `docs/superpowers/plans/2026-08-23-react-migration-docs-slice.md` for what's built vs. planned. Every other web-shell path (`/shop`, `/dashboard`, etc.) still runs on the old static site under `apps/game/web/` until its own migration slice.
+- Deployed on Orchard (`pixl-web-shell`, no public hostname of its own — see next point), proxied at `pixl.hackclub.com/docs` via `apps/landing/next.config.ts`'s `rewrites()`.
+- Reaches the outside world only through that proxy, so it uses `basePath: "/docs"` (`next.config.ts`) to keep every Next-generated URL (asset chunks, `next/link` hrefs) correctly prefixed — **this is why the app's own route tree has no literal `docs` segment** (`app/[slug]/page.tsx`, not `app/docs/[slug]/page.tsx`; basePath adds that back at request time). Plain `<a>`/`<img>` tags and CSS `url()` are *not* auto-prefixed by basePath, so those carry an explicit `/docs/` by hand where they appear in the code — same reasoning applies to anything public/-served, including the OG cards `packages/docs-engine` writes.
+- Reads `docs/*.md` directly via `packages/docs-engine`'s `render()`/`buildTokens()` (a workspace-package import — this app's Dockerfile uses a repo-root build context specifically so that resolves, unlike `apps/dashboard`'s isolated per-app context).
+- `apps/landing` reaches it over the Orchard cluster's internal service DNS (`pixl-web-shell.ysws-pixl.svc.cluster.local:3000`), not a public hostname — both run as Orchard deployments in the same `ysws-pixl` k8s namespace, so no DNS record is needed for the hop.
+- Docker image uses Next's `output: "standalone"` — required in this monorepo, not just an optimization: without it, the runtime stage would need to drag along the whole workspace's hoisted `node_modules` (Bun installs into a shared `/repo/node_modules/.bun/...` store for any workspace-package-dependent app, since the install runs against the root `package.json`) to keep `apps/web-shell/node_modules`'s symlinks from dangling. `output: "standalone"` traces the real dependency graph into concrete files instead.
 
 ### `apps/pixorpheus` (Slack bot)
 - Bun-native TypeScript, no build step (`bun run src/index.ts`) — a single Bolt v4 process, organized by feature under `src/` (`tickets/`, `chat/`, `ai/`, `memory/`, `commands/`, `pixelate/`, `github/`, `external/`, `slack/`). There is no separate dashboard process anymore — helper/admin ticket moderation lives in `apps/dashboard` (the Next.js app), which resolves tickets through `src/external/ticketApi.ts` on this bot.
