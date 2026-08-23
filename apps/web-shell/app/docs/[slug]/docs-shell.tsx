@@ -146,7 +146,7 @@ export function DocsShell({
       <aside className="docs-nav">
         <div className="docs-nav-head">
           <Link className="docs-brand" href="/play">
-            <img src="/index.icon.png" alt="" />
+            <img src="/icon.svg" alt="" />
             PIXL <span>DOCS</span>
           </Link>
           <div className="theme-picker">
