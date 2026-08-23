@@ -2,7 +2,7 @@ import { supabase } from "./db/client.js";
 
 const MODEL = "google/gemini-2.5-flash-lite";
 const LOOKBACK_HOURS = 10;
-const DASH_URL = "https://dash.pixl.rsvp";
+export const DASH_URL = "https://dash.pixl.rsvp";
 
 export interface ReportAiResult {
   score: number;

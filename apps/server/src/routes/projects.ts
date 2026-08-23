@@ -7,6 +7,7 @@ import { addNotification } from "./notifications.js";
 import { findInYswsArchive } from "../ysws/archive.js";
 import { buildDoubleDip } from "../ysws/doubleDip.js";
 import { fetchHackatimeStats, fetchTrackedSecondsSince } from "../hackatime/api.js";
+import { postShipToSlack } from "../shipNotify.js";
 
 const router = Router();
 
@@ -504,6 +505,7 @@ router.post("/api/projects/:id/ship", async (req, res) => {
     .eq("id", session.userId)
     .single();
   const htToken = (userRow as { hackatime_token?: string } | null)?.hackatime_token ?? null;
+  const ownerSlackId = (userRow as { slack_id?: string } | null)?.slack_id ?? null;
   const stats = await fetchHackatimeStats(htToken);
   // Software must have a working Hackatime connection; hardware treats Hackatime
   // as optional (journal hours can stand in), so a hardware ship never fails on
@@ -512,11 +514,7 @@ router.post("/api/projects/:id/ship", async (req, res) => {
     return res.status(502).json({ ok: false, error: "hackatime_unavailable" });
   const linked = (project.hackatime_projects as string[]) ?? [];
   // Only hours logged from the cutoff onward count — see HACKATIME_CUTOFF.
-  const htSeconds = await fetchTrackedSecondsSince(
-    (userRow as { slack_id?: string } | null)?.slack_id ?? null,
-    htToken,
-    linked,
-  );
+  const htSeconds = await fetchTrackedSecondsSince(ownerSlackId, htToken, linked);
   // Hardware also counts journalled hours toward the tracked total, so journals
   // alone can carry a hardware ship; the total is journal + Hackatime. Software
   // stays Hackatime-only for its floor.
@@ -687,6 +685,7 @@ router.post("/api/projects/:id/ship", async (req, res) => {
     isUpdate ? "Update shipped" : "Project shipped",
     `"${project.name}" is in the review queue. You'll hear back here once it's reviewed.`,
   );
+  void postShipToSlack(data, ownerSlackId, trackedSeconds, isUpdate);
   res.json({ ok: true, project: data });
 });
 
