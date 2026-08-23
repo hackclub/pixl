@@ -47,6 +47,21 @@ export const SUBADMIN_PERMISSIONS = ALL_PERMISSIONS.filter(
 // whose review right would otherwise come from ADMIN_SLACK_IDS.
 export const NO_REVIEW = "no_review";
 
+// Marker stored in an admins row purely to label someone as having been
+// granted the Sponsor role from /admins (see addSponsor in app/actions.ts).
+// Not itself a capability , the real access comes from the perms/markers in
+// SPONSOR_BASE_PERMS below, granted alongside it. Filtered out of the
+// effective perms Set in getAccess just like NO_REVIEW/SECOND_PASS.
+export const SPONSOR = "sponsor";
+
+// The permission bundle a new Sponsor is granted in one go: ticket handling
+// (answer/resolve/fulfill), warning players, and reviewing (both passes , the
+// SECOND_PASS marker is applied alongside this by addSponsor, since it isn't
+// a plain Permission). This is only the starting bundle: a super can still
+// tick on any other SUBADMIN_PERMISSIONS checkbox for them afterward from the
+// normal per-admin form on /admins, same as any other admin.
+export const SPONSOR_BASE_PERMS = ["warn", "tickets", "review"] as const satisfies readonly Permission[];
+
 // Marker stored in an admins row to promote a reviewer to final (second-pass)
 // reviewer, on top of whoever SECOND_PASS_SLACK_IDS grants.
 export const SECOND_PASS = "second_pass";
@@ -119,7 +134,9 @@ export async function getAccess(): Promise<AdminAccess | null> {
     return { session, isSuper: true, isOwner, perms, canSecondPass };
   }
   if (!row) return null;
-  const perms = new Set(row.permissions.filter((p) => p !== NO_REVIEW && p !== SECOND_PASS));
+  const perms = new Set(
+    row.permissions.filter((p) => p !== NO_REVIEW && p !== SECOND_PASS && p !== SPONSOR),
+  );
   return { session, isSuper: false, isOwner: false, perms, canSecondPass };
 }
 

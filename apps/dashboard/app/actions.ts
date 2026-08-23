@@ -79,6 +79,8 @@ import {
   SUBADMIN_PERMISSIONS,
   NO_REVIEW,
   SECOND_PASS,
+  SPONSOR,
+  SPONSOR_BASE_PERMS,
   type AdminAccess,
   type Permission,
 } from "@/lib/guard";
@@ -2181,6 +2183,7 @@ function readSubadminPerms(formData: FormData, existing: string[]): string[] {
   if (existing.includes("review")) perms.push("review");
   if (existing.includes(NO_REVIEW)) perms.push(NO_REVIEW);
   if (existing.includes(SECOND_PASS)) perms.push(SECOND_PASS);
+  if (existing.includes(SPONSOR)) perms.push(SPONSOR);
   return perms;
 }
 
@@ -2329,6 +2332,45 @@ export async function addAdmin(formData: FormData): Promise<void> {
         `Sign in with Slack here: ${DASH_URL}`,
       ].join("\n\n"),
     );
+}
+
+// Grants the Sponsor role in one go: warn, tickets (answer/resolve/fulfill),
+// review, and the SECOND_PASS marker (final-pass review), tagged with the
+// SPONSOR marker so the admin list can label them. Unions onto whatever perms
+// they already hold rather than clobbering them , same as addReviewer layering
+// on top of an existing admin. A super can still tick on any other permission
+// for this person afterward from the normal per-admin form below.
+export async function addSponsor(formData: FormData): Promise<void> {
+  const access = await requireSuper();
+  const slackId = String(formData.get("slackId") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+  if (!slackId) return;
+  const existing = await getAdmin(slackId);
+  const perms = [
+    ...new Set([
+      ...(existing?.permissions.filter((p) => p !== NO_REVIEW) ?? []),
+      ...SPONSOR_BASE_PERMS,
+      SECOND_PASS,
+      SPONSOR,
+    ]),
+  ];
+  await setTeamPerms(
+    slackId,
+    name,
+    perms,
+    existing ? "updated" : "added",
+    actorName(access),
+    actorName(access),
+    "",
+  );
+  await dmTeam(
+    slackId,
+    [
+      "You're a Pixl sponsor now! 🎉",
+      "That's warn, ticket handling (answer/resolve/fulfill), and review access, including the final pass , your approvals credit pixels.",
+      `Sign in with Slack here: ${DASH_URL}`,
+    ].join("\n\n"),
+  );
 }
 
 export async function updateAdminPerms(formData: FormData): Promise<void> {
