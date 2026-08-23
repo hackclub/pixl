@@ -112,12 +112,34 @@
         "typescript": "^5.7.2",
       },
     },
+    "apps/web-shell": {
+      "name": "@pixl/web-shell",
+      "version": "0.1.0",
+      "dependencies": {
+        "@pixl/docs-engine": "workspace:*",
+        "next": "16.2.11",
+        "react": "19.2.4",
+        "react-dom": "19.2.4",
+      },
+      "devDependencies": {
+        "@tailwindcss/postcss": "^4",
+        "@types/node": "^20",
+        "@types/react": "^19",
+        "@types/react-dom": "^19",
+        "tailwindcss": "^4",
+        "typescript": "^5",
+      },
+    },
     "packages/config": {
       "name": "@pixl/config",
       "version": "0.0.0",
     },
     "packages/docs-engine": {
       "name": "@pixl/docs-engine",
+      "version": "0.0.0",
+    },
+    "packages/map-sync": {
+      "name": "@pixl/map-sync",
       "version": "0.0.0",
     },
     "packages/theme": {
@@ -464,9 +486,13 @@
 
     "@pixl/landing": ["@pixl/landing@workspace:apps/landing"],
 
+    "@pixl/map-sync": ["@pixl/map-sync@workspace:packages/map-sync"],
+
     "@pixl/server": ["@pixl/server@workspace:apps/server"],
 
     "@pixl/theme": ["@pixl/theme@workspace:packages/theme"],
+
+    "@pixl/web-shell": ["@pixl/web-shell@workspace:apps/web-shell"],
 
     "@radix-ui/number": ["@radix-ui/number@1.1.2", "", {}, "sha512-ceTwaxc4I5IOi97DgCotl3pqiyRGvffcc0oOsE2dQYaJOFIDsDt4VWG6xEbg1QePv9QWausCEIppud/tJ1wNig=="],
 

@@ -1,69 +1,54 @@
-/**
- * Pushes pixl.json out to every app.
- *
- *   bun run config:sync
- *
- * This package is a *build-time* source of truth, not a runtime dependency.
- * Nothing imports "@pixl/config" at runtime, deliberately: both Railway services
- * build from a `/apps/<app>` root directory, so a workspace package sitting
- * outside that directory does not exist at install time and `bun install`
- * fails with "Workspace dependency @pixl/config not found". Generating a
- * self-contained file into each app sidesteps package resolution everywhere -
- * Railway, Vercel, the Godot export, and plain <script> tags all just work.
- *
- * Every target below is committed (the apps need them to build and run) but
- * generated. Hand-edits are overwritten on the next run. See README.md.
- */
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
-
-const ROOT = new URL("../../", import.meta.url).pathname;
-const SOURCE = `${ROOT}packages/config/pixl.json`;
-
-const NOTE = "GENERATED from packages/config/pixl.json by `bun run config:sync` - do not edit";
-
-const raw = await readFile(SOURCE, "utf8");
-const config = JSON.parse(raw);
-const pretty = JSON.stringify(config, null, 2);
-
-const written: string[] = [];
-
-async function write(path: string, contents: string) {
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, contents);
-  written.push(path.replace(ROOT, ""));
-}
-
-// --- Godot: read off res:// by scripts/pixl_config.gd -----------------------
-// JSON has no comment syntax, so the "do not edit" warning rides along as a key.
-await write(
-  `${ROOT}apps/game/pixl.json`,
-  `${JSON.stringify({ _generated: NOTE, ...config }, null, 2)}\n`,
-);
-
-// --- The game's web pages ---------------------------------------------------
-// pixl.js is loaded by all 14 pages, so one injected block reaches every one of
-// them without touching a single HTML file.
-const OPEN = "  // <pixl-config>";
-const CLOSE = "  // </pixl-config>";
-const WEB_TARGET = `${ROOT}apps/game/web/pixl.js`;
-const web = await readFile(WEB_TARGET, "utf8");
-const start = web.indexOf(OPEN);
-const end = web.indexOf(CLOSE);
-if (start === -1 || end === -1) {
-  console.error(`[config:sync] missing ${OPEN} / ${CLOSE} markers in ${WEB_TARGET}`);
-  process.exit(1);
-}
-const block = [OPEN, `  // ${NOTE}`, `  const config = ${pretty.replace(/\n/g, "\n  ")};`, CLOSE];
-await write(WEB_TARGET, web.slice(0, start) + block.join("\n") + web.slice(end + CLOSE.length));
-
-// --- TypeScript apps --------------------------------------------------------
-// Self-contained on purpose: no import of this package, so each app's build only
-// ever sees its own directory. The helpers are duplicated across the generated
-// files, which is fine - nobody hand-maintains them.
-const ts = `// ${NOTE}
+// GENERATED from packages/config/pixl.json by `bun run config:sync` - do not edit
 /* eslint-disable */
-export const config = ${pretty} as const;
+export const config = {
+  "name": "Pixl",
+  "tagline": "A retro 2D world where you level up by building real things",
+  "launchDate": "2026-08-18T11:00:00Z",
+  "hackatimeCutoff": "2026-08-18T00:00:00Z",
+  "urls": {
+    "site": "https://pixl.hackclub.com",
+    "play": "https://play.pixl.hackclub.com",
+    "docs": "https://pixl.hackclub.com/docs",
+    "server": "https://server.pixl.hackclub.com",
+    "ws": "wss://server.pixl.hackclub.com/ws",
+    "repo": "https://github.com/hackclub/pixl"
+  },
+  "economy": {
+    "pixelValueUsd": 0.07,
+    "sponsorRateUsd": 8.5,
+    "basePayoutUsd": 3.5,
+    "maxPayoutUsd": 6,
+    "reForMaxPayout": 5000,
+    "tierRePerHour": [
+      5,
+      10,
+      15,
+      25
+    ],
+    "tierKickerUsdPerStep": 0.5,
+    "tierKickerHours": 40,
+    "trialBonusRe": 25,
+    "levelBands": [
+      {
+        "throughLevel": 10,
+        "rePerLevel": 10
+      },
+      {
+        "throughLevel": 50,
+        "rePerLevel": 35
+      },
+      {
+        "throughLevel": 100,
+        "rePerLevel": 70
+      }
+    ]
+  },
+  "team": [
+    "Gabin",
+    "Ridit",
+    "Ricky"
+  ]
+} as const;
 
 const E = config.economy;
 
@@ -171,7 +156,7 @@ export function pxPerHourOver(reBefore: number, reAfter: number): number {
  * within a few cents of a tier-1 one. This kicker fixes that - +$0.50/hour per
  * tier step above T1.
  *
- * It only applies to the first \`tierKickerHours\` of a project, because a long
+ * It only applies to the first `tierKickerHours` of a project, because a long
  * tier-4 project is *already* rewarded: it builds RE five times faster, which
  * permanently lifts the rate on everything shipped afterwards. Without the cap a
  * 150h project's tier gap more than doubles and the margin on exactly the most
@@ -188,11 +173,11 @@ export function tierKickerUsd(hours: number, tier: number): number {
   return E.tierKickerUsdPerStep * (t - 1) * Math.min(h, E.tierKickerHours);
 }
 
+/** Everything a project pays, in dollars: the RE-driven rate plus the tier kicker. */
 export function projectPayoutUsd(hours: number, tier: number, reBefore: number): number {
   const h = Number.isFinite(hours) ? Math.max(hours, 0) : 0;
   const reAfter = reBefore + reForHours(h, tier);
-  const raw = h * averageUsdPerHourOver(reBefore, reAfter) + tierKickerUsd(h, tier);
-  return Math.min(raw, h * E.maxPayoutUsd);
+  return h * averageUsdPerHourOver(reBefore, reAfter) + tierKickerUsd(h, tier);
 }
 
 /** The same total in pixels - what actually gets credited. */
@@ -230,16 +215,3 @@ export const launchDateLabel = formatDate(launchDate, {
   day: "numeric",
   year: "numeric",
 });
-`;
-
-for (const target of [
-  "apps/server/src/config.generated.ts",
-  "apps/pixorpheus/src/config.generated.ts",
-  "apps/landing/app/_generated/config.ts",
-  "apps/dashboard/app/_generated/config.ts",
-  "apps/web-shell/app/_generated/config.ts",
-]) {
-  await write(`${ROOT}${target}`, ts);
-}
-
-console.log(`[config:sync] wrote:\n  ${written.join("\n  ")}`);

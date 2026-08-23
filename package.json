@@ -18,6 +18,7 @@
     "dev": "turbo dev",
     "landing": "turbo dev --filter=@pixl/landing",
     "dashboard": "turbo dev --filter=@pixl/dashboard",
+    "web-shell": "turbo dev --filter=@pixl/web-shell",
     "build": "turbo build",
     "config:sync": "bun run packages/config/sync.ts",
     "theme:sync": "bun run packages/theme/sync.ts",
