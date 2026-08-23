@@ -25,12 +25,6 @@
 <style>
   .vwrap { max-width: 960px; margin: 0 auto; }
 
-  /* The vault's own accent. It was referenced as var(--violet) in seven places
-     but never actually defined anywhere, so every one of those colors silently
-     fell back to inherited text. Defined here with the value the seal/segment
-     fills were already hardcoding. */
-  :root { --violet: #7048e8; }
-
   /* ---- energy gauge ---- */
   .gauge {
     margin-top: 14px; padding: 24px 26px;
@@ -39,15 +33,15 @@
     box-shadow: var(--drop);
     position: relative; overflow: hidden;
   }
-  .gauge-eyebrow { font-family: var(--pixel); font-size: 12px; letter-spacing: 4px; color: var(--violet); margin-bottom: 8px; }
+  .gauge-eyebrow { font-family: var(--pixel); font-size: 12px; letter-spacing: 4px; color: var(--teal); margin-bottom: 8px; }
   .gauge-num { font-family: var(--pixel); font-size: clamp(38px, 8vw, 64px); line-height: 1; color: var(--gold); }
-  .gauge-num small { font-family: var(--pixel); font-size: .28em; letter-spacing: 3px; color: var(--violet); display: block; margin-top: 8px; }
+  .gauge-num small { font-family: var(--pixel); font-size: .28em; letter-spacing: 3px; color: var(--teal); display: block; margin-top: 8px; }
   .gauge-next { margin-top: 4px; font-size: 14px; color: var(--dim); }
   .gauge-next b { color: var(--gold-soft); }
 
   .segbar { display: flex; gap: 3px; margin-top: 18px; height: 24px; }
   .seg { flex: 1; border: var(--bw) solid var(--stroke); border-radius: 0; background: var(--panel-deep); }
-  .seg.on { background: var(--violet); }
+  .seg.on { background: var(--teal); }
 
   /* ---- vault chambers ---- */
   .chambers { display: flex; flex-direction: column; gap: 16px; margin-top: 28px; }
@@ -65,8 +59,8 @@
   }
   .ch-seal .lv-word { font-size: 10px; letter-spacing: 3px; }
   .ch-seal .lv-num { font-size: 40px; line-height: 1; }
-  .chamber.on .ch-seal { background: var(--violet); color: var(--panel-deep); }
-  .chamber.on .ch-seal .lv-word { color: #e5dbff; }
+  .chamber.on .ch-seal { background: var(--teal); color: var(--panel-deep); }
+  .chamber.on .ch-seal .lv-word { color: var(--panel-deep); }
   .chamber.off .ch-seal { background: var(--panel-deep); color: var(--faint); }
   .chamber.on .ch-seal::after { content: "UNLOCKED"; font-family: var(--sans); font-size: 15px; }
   .chamber.off .ch-seal::after { content: "LOCKED"; font-family: var(--sans); font-size: 15px; opacity: .8; }
@@ -77,7 +71,7 @@
   .chamber.on .ch-title { color: var(--gold); }
   .chamber.off .ch-title { color: var(--dim); }
   .stamp { margin-left: auto; font-family: var(--pixel); font-size: 11px; letter-spacing: 2px; border: 2px solid; border-radius: 0; padding: 4px 9px 3px; }
-  .stamp.on { color: var(--violet); border-color: var(--violet); background: rgba(112,72,232,.10); }
+  .stamp.on { color: var(--teal); border-color: var(--teal); background: rgba(82,174,185,.10); }
   .stamp.off { color: var(--faint); border-color: var(--faint); }
   .ch-blurb { font-size: 14.5px; color: var(--dim); line-height: 1.6; margin-bottom: 12px; }
   .chamber.off .ch-blurb { color: var(--faint); }
@@ -86,13 +80,13 @@
     background: var(--panel-deep); color: var(--ink); }
   .rw.energy { color: var(--gold); border-color: rgba(236,72,153,.4); }
   .chamber.off .rw { color: var(--faint); }
-  .ch-need { margin-top: 10px; font-size: 12.5px; color: var(--violet); letter-spacing: .5px; }
+  .ch-need { margin-top: 10px; font-size: 12.5px; color: var(--teal); letter-spacing: .5px; }
 
   .chamber.off { filter: saturate(.7) brightness(.97); opacity: .78; }
-  .chamber.on:hover { border-color: var(--violet); box-shadow: var(--drop); transform: translate(-2px,-2px); }
+  .chamber.on:hover { border-color: var(--teal); box-shadow: var(--drop); transform: translate(-2px,-2px); }
 
   .lore { margin: 34px 0 10px; padding: 16px 20px; font-size: 14px; color: var(--dim); line-height: 1.75; }
-  .lore b { color: var(--violet); }
+  .lore b { color: var(--teal); }
 </style>
 </head>
 <body>
@@ -100,7 +94,7 @@
   <div class="vwrap">
     <section style="text-align:center; padding: 24px 20px 4px">
       <h1 class="page-title">THE CORE VAULT</h1>
-      <div class="page-sub" style="color:#c9b3ff">EVERY SHIP FEEDS RESTORATION ENERGY, THE COMMUNITY RECOVERS THE VAULT TOGETHER</div>
+      <div class="page-sub" style="color:var(--teal)">EVERY SHIP FEEDS RESTORATION ENERGY, THE COMMUNITY RECOVERS THE VAULT TOGETHER</div>
     </section>
 
     <section class="gauge">
