@@ -145,10 +145,12 @@ export function DocsShell({
     <div className="docs">
       <aside className="docs-nav">
         <div className="docs-nav-head">
-          <Link className="docs-brand" href="/play">
-            <img src="/icon.svg" alt="" />
+          {/* Plain <a>, not Link: /play is outside basePath entirely (a
+              different proxied app), so it must not get "/docs" prepended. */}
+          <a className="docs-brand" href="/play">
+            <img src="/docs/icon.svg" alt="" />
             PIXL <span>DOCS</span>
-          </Link>
+          </a>
           <div className="theme-picker">
             <button
               className="theme-toggle"
@@ -209,7 +211,7 @@ export function DocsShell({
                   <Link
                     key={i.slug}
                     className={`section-link${i.slug === activeSlug ? " active" : ""}`}
-                    href={`/docs/${i.slug}/`}
+                    href={`/${i.slug}/`}
                   >
                     {i.title}
                   </Link>
