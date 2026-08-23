@@ -302,10 +302,10 @@ const Pixl = (() => {
 
   async function upload(file, opts = {}) {
     // opts.kind: "image" (default, /api/uploads) or "bom" (/api/uploads/bom,
-    // a hardware ship's Bill of Materials CSV — see MAX_CSV_BYTES server-side).
+    // a hardware ship's Bill of Materials CSV, see MAX_CSV_BYTES server-side).
     const isBom = opts.kind === "bom";
     // Must match MAX_MODERATE_BYTES in apps/server/src/imageModeration.ts (images)
-    // or MAX_CSV_BYTES in apps/server/src/routes/uploads.ts (bom) — those are the
+    // or MAX_CSV_BYTES in apps/server/src/routes/uploads.ts (bom), those are the
     // hard server-side caps, so reject early instead of making the caller wait
     // on an upload that's guaranteed to 413.
     if (file && file.size > (isBom ? 2_000_000 : 15_000_000))

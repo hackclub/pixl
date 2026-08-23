@@ -88,7 +88,7 @@ router.post(
 const CSV_TYPES = ["text/csv", "application/vnd.ms-excel", "application/csv"];
 const MAX_CSV_BYTES = 2_000_000;
 
-// A hardware ship's Bill of Materials — not an image, so no vision moderation,
+// A hardware ship's Bill of Materials, not an image, so no vision moderation,
 // just a straight proxy to the CDN like the image route above.
 router.post(
   "/api/uploads/bom",

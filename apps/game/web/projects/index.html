@@ -1254,7 +1254,7 @@
       let hasBirthday = true; // assume yes until we hear otherwise — avoids a flash of the banner
       let form = null;
       // The player's current $/hour ship rate (from /api/profile/wallet), used
-      // only for the funding "~Xh to cover this" estimate below — falls back to
+      // only for the funding "~Xh to cover this" estimate below, falls back to
       // the base rate from config if the wallet fetch hasn't landed yet.
       let walletUsdPerHour = Pixl.config.economy ? Pixl.config.economy.basePayoutUsd : 3.5;
 
@@ -1757,7 +1757,7 @@
         </label>
         <p class="disclosure-desc">
           Ask for money toward parts and shipping. Upload your Bill of Materials, your cart screenshot(s)
-          (with shipping included), and how much you need — all required to ship a funded project.
+          (with shipping included), and how much you need, all required to ship a funded project.
         </p>
         <div id="f-funding-fields" ${p.needs_funding ? "" : "hidden"}>
           <div class="form-row">
@@ -1769,7 +1769,7 @@
             </div>
           </div>
           <div class="form-row">
-            <label>CART SCREENSHOT(S) — WITH SHIPPING</label>
+            <label>CART SCREENSHOT(S), WITH SHIPPING</label>
             <div style="display:flex;flex-direction:column;gap:8px">
               <button class="btn dark" id="f-cart-btn" type="button">ADD SCREENSHOT</button>
               <input type="file" id="f-cart-file" accept="image/png,image/jpeg,image/webp" hidden>
