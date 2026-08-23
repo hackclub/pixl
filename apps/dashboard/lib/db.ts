@@ -147,6 +147,10 @@ export interface ProjectRow {
   joe_reviewed_at: string | null;
   joe_reviewer: string;
   joe_error: string;
+  // Airtable YSWS push (see sendProjectToAirtable in app/actions.ts) - the
+  // Airtable record id once this project has been pushed, so a re-send
+  // updates the existing row instead of creating a duplicate.
+  airtable_record_id: string | null;
 }
 
 export interface PlayerStateRow {

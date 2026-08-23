@@ -54,7 +54,9 @@ import {
   turnedNineteenSinceShipping,
   type DashEventRow,
 } from "@/lib/db";
-import { buildAuditNote, TECHNICAL_FEATURES_MIN } from "@/lib/auditNote";
+import { buildAuditNote, parseAuditNote, TECHNICAL_FEATURES_MIN } from "@/lib/auditNote";
+import { decryptPII } from "@/lib/crypto";
+import { buildAirtableFields, pushProjectRecord } from "@/lib/airtable";
 import { joeEnabled } from "@/lib/joe";
 import { submitToJoe } from "@/lib/joeSync";
 import { slackHandle, dmUser, slackAvatars } from "@/lib/slack";
@@ -1483,6 +1485,100 @@ export async function archiveProject(formData: FormData): Promise<void> {
     by,
   );
   revalidatePath("/", "layout");
+}
+
+// Manual, one-project-at-a-time push into the intermediate YSWS Airtable
+// base. Never flips that base's own "Automation - Submit to Unified"
+// checkbox - a teammate does that by hand after reviewing what lands here.
+// Re-running this on an already-pushed project updates the same Airtable
+// row (via the stored airtable_record_id) instead of creating a duplicate.
+export async function sendProjectToAirtable(formData: FormData): Promise<void> {
+  await requirePerm("ban");
+  const projectId = Number(formData.get("projectId") ?? 0);
+  if (!projectId) return;
+  const back = `/projects/${projectId}`;
+
+  const { data: project, error: projectError } = await db
+    .from("projects")
+    .select(
+      "id, status, banned_at, rejected_at, repo_url, demo_url, description, image_url, approved_hours, system_note, user_id, airtable_record_id",
+    )
+    .eq("id", projectId)
+    .single();
+  if (projectError || !project) {
+    redirect(`${back}?error=${encodeURIComponent("Project not found.")}`);
+  }
+  if (project.status !== "approved" || project.banned_at || project.rejected_at) {
+    redirect(`${back}?error=${encodeURIComponent("Only approved projects can be sent to Airtable.")}`);
+  }
+
+  const { data: user, error: userError } = await db
+    .from("users")
+    .select(
+      "first_name, last_name, real_name, email, birthday, address_line1, address_line2, address_city, address_state, address_country, address_postal",
+    )
+    .eq("id", project.user_id)
+    .maybeSingle();
+  if (userError) {
+    redirect(`${back}?error=${encodeURIComponent("Could not look up this project's owner - try again.")}`);
+  }
+
+  const [fallbackFirst, ...fallbackRest] = (user?.real_name ?? "").split(" ");
+  const firstName = user?.first_name || fallbackFirst || "";
+  const lastName = user?.last_name || fallbackRest.join(" ") || "";
+
+  const { data: audit, error: auditError } = await db
+    .from("review_audits")
+    .select("audit_note")
+    .eq("project_id", projectId)
+    .eq("verdict", "approved")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (auditError) {
+    redirect(`${back}?error=${encodeURIComponent("Could not look up the approval note - try again.")}`);
+  }
+  const auditSections = parseAuditNote(audit?.audit_note ?? "");
+
+  const fields = buildAirtableFields({
+    repoUrl: project.repo_url ?? "",
+    demoUrl: project.demo_url ?? "",
+    firstName,
+    lastName,
+    email: user?.email ?? "",
+    imageUrl: project.image_url ?? "",
+    description: project.description ?? "",
+    approvedHours: project.approved_hours,
+    systemNote: project.system_note ?? "",
+    birthday: decryptPII(user?.birthday),
+    addressLine1: decryptPII(user?.address_line1),
+    addressLine2: decryptPII(user?.address_line2),
+    city: decryptPII(user?.address_city),
+    state: decryptPII(user?.address_state),
+    country: decryptPII(user?.address_country),
+    zip: decryptPII(user?.address_postal),
+    auditSections,
+  });
+
+  const result = await pushProjectRecord(fields, project.airtable_record_id ?? null);
+  if (!result.ok) {
+    // result.error comes from Airtable's own API error message or a network
+    // failure reason - never from decrypted PII, so it's safe to show.
+    redirect(`${back}?error=${encodeURIComponent(`Airtable push failed: ${result.error}`)}`);
+  }
+
+  const { error: updateError } = await db
+    .from("projects")
+    .update({ airtable_record_id: result.recordId })
+    .eq("id", projectId);
+  if (updateError) {
+    console.error("sendProjectToAirtable: airtable_record_id save failed", updateError.message);
+    redirect(
+      `${back}?error=${encodeURIComponent("Pushed to Airtable, but failed to save the record link - check Airtable for a duplicate before pushing again.")}`,
+    );
+  }
+
+  revalidatePath(back);
 }
 
 // Any reviewer can nominate a project as a "Beacon" - a cosmetic badge shown
