@@ -17,6 +17,23 @@ export function LanguageSwitcher() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function cancelClose() {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+  }
+
+  function scheduleClose() {
+    cancelClose();
+    closeTimeoutRef.current = setTimeout(() => {
+      setOpen(false);
+    }, 300);
+  }
+
+  useEffect(() => cancelClose, []);
 
   useEffect(() => {
     if (!open) return;
@@ -45,17 +62,19 @@ export function LanguageSwitcher() {
   const current = LANGS.find(([value]) => value === lang)?.[1] ?? lang;
 
   return (
-    <div
-      ref={rootRef}
-      className="fixed bottom-3 left-3 z-1000 sm:bottom-5 sm:left-5"
-    >
+    <div ref={rootRef} className="fixed bottom-0 left-3 z-1000 sm:left-5">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
+        onMouseEnter={() => {
+          cancelClose();
+          setOpen(true);
+        }}
+        onMouseLeave={scheduleClose}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={dict.menu.language}
-        className="flex cursor-pointer items-center gap-2 border-black border-b-4 border-l-2 border-r-4 border-t-2 bg-[#F5EED2] px-3 py-1.5 font-pixel text-base text-black transition-all hover:-translate-x-0.5 hover:-translate-y-0.5 hover:border-b-6 sm:gap-2.5 sm:px-4 sm:py-2 sm:text-lg lg:text-xl"
+        className="flex cursor-pointer items-center gap-2 border-black border-b-4 border-l-2 border-r-4 border-t-2 bg-[#F5EED2] px-3 py-1.5 font-pixel text-base text-black transition-all hover:border-b-6 sm:gap-2.5 sm:px-6 sm:py-2 sm:text-lg lg:text-xl"
       >
         {current}
         <svg
@@ -78,6 +97,8 @@ export function LanguageSwitcher() {
           aria-label={dict.menu.language}
           className="absolute bottom-full left-0 z-10 mb-2 min-w-full overflow-hidden border-2 border-black bg-[#F5EED2]"
           style={{ boxShadow: "4px 4px 0 #000" }}
+          onMouseEnter={cancelClose}
+          onMouseLeave={scheduleClose}
         >
           {LANGS.map(([value, label]) => (
             <li key={value} role="option" aria-selected={value === lang}>
