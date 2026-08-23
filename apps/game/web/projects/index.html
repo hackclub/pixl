@@ -1750,7 +1750,7 @@
         </select>
         <span class="faint" id="f-kind-note" style="font-size:11px;line-height:1.5;margin-top:4px"></span>
       </div>
-      <div class="disclosure" id="f-funding-block" ${p.kind === "hardware" ? "" : "hidden"}>
+      <div class="disclosure" id="f-funding-block" style="${p.kind === "hardware" ? "" : "display:none"}">
         <label class="disclosure-check">
           <input type="checkbox" id="f-funding" ${p.needs_funding ? "checked" : ""}>
           I need funding for this build
@@ -1917,7 +1917,8 @@
               $("f-kind").value === "hardware"
                 ? "Hardware: Hackatime is optional - journal your hours and they count too. Goes to the hardware review queue."
                 : "Software: needs Hackatime hours to ship.";
-            if ($("f-funding-block")) $("f-funding-block").hidden = $("f-kind").value !== "hardware";
+            if ($("f-funding-block"))
+              $("f-funding-block").style.display = $("f-kind").value === "hardware" ? "" : "none";
           };
           $("f-kind").addEventListener("change", kindNote);
           kindNote();
