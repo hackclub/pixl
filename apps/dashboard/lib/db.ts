@@ -105,6 +105,11 @@ export interface ProjectRow {
   image_url: string;
   level: number;
   project_type: string | null;
+  kind: string;
+  needs_funding: boolean;
+  funding_usd: number;
+  bom_url: string;
+  cart_screenshot_urls: string[];
   used_ai: boolean;
   ai_notes: string;
   is_update: boolean;

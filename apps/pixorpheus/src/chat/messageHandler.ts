@@ -260,18 +260,22 @@ app.message(async ({ message, client }) => {
         } else {
           result = await computeCompactSince(0, m.channel);
         }
+        const intro =
+          label === "yesterday"
+            ? `here's what you missed yesterday (${result?.messageCount ?? 0} messages), catch up lazy :3c:`
+            : `ok here's the compact for today so far (${result?.messageCount ?? 0} messages):`;
+        const empty =
+          label === "yesterday" ? "yesterday was mad quiet, nothing to compact ngl" : "nothing's happened today yet, too quiet in here rn";
         await client.chat.postMessage({
           channel: m.channel,
           thread_ts: threadTs,
-          text: result
-            ? `*compact for ${label}* (${result.messageCount} messages)\n${result.summary}`
-            : `nothing to compact for ${label} yet`,
+          text: result ? `${intro}\n${result.summary}` : empty,
         });
       } catch (e) {
         await client.chat.postMessage({
           channel: m.channel,
           thread_ts: threadTs,
-          text: "compact failed ngl",
+          text: "compact broke on me ngl, try again in a sec",
         });
       }
       return;

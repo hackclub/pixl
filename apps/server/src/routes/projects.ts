@@ -265,6 +265,10 @@ interface ProjectFields {
   hackatime_projects: string[];
   level: number;
   kind: string;
+  needs_funding: boolean;
+  funding_usd: number;
+  bom_url: string;
+  cart_screenshot_urls: string[];
 }
 
 // Shared field parsing/validation for create + update. Returns an error code
@@ -290,6 +294,17 @@ export function parseProjectBody(
   const projectType = PROJECT_TYPES.includes(String(body?.projectType))
     ? String(body?.projectType)
     : "other";
+  const kind = body?.kind === "hardware" ? "hardware" : "software";
+  // Funding is a hardware-only ask, held clean for software so a kind switch
+  // back to software can't leave stale funding data sitting on the row.
+  const needsFunding = kind === "hardware" && body?.needsFunding === true;
+  const fundingUsd = needsFunding
+    ? Math.min(Math.max(Number(body?.fundingUsd) || 0, 0), 100000)
+    : 0;
+  const bomUrl = needsFunding ? String(body?.bomUrl ?? "").trim().slice(0, 500) : "";
+  const cartScreenshotUrls = needsFunding && Array.isArray(body?.cartScreenshotUrls)
+    ? body.cartScreenshotUrls.map((u: unknown) => String(u)).slice(0, 10)
+    : [];
   return {
     fields: {
       name,
@@ -306,7 +321,11 @@ export function parseProjectBody(
       level: Math.min(4, Math.max(1, Math.round(Number(body?.level)) || 1)),
       // Software vs hardware track, chosen at creation. Hardware ships don't
       // require Hackatime and go to their own review queue.
-      kind: body?.kind === "hardware" ? "hardware" : "software",
+      kind,
+      needs_funding: needsFunding,
+      funding_usd: fundingUsd,
+      bom_url: bomUrl,
+      cart_screenshot_urls: cartScreenshotUrls,
     },
   };
 }
@@ -465,6 +484,19 @@ router.post("/api/projects/:id/ship", async (req, res) => {
     return res.status(400).json({ ok: false, error: "demo_unreachable" });
 
   const isHardware = project.kind === "hardware";
+
+  // A funded hardware ship needs the reviewer to be able to verify the ask:
+  // what it's for (BOM), what it costs (cart screenshots, with shipping),
+  // and how much (the dollar amount). Same "block at ship, not at save" shape
+  // as the other checklist items above.
+  if (isHardware && project.needs_funding) {
+    if (!String(project.bom_url ?? "").trim())
+      return res.status(400).json({ ok: false, error: "bom_required" });
+    if (!Array.isArray(project.cart_screenshot_urls) || project.cart_screenshot_urls.length === 0)
+      return res.status(400).json({ ok: false, error: "cart_screenshot_required" });
+    if (!(Number(project.funding_usd) > 0))
+      return res.status(400).json({ ok: false, error: "funding_amount_required" });
+  }
 
   const { data: userRow } = await supabase
     .from("users")

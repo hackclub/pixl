@@ -76,6 +76,23 @@ export function BeaconBadge() {
   return <Badge tone="amber">★ Beacon</Badge>;
 }
 
+// Hardware-only funding ask, set by the player via needs_funding. See the
+// funding panel in review/[id]/page.tsx for the BOM / cart screenshot detail.
+export function FundingBadge({
+  needsFunding,
+  fundingUsd,
+}: {
+  needsFunding: boolean;
+  fundingUsd?: number | null;
+}) {
+  if (!needsFunding) return null;
+  return (
+    <Badge tone="green">
+      Funding: {fundingUsd ? `$${Number(fundingUsd).toFixed(2)}` : "requested"}
+    </Badge>
+  );
+}
+
 export function ShipBadges({
   project,
 }: {

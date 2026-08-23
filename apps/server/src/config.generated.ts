@@ -173,11 +173,11 @@ export function tierKickerUsd(hours: number, tier: number): number {
   return E.tierKickerUsdPerStep * (t - 1) * Math.min(h, E.tierKickerHours);
 }
 
-/** Everything a project pays, in dollars: the RE-driven rate plus the tier kicker. */
 export function projectPayoutUsd(hours: number, tier: number, reBefore: number): number {
   const h = Number.isFinite(hours) ? Math.max(hours, 0) : 0;
   const reAfter = reBefore + reForHours(h, tier);
-  return h * averageUsdPerHourOver(reBefore, reAfter) + tierKickerUsd(h, tier);
+  const raw = h * averageUsdPerHourOver(reBefore, reAfter) + tierKickerUsd(h, tier);
+  return Math.min(raw, h * E.maxPayoutUsd);
 }
 
 /** The same total in pixels - what actually gets credited. */

@@ -85,4 +85,57 @@ router.post(
   },
 );
 
+const CSV_TYPES = ["text/csv", "application/vnd.ms-excel", "application/csv"];
+const MAX_CSV_BYTES = 2_000_000;
+
+// A hardware ship's Bill of Materials, not an image, so no vision moderation,
+// just a straight proxy to the CDN like the image route above.
+router.post(
+  "/api/uploads/bom",
+  express.raw({ type: CSV_TYPES, limit: MAX_CSV_BYTES }),
+  async (req, res) => {
+    const token = typeof req.query.token === "string" ? req.query.token : "";
+    const session = token ? verifySessionToken(token) : null;
+    if (!session) return res.status(401).json({ ok: false });
+
+    const key = process.env.HACKCLUB_CDN_KEY;
+    if (!key) {
+      console.error("[uploads] HACKCLUB_CDN_KEY is not set, refusing upload");
+      return res.status(503).json({ ok: false, error: "cdn_not_configured" });
+    }
+
+    const contentType = String(req.headers["content-type"] ?? "").split(";")[0].trim();
+    const buf = Buffer.isBuffer(req.body) ? req.body : null;
+    if (!buf || buf.length === 0) {
+      if (contentType && !CSV_TYPES.includes(contentType))
+        return res.status(415).json({ ok: false, error: "unsupported_type" });
+      return res.status(400).json({ ok: false, error: "empty_body" });
+    }
+
+    const form = new FormData();
+    form.append("file", new Blob([new Uint8Array(buf)], { type: "text/csv" }), `bom-${Date.now()}.csv`);
+
+    try {
+      const r = await fetch("https://cdn.hackclub.com/api/v4/upload", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}` },
+        body: form,
+      });
+      if (!r.ok) {
+        console.error("[uploads] bom cdn rejected", r.status, await r.text());
+        return res.status(502).json({ ok: false, error: "cdn_failed" });
+      }
+      const json = (await r.json()) as { url?: string };
+      if (!json.url) {
+        console.error("[uploads] bom cdn response missing url", json);
+        return res.status(502).json({ ok: false, error: "cdn_failed" });
+      }
+      res.json({ ok: true, url: json.url });
+    } catch (e) {
+      console.error("[uploads] bom upload failed", e);
+      res.status(502).json({ ok: false, error: "cdn_failed" });
+    }
+  },
+);
+
 export default router;
