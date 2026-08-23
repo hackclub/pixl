@@ -132,13 +132,6 @@ Bun.serve({
     const direct = await serveStatic(pathname, ifNoneMatch);
     if (direct) return direct;
 
-    // vercel.json rewrite: /docs/:slug -> /docs/index.html, so the docs shell
-    // renders client-side for every page built out of docs/*.md.
-    if (/^\/docs\/[^/]+\/?$/.test(pathname)) {
-      const docs = await serveStatic("/docs/index.html", ifNoneMatch);
-      if (docs) return docs;
-    }
-
     return new Response("Not found", {
       status: 404,
       headers: withIsolation(new Headers({ "Content-Type": "text/plain" }), pathname),

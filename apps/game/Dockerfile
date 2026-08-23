@@ -1,5 +1,7 @@
-# Build context is the repo root, not apps/game: the shell's docs pages and
-# link-preview cards are generated out of docs/ and packages/docs-engine/.
+# Build context is the repo root, not apps/game: the shell's link-preview
+# cards are generated out of packages/docs-engine/ (docs pages themselves
+# moved to apps/web-shell, its own Dockerfile - this app no longer touches
+# docs/ at all).
 #
 # This is .github/workflows/deploy-game.yml as a container - same Godot version,
 # same export preset, same shell assembly - with serve.ts standing in for the
@@ -41,17 +43,17 @@ RUN mkdir -p /out \
     && godot --headless --path apps/game --export-release Web /out/index.html \
     && test -f /out/index.html
 
-# docs:build and previews:build write into apps/game/web/, so they have to run
-# before the shell is copied into the site. Neither has any dependency beyond
-# Bun's stdlib, so there is nothing to install.
+# previews:build writes into apps/game/web/, so it has to run before the
+# shell is copied into the site. No dependency beyond Bun's stdlib, so there
+# is nothing to install. docs:build no longer runs here - /docs is now
+# apps/web-shell (its own Dockerfile, its own OG cards); this app doesn't
+# carry a docs/ shell anymore at all.
 FROM oven/bun:1.3.13 AS shell
 WORKDIR /repo
 COPY package.json ./
 COPY packages packages
-COPY docs docs
 COPY apps/game/web apps/game/web
 COPY apps/game/assets apps/game/assets
-RUN bun run docs:build && test -f apps/game/web/docs/index.html
 RUN bun run previews:build && test -f apps/game/web/dashboard/og.png
 
 FROM debian:bookworm-slim AS assemble
