@@ -551,7 +551,16 @@ router.post("/api/projects/:id/ship", async (req, res) => {
     return res.status(400).json({ ok: false, error: "update_notes_required" });
   if (isUpdate && updateNotes.length < 100)
     return res.status(400).json({ ok: false, error: "update_notes_too_short" });
-  const otherYsws = req.body?.otherYsws === true || !!project.imported_ysws_entry_id;
+  // Only the player's own checkbox requires the notes below - an import-derived
+  // disclosure (project.imported_ysws_entry_id) never showed that field, so
+  // there's nothing to validate for it.
+  const explicitOtherYsws = req.body?.otherYsws === true;
+  const otherYsws = explicitOtherYsws || !!project.imported_ysws_entry_id;
+  const otherYswsNotes = String(req.body?.otherYswsNotes ?? "").trim().slice(0, 2000);
+  if (explicitOtherYsws && !otherYswsNotes)
+    return res.status(400).json({ ok: false, error: "other_ysws_notes_required" });
+  if (explicitOtherYsws && otherYswsNotes.length < 100)
+    return res.status(400).json({ ok: false, error: "other_ysws_notes_too_short" });
 
   // The Trial link was chosen at creation (project.sidequest_id). Re-validate it
   // here and enforce the Trial's minimum hours against the tracked total above
@@ -636,6 +645,7 @@ router.post("/api/projects/:id/ship", async (req, res) => {
       is_update: isUpdate,
       update_notes: isUpdate ? updateNotes : "",
       other_ysws: otherYsws,
+      other_ysws_notes: explicitOtherYsws ? otherYswsNotes : "",
       system_note: systemNote,
       sidequest_id: sidequestId,
       eligibility_attested: true,
