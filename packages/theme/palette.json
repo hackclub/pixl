@@ -1,5 +1,5 @@
 {
-  "_note": "web.* feeds apps/game/web/pixl.css. godot.* feeds apps/game/theme.json. The web set is PIXL PAPER: the landing site's neo-brutalist look (cream paper, black rules, hard offset shadows, Hack Club red and orange) ported onto the shell and docs so the marketing page and the signed-in product read as one brand. Every surface is a warm cream, deliberately: the first cut used a near-white panel and the pages read as white slabs with the cream only showing through the gaps, which is exactly what landing does not look like. Separation comes from the black rules and the hard shadows, never from lightening a surface toward white. Only a light set exists right now, dark was pulled on 2026-08-17 pending a proper design. godot.* is NOT part of this port, the game still runs the older LEDGER gold on charcoal, so the two objects no longer share values.",
+  "_note": "web.* feeds apps/game/web/pixl.css. godot.* feeds apps/game/theme.json. The web set is PIXL PAPER: the landing site's neo-brutalist look (cream paper, black rules, hard offset shadows, Hack Club red and orange) ported onto the shell and docs so the marketing page and the signed-in product read as one brand. Every surface is a warm cream, deliberately: the first cut used a near-white panel and the pages read as white slabs with the cream only showing through the gaps, which is exactly what landing does not look like. Separation comes from the black rules and the hard shadows, never from lightening a surface toward white. dark is Charcoal LEDGER with an ember coral accent: distinct ink/stroke/panel values (not a 1:1 inversion of light) sharing its charcoal DNA with the Godot game's own godot.dark rather than inventing an unrelated look. godot.* is NOT part of this port, the game still runs the older LEDGER gold on charcoal, so the two objects no longer share values.",
   "web": {
     "light": {
       "ink": "#16161e",
@@ -21,6 +21,29 @@
       "effects": {
         "drop": "4px 4px 0 #16161e",
         "dropLg": "8px 8px 0 #16161e",
+        "dither": "none"
+      }
+    },
+    "dark": {
+      "ink": "#ece8e2",
+      "dim": "#b3ada2",
+      "faint": "#847e72",
+      "muted": "#5c574c",
+      "panel": "#211f1e",
+      "panel-2": "#2a2724",
+      "panel-deep": "#171615",
+      "gold": "#ff6b4a",
+      "gold-soft": "#ff8a6b",
+      "accent": "#ff4763",
+      "teal": "#5fc2cd",
+      "teal-hover": "#7ad4de",
+      "good": "#4ade80",
+      "bad": "#ff4763",
+      "stroke": "#4a453d",
+      "btn-ink": "#171615",
+      "effects": {
+        "drop": "4px 4px 0 #000000",
+        "dropLg": "8px 8px 0 #000000",
         "dither": "none"
       }
     }

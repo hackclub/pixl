@@ -136,11 +136,9 @@ const Pixl = (() => {
   // expose the *active* theme's values, so the other themes' panel/gold need
   // their own small copy here just to draw the dots. Keep in sync with
   // packages/theme/palette.json by eye; there's no runtime data feeding this.
-  //
-  // One entry means no picker is rendered at all (see mountTopbar), so adding
-  // a second theme back here is the only step needed to bring the button back.
   const THEMES = [
     { id: "light", label: "Pixl Paper", panel: "#f5eed2", gold: "#ec3750" },
+    { id: "dark", label: "Pixl Ink", panel: "#171615", gold: "#ff6b4a" },
   ];
 
   function currentTheme() {

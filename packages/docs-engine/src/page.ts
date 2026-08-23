@@ -86,6 +86,10 @@ export function renderPage({ doc, nav, siteUrl, prev, next }: PageInput): string
   <aside class="docs-nav">
     <div class="docs-nav-head">
       <a class="docs-brand" id="docs-brand" title="Back to the game"><img src="/index.icon.png" alt="">PIXL <span>DOCS</span></a>
+      <div class="theme-picker">
+        <button class="theme-toggle" id="docs-theme-btn" type="button" title="Change theme" aria-expanded="false"></button>
+        <div class="theme-menu" id="docs-theme-menu" hidden></div>
+      </div>
     </div>
     <button class="btn dark" id="docs-back" type="button" style="margin:0 6px 16px;justify-content:center">◄ BACK</button>
     <nav id="docs-nav-list">

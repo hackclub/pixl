@@ -22,19 +22,45 @@
     });
   }
 
+  // Every doc is a real page load, not an SPA route change, so a group you
+  // open by hand has nothing keeping it open once you click through to a
+  // different page - the next page only opens whichever group contains it.
+  // Persist manually-opened groups by label so they survive navigation, but
+  // only ever add opens here, never force one closed: the group holding the
+  // page you're currently on must stay open regardless of past history.
+  const OPEN_KEY = "pixl-docs-open-groups";
+  const savedOpen = (() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(OPEN_KEY) || "[]"));
+    } catch (e) {
+      return new Set();
+    }
+  })();
+  const groups = [...document.querySelectorAll(".docs-group")];
+  groups.forEach((group) => {
+    const label = group.querySelector(".g-title")?.textContent;
+    if (label && savedOpen.has(label)) group.classList.remove("collapsed");
+  });
   document.querySelectorAll(".docs-group-head").forEach((head) => {
-    head.addEventListener("click", () => head.parentElement.classList.toggle("collapsed"));
+    head.addEventListener("click", () => {
+      head.parentElement.classList.toggle("collapsed");
+      const open = groups
+        .filter((g) => !g.classList.contains("collapsed"))
+        .map((g) => g.querySelector(".g-title")?.textContent)
+        .filter(Boolean);
+      try {
+        localStorage.setItem(OPEN_KEY, JSON.stringify(open));
+      } catch (e) {}
+    });
   });
 
   // Same paint-palette icon and swatch table as pixl.js's picker - two
   // independent copies (docs pages don't load pixl.js), kept in sync by eye
   // with packages/theme/palette.json.
   const PALETTE_ICON = '<svg viewBox="0 0 16 16" fill="currentColor"><rect x="4" y="2" width="8" height="2"/><rect x="2" y="4" width="2" height="7"/><rect x="12" y="4" width="2" height="6"/><rect x="4" y="11" width="7" height="2"/><rect x="10" y="10" width="2" height="2"/><rect x="5" y="5" width="2" height="2"/><rect x="9" y="5" width="2" height="2"/><rect x="5" y="8" width="2" height="2"/></svg>';
-  // Only one theme right now, so page.ts emits no picker markup and the block
-  // below no-ops. Re-add a second entry here (and the markup in page.ts) to
-  // bring the picker back.
   const THEMES = [
     { id: "light", label: "Pixl Paper", panel: "#f5eed2", gold: "#ec3750" },
+    { id: "dark", label: "Pixl Ink", panel: "#171615", gold: "#ff6b4a" },
   ];
   const themeBtn = document.getElementById("docs-theme-btn");
   const themeMenu = document.getElementById("docs-theme-menu");

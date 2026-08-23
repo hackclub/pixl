@@ -89,14 +89,21 @@ html{font-size:15px;-webkit-text-size-adjust:100%}
   --sidebar:260px;--toprail:54px;
 }
 
-/* There is deliberately no dark theme right now. The inverted cut (ink paper,
-   cream rules) was pulled on 2026-08-17 because it read as an e-ink display
-   rather than as Pixl, and landing has no dark mode to port from in the first
-   place. A stale data-theme="dark" left in someone's storage simply falls
-   through to the tokens above, so nothing breaks. To bring one back: add a
-   "dark" set to palette.json, restore a :root[data-theme="dark"] block with
-   the matching <pixl-theme:dark> markers, and re-add it to the THEMES array
-   in pixl.js and docs.js, which is what makes the picker reappear. */
+/* PIXL PAPER DARK — the same language, deliberately not a straight inversion
+   of light: ink, stroke and panel are three distinct values here (the old
+   2026-08-17 attempt used the same cream for both ink and stroke, which is
+   why it read as flat e-ink rather than a real dark UI). Charcoal panels
+   share their DNA with the Godot game's own existing dark theme
+   (godot.dark in palette.json) rather than inventing an unrelated look;
+   the accent shifts from the game's yellow-leaning gold to a coral instead. */
+:root[data-theme="dark"]{
+  /* <pixl-theme:dark> */
+  --ink:#ece8e2;--dim:#b3ada2;--faint:#847e72;--muted:#5c574c;--panel:#211f1e;--panel-2:#2a2724;--panel-deep:#171615;--gold:#ff6b4a;--gold-soft:#ff8a6b;--accent:#ff4763;--teal:#5fc2cd;--teal-hover:#7ad4de;--good:#4ade80;--bad:#ff4763;--stroke:#4a453d;--btn-ink:#171615;
+  /* <pixl-theme:dark:end> */
+  /* <pixl-theme:dark:effects> */
+  --drop:4px 4px 0 #000000;--drop-lg:8px 8px 0 #000000;--dither:none;
+  /* <pixl-theme:dark:effects:end> */
+}
 
 /* Kenney pixel cursor pack (CC0) — the arrow replaces the OS pointer everywhere
    in the web shell + docs, the pointing hand shows on anything clickable. */
