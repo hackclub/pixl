@@ -35,7 +35,6 @@ const MONOCRAFT := preload("res://assets/fonts/PixelifySans.ttf")
 
 var _in_range := false
 var _prompt: Label
-var _quest_marker: Label
 var _quest_pending := false
 var _base_frames: SpriteFrames
 var _home: Vector2
@@ -83,30 +82,9 @@ func _ready() -> void:
 	_prompt.z_index = 21
 	_prompt.visible = false
 	add_child(_prompt)
-	# Trial-givers (both fresh-offer and check-in copies) float a marker above their
-	# name at all times, so they read as "has a Trial for you" and can't be mistaken
-	# for a player at a glance — unlike the [E] talk prompt, this isn't range-gated.
-	if quest_trial:
-		_quest_marker = Label.new()
-		_quest_marker.text = "✲"
-		_quest_marker.add_theme_font_override("font", MONOCRAFT)
-		_quest_marker.add_theme_font_size_override("font_size", 26)
-		_quest_marker.add_theme_color_override("font_color", Color(1, 0.85, 0.1))
-		_quest_marker.add_theme_color_override("font_outline_color", Color(0, 0, 0))
-		_quest_marker.add_theme_constant_override("outline_size", 6)
-		_quest_marker.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_quest_marker.scale = Vector2.ONE / 3.5
-		_quest_marker.z_index = 20
-		add_child(_quest_marker)
 	await get_tree().process_frame
 	nl.reset_size()
 	nl.position = Vector2(-nl.size.x * nl.scale.x / 2.0, -33.0 - nl.size.y * nl.scale.y)
-	if _quest_marker:
-		_quest_marker.reset_size()
-		_quest_marker.position = Vector2(
-			-_quest_marker.size.x * _quest_marker.scale.x / 2.0,
-			nl.position.y - 4.0 - _quest_marker.size.y * _quest_marker.scale.y,
-		)
 	# A node placed hidden (a conditional check-in copy) must also start
 	# non-interactive until its world reveals it — otherwise its InteractArea keeps
 	# monitoring and the player can talk to thin air.

@@ -2206,6 +2206,7 @@
         <span class="chip teal tip-wrap" id="time-chip" tabindex="0"><span class="tip-main">${Pixl.hours(linkedSeconds(p))} TRACKED</span><span class="tip-pop">Hackatime: ${Pixl.hours(linkedSeconds(p))} · Journal: 0h</span></span>
         ${p.pixels_earned ? `<span class="chip gold">+${Math.round(p.pixels_earned)} PX EARNED</span>` : ""}
         ${p.sidequest_name ? `<span class="chip teal">TRIAL: ${Pixl.esc(p.sidequest_name)}</span>` : ""}
+        <button class="btn ghost" id="share-btn" style="margin-left:auto">SHARE</button>
       </div>
       <div class="proj-hero" id="p-hero">${p.image_url ? `<img src="${Pixl.esc(p.image_url)}" alt="">` : `<span class="faint" style="font-size:13px">No thumbnail yet</span>`}</div>
       ${p.status === "needs_changes" && p.review_note ? `<div class="note-strip" style="margin-bottom:14px">REVIEWER: ${Pixl.esc(p.review_note)}</div>` : ""}
@@ -2330,6 +2331,15 @@
           $("tr-px").addEventListener("click", () => claimTrialReward(p, "pixels", prize, total, beyond));
         }
         wireTrialPicker();
+        $("share-btn").addEventListener("click", async () => {
+          const link = location.origin + "/explore/#project=" + p.id;
+          try {
+            await navigator.clipboard.writeText(link);
+            Pixl.toast("Link copied!");
+          } catch {
+            Pixl.toast(link);
+          }
+        });
         if ($("s-ship") && !inReview)
           $("s-ship").addEventListener("click", async () => {
             const blockers = shipBlockers(p, isUpdate);

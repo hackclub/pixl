@@ -5,6 +5,10 @@ const ARROW_PATH := "res://assets/ui/trial_arrow.png"
 const MARGIN := 48.0
 const PULSE_SPEED := 4.0
 const PULSE_AMOUNT := 0.12
+const OVERHEAD_SCALE := 0.4
+const OVERHEAD_OFFSET_Y := -60.0
+const BOB_SPEED := 3.0
+const BOB_AMOUNT := 4.0
 
 var _root: Control
 var _arrow: TextureRect
@@ -54,7 +58,12 @@ func _process(delta: float) -> void:
 	var offset := screen_pos - center
 	var half := center - Vector2(MARGIN, MARGIN)
 	if absf(offset.x) <= half.x and absf(offset.y) <= half.y:
-		_root.visible = false
+		_root.visible = true
+		var head_world := target.global_position + Vector2(0, OVERHEAD_OFFSET_Y + sin(_t * BOB_SPEED) * BOB_AMOUNT)
+		var head_point: Vector2 = get_viewport().canvas_transform * head_world
+		_arrow.position = head_point - _arrow.pivot_offset
+		_arrow.rotation = PI
+		_arrow.scale = Vector2.ONE * OVERHEAD_SCALE
 		return
 
 	_root.visible = true
