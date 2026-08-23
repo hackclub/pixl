@@ -4,15 +4,24 @@
 // root), the same relative position in dev (`bun run --cwd apps/web-shell
 // dev`), in the Docker image (see ../Dockerfile, which preserves the
 // repo-root-relative layout on purpose), and under `bun test` run from the
-// repo root. Resolved off import.meta.dir rather than process.cwd() so it
-// doesn't depend on the invoking process's working directory.
+// repo root. Resolved off import.meta.url rather than process.cwd() so it
+// doesn't depend on the invoking process's working directory. Neither
+// Bun's import.meta.dir nor import.meta.dirname is used here: `next
+// build`'s page-data collection executes this module under Node, not Bun,
+// even though the build itself is launched via `bun run`, and Turbopack's
+// import.meta.dirname transform for that pass evaluates to undefined
+// (it only wires up a `url` getter), throwing inside path.join. Deriving
+// the directory from import.meta.url via fileURLToPath is the one form
+// that resolves correctly in Bun, plain Node, and under Turbopack.
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { render, type Doc } from "@pixl/docs-engine/src/markdown.ts";
 import { buildTokens } from "@pixl/docs-engine/src/tokens.ts";
 import { config } from "@/app/_generated/config";
 
-const DOCS_DIR = path.join(import.meta.dir, "..", "..", "..", "docs");
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const DOCS_DIR = path.join(HERE, "..", "..", "..", "docs");
 // `config` is generated with `as const` (deeply readonly); buildTokens's
 // PixlConfig wants mutable arrays. The values are only ever read here.
 const tokens = buildTokens(config as unknown as Parameters<typeof buildTokens>[0]);
