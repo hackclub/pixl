@@ -1,10 +1,10 @@
 // Only OG preview cards now — docs/*.md rendering itself moved into
 // apps/web-shell/lib/docs.ts. Still runs from the repo root via
-// `bun run docs:build`, but now writes into apps/web-shell/public/<slug>/
-// instead of static HTML pages under apps/game/web/docs/. No "docs/"
-// subdirectory here on purpose: apps/web-shell sets basePath: "/docs", which
-// already prefixes every public/ file it serves - a public/docs/<slug>/
-// nesting would double up into /docs/docs/<slug>/og.png externally.
+// `bun run docs:build`, but now writes into apps/web-shell/public/docs/<slug>/
+// instead of static HTML pages under apps/game/web/docs/. apps/web-shell has
+// no basePath (see next.config.ts) - doc pages live at the literal
+// /docs/<slug>/ route, so their OG images need to physically sit at
+// public/docs/<slug>/og.png to match.
 import { mkdir, readdir } from "node:fs/promises";
 import { render } from "./src/markdown.ts";
 import { renderCard } from "./src/og.ts";
@@ -12,7 +12,7 @@ import { buildTokens } from "./src/tokens.ts";
 
 const ROOT = new URL("../../", import.meta.url).pathname;
 const CONTENT = `${ROOT}docs`;
-const OUT = `${ROOT}apps/web-shell/public`;
+const OUT = `${ROOT}apps/web-shell/public/docs`;
 const config = JSON.parse(
   await Bun.file(`${ROOT}packages/config/pixl.json`).text(),
 );
@@ -48,4 +48,4 @@ for (const file of files) {
   count++;
 }
 
-console.log(`[docs] built ${count} OG cards into apps/web-shell/public/`);
+console.log(`[docs] built ${count} OG cards into apps/web-shell/public/docs/`);

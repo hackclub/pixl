@@ -4,13 +4,14 @@
 
 html { font-size: 15px; -webkit-text-size-adjust: 100%; }
 
-/* Absolute paths, not next/image - basePath doesn't auto-prefix plain CSS
-   url()/img src, so /docs is written here by hand. */
+/* Bare /img/... - already served by the old game origin regardless of which
+   app rendered the page (apps/landing/next.config.ts's blanket
+   /img/:path* rewrite), so no local copy of these assets is needed here. */
 body, html {
-  cursor: url(/docs/img/cursor/cursor-arrow.png) 2 0, auto;
+  cursor: url(/img/cursor/cursor-arrow.png) 2 0, auto;
 }
 a, button, .btn, .section-link, .docs-group-head, .theme-toggle, .copy-btn {
-  cursor: url(/docs/img/cursor/cursor-pointer.png) 16 16, pointer !important;
+  cursor: url(/img/cursor/cursor-pointer.png) 16 16, pointer !important;
 }
 
 body {
