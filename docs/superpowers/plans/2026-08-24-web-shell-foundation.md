@@ -4,7 +4,7 @@
 
 **Goal:** Give `apps/web-shell` httpOnly-cookie auth and the shared sidebar/topbar shell chrome every future page depends on, proven end-to-end with one real signed-in page: `/dashboard`.
 
-**Architecture:** A `middleware.ts` catches the `?token=` Hack Club Auth hands back on any page, stores it in an httpOnly cookie, and strips it from the URL. `lib/session.ts` verifies that JWT locally (same secret and payload shape as `apps/server`). Server Components read the session via `next/headers` and call `apps/server` directly for their own data; a generic `app/api/proxy/[...path]/route.ts` exists for the Client Components later slices will need for mutations, since the browser can no longer read the token itself. A `(shell)` route group renders the sidebar/topbar chrome (ported from `pixl.js`'s `mountTopbar`) around every signed-in page, starting with `/dashboard`.
+**Architecture:** A `proxy.ts` catches the `?token=` Hack Club Auth hands back on any page, stores it in an httpOnly cookie, and strips it from the URL. `lib/session.ts` verifies that JWT locally (same secret and payload shape as `apps/server`). Server Components read the session via `next/headers` and call `apps/server` directly for their own data; a generic `app/api/proxy/[...path]/route.ts` exists for the Client Components later slices will need for mutations, since the browser can no longer read the token itself. A `(shell)` route group renders the sidebar/topbar chrome (ported from `pixl.js`'s `mountTopbar`) around every signed-in page, starting with `/dashboard`.
 
 **Tech Stack:** Next.js 16 App Router, React 19, TypeScript, Bun (install/build/test), `jsonwebtoken`, `bun:test`.
 
@@ -47,7 +47,7 @@ New:
 - `apps/web-shell/.env.example`
 - `apps/web-shell/lib/session.ts` + `lib/session.test.ts`
 - `apps/web-shell/lib/server-api.ts`
-- `apps/web-shell/middleware.ts`
+- `apps/web-shell/proxy.ts`
 - `apps/web-shell/app/api/proxy/[...path]/route.ts` + `route.test.ts`
 - `apps/web-shell/lib/urls.ts`
 - `apps/web-shell/app/(shell)/layout.tsx`
@@ -69,18 +69,34 @@ Modified:
 
 ---
 
-### Task 1: Read the Next 16 docs for middleware, route handlers, and Server Component params
+### Task 1: Read the Next 16 docs for middleware/proxy, route handlers, and Server Component params
 
-**Files:** none (research only)
+**Files:** none (research only — already done once while writing this plan; documented here so the finding is on record and Task 4 reflects it)
 
-- [ ] **Step 1: Confirm the App Router APIs this plan assumes**
+- [x] **Step 1: Confirm the App Router APIs this plan assumes**
 
-Run: `ls node_modules/next/dist/docs/` (from repo root) and read the middleware and route-handler pages. This plan assumes, and every task below depends on:
-- Route `params` in a page/layout/route handler are `Promise`-typed (`params: Promise<{ slug: string }>`, `await params`) — already confirmed true for this app in the docs slice, but route handlers (`app/api/proxy/[...path]/route.ts`, new in this plan) haven't been used here yet, so confirm the same holds for them specifically.
-- `middleware.ts` at the app root, a default-exported `middleware(req: NextRequest)` function, and an exported `config = { matcher: [...] }` — same shape `apps/dashboard/middleware.ts` already uses in this repo, but confirm nothing changed in Next 16.
-- `NextResponse.redirect`, `NextResponse.next`, `NextResponse.json`, and reading/writing cookies via `res.cookies.set(...)` on a `NextResponse` — all used in Task 4.
-
-If any of these differ from what's assumed, adjust the relevant task's code before implementing it — don't implement first and find out later.
+Read from `apps/web-shell/node_modules/next/dist/docs/`:
+- Route `params` in a page/layout/route handler are `Promise`-typed
+  (`params: Promise<{ slug: string }>`, `await params`) — confirmed both
+  for pages (already true for this app since the docs slice) and for
+  Route Handlers specifically
+  (`01-app/03-api-reference/03-file-conventions/route.md`: `{ params }:
+  { params: Promise<{ team: string }> }`). Task 5's proxy route uses this
+  shape.
+- **Finding that changes Task 4 below:** Next.js 16 deprecated the
+  `middleware.ts` convention and renamed it to `proxy.ts`
+  (`01-app/01-getting-started/16-proxy.md`: "Starting with Next.js 16,
+  Middleware is now called Proxy... The functionality remains the same,"
+  and `03-file-conventions/proxy.md`: "The `middleware` file convention is
+  deprecated and has been renamed to `proxy`"). The exported function is
+  now named `proxy` (or a default export), not `middleware`; everything
+  else — `NextResponse.redirect`/`.next()`/`.json()`, `res.cookies.set()`,
+  the `matcher` config shape — is unchanged. `apps/dashboard/middleware.ts`
+  predates this rename and keeps working (deprecated, not removed) — that
+  file is unrelated to this plan and out of scope to update. Task 4 below
+  is written as `proxy.ts`/`export function proxy`, the current
+  convention, since this is new code in a new app with no reason to
+  start on a deprecated name.
 
 ---
 
@@ -342,7 +358,7 @@ Expected: FAIL — `Cannot find module './session.ts'`
 
 ```ts
 // apps/web-shell/lib/session.ts
-// The cookie holds apps/server's own JWT (see the middleware.ts handoff) -
+// The cookie holds apps/server's own JWT (see the proxy.ts handoff) -
 // this must decode with the exact same secret and payload shape as
 // apps/server/src/auth/session.ts's verifySessionToken, or a legitimate
 // session reads as signed out. The secret is read lazily inside the
@@ -446,12 +462,17 @@ git commit -m "add web-shell's session verification and server-side API helper"
 
 ---
 
-### Task 4: Middleware — catch the HCA token handoff on any page
+### Task 4: Proxy (formerly "middleware") — catch the HCA token handoff on any page
 
 **Files:**
-- Create: `apps/web-shell/middleware.ts`
+- Create: `apps/web-shell/proxy.ts`
 
-- [ ] **Step 1: Write `middleware.ts`**
+- [ ] **Step 1: Write `proxy.ts`**
+
+Named `proxy.ts` with an exported `proxy` function, not the older
+`middleware.ts`/`middleware` — Next.js 16 deprecated that convention (see
+Task 1's finding). `apps/dashboard/middleware.ts` predates the rename and
+keeps working as-is; it's a separate app and out of scope here.
 
 Unlike `apps/dashboard` (which runs its own OAuth exchange and always
 lands on one `/api/auth/callback`), `apps/server` still owns the whole
@@ -462,7 +483,7 @@ in Task 7's `lib/urls.ts`). This has to run on every request, not one
 route, to catch that redirect landing anywhere.
 
 ```ts
-// apps/web-shell/middleware.ts
+// apps/web-shell/proxy.ts
 import { NextRequest, NextResponse } from "next/server";
 import { SESSION_COOKIE } from "@/lib/session";
 
@@ -470,7 +491,7 @@ import { SESSION_COOKIE } from "@/lib/session";
 // expiry, so the cookie never outlives the JWT it holds.
 const MAX_AGE = 60 * 60 * 24 * 14;
 
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("token");
   if (!token) return NextResponse.next();
 
@@ -493,9 +514,9 @@ export const config = {
 ```
 
 This never verifies the token (that's `lib/session.ts`'s job, run later
-by whatever Server Component reads the cookie) — middleware's only job is
-"a token showed up in the URL, move it into the cookie and clean the URL
-up," identically whether the token turns out to be valid or not. An
+by whatever Server Component reads the cookie) — this function's only job
+is "a token showed up in the URL, move it into the cookie and clean the
+URL up," identically whether the token turns out to be valid or not. An
 invalid/expired token just means `getSession()` returns `null` downstream,
 same as no cookie at all.
 
@@ -517,8 +538,8 @@ local dev).
 - [ ] **Step 4: Commit**
 
 ```bash
-git add apps/web-shell/middleware.ts
-git commit -m "add middleware to catch the HCA token handoff into an httpOnly cookie"
+git add apps/web-shell/proxy.ts
+git commit -m "add proxy.ts to catch the HCA token handoff into an httpOnly cookie"
 ```
 
 ---
@@ -2063,7 +2084,7 @@ replace its bullet list with:
   see `docs/superpowers/specs/2026-08-23-react-migration-design.md`'s
   addendum for why one was ever needed and why it stopped working).
 - Auth: an httpOnly `pixl_session` cookie holds the same JWT
-  `apps/server` issues. `middleware.ts` catches `?token=` on any request
+  `apps/server` issues. `proxy.ts` catches `?token=` on any request
   (Hack Club Auth redirects back to whatever page login started from, not
   one fixed callback route) and moves it into the cookie. `lib/session.ts`
   verifies it locally (`JWT_SECRET` must match `apps/server`'s exactly).
@@ -2119,7 +2140,7 @@ Expected: build succeeds.
 - [ ] **Step 3: Manual end-to-end verification against a real signed-in session**
 
 This is the one thing no automated test in this plan covers: a real Hack
-Club Auth round-trip through `middleware.ts` into a page that actually
+Club Auth round-trip through `proxy.ts` into a page that actually
 renders signed-in content.
 
 Run: `bun run --cwd apps/web-shell dev`
