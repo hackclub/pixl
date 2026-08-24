@@ -420,7 +420,12 @@ const Pixl = (() => {
   // all themes rather than a sun/moon pair that only made sense for two.
   const PALETTE_ICON = `<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="4" y="2" width="8" height="2"/><rect x="2" y="4" width="2" height="7"/><rect x="12" y="4" width="2" height="6"/><rect x="4" y="11" width="7" height="2"/><rect x="10" y="10" width="2" height="2"/><rect x="5" y="5" width="2" height="2"/><rect x="9" y="5" width="2" height="2"/><rect x="5" y="8" width="2" height="2"/></svg>`;
 
-  function mountTopbar(active) {
+  function mountTopbar(active, opts) {
+    // Pages that are meant to be publicly browsable (e.g. the shop) pass
+    // guestNoShell: true to skip the sidebar/rail entirely for a signed-out
+    // visitor, rather than showing the trimmed "LOG IN" rail every other page
+    // gets — the page's own content is the whole story, chrome-free.
+    if (opts && opts.guestNoShell && !token) return;
     const navLink = (slug, label, extra) =>
       `<a href="/${slug}/" class="${slug === active ? "active" : ""}${extra ? " " + extra : ""}"><span class="ic">${ICONS[slug] || ""}</span><span>${label}</span></a>`;
     const nav = NAV_GROUPS.map(

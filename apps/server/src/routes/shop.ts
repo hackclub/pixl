@@ -82,12 +82,16 @@ async function attachStock(items: Record<string, unknown>[]): Promise<void> {
 // Active catalog, plus mystery-merchant items while their event runs — those
 // stay inactive in the dashboard so they vanish the moment the event ends.
 // Trophy items (unlock_xp > 0) come back flagged with the player's own progress.
+// Signed out visitors get the same catalog (browsable, so the shop can be
+// shared/linked to anyone) with every personal field defaulted — no saves, no
+// trophy progress, gated items locked — since there's no session to look any
+// of that up against. Buying/saving/claiming still require a session, same
+// as before.
 router.get("/api/shop/items", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";
   const session = token ? verifySessionToken(token) : null;
-  if (!session) return res.status(401).json({ ok: false });
 
-  const region = await regionFor(session.userId);
+  const region = session ? await regionFor(session.userId) : "US";
   const { data, error } = await fetchItems(undefined, region);
   if (error) {
     console.error("[shop] items failed", error);
@@ -113,17 +117,20 @@ router.get("/api/shop/items", async (req, res) => {
 
   // Saved (pinned) items, and for a config_options item the last spec the
   // player put together — restored on the detail page instead of resetting
-  // to the first choice of every group on each visit.
-  const { data: saveRows } = await supabase
-    .from("shop_saves")
-    .select("item_id, option, config")
-    .eq("user_id", session.userId);
-  const savesById = new Map(
-    ((saveRows ?? []) as { item_id: number; option: string; config: unknown }[]).map((r) => [
-      Number(r.item_id),
-      r,
-    ]),
-  );
+  // to the first choice of every group on each visit. Nothing to look up for
+  // a signed-out visitor, so every item defaults to unsaved.
+  const savesById = session
+    ? new Map(
+        (
+          (
+            await supabase
+              .from("shop_saves")
+              .select("item_id, option, config")
+              .eq("user_id", session.userId)
+          ).data ?? []
+        ).map((r: { item_id: number; option: string; config: unknown }) => [Number(r.item_id), r]),
+      )
+    : new Map<number, { item_id: number; option: string; config: unknown }>();
   for (const item of items) {
     const save = savesById.get(Number(item.id));
     item.saved = !!save;
@@ -134,10 +141,12 @@ router.get("/api/shop/items", async (req, res) => {
   // The player's own trophy progress. Trophies gate on the player's level
   // (1-100, derived from lifetime RE), not raw hours - `unlock_xp` holds the
   // level required. The field name predates levels and isn't worth a migration.
+  // A signed-out visitor has no level/claims to report, so trophies just show
+  // as locked at 0 XP rather than erroring the whole catalog out.
   const hasTrophies = items.some((i) => Number(i.unlock_xp) > 0);
   let xp = 0;
   let claimed: number[] = [];
-  if (hasTrophies) {
+  if (hasTrophies && session) {
     const [level, { data: claims }] = await Promise.all([
       levelFor(session.userId),
       supabase.from("shop_claims").select("item_id").eq("user_id", session.userId),
@@ -158,13 +167,18 @@ router.get("/api/shop/items", async (req, res) => {
     ),
   ].filter((id) => Number.isFinite(id) && id > 0);
   if (gatedIds.length > 0) {
+    // A signed-out visitor hasn't shipped anything, so every gated item is
+    // locked for them — skip the shipped-projects lookup entirely rather than
+    // querying it against no user.
     const [{ data: shipped }, { data: trials }] = await Promise.all([
-      supabase
-        .from("projects")
-        .select("sidequest_id")
-        .eq("user_id", session.userId)
-        .not("sidequest_id", "is", null)
-        .in("status", ["shipped", "fraud_review", "second_review", "approved"]),
+      session
+        ? supabase
+            .from("projects")
+            .select("sidequest_id")
+            .eq("user_id", session.userId)
+            .not("sidequest_id", "is", null)
+            .in("status", ["shipped", "fraud_review", "second_review", "approved"])
+        : Promise.resolve({ data: [] as { sidequest_id: number }[] }),
       supabase.from("sidequests").select("id, name, active").in("id", gatedIds),
     ]);
     const done = new Set(((shipped ?? []) as { sidequest_id: number }[]).map((r) => Number(r.sidequest_id)));

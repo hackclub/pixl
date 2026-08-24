@@ -359,6 +359,7 @@
             <div class="page-sub">Stickers · Licenses · Plushies · Hardware, all real</div>
             <div class="open-sign"><span class="dot teal"></span>OPEN · PIXELS ACCEPTED</div>
           </div>
+          <a class="btn teal" id="guest-login-btn" href="#" hidden>LOG IN TO BUY</a>
         </div>
       </section>
 
@@ -416,7 +417,7 @@
 
     <script src="/pixl.js?v=6"></script>
     <script>
-      Pixl.mountTopbar("shop");
+      Pixl.mountTopbar("shop", { guestNoShell: true });
 
       const $ = (id) => document.getElementById(id);
       let items = [];
@@ -562,6 +563,10 @@
           list = [...list].sort((a, b) =>
             String(a.name).localeCompare(String(b.name)),
           );
+        // Saved items float to the top regardless of sort mode - sort() is
+        // stable, so this just bubbles saved items up without disturbing the
+        // price/name/featured order within each group.
+        list = [...list].sort((a, b) => (b.saved ? 1 : 0) - (a.saved ? 1 : 0));
 
         $("trophies").innerHTML =
           trophies.length === 0
@@ -633,6 +638,10 @@
       // already has saved (usually none yet — a plain bookmark until the
       // player configures it on the detail page).
       async function toggleSave(id) {
+        if (!Pixl.hasToken) {
+          Pixl.toast("Log in to save items.", true);
+          return;
+        }
         const item = items.find((i) => i.id === id);
         if (!item) return;
         const nowSaved = !item.saved;
@@ -728,8 +737,13 @@
       }
 
       async function boot() {
-        if (!Pixl.hasToken) return;
-        wallet = await Pixl.loadWallet();
+        if (!Pixl.hasToken) {
+          $("guest-login-btn").hidden = false;
+          $("guest-login-btn").href = Pixl.loginUrl();
+          $("region-select").disabled = true;
+        } else {
+          wallet = await Pixl.loadWallet();
+        }
         await loadItems();
         $("loading").remove();
         if (wallet)

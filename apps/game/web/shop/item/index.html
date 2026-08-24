@@ -279,7 +279,7 @@
 
     <script src="/pixl.js?v=6"></script>
     <script>
-      Pixl.mountTopbar("shop");
+      Pixl.mountTopbar("shop", { guestNoShell: true });
 
       const $ = (id) => document.getElementById(id);
       const itemId = Number(new URLSearchParams(location.search).get("id"));
@@ -394,6 +394,14 @@
         $("detail-price").innerHTML =
           `<img src="/img/pixel.png" style="width:20px;height:20px" alt="">${price.toLocaleString()} PIXELS<span class="price-hours">${hoursOf(price)}</span>`;
         $("detail-price").classList.toggle("cant", !afford);
+        if (!Pixl.hasToken) {
+          $("buy-btn").disabled = false;
+          $("buy-btn").textContent = "LOG IN TO BUY";
+          $("buy-btn").classList.add("teal");
+          $("afford-fill").style.width = "0%";
+          $("afford-label").textContent = "Log in to see your balance and buy.";
+          return;
+        }
         $("buy-btn").disabled = !afford;
         $("buy-btn").textContent = "BUY";
         const have = wallet ? wallet.pixels : 0;
@@ -706,6 +714,17 @@
           `<img src="/img/pixel.png" style="width:20px;height:20px" alt="">${total.toLocaleString()} PIXELS<span class="price-hours">${hoursOf(total)}</span>` +
           (quantity > 1 ? ` <span class="price-hours">(${Number(selected.price).toLocaleString()} × ${quantity})</span>` : "");
         $("detail-price").classList.toggle("cant", !afford);
+        // Signed-out visitor: there's no wallet to check affordability against,
+        // so send them to log in instead of a "BUY" button that's really just
+        // permanently disabled for a reason they can't see.
+        if (!Pixl.hasToken) {
+          $("buy-btn").textContent = !inStock ? "SOLD OUT" : "LOG IN TO BUY";
+          $("buy-btn").disabled = !inStock;
+          $("buy-btn").classList.toggle("teal", inStock);
+          $("afford-label").textContent = "Log in to see your balance and buy.";
+          $("afford-fill").style.width = "0%";
+          return;
+        }
         $("buy-btn").textContent = !inStock ? "SOLD OUT" : "BUY";
         $("buy-btn").disabled = !afford || !inStock;
         const have = wallet ? wallet.pixels : 0;
@@ -738,6 +757,10 @@
       }
 
       async function toggleSave() {
+        if (!Pixl.hasToken) {
+          Pixl.toast("Log in to save items.", true);
+          return;
+        }
         const nowSaved = !saved;
         saved = nowSaved;
         updateSaveBtn();
@@ -884,6 +907,10 @@
 
       $("buy-btn").addEventListener("click", () => {
         if (!selected) return;
+        if (!Pixl.hasToken) {
+          location.href = Pixl.loginUrl();
+          return;
+        }
         if (isTrophy(selected)) {
           if (trophyState(selected) === "claimable") claimTrophy(selected.id);
           return;
@@ -924,12 +951,7 @@
       setInterval(refreshStock, 8000);
 
       async function boot() {
-        if (!Pixl.hasToken) {
-          $("loading").remove();
-          $("notfound").hidden = false;
-          return;
-        }
-        wallet = await Pixl.loadWallet();
+        if (Pixl.hasToken) wallet = await Pixl.loadWallet();
         try {
           const data = await Pixl.api("/api/shop/items");
           const items = (data.items || []).map((i) => ({
