@@ -14,11 +14,11 @@ const GAME_ORIGIN = "https://play.pixl.hackclub.com";
 const WEB_SHELL_ORIGIN = "http://pixl-web-shell.ysws-pixl.svc.cluster.local:3000";
 
 // Shell pages, mounted at the same path on the apex as on the game host.
-// "docs" moved to WEB_SHELL_ORIGIN as the React migration's first slice -
-// everything else here still serves off the old static site.
+// "docs" and "dashboard" moved to WEB_SHELL_ORIGIN as the React migration's
+// first two slices - everything else here still serves off the old static site.
 const SHELL_PATHS = [
   "shop", "orders", "collectibles", "vault", "explore", "ideas", "quests",
-  "trials", "timeline", "projects", "report", "dashboard", "hackatime",
+  "trials", "timeline", "projects", "report", "hackatime",
   "refers", "account", "calc",
 ];
 
@@ -48,6 +48,8 @@ const nextConfig: NextConfig = {
       { source: "/play/:path*", destination: `${GAME_ORIGIN}/:path*` },
       { source: "/docs", destination: `${WEB_SHELL_ORIGIN}/docs` },
       { source: "/docs/:path*", destination: `${WEB_SHELL_ORIGIN}/docs/:path*` },
+      { source: "/dashboard", destination: `${WEB_SHELL_ORIGIN}/dashboard` },
+      { source: "/dashboard/:path*", destination: `${WEB_SHELL_ORIGIN}/dashboard/:path*` },
       ...SHELL_PATHS.flatMap((p) => [
         { source: `/${p}`, destination: `${GAME_ORIGIN}/${p}/` },
         { source: `/${p}/:path*`, destination: `${GAME_ORIGIN}/${p}/:path*` },
