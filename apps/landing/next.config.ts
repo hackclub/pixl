@@ -50,6 +50,11 @@ const nextConfig: NextConfig = {
       { source: "/docs/:path*", destination: `${WEB_SHELL_ORIGIN}/docs/:path*` },
       { source: "/dashboard", destination: `${WEB_SHELL_ORIGIN}/dashboard` },
       { source: "/dashboard/:path*", destination: `${WEB_SHELL_ORIGIN}/dashboard/:path*` },
+      // apps/web-shell's own JS/CSS chunks (Next "Multi Zone" assetPrefix -
+      // see that app's next.config.ts). Without this, both apps generate
+      // chunk URLs at the same bare /_next/static/... path and this app's
+      // own ingress wins, so web-shell's pages render completely unstyled.
+      { source: "/web-shell-assets/:path*", destination: `${WEB_SHELL_ORIGIN}/web-shell-assets/:path*` },
       ...SHELL_PATHS.flatMap((p) => [
         { source: `/${p}`, destination: `${GAME_ORIGIN}/${p}/` },
         { source: `/${p}/:path*`, destination: `${GAME_ORIGIN}/${p}/:path*` },
