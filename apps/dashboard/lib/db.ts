@@ -116,6 +116,7 @@ export interface ProjectRow {
   update_notes: string;
   ship_note: string;
   other_ysws: boolean;
+  other_ysws_notes: string;
   system_note: string;
   imported_ysws_entry_id: string | null;
   imported_from_ysws: string | null;

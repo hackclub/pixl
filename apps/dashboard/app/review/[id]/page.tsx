@@ -381,6 +381,16 @@ export default async function ReviewDetail({
               </div>
             </div>
           )}
+          {p.other_ysws_notes && (
+            <div className="rounded-xl border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 p-4 text-sm">
+              <div className="font-semibold mb-1 text-amber-700 dark:text-amber-300">
+                What changed since their other YSWS submission
+              </div>
+              <div className="whitespace-pre-wrap break-words text-amber-900/90 dark:text-amber-200/90">
+                {p.other_ysws_notes}
+              </div>
+            </div>
+          )}
           {p.ship_note && (
             <div className="rounded-xl border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 p-4 text-sm">
               <div className="font-semibold mb-1 text-amber-700 dark:text-amber-300">

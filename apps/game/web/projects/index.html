@@ -1224,6 +1224,8 @@
           "Hackatime is unreachable right now, try again in a bit.",
         update_notes_required: "Describe what changed in this update.",
         update_notes_too_short: "Update notes need at least 100 characters.",
+        other_ysws_notes_required: "Describe what you updated since your other YSWS submission.",
+        other_ysws_notes_too_short: "That description needs at least 100 characters.",
         already_shipped: "This one is already in the review queue.",
         project_banned: "This project is banned and can't be shipped.",
         cdn_not_configured: "Image uploads aren't configured on the server.",
@@ -1861,10 +1863,6 @@
             <span class="ta-count" id="f-update-count">0 / 2000</span>
           </div>
         </div>
-        <label class="disclosure-check" style="color:var(--dim)">
-          <input type="checkbox" id="s-ysws">
-          I already submitted this project to another Hack Club YSWS
-        </label>
       </div>`
           : ""
       }
@@ -1879,6 +1877,20 @@
           <div class="ta-wrap">
             <textarea class="field" id="f-ai-notes" maxlength="500" placeholder="Which parts, which tools, how much…">${Pixl.esc(p.ai_notes || "")}</textarea>
             <span class="ta-count" id="f-ai-count">${(p.ai_notes || "").length} / 500</span>
+          </div>
+        </div>
+      </div>
+      <div class="disclosure">
+        <label class="disclosure-check">
+          <input type="checkbox" id="s-ysws" ${p.other_ysws ? "checked" : ""}>
+          Mark it as an update
+        </label>
+        <p class="disclosure-desc">If you already submitted this project to another Hack Club YSWS and you're shipping it again here as an update, mark this.</p>
+        <div class="form-row" id="s-ysws-notes-row" ${p.other_ysws ? "" : "hidden"}>
+          <label>WHAT DID YOU UPDATE? *</label>
+          <div class="ta-wrap">
+            <textarea class="field" id="s-ysws-notes" maxlength="2000" placeholder="Describe what's new since that submission (min 100 characters).">${Pixl.esc(p.other_ysws_notes || "")}</textarea>
+            <span class="ta-count" id="s-ysws-count">${(p.other_ysws_notes || "").length} / 2000</span>
           </div>
         </div>
       </div>
@@ -1905,6 +1917,10 @@
           });
           wireCount("f-update-notes", "f-update-count", 2000);
         }
+        $("s-ysws").addEventListener("change", () => {
+          $("s-ysws-notes-row").hidden = !$("s-ysws").checked;
+        });
+        wireCount("s-ysws-notes", "s-ysws-count", 2000);
         if ($("f-level")) {
           const showBlurb = () => {
             const i = Number($("f-level").value) - 1;
@@ -2242,15 +2258,6 @@
           justify your hours, so an empty journal is the fastest way to get deflated.
         </div>
         ${inReview ? "" : trialPickerHtml(p)}
-        ${
-          !isUpdate
-            ? `
-        <label class="check-row">
-          <input type="checkbox" id="s-ysws"${p.other_ysws ? " checked" : ""}>
-          I already submitted this project to another Hack Club YSWS
-        </label>`
-            : ""
-        }
         <label class="check-row">
           <input type="checkbox" id="s-eligible"${p.eligibility_attested || inReview ? " checked" : ""}>
           This isn't a school assignment or paid Hack Club work
@@ -2929,6 +2936,11 @@
           if (notes.length < 100)
             b.push("describe what changed (100+ characters)");
         }
+        if ($("s-ysws") && $("s-ysws").checked) {
+          const ysNotes = $("s-ysws-notes") ? $("s-ysws-notes").value.trim() : "";
+          if (ysNotes.length < 100)
+            b.push("describe what you updated (100+ characters)");
+        }
         if (
           ["draft", "needs_changes", "approved"].includes(p.status) ||
           p.rejected_at
@@ -2945,6 +2957,8 @@
         };
         if (isUpdate && $("f-update") && $("f-update").checked)
           body.updateNotes = $("f-update-notes").value.trim();
+        if ($("s-ysws") && $("s-ysws").checked)
+          body.otherYswsNotes = $("s-ysws-notes").value.trim();
         // 0 / absent tells the server this ship isn't for a Trial (clears any link).
         if ($("s-trial")) body.sidequestId = Number($("s-trial").value) || 0;
         if (acceptNoTrialPrize) body.acceptNoTrialPrize = true;
