@@ -159,8 +159,8 @@ export function DocsShell({
     <div className="docs">
       <aside className="docs-nav">
         <div className="docs-nav-head">
-          {/* Plain <a>, not Link: /play is outside basePath entirely (a
-              different proxied app), so it must not get "/docs" prepended. */}
+          {/* Plain <a>, not Link: /play is a different proxied app entirely,
+              outside this app's route tree. */}
           <a className="docs-brand" href="/play">
             <img src="/docs/icon.svg" alt="" />
             PIXL <span>DOCS</span>
@@ -225,7 +225,7 @@ export function DocsShell({
                   <Link
                     key={i.slug}
                     className={`section-link${i.slug === activeSlug ? " active" : ""}`}
-                    href={`/${i.slug}/`}
+                    href={`/docs/${i.slug}/`}
                   >
                     {i.title}
                   </Link>

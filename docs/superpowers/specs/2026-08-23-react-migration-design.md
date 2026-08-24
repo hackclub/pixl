@@ -161,5 +161,134 @@ token-in-localStorage flow unmodified — this redesign is scoped to
   a build artifact, not hand-authored shell content.
 - Any change to the Godot client's own auth flow or to `apps/server`'s
   existing token-verification behavior.
-- Deciding the page order for slices after docs (dashboard, shop, etc.) —
-  to be scoped when that slice is planned.
+- ~~Deciding the page order for slices after docs (dashboard, shop, etc.) —
+  to be scoped when that slice is planned.~~ Decided in the addendum below.
+
+## Addendum (2026-08-24): migrating the rest of the player web shell
+
+Docs shipped and is live. This addendum decides section 6's follow-on
+("Sequencing after docs... not decided as part of this design") and
+concretizes section 5's auth design now that a real slice depends on it.
+Sections 1-4 stand unchanged. Scope: every remaining `SHELL_PATHS` family in
+`apps/landing/next.config.ts` — `shop`, `orders`, `collectibles`, `vault`,
+`explore`, `ideas`, `quests`, `trials`, `timeline`, `projects`, `report`,
+`dashboard`, `hackatime`, `refers`, `account`, `calc` — except the Godot
+game itself, which this migration never touches.
+
+### Deferred: `quests` and `timeline`
+
+Both exist as real pages but are commented out of `pixl.js`'s `NAV_GROUPS`
+today ("not ready for players" / "disabled for now"). Decision: **skip
+both for this migration.** They stay on the old static site, unmigrated,
+until whoever finishes their design ships them — porting UI for a feature
+that may still change shape before launch is wasted work. Their
+`SHELL_PATHS` rewrites keep pointing at `play.pixl.hackclub.com`
+indefinitely, until a future slice (out of scope here) takes them on.
+
+### Slice order
+
+Foundation first (nothing signed-in can ship before auth + shared shell
+exist), then every other family ordered by size/risk, with the two largest
+pages carved into their own dedicated slices:
+
+1. **Foundation** — shared shell chrome (sidebar/topbar/nav/mobile
+   dock/theme picker), the auth redesign from section 5 (now concretized
+   below), and shared `lib/` utilities (economy formulas, bbcode/markdown
+   renderers, confirm dialog) — shipped together with `dashboard` (476
+   lines) as the proof-of-concept content page, since it's read-mostly
+   (wallet + Restoration chips, no forms) and is the literal landing page
+   every player hits first.
+2. `collectibles` (167) + `account` (186) + `trials` (208) — smallest
+   remaining pages, mostly read + simple claim/save actions.
+3. `report` (238) + `vault` (264) + `orders` (286).
+4. `refers` (302) + `ideas` (340) — upvote/downvote and referral tracking
+   push these above the previous tier.
+5. `calc` (391) — standalone and public (`window.PIXL_PUBLIC`, no auth
+   required), but deliberately *not* slotted earlier despite that: cutting
+   it over before auth ships would flip an already-signed-in player's chrome
+   from signed-in to signed-out on that one page for the window between two
+   slices, a regression not worth the size-based ordering purity.
+6. `explore` (733) — largest of the "normal" pages.
+7. `shop` (1863: `shop/` index + `shop/item/`) — its own slice, likely two
+   tasks (catalog list, item detail + config picker).
+8. `projects` (3797) + the `hackatime` redirect — by far the largest:
+   the create/ship/journal flow, the project editor, Hackatime linking.
+   `hackatime/index.html` is a bare redirect stub to `/projects/` (not a
+   real page) and is folded in here rather than given its own slice.
+
+Cutover in `apps/landing/next.config.ts` still happens **per family, not
+per slice** — a bundled slice's pages each get their own rewrite repointed
+independently once that specific page is verified end-to-end, the same
+safety property the docs slice's single-family cutover already had.
+
+Plans for these slices are written **just-in-time**, one per slice,
+starting with Foundation — not all 8 up front — so each plan reflects what
+the previous slice actually taught us rather than a pattern guessed at
+before it exists anywhere in `apps/web-shell`.
+
+### Auth, concretized
+
+Section 5 decided the shape (httpOnly cookie on `apps/web-shell`'s own
+domain, forwarding the same token `apps/server` already expects) but
+deferred the mechanics to "an implementation-time call." Foundation makes
+that call:
+
+- `apps/web-shell` gets `JWT_SECRET` as an env var — the same secret
+  `apps/server` holds — and a `lib/session.ts` that ports
+  `verifySessionToken` byte-for-byte from
+  `apps/server/src/auth/session.ts` (same `jsonwebtoken` verify, same
+  `SessionPayload` shape). This avoids a network round-trip just to know
+  who's signed in. `apps/dashboard/lib/session.ts` is a real precedent for
+  the cookie plumbing (httpOnly, `sameSite: "lax"`, `secure` gated on
+  `BASE_URL` starting with `https`) — simpler here, since the "session" is
+  already a signed JWT and doesn't need dashboard's HMAC-wrapping.
+- **Token handoff happens in `middleware.ts`, not a single callback
+  route.** Unlike `apps/dashboard` (which runs its own OAuth exchange and
+  always lands on one `/api/auth/callback`), `apps/server` still owns the
+  whole Hack Club Auth exchange and redirects back to whatever
+  `web_redirect` pointed at — the page the player started login from — with
+  `?token=` appended (see `pixl.js`'s `loginUrl()`). So `middleware.ts` runs
+  on every request, checks for `?token=`, sets the httpOnly cookie, and 307s
+  to the same URL with the param stripped — the server-side equivalent of
+  what `pixl.js` does client-side today via `history.replaceState`.
+- **Mutations go through a generic proxy**, since the token is now
+  unreadable by client JS by design (that's the entire point of httpOnly).
+  A single route handler, `app/api/proxy/[...path]/route.ts`, forwards
+  method/body/query to `apps/server` and injects the cookie's token;
+  Client Components fetch `/api/proxy/...` instead of `apps/server`
+  directly. This preserves nearly the exact shape of `pixl.js`'s existing
+  `api()`/`send()` calls (swap the base URL, drop the explicit token
+  param) across every remaining slice, instead of hand-writing a Server
+  Action per mutation. It's the same trust boundary as today: a
+  signed-in client could already call any `apps/server` endpoint with its
+  own token — this only moves *where* the token itself lives.
+
+### Shared shell + `lib/` architecture
+
+- The sidebar/topbar/mobile-dock/theme-picker become a `(shell)`
+  route-group layout: a Server Component that calls `getSession()` to pick
+  signed-in vs. signed-out chrome (mirroring `mountTopbar`'s branch today),
+  with small Client Components for the genuinely interactive pieces (mobile
+  sheet, theme dropdown). `apps/web-shell/app/[slug]/docs-shell.tsx`
+  already built this same shape for docs' three-column layout — this is
+  reuse of an established pattern, not a from-scratch design.
+- `lib/economy.ts` — `rePerHour`/`reForHours`/`payoutUsdPerHour`/
+  `projectPayoutUsd`/`projectPayoutPx` ported as a **tested** pure module
+  (same pattern as `packages/docs-engine/src/tokens.ts` from the docs
+  slice), since CLAUDE.md requires this stay byte-for-byte identical to
+  `apps/server`'s own payout math.
+- `lib/bbcode.ts`, `lib/markdown.ts` — the player-journal renderers (not
+  `docs-engine`'s doc-content markdown), ported as pure tested functions.
+- `confirmDialog()` becomes a `useConfirm()` hook backed by a single
+  `<ConfirmDialogHost/>` mounted once in the shell layout — keeps the
+  `if (!(await confirm({...}))) return;` call-site shape almost unchanged
+  at every port site instead of a redesign.
+- `enhanceSelect()`'s DOM-hijacking hack is retired in favor of a real
+  Radix `<Select>` — section 1 already flagged "shadcn/radix where useful"
+  and this is the first real use case for it.
+- **The onboarding tour (`runTour`/`ONBOARDING_STEPS`) is explicitly not
+  redesigned in Foundation.** It's DOM-target-based (`#new-btn`, `#f-name`,
+  ...) and only matters for the `projects` create/ship flow (slice 8) — its
+  redesign (targeting real component refs instead of querySelector strings)
+  is deferred to that slice, when the actual component tree it needs to
+  target exists to design against.
