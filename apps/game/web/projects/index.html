@@ -2165,6 +2165,7 @@
         }
         Pixl.toast(p.id ? "Saved!" : "Project created!");
         await loadProjects();
+        skipDetailsCollapse = true;
         location.hash = "#p=" + r.project.id;
         return true;
       }
@@ -2176,6 +2177,7 @@
       // just from typing). Deliberately not applied to the journal composer:
       // posting a journal entry is a real, deliberate action.
       let autosaveTimer = null;
+      let skipDetailsCollapse = false;
       function wireAutosave(p) {
         if (!p.id) return;
         const fieldIds = [
@@ -2215,6 +2217,8 @@
           (["draft", "needs_changes", "approved"].includes(p.status) ||
             p.rejected_at);
         const isUpdate = p.status === "approved" && !p.rejected_at;
+        const collapseDetails = !!p.id && !skipDetailsCollapse;
+        skipDetailsCollapse = false;
         view.innerHTML = `
     <a class="btn dark back-btn" href="#">← ALL PROJECTS</a>
     <div class="editor">
@@ -2231,7 +2235,11 @@
       ${p.rejected_at ? `<div class="note-strip" style="margin-bottom:14px">REJECTED${p.reject_reason ? ": " + Pixl.esc(p.reject_reason) : ""}, fix it up and ship again.</div>` : ""}
       ${trialRewardHtml(p)}
       ${inReview ? "" : trialBriefHtml(trialForProject(p))}
-      ${formHtml(p)}
+      <div class="section-h" style="display:flex;align-items:center;gap:12px">
+        PROJECT DETAILS
+        <button class="btn ghost" id="details-toggle" style="margin-left:auto">${collapseDetails ? "EDIT DETAILS" : "HIDE DETAILS"}</button>
+      </div>
+      <div id="details-body"${collapseDetails ? " hidden" : ""}>${formHtml(p)}</div>
 
       <div class="section-h">COLLABORATORS</div>
       <div id="collab-slot" class="panel" style="padding:14px"><div class="spin"></div></div>
@@ -2353,6 +2361,10 @@
         }
         wireTrialPicker();
         wireCount("s-note", "s-note-count", 2000);
+        $("details-toggle").addEventListener("click", () => {
+          $("details-body").hidden = !$("details-body").hidden;
+          $("details-toggle").textContent = $("details-body").hidden ? "EDIT DETAILS" : "HIDE DETAILS";
+        });
         $("share-btn").addEventListener("click", async () => {
           const link = location.origin + "/explore/#project=" + p.id;
           try {
@@ -2905,6 +2917,7 @@
         if (!r.ok) return Pixl.toast(err(r.error), true);
         Pixl.toast("Unshipped, it's a draft again, edit away.");
         await loadProjects();
+        skipDetailsCollapse = true;
         renderProject(p.id);
       }
 
