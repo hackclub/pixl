@@ -1338,6 +1338,33 @@ export function ShellNav({
 
 - [ ] **Step 4: Write the Server Component shell layout**
 
+**Correction found during implementation:** the version below originally
+relied on a `body.has-sidebar` CSS class (`padding-left: var(--sidebar);
+padding-top: var(--toprail);`, ported into `globals.css` in Task 6) to
+push page content right of the fixed-position sidebar and below the
+fixed-position toprail — matching how the old vanilla-JS `mountTopbar()`
+did it via `document.body.classList.add("has-sidebar")`. That doesn't
+work here: only the ROOT layout (`app/layout.tsx`, a different file, out
+of scope for this task) renders `<html>`/`<body>` in the App Router: a
+nested `(shell)` route-group layout can only control what renders INSIDE
+`<body>`, never add a class to `<body>` itself. Without a fix, `<main
+className="wrap">` would render with no offset at all, hidden underneath
+the fixed sidebar.
+
+The fix (already reflected in the code sample below): a new `.shell-main`
+wrapper `<div>` that does the same padding job as `body.has-sidebar`, but
+scoped to an element this layout actually controls. This needed one small
+CSS addition alongside Task 6's port (not in `pixl.css` — a necessary
+adaptation for this app's Server Component architecture, not a
+speculative addition): immediately after the existing `body.has-sidebar`
+rule in `apps/web-shell/app/globals.css`, add
+`.shell-main { padding-left: var(--sidebar); padding-top: var(--toprail); }`,
+and inside the existing `@media (max-width: 900px)` block, right after
+`body.has-sidebar`'s override there, add
+`.shell-main { padding-left: 0; padding-bottom: 64px; }`. `body.has-sidebar`
+itself stays in the CSS untouched (dead in this app today, but a faithful,
+harmless part of the verbatim `pixl.css` port).
+
 Fetches the wallet + restoration numbers server-side (no client loading
 flash), and renders the full-page gate for a signed-out visitor instead of
 any page content — matching `pixl.js`'s `gate()` behavior exactly (its CTA
@@ -1400,7 +1427,9 @@ export default async function ShellLayout({ children }: { children: React.ReactN
   return (
     <>
       <ShellNav game={game} pixels={pixels} restorationPct={restorationPct} />
-      <main className="wrap">{children}</main>
+      <div className="shell-main">
+        <main className="wrap">{children}</main>
+      </div>
     </>
   );
 }
@@ -1409,16 +1438,11 @@ export default async function ShellLayout({ children }: { children: React.ReactN
 - [ ] **Step 5: Typecheck**
 
 Run: `bun run --cwd apps/web-shell typecheck`
-Expected: no errors (the `body.has-sidebar` class from `pixl.css` isn't
-applied anywhere yet — that's fine, it's a `body`-level class the old
-`mountTopbar()` added via `document.body.classList.add`; this Server
-Component structure doesn't need it, since the layout renders the sidebar
-and offsets via the `.wrap` `<main>` sitting next to a `position: fixed`
-sidebar rather than padding the whole `<body>`. Confirm this actually
-looks right visually in Task 9's manual check — if the page content
-renders underneath the fixed sidebar/toprail instead of beside them, add
-`className="has-sidebar"` to a wrapping element here before moving on,
-don't leave it visually broken).
+Expected: no errors. The `.shell-main` wrapper (see Step 4's correction
+note above) is what actually offsets page content around the fixed
+sidebar/toprail here — `body.has-sidebar` stays in `globals.css` unused,
+since a nested `(shell)` layout can't apply a class to `<body>`. Confirm
+this looks right visually in Task 9's manual check.
 
 - [ ] **Step 6: Commit**
 
@@ -2159,9 +2183,9 @@ Run: `bun run --cwd apps/web-shell dev`
 4. Click the mobile MORE sheet (resize the window under 900px) and the
    theme picker — confirm both open, close on outside click and Escape,
    and the theme picker's choice persists across a reload.
-5. Confirm `body.has-sidebar`-equivalent layout actually looks right (see
-   Task 7 Step 5's note) — the sidebar/toprail shouldn't overlap the page
-   content.
+5. Confirm the `.shell-main` layout offset actually looks right (see
+   Task 7 Step 4's correction note) — the sidebar/toprail shouldn't
+   overlap the page content.
 
 If anything in this step doesn't match, fix it now — this is the
 Foundation slice's whole reason to exist, and every later slice inherits
