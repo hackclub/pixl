@@ -71,6 +71,12 @@ img { display: block; }
 
 /* ── app shell / sidebar ── */
 body.has-sidebar { padding-left: var(--sidebar); padding-top: var(--toprail); }
+/* body.has-sidebar (above) can't actually be applied here - only the root
+   layout controls <body>, and this app's shell chrome renders from a
+   nested (shell) route-group layout that can't reach its own ancestor.
+   .shell-main does the same job, scoped to a wrapper div the shell layout
+   itself renders around {children} instead. */
+.shell-main { padding-left: var(--sidebar); padding-top: var(--toprail); }
 
 .sidebar {
   position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar); z-index: 40;
@@ -126,6 +132,7 @@ body.has-sidebar { padding-left: var(--sidebar); padding-top: var(--toprail); }
 
 @media (max-width: 900px) {
   body.has-sidebar { padding-left: 0; padding-bottom: 64px; }
+  .shell-main { padding-left: 0; padding-bottom: 64px; }
   .sidebar {
     top: auto; left: 0; right: 0; bottom: 0; width: auto; height: 60px;
     flex-direction: row; gap: 2px; padding: 0 6px;
