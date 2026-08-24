@@ -107,12 +107,55 @@ Doc *pages* now render in `apps/web-shell` (see below) — this package only sti
 - Page routes follow Next App Router conventions (`app/<route>/page.tsx`); shared page-local components live in `app/_components/`.
 
 ### `apps/web-shell` (React migration of the player-facing web shell)
-- Next.js 16 App Router, first slice is docs-only (`/docs/*`) — see `docs/superpowers/specs/2026-08-23-react-migration-design.md` for the full migration design and `docs/superpowers/plans/2026-08-23-react-migration-docs-slice.md` for what's built vs. planned. Every other web-shell path (`/shop`, `/dashboard`, etc.) still runs on the old static site under `apps/game/web/` until its own migration slice.
-- Deployed on Orchard (`pixl-web-shell`, no public hostname of its own — see next point), proxied at `pixl.hackclub.com/docs` via `apps/landing/next.config.ts`'s `rewrites()`.
-- Reaches the outside world only through that proxy, so it uses `basePath: "/docs"` (`next.config.ts`) to keep every Next-generated URL (asset chunks, `next/link` hrefs) correctly prefixed — **this is why the app's own route tree has no literal `docs` segment** (`app/[slug]/page.tsx`, not `app/docs/[slug]/page.tsx`; basePath adds that back at request time). Plain `<a>`/`<img>` tags and CSS `url()` are *not* auto-prefixed by basePath, so those carry an explicit `/docs/` by hand where they appear in the code — same reasoning applies to anything public/-served, including the OG cards `packages/docs-engine` writes.
-- Reads `docs/*.md` directly via `packages/docs-engine`'s `render()`/`buildTokens()` (a workspace-package import — this app's Dockerfile uses a repo-root build context specifically so that resolves, unlike `apps/dashboard`'s isolated per-app context).
-- `apps/landing` reaches it over the Orchard cluster's internal service DNS (`pixl-web-shell.ysws-pixl.svc.cluster.local:3000`), not a public hostname — both run as Orchard deployments in the same `ysws-pixl` k8s namespace, so no DNS record is needed for the hop.
-- Docker image uses Next's `output: "standalone"` — required in this monorepo, not just an optimization: without it, the runtime stage would need to drag along the whole workspace's hoisted `node_modules` (Bun installs into a shared `/repo/node_modules/.bun/...` store for any workspace-package-dependent app, since the install runs against the root `package.json`) to keep `apps/web-shell/node_modules`'s symlinks from dangling. `output: "standalone"` traces the real dependency graph into concrete files instead.
+- Next.js 16 App Router, deployed on Orchard (`pixl-web-shell`, no public
+  hostname of its own — reached only through `apps/landing/next.config.ts`'s
+  `rewrites()`, over the Orchard cluster's internal service DNS). Each page
+  family lives at its own literal route segment (`app/docs/[slug]`,
+  `app/(shell)/dashboard`, and so on as later slices land) — there is no
+  app-wide `basePath` (removed 2026-08-24 once a second family joined docs;
+  see `docs/superpowers/specs/2026-08-23-react-migration-design.md`'s
+  addendum for why one was ever needed and why it stopped working).
+- Auth: an httpOnly `pixl_session` cookie holds the same JWT
+  `apps/server` issues. `proxy.ts` catches `?token=` on any request
+  (Hack Club Auth redirects back to whatever page login started from, not
+  one fixed callback route) and moves it into the cookie. `lib/session.ts`
+  verifies it locally (`JWT_SECRET` must match `apps/server`'s exactly).
+  Server Components call `apps/server` directly via `lib/server-api.ts`;
+  Client Components that need to mutate go through
+  `app/api/proxy/[...path]/route.ts` instead, since the cookie is
+  unreadable by client JS by design. This only applies to `apps/web-shell`
+  — the Godot client and any page still on the old static site
+  (`apps/game/web/`) keep using the token-in-localStorage flow unchanged.
+- The `(shell)` route group (`app/(shell)/layout.tsx`) renders the
+  sidebar/topbar chrome — ported from `apps/game/web/pixl.js`'s
+  `mountTopbar()` — around every signed-in page. `app/(shell)/nav-data.ts`
+  holds the nav structure; `shell-nav.tsx` is the interactive Client
+  Component (mobile sheet, theme picker); the layout itself is a Server
+  Component that renders the full-page signed-out gate or fetches the
+  wallet/Restoration numbers before the page ever reaches the browser.
+- The RE/payout economy formulas (`rePerHour`, `projectPayoutUsd`, etc. in
+  `pixl.js`) aren't ported here yet — `/dashboard` only ever displays
+  values `apps/server` already computed (wallet pixels/RE/level), it never
+  runs the formulas itself. Port them as their own tested module (matching
+  `packages/docs-engine/src/tokens.ts`'s pattern: byte-for-byte identical
+  to `apps/server`'s own math, this must never drift) when a slice first
+  needs to compute a payout number client-side — likely `calc` or `projects`.
+- Reads `docs/*.md` directly via `packages/docs-engine`'s `render()`/
+  `buildTokens()` (a workspace-package import — this app's Dockerfile uses
+  a repo-root build context specifically so that resolves, unlike
+  `apps/dashboard`'s isolated per-app context).
+- Docker image uses Next's `output: "standalone"` — required in this
+  monorepo, not just an optimization: without it, the runtime stage would
+  need to drag along the whole workspace's hoisted `node_modules` (Bun
+  installs into a shared `/repo/node_modules/.bun/...` store for any
+  workspace-package-dependent app, since the install runs against the root
+  `package.json`) to keep `apps/web-shell/node_modules`'s symlinks from
+  dangling. `output: "standalone"` traces the real dependency graph into
+  concrete files instead.
+- See `docs/superpowers/specs/2026-08-23-react-migration-design.md` for
+  the full migration design (its 2026-08-24 addendum has the slice order
+  for everything after docs) and `docs/superpowers/plans/` for the
+  per-slice implementation plans.
 
 ### `apps/pixorpheus` (Slack bot)
 - Bun-native TypeScript, no build step (`bun run src/index.ts`) — a single Bolt v4 process, organized by feature under `src/` (`tickets/`, `chat/`, `ai/`, `memory/`, `commands/`, `pixelate/`, `github/`, `external/`, `slack/`). There is no separate dashboard process anymore — helper/admin ticket moderation lives in `apps/dashboard` (the Next.js app), which resolves tickets through `src/external/ticketApi.ts` on this bot.
