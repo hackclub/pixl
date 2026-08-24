@@ -268,6 +268,7 @@
               </div>
               <div class="btn-row">
                 <button class="btn" id="buy-btn">BUY</button>
+                <button class="btn dark" id="save-btn" hidden>☆ SAVE</button>
                 <a class="btn dark" href="/shop/">KEEP BROWSING</a>
               </div>
             </div>
@@ -290,6 +291,7 @@
       let optionPick = {};
       let configPick = {};
       let quantity = 1;
+      let saved = false;
 
       function clampQty(n) {
         n = Math.round(Number(n));
@@ -362,6 +364,7 @@
             }
             renderConfigurator();
             updateConfigPriceUI();
+            if (saved) saveCurrent();
           });
         }
       }
@@ -562,6 +565,8 @@
 
         $("qty-row").hidden = true;
         $("note-row").hidden = true;
+        $("save-btn").hidden = isTrophy(selected);
+        updateSaveBtn();
 
         if (isTrophy(selected)) {
           $("detail-options").innerHTML = optionGroups(selected)
@@ -653,7 +658,9 @@
             say("NOT SOLD IN YOUR REGION… YET.", 5000);
             return;
           }
-          configPick = {};
+          // Restore a saved build (see toggleSave / saveCurrent) instead of
+          // resetting to the first choice of every group on each visit.
+          configPick = { ...(selected.saved_config || {}) };
           renderConfigurator();
           $("note-row").hidden = false;
           $("detail-limited").innerHTML =
@@ -712,6 +719,43 @@
           `YOU HAVE ${Math.round(have)} / ${total.toLocaleString()} PX` +
           (pct >= 100 ? ", EASY." : "");
       }
+
+      function updateSaveBtn() {
+        $("save-btn").textContent = saved ? "★ SAVED" : "☆ SAVE";
+        $("save-btn").classList.toggle("teal", saved);
+        $("save-btn").classList.toggle("dark", !saved);
+      }
+
+      // Re-posts the current option/config picks under the existing save —
+      // fired on every configurator change once an item is saved, so a
+      // player's build stays in sync as they keep deciding, without them
+      // having to hit SAVE again after every tweak.
+      async function saveCurrent() {
+        await Pixl.send("POST", `/api/shop/save/${selected.id}`, {
+          option: optionSummary(),
+          config: selected.config_options ? configPick : null,
+        });
+      }
+
+      async function toggleSave() {
+        const nowSaved = !saved;
+        saved = nowSaved;
+        updateSaveBtn();
+        const r = nowSaved
+          ? await Pixl.send("POST", `/api/shop/save/${selected.id}`, {
+              option: optionSummary(),
+              config: selected.config_options ? configPick : null,
+            })
+          : await Pixl.send("DELETE", `/api/shop/save/${selected.id}`);
+        if (!r.ok) {
+          saved = !nowSaved;
+          updateSaveBtn();
+          Pixl.toast("Couldn't update that save, try again.", true);
+        } else {
+          Pixl.toast(saved ? "Saved! We'll keep your build in sync as you tweak it." : "Removed from saved items.");
+        }
+      }
+      $("save-btn").addEventListener("click", toggleSave);
 
       async function claimTrophy(id) {
         const r = await Pixl.send("POST", `/api/shop/claim/${id}`);
@@ -897,6 +941,7 @@
           xp = Number(data.xp || 0);
           claimedIds = new Set((data.claimed || []).map(Number));
           selected = items.find((i) => i.id === itemId) || null;
+          saved = !!(selected && selected.saved);
         } catch (e) {
           if (e.message !== "unauthorized")
             Pixl.toast("Couldn't reach the shop server.", true);

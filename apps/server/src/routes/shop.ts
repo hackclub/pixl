@@ -111,6 +111,26 @@ router.get("/api/shop/items", async (req, res) => {
 
   await attachStock(items);
 
+  // Saved (pinned) items, and for a config_options item the last spec the
+  // player put together — restored on the detail page instead of resetting
+  // to the first choice of every group on each visit.
+  const { data: saveRows } = await supabase
+    .from("shop_saves")
+    .select("item_id, option, config")
+    .eq("user_id", session.userId);
+  const savesById = new Map(
+    ((saveRows ?? []) as { item_id: number; option: string; config: unknown }[]).map((r) => [
+      Number(r.item_id),
+      r,
+    ]),
+  );
+  for (const item of items) {
+    const save = savesById.get(Number(item.id));
+    item.saved = !!save;
+    item.saved_option = save?.option || "";
+    item.saved_config = save?.config || null;
+  }
+
   // The player's own trophy progress. Trophies gate on the player's level
   // (1-100, derived from lifetime RE), not raw hours - `unlock_xp` holds the
   // level required. The field name predates levels and isn't worth a migration.
@@ -273,6 +293,56 @@ router.post("/api/shop/claim/:id", async (req, res) => {
     `You claimed "${item.name}". The team will reach out about getting it to you.`,
   );
   res.json({ ok: true, claimed: true });
+});
+
+// Pin an item (with its current option/config picks, for a configurable
+// item) so it's easy to find again and, on the detail page, so an
+// in-progress build restores instead of resetting to the first choice of
+// every group. Re-posting while already saved overwrites the stored picks —
+// the detail page calls this again on every config change once an item is
+// pinned, so a saved build stays in sync as the player keeps deciding.
+router.post("/api/shop/save/:id", async (req, res) => {
+  const token = typeof req.query.token === "string" ? req.query.token : "";
+  const session = token ? verifySessionToken(token) : null;
+  if (!session) return res.status(401).json({ ok: false });
+
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ ok: false });
+  const option = typeof req.body?.option === "string" ? req.body.option.slice(0, 300) : "";
+  const config =
+    req.body?.config && typeof req.body.config === "object" ? req.body.config : null;
+
+  const { error } = await supabase
+    .from("shop_saves")
+    .upsert(
+      { user_id: session.userId, item_id: id, option, config },
+      { onConflict: "user_id,item_id" },
+    );
+  if (error) {
+    console.error("[shop] save failed", error);
+    return res.status(500).json({ ok: false });
+  }
+  res.json({ ok: true, saved: true });
+});
+
+router.delete("/api/shop/save/:id", async (req, res) => {
+  const token = typeof req.query.token === "string" ? req.query.token : "";
+  const session = token ? verifySessionToken(token) : null;
+  if (!session) return res.status(401).json({ ok: false });
+
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ ok: false });
+
+  const { error } = await supabase
+    .from("shop_saves")
+    .delete()
+    .eq("user_id", session.userId)
+    .eq("item_id", id);
+  if (error) {
+    console.error("[shop] unsave failed", error);
+    return res.status(500).json({ ok: false });
+  }
+  res.json({ ok: true, saved: false });
 });
 
 // The player's own orders, newest first, for the Orders tab in the dash. Reads

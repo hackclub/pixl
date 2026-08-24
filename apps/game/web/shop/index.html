@@ -125,6 +125,7 @@
         box-shadow: 0 0 0 1px var(--gold), var(--drop);
       }
       .item-img {
+        position: relative;
         height: 148px;
         display: flex;
         align-items: center;
@@ -234,6 +235,26 @@
         padding: 3px 7px;
         z-index: 2;
       }
+      .pin-btn {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        width: 26px;
+        height: 26px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--panel);
+        border: var(--bw) solid var(--stroke);
+        border-radius: 0;
+        color: var(--faint);
+        font-size: 14px;
+        line-height: 1;
+        cursor: pointer;
+        z-index: 3;
+      }
+      .pin-btn:hover { color: var(--gold); border-color: var(--gold); }
+      .pin-btn.on { color: var(--gold); border-color: var(--gold); background: var(--panel); }
 
       /* ── trophies / restoration rewards ── */
       .trophy-card {
@@ -372,6 +393,7 @@
         <button class="tier" data-tier="under">UNDER 500</button>
         <button class="tier" data-tier="over">500+</button>
         <button class="tier" id="unlocked-toggle">UNLOCKED ONLY</button>
+        <button class="tier" id="saved-toggle">★ SAVED</button>
       </div>
 
       <div class="tiers" id="categories"></div>
@@ -404,6 +426,7 @@
       let activeTier = "all";
       let activeCategory = "all";
       let unlockedOnly = false;
+      let savedOnly = false;
       let loadingRegion = false;
 
       const CATEGORIES = [
@@ -529,7 +552,7 @@
           .filter((i) => isTrophy(i) && match(i))
           .filter((i) => !unlockedOnly || trophyState(i) !== "locked");
         let list = items.filter(
-          (i) => !isTrophy(i) && match(i) && tierMatch(i) && categoryMatch(i),
+          (i) => !isTrophy(i) && match(i) && tierMatch(i) && categoryMatch(i) && (!savedOnly || i.saved),
         );
         if (sort === "cheap")
           list = [...list].sort((a, b) => basePrice(a) - basePrice(b));
@@ -559,7 +582,7 @@
       ${item.locked && !item.unlockPending ? `<div class="locked-corner-tag">🔒 LOCKED</div>` : ""}
       ${item.limited ? `<div class="limited-tag">LIMITED</div>` : ""}
       ${item.stock && item.stock.length ? `<div class="stock-corner-tag">${item.stock[0].total} ONLY</div>` : ""}
-      <div class="item-img">${imgHtml(item)}</div>
+      <div class="item-img">${imgHtml(item)}<button type="button" class="pin-btn ${item.saved ? "on" : ""}" data-pin="${item.id}" title="${item.saved ? "Saved, click to unsave" : "Save this item"}">${item.saved ? "★" : "☆"}</button></div>
       <div class="item-name">${Pixl.esc(item.name)}</div>
       <div class="item-desc">${Pixl.esc(Pixl.bbstrip(item.description || ""))}</div>
       <div class="item-foot">
@@ -598,6 +621,34 @@
             location.href = `/shop/item?id=${card.dataset.id}`;
           });
         }
+        for (const btn of $("items").querySelectorAll("[data-pin]")) {
+          btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            toggleSave(Number(btn.dataset.pin));
+          });
+        }
+      }
+
+      // Pin/unpin from the grid, carrying whatever option/config that item
+      // already has saved (usually none yet — a plain bookmark until the
+      // player configures it on the detail page).
+      async function toggleSave(id) {
+        const item = items.find((i) => i.id === id);
+        if (!item) return;
+        const nowSaved = !item.saved;
+        item.saved = nowSaved;
+        render();
+        const r = nowSaved
+          ? await Pixl.send("POST", `/api/shop/save/${id}`, {
+              option: item.saved_option || "",
+              config: item.saved_config || null,
+            })
+          : await Pixl.send("DELETE", `/api/shop/save/${id}`);
+        if (!r.ok) {
+          item.saved = !nowSaved;
+          Pixl.toast("Couldn't update that save, try again.", true);
+          render();
+        }
       }
 
       async function claimTrophy(id) {
@@ -626,6 +677,12 @@
         if (b.id === "unlocked-toggle") {
           unlockedOnly = !unlockedOnly;
           b.classList.toggle("on", unlockedOnly);
+          render();
+          return;
+        }
+        if (b.id === "saved-toggle") {
+          savedOnly = !savedOnly;
+          b.classList.toggle("on", savedOnly);
           render();
           return;
         }
