@@ -14,11 +14,16 @@ const GAME_ORIGIN = "https://play.pixl.hackclub.com";
 const WEB_SHELL_ORIGIN = "http://pixl-web-shell.ysws-pixl.svc.cluster.local:3000";
 
 // Shell pages, mounted at the same path on the apex as on the game host.
-// "docs" and "dashboard" moved to WEB_SHELL_ORIGIN as the React migration's
-// first two slices - everything else here still serves off the old static site.
+// "docs" moved to WEB_SHELL_ORIGIN as the React migration's first slice.
+// "dashboard" was cut over too (2026-08-24) and reverted the same day -
+// the React version is real and merged (apps/web-shell/app/(shell)/dashboard),
+// but the gate it shows a signed-out visitor only offers "Enter the Game",
+// no way to reach the web login link that actually sets the session cookie -
+// confusing for anyone who expects being logged into the game to carry
+// over. Re-cut over once that gate gets a real login path, not before.
 const SHELL_PATHS = [
   "shop", "orders", "collectibles", "vault", "explore", "ideas", "quests",
-  "trials", "timeline", "projects", "report", "hackatime",
+  "trials", "timeline", "projects", "report", "dashboard", "hackatime",
   "refers", "account", "calc",
 ];
 
@@ -48,8 +53,6 @@ const nextConfig: NextConfig = {
       { source: "/play/:path*", destination: `${GAME_ORIGIN}/:path*` },
       { source: "/docs", destination: `${WEB_SHELL_ORIGIN}/docs` },
       { source: "/docs/:path*", destination: `${WEB_SHELL_ORIGIN}/docs/:path*` },
-      { source: "/dashboard", destination: `${WEB_SHELL_ORIGIN}/dashboard` },
-      { source: "/dashboard/:path*", destination: `${WEB_SHELL_ORIGIN}/dashboard/:path*` },
       // apps/web-shell's own JS/CSS chunks (Next "Multi Zone" assetPrefix -
       // see that app's next.config.ts). Without this, both apps generate
       // chunk URLs at the same bare /_next/static/... path and this app's
