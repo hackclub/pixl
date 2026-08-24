@@ -6,8 +6,7 @@
 // can set JWT_SECRET before the first call rather than before import.
 import jwt from "jsonwebtoken";
 import { cookies } from "next/headers";
-
-export const SESSION_COOKIE = "pixl_session";
+import { SESSION_COOKIE } from "./session-cookie";
 
 export interface SessionPayload {
   userId: string;
