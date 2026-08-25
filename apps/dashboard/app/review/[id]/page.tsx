@@ -19,7 +19,15 @@ import { yswsShipsFor } from "@/lib/ysws";
 import { renderMarkdown } from "@/lib/markdown";
 import { db } from "@/lib/db";
 import { ReviewForm, type BountyOption } from "@/app/_components/ReviewForm";
-import { banProject, setProjectLevel, sendBackToFirstPass, forceAdvanceFraud, toggleProjectPeak } from "@/app/actions";
+import {
+  banProject,
+  setProjectLevel,
+  sendBackToFirstPass,
+  forceAdvanceFraud,
+  toggleProjectPeak,
+  extendHoursCutoff,
+} from "@/app/actions";
+import { hackatimeCutoffUnix, hackatimeCutoffLabel } from "@/app/_generated/config";
 import { PendingButton } from "@/app/_components/PendingButton";
 import { ReviewDetailTabs } from "@/app/_components/ReviewDetailTabs";
 import { LevelBadge, TypeBadge, ShipBadges, StatusBadge, BeaconBadge, FundingBadge } from "@/app/_components/ProjectBadges";
@@ -29,6 +37,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 
@@ -179,6 +188,10 @@ export default async function ReviewDetail({
       : 0;
 
   const ageFlag = turnedNineteenSinceShipping(p.users?.birthday, shippedAt);
+  // One day before the global cutoff, for the extend-hours date input's max.
+  const maxExtendDateStr = new Date((hackatimeCutoffUnix - 86_400) * 1000)
+    .toISOString()
+    .slice(0, 10);
   const bounties: BountyOption[] = ((bountyEventsResult.data ?? []) as {
     id: number;
     name: string;
@@ -596,6 +609,17 @@ export default async function ReviewDetail({
                   <span className="ml-auto tabular-nums font-medium">{fmtHM(journalHours)}</span>
                 </div>
               </div>
+              {p.hours_extended_since && (
+                <div className="mt-3 pt-3 border-t border-border text-xs text-muted-foreground">
+                  Counting hours from{" "}
+                  <span className="font-medium text-foreground">
+                    {new Date(p.hours_extended_since).toLocaleDateString()}
+                  </span>{" "}
+                  (before the {hackatimeCutoffLabel} cutoff) , set by{" "}
+                  <span className="font-medium text-foreground">{p.hours_extended_by}</span>:{" "}
+                  {p.hours_extended_note}
+                </div>
+              )}
             </Card>
 
             <Card className="p-4 gap-0 flex-row items-center justify-between">
@@ -800,6 +824,47 @@ export default async function ReviewDetail({
                     }
                   />
                 </Card>
+
+                <details className="rounded-xl bg-card ring-1 ring-border p-4 text-card-foreground">
+                  <summary className="flex items-center gap-2 cursor-pointer text-sm font-semibold text-foreground select-none list-none">
+                    <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground" />
+                    Extend hours cutoff
+                  </summary>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Normally only hours from {hackatimeCutoffLabel} onward count. If this project
+                    genuinely started earlier and paused (verify against Hackatime&apos;s first-activity
+                    date above), pick how far back to count from , this re-pulls their Hackatime
+                    spans and raises the credited total, it never lowers it.
+                  </p>
+                  <form action={extendHoursCutoff} className="mt-3 flex flex-col gap-2">
+                    <input type="hidden" name="projectId" value={p.id} />
+                    <Input
+                      type="date"
+                      name="since"
+                      required
+                      max={maxExtendDateStr}
+                      defaultValue={
+                        p.hours_extended_since
+                          ? new Date(p.hours_extended_since).toISOString().slice(0, 10)
+                          : undefined
+                      }
+                    />
+                    <Textarea
+                      name="note"
+                      required
+                      rows={2}
+                      placeholder="Why count from this date (internal, not shown to the player)…"
+                      className="text-sm resize-y"
+                    />
+                    <PendingButton
+                      variant="secondary"
+                      pendingText="Extending…"
+                      confirm="Recount this project's hours from that date? This only ever raises the credited total."
+                    >
+                      Extend cutoff
+                    </PendingButton>
+                  </form>
+                </details>
 
                 {isFinalStage && (
                 <details className="rounded-xl bg-card ring-1 ring-violet-300 dark:ring-violet-500/30 p-4 text-card-foreground">
