@@ -179,7 +179,9 @@
 <script src="/pixl.js?v=6"></script>
 <script>
 Pixl.mountTopbar("calc");
-Pixl.loadWallet();
+// RE is banked for life now (not reset per project), so predicting one of
+// your own projects has to start from your actual lifetime RE, not 0.
+const walletPromise = Pixl.loadWallet();
 
 const $ = (id) => document.getElementById(id);
 
@@ -213,9 +215,9 @@ const $ = (id) => document.getElementById(id);
 const TIERS = ["T1 Spark", "T2 Signal", "T3 Grid", "T4 Nexus"];
 $("c-tier").innerHTML = TIERS.map((t, i) => `<option value="${i + 1}">${t}</option>`).join("");
 
-function writeStats(prefix, hours, tier) {
-  const usd = Pixl.projectPayoutUsd(hours, tier, 0);
-  const px = Pixl.projectPayoutPx(hours, tier, 0);
+function writeStats(prefix, hours, tier, reBefore = 0) {
+  const usd = Pixl.projectPayoutUsd(hours, tier, reBefore);
+  const px = Pixl.projectPayoutPx(hours, tier, reBefore);
   const re = Pixl.reForHours(hours, tier);
   $(`${prefix}px`).textContent = Math.round(px).toLocaleString();
   $(`${prefix}re`).textContent = `${Math.round(re).toLocaleString()} RE`;
@@ -274,14 +276,18 @@ $("c-project").addEventListener("change", async () => {
   }
   $("c-project").disabled = true;
   try {
-    const { trackedSeconds } = await Pixl.api(`/api/projects/${id}/hours`);
+    const [{ trackedSeconds }, wallet] = await Promise.all([
+      Pixl.api(`/api/projects/${id}/hours`),
+      walletPromise,
+    ]);
     const hours = Math.round((trackedSeconds / 3600) * 100) / 100;
     const tier = project.level || 1;
+    const reBefore = wallet ? wallet.re || 0 : 0;
     $("c-hours").value = hours;
     $("c-tier").value = tier;
     $("c-tier").dispatchEvent(new Event("change"));
     recalc();
-    writeStats("c-mine-", hours, tier);
+    writeStats("c-mine-", hours, tier, reBefore);
     $("c-mine-out").hidden = false;
   } catch {
     Pixl.toast("Couldn't load that project's tracked hours.", true);

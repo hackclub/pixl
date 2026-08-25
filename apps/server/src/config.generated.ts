@@ -50,9 +50,9 @@ export const config = {
       }
     ],
     "tierRePerHour": [
-      10.714285714285714,
       12.5,
       15,
+      18.75,
       25
     ],
     "tierKickerUsdPerStep": 0.5,

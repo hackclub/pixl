@@ -22,9 +22,9 @@ export interface PixlConfig {
 export function buildTokens(config: PixlConfig): Record<string, string> {
   const E = config.economy;
   const px = (usd: number) => `${Math.round(usd / E.pixelValueUsd)} px`;
-  // Some tierRePerHour values (e.g. 75/7 for a clean 700h-to-cap target) don't
-  // round to a clean decimal - round to 2dp and drop trailing zeros for display,
-  // the exact value still drives the real math everywhere else.
+  // tierRePerHour can carry more than 2 decimals - round to 2dp and drop
+  // trailing zeros for display, the exact value still drives the real math
+  // everywhere else.
   const reRate = (n: number) => String(Math.round(n * 100) / 100);
   const tokens: Record<string, string> = {
     basePx: px(E.basePayoutUsd),
