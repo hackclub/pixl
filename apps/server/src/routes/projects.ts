@@ -697,7 +697,14 @@ router.post("/api/projects/:id/ship", async (req, res) => {
 });
 
 // Withdraw a project from the review queue back to a draft so the owner can
-// edit it. Only allowed while it's actually in review (shipped/second_review).
+// edit it. Only allowed before any human has weighed in ("shipped" = waiting
+// for first pass, untouched) — NOT once it's in second_review/fraud_review,
+// since by then a first-pass reviewer has already proposed a verdict
+// (possibly a ban) and this update doesn't clear first_pass_* fields. Letting
+// a maker unship+reship from that stage let them silently dodge a pending
+// ban proposal: status reset to "shipped" (reshippable) while the stale
+// first_pass_verdict stuck around, confusing the next reviewer instead of
+// escalating to them. Found via project #176, 2026-08-25.
 router.post("/api/projects/:id/unship", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";
   const session = token ? verifySessionToken(token) : null;
@@ -713,7 +720,7 @@ router.post("/api/projects/:id/unship", async (req, res) => {
     .eq("user_id", session.userId)
     .maybeSingle();
   if (!project) return res.status(404).json({ ok: false });
-  if (!["shipped", "fraud_review", "second_review"].includes(project.status))
+  if (project.status !== "shipped")
     return res.status(400).json({ ok: false, error: "not_in_review" });
 
   const { data, error } = await supabase
