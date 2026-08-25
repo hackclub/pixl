@@ -17,10 +17,40 @@
     "sponsorRateUsd": 8.5,
     "basePayoutUsd": 3.5,
     "maxPayoutUsd": 6,
-    "reForMaxPayout": 5000,
+    "reForMaxPayout": 7500,
+    "payoutSteps": [
+      {
+        "re": 0,
+        "usd": 3.5
+      },
+      {
+        "re": 1250,
+        "usd": 3.75
+      },
+      {
+        "re": 2500,
+        "usd": 4
+      },
+      {
+        "re": 3750,
+        "usd": 4.5
+      },
+      {
+        "re": 5000,
+        "usd": 5
+      },
+      {
+        "re": 6250,
+        "usd": 5.5
+      },
+      {
+        "re": 7500,
+        "usd": 6
+      }
+    ],
     "tierRePerHour": [
-      5,
-      10,
+      10.714285714285714,
+      12.5,
       15,
       25
     ],

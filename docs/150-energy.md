@@ -21,25 +21,73 @@ When a reviewer approves your project they also give it a **tier**, 1 to 4, base
 
 Tier is about the project, not about you. A first timer who ships something genuinely hard gets the high tier for it. Padding a simple site out with hours doesn't move it up either, since reviewers look at the actual repo.
 
-## RE decides your rate, one project at a time
+## RE decides your rate, and it's yours forever
 
-Each project's own RE, its tier weighted by its hours, is what sets *that project's* hourly rate. It starts at {{baseUsd}} an hour and climbs in a straight line to {{maxUsd}} an hour once the project alone earns {{reCap}} RE. In pixels, that's {{basePx}} an hour rising to {{maxPx}}.
+Your **lifetime RE** — every hour of every project you've ever shipped, added up — is what sets your hourly rate. It never resets and nothing you ship later erases what you already earned. The rate itself is a fixed table: once your lifetime RE crosses a threshold, every ship from then on pays at that rate or higher, this one included.
 
-The climb counts for the project that's earning it, and only that project. Its rate rises *while* its hours land, so it gets paid the average rate across the RE it earned, from zero. Whatever RE you've already banked from other projects doesn't carry over: every project starts its own climb from the bottom, so splitting your work across several projects or bundling it into one pays about the same either way, and no single big build inflates the rate on everything you ship afterwards.
+| {{step1Re}} RE | lifetime, reached | {{step1Usd}} / hour |
+| {{step2Re}} RE | lifetime, reached | {{step2Usd}} / hour |
+| {{step3Re}} RE | lifetime, reached | {{step3Usd}} / hour |
+| {{step4Re}} RE | lifetime, reached | {{step4Usd}} / hour |
+| {{step5Re}} RE | lifetime, reached | {{step5Usd}} / hour |
+| {{step6Re}} RE | lifetime, reached | {{step6Usd}} / hour |
+| {{step7Re}} RE | lifetime, the cap | **{{step7Usd}} / hour** |
 
-For example, a {{capExampleHours}} hour T4 project earns the full {{reCap}} RE by itself, so its rate runs the entire ramp start to finish and it's paid {{capExampleUsd}} ({{capExamplePx}}) total. Ship a {{nextExampleHours}} hour T1 project right after it and that one earns barely any RE on its own, so it's paid close to base: around {{nextExampleRate}} an hour ({{nextExamplePx}} total), not the {{maxUsd}} the big project just finished at.
+Since RE is one pooled number no matter which tiers earned it, your real hours-to-cap depends on whatever mix of tiers you ship. But if you stuck to one tier the whole way, here's how many hours each payout level takes:
+
+### If you only ship T4 Nexus
+
+| {{step1Usd}} / hr | {{step1Re}} RE | {{step1T4h}}h |
+| {{step2Usd}} / hr | {{step2Re}} RE | {{step2T4h}}h |
+| {{step3Usd}} / hr | {{step3Re}} RE | {{step3T4h}}h |
+| {{step4Usd}} / hr | {{step4Re}} RE | {{step4T4h}}h |
+| {{step5Usd}} / hr | {{step5Re}} RE | {{step5T4h}}h |
+| {{step6Usd}} / hr | {{step6Re}} RE | {{step6T4h}}h |
+| **{{step7Usd}} / hr (cap)** | {{step7Re}} RE | **{{step7T4h}}h** |
+
+### If you only ship T3 Grid
+
+| {{step1Usd}} / hr | {{step1Re}} RE | {{step1T3h}}h |
+| {{step2Usd}} / hr | {{step2Re}} RE | {{step2T3h}}h |
+| {{step3Usd}} / hr | {{step3Re}} RE | {{step3T3h}}h |
+| {{step4Usd}} / hr | {{step4Re}} RE | {{step4T3h}}h |
+| {{step5Usd}} / hr | {{step5Re}} RE | {{step5T3h}}h |
+| {{step6Usd}} / hr | {{step6Re}} RE | {{step6T3h}}h |
+| **{{step7Usd}} / hr (cap)** | {{step7Re}} RE | **{{step7T3h}}h** |
+
+### If you only ship T2 Signal
+
+| {{step1Usd}} / hr | {{step1Re}} RE | {{step1T2h}}h |
+| {{step2Usd}} / hr | {{step2Re}} RE | {{step2T2h}}h |
+| {{step3Usd}} / hr | {{step3Re}} RE | {{step3T2h}}h |
+| {{step4Usd}} / hr | {{step4Re}} RE | {{step4T2h}}h |
+| {{step5Usd}} / hr | {{step5Re}} RE | {{step5T2h}}h |
+| {{step6Usd}} / hr | {{step6Re}} RE | {{step6T2h}}h |
+| **{{step7Usd}} / hr (cap)** | {{step7Re}} RE | **{{step7T2h}}h** |
+
+### If you only ship T1 Spark
+
+| {{step1Usd}} / hr | {{step1Re}} RE | {{step1T1h}}h |
+| {{step2Usd}} / hr | {{step2Re}} RE | {{step2T1h}}h |
+| {{step3Usd}} / hr | {{step3Re}} RE | {{step3T1h}}h |
+| {{step4Usd}} / hr | {{step4Re}} RE | {{step4T1h}}h |
+| {{step5Usd}} / hr | {{step5Re}} RE | {{step5T1h}}h |
+| {{step6Usd}} / hr | {{step6Re}} RE | {{step6T1h}}h |
+| **{{step7Usd}} / hr (cap)** | {{step7Re}} RE | **{{step7T1h}}h** |
+
+For example, ship a {{capExampleHours}} hour T4 project from scratch and its own RE alone gets you to the {{step7Usd}} cap, paid {{capExampleUsd}} ({{capExamplePx}}) total. Ship a {{nextExampleHours}} hour T1 project first instead and it only earns a little RE, so it's paid close to base: around {{nextExampleRate}} an hour ({{nextExamplePx}} total) — but that RE doesn't vanish. It's sitting in your lifetime total, pushing your very next ship's rate up before it even starts.
 
 ::: note The short version
-On any one project, ship more, and ship something more ambitious, and every hour of it is worth more than the one before it. That project's own rate has a ceiling; your lifetime RE, below, does not.
+Every hour you ship, at any tier, banks RE forever and pushes your rate up for every ship after it, including the one that earned it.
 :::
 
 ## The tier bonus
 
 That climb is deliberately slow, because {{reCap}} RE is a lot of shipping for one project. On a short project it would barely register, and a tier 4 weekend build would pay about the same as a tier 1 one. So tier also pays a flat bonus on top: {{kickerUsd}} an hour for every tier above T1, on the first {{kickerHours}} hours of a project.
 
-So a 10 hour T4 project earns {{kickerExampleUsd}}, about {{kickerExamplePx}}, on top of whatever its normal rate pays. Put together: 10 hours at T4 earns {{exampleRampUsd}} off the RE ramp (its own RE barely dents {{reCap}}, so the ramp alone is still close to base) plus the {{kickerExampleUsd}} kicker, for {{exampleTotalUsd}} total, about {{exampleTotalPx}}.
+So a 10 hour T4 project earns {{kickerExampleUsd}}, about {{kickerExamplePx}}, on top of whatever its normal rate pays. Put together: a fresh player's first 10 hours at T4 earns {{exampleRampUsd}} at the base rate (its own RE barely dents {{reCap}}, so it doesn't move the payout table yet) plus the {{kickerExampleUsd}} kicker, for {{exampleTotalUsd}} total, about {{exampleTotalPx}}.
 
-After that the bonus stops, because by then a high tier project is already earning RE several times faster than a low tier one, so its own rate has already climbed a long way up the ramp without needing the flat bonus's help.
+After that the bonus stops, because by then a high tier project is already earning RE several times faster than a low tier one, so its own RE has already pushed the player several steps up the payout table without needing the flat bonus's help.
 
 ## Levels
 

@@ -19,10 +19,40 @@ const Pixl = (() => {
       "sponsorRateUsd": 8.5,
       "basePayoutUsd": 3.5,
       "maxPayoutUsd": 6,
-      "reForMaxPayout": 5000,
+      "reForMaxPayout": 7500,
+      "payoutSteps": [
+        {
+          "re": 0,
+          "usd": 3.5
+        },
+        {
+          "re": 1250,
+          "usd": 3.75
+        },
+        {
+          "re": 2500,
+          "usd": 4
+        },
+        {
+          "re": 3750,
+          "usd": 4.5
+        },
+        {
+          "re": 5000,
+          "usd": 5
+        },
+        {
+          "re": 6250,
+          "usd": 5.5
+        },
+        {
+          "re": 7500,
+          "usd": 6
+        }
+      ],
       "tierRePerHour": [
-        5,
-        10,
+        10.714285714285714,
+        12.5,
         15,
         25
       ],
@@ -71,14 +101,22 @@ const Pixl = (() => {
     const h = Number.isFinite(hours) ? Math.max(hours, 0) : 0;
     return h * rePerHour(tier);
   }
+  // Flat step table, not a curve: E.payoutSteps is sorted ascending by RE,
+  // rate is whichever step's threshold is the highest one still <= re.
   function payoutUsdPerHour(re) {
     const E = config.economy;
-    const progress = Math.min(Math.max(re, 0) / E.reForMaxPayout, 1);
-    return E.basePayoutUsd + progress * (E.maxPayoutUsd - E.basePayoutUsd);
+    const r = Math.max(re, 0);
+    let usd = E.payoutSteps[0].usd;
+    for (const step of E.payoutSteps) {
+      if (r < step.re) break;
+      usd = step.usd;
+    }
+    return usd;
   }
-  // The rate for a project's own reBefore -> reAfter span: the RE-driven rate
-  // at reAfter, so crossing reForMaxPayout on one project pays the max rate
-  // for that project's hours immediately rather than only approaching it.
+  // The rate for a ship: the step the player's lifetime RE sits at once this
+  // ship's own RE is added in (reBefore -> reAfter) - RE banks forever, so
+  // this pays the new step for all of this ship's hours, not just the ones
+  // past the boundary.
   function averageUsdPerHourOver(reBefore, reAfter) {
     return payoutUsdPerHour(Math.max(reAfter, reBefore, 0));
   }

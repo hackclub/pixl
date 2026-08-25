@@ -68,7 +68,9 @@ export function economyBrief(texts: string[]): string | null {
   const head =
     `PIXL PAY CALCULATOR (exact, authoritative — computed from the real payout formula, not a guess). ` +
     `This is a real question: give the ACTUAL numbers, a short sentence is fine, do NOT dodge with a vague reply. ` +
-    `Round in your own voice if you want. Pay is PER PROJECT: every project starts its rate from the bottom and climbs as that ONE project earns its own RE, so a fresh project always starts at reBefore 0.`;
+    `Round in your own voice if you want. Pay comes off LIFETIME RE — it banks forever across every project you've ever shipped, ` +
+    `and your hourly rate is read off a fixed step table against that pool. The numbers below assume starting from 0 lifetime RE ` +
+    `(a brand new player's floor); anyone who's already shipped before starts higher on the table, so their real rate is at least this good.`;
 
   const lines: string[] = [head];
 
@@ -85,8 +87,8 @@ export function economyBrief(texts: string[]): string | null {
     if (tier !== undefined) {
       const h = hoursForTarget(dollarTarget, tier);
       lines.push(
-        `To hit ${money(dollarTarget, toPx(dollarTarget))} on a single Tier ${tier} project takes about ` +
-          `${h.toFixed(1)}h shipped (computed by solving the real payout ramp, not a flat rate — it's not linear).`,
+        `Starting from 0 lifetime RE, hitting ${money(dollarTarget, toPx(dollarTarget))} on a single Tier ${tier} project takes about ` +
+          `${h.toFixed(1)}h shipped (computed by solving the real payout step table, not a flat rate). Already have RE banked? Fewer hours needed.`,
       );
     } else {
       lines.push(`Hours needed to hit ${money(dollarTarget, toPx(dollarTarget))} on one project, by tier:`);
@@ -113,8 +115,8 @@ export function economyBrief(texts: string[]): string | null {
     if (!STRONG_PAY_RE.test(text)) return null;
     lines.push(
       `No tier/hours given, so the mechanics: base rate is ${money(E.basePayoutUsd, toPx(E.basePayoutUsd))}/hr, ` +
-        `climbing to a max of ${money(E.maxPayoutUsd, toPx(E.maxPayoutUsd))}/hr once a single project earns ` +
-        `${E.reForMaxPayout.toLocaleString()} RE on its own. Each hour earns ${E.tierRePerHour.join("/")} RE at T1/T2/T3/T4, ` +
+        `climbing in steps to a max of ${money(E.maxPayoutUsd, toPx(E.maxPayoutUsd))}/hr once your LIFETIME RE (banked forever ` +
+        `across every project) crosses ${E.reForMaxPayout.toLocaleString()} RE. Each hour earns ${E.tierRePerHour.join("/")} RE at T1/T2/T3/T4, ` +
         `plus a flat kicker of +$${E.tierKickerUsdPerStep.toFixed(2)}/hr per tier above T1 on the first ${E.tierKickerHours}h. ` +
         `Tell them to give a tier + hours for an exact number.`,
     );
