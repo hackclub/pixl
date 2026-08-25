@@ -91,12 +91,13 @@ const TIERS = [
 
 /**
  * The tier picker plus every conversion it implies, worked out live so a
- * reviewer never has to do the arithmetic: hours at this tier become RE, and
- * the rate averaged over this project's own RE (0 -> projectRe) times the
- * hours is the payout - the player's existing lifetime RE/level is shown
- * for context but doesn't move the rate. Numbers come from packages/config,
- * and the maths mirrors creditBeneficiary exactly - if these two ever
- * disagree, the reviewer is being shown a number the player won't receive.
+ * reviewer never has to do the arithmetic: hours at this tier become RE,
+ * that RE moves the player along the payout ramp on top of their existing
+ * lifetime RE (RE is player-specific and banked forever, not reset per
+ * project), and the rate averaged across that move times the hours is the
+ * payout. Numbers come from packages/config, and the maths mirrors
+ * creditBeneficiary exactly - if these two ever disagree, the reviewer is
+ * being shown a number the player won't receive.
  */
 function TierAndPayout({
   hours,
@@ -121,12 +122,12 @@ function TierAndPayout({
   const trialBonusRe = forTrial ? config.economy.trialBonusRe : 0;
   const projectRe = hoursRe + trialBonusRe;
   const reAfter = playerReBefore + projectRe;
-  // Averaged across this project's own RE only (0 -> projectRe), matching
-  // creditBeneficiary exactly - the player's lifetime RE doesn't move the rate.
+  // Averaged across the RE this ship earns on top of the player's existing
+  // lifetime RE, matching creditBeneficiary exactly.
   // Hours-based RE only: the flat Trial bonus counts toward level and the vault
   // but deliberately never moves the payout rate, same as creditBeneficiary.
-  const rate = pxPerHourOver(0, hoursRe);
-  const usdRate = averageUsdPerHourOver(0, hoursRe);
+  const rate = pxPerHourOver(playerReBefore, playerReBefore + hoursRe);
+  const usdRate = averageUsdPerHourOver(playerReBefore, playerReBefore + hoursRe);
   // Flat tier bonus on the project's first hours - the thing that makes tier
   // visible on a short project, where the RE ramp alone is worth cents.
   const kickerUsd = tierKickerUsd(hours, tier);
