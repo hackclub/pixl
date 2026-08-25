@@ -22,6 +22,10 @@ export interface PixlConfig {
 export function buildTokens(config: PixlConfig): Record<string, string> {
   const E = config.economy;
   const px = (usd: number) => `${Math.round(usd / E.pixelValueUsd)} px`;
+  // Some tierRePerHour values (e.g. 75/7 for a clean 700h-to-cap target) don't
+  // round to a clean decimal - round to 2dp and drop trailing zeros for display,
+  // the exact value still drives the real math everywhere else.
+  const reRate = (n: number) => String(Math.round(n * 100) / 100);
   const tokens: Record<string, string> = {
     basePx: px(E.basePayoutUsd),
     maxPx: px(E.maxPayoutUsd),
@@ -32,10 +36,10 @@ export function buildTokens(config: PixlConfig): Record<string, string> {
     kickerUsd: `$${E.tierKickerUsdPerStep.toFixed(2)}`,
     kickerHours: String(E.tierKickerHours),
     trialBonusRe: String(E.trialBonusRe),
-    t1: String(E.tierRePerHour[0]),
-    t2: String(E.tierRePerHour[1]),
-    t3: String(E.tierRePerHour[2]),
-    t4: String(E.tierRePerHour[3]),
+    t1: reRate(E.tierRePerHour[0]!),
+    t2: reRate(E.tierRePerHour[1]!),
+    t3: reRate(E.tierRePerHour[2]!),
+    t4: reRate(E.tierRePerHour[3]!),
     cutoff: new Intl.DateTimeFormat("en-US", {
       month: "long",
       day: "numeric",

@@ -42,7 +42,7 @@ describe("buildTokens", () => {
 
   test("resolves tier rates and the trial bonus", () => {
     const tokens = buildTokens(config);
-    expect(tokens.t1).toBe("10.714285714285714");
+    expect(tokens.t1).toBe("10.71");
     expect(tokens.t2).toBe("12.5");
     expect(tokens.t3).toBe("15");
     expect(tokens.t4).toBe("25");

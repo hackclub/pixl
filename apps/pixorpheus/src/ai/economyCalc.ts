@@ -29,6 +29,9 @@ function money(usd: number, px: number): string {
   return `$${usd.toFixed(2)} (${Math.round(px)}px)`;
 }
 
+// tierRePerHour values aren't all clean decimals - round to 2dp for display.
+const reRate = (n: number) => String(Math.round(n * 100) / 100);
+
 // projectPayoutUsd(hours, tier, 0) is monotonically increasing in hours, so a target
 // dollar amount ("how many hours for $500 at T4") can be inverted by bisection instead
 // of leaving Pixo to guess — this is exactly the gap that let it hallucinate "55 hours"
@@ -116,7 +119,7 @@ export function economyBrief(texts: string[]): string | null {
     lines.push(
       `No tier/hours given, so the mechanics: base rate is ${money(E.basePayoutUsd, toPx(E.basePayoutUsd))}/hr, ` +
         `climbing in steps to a max of ${money(E.maxPayoutUsd, toPx(E.maxPayoutUsd))}/hr once your LIFETIME RE (banked forever ` +
-        `across every project) crosses ${E.reForMaxPayout.toLocaleString()} RE. Each hour earns ${E.tierRePerHour.join("/")} RE at T1/T2/T3/T4, ` +
+        `across every project) crosses ${E.reForMaxPayout.toLocaleString()} RE. Each hour earns ${E.tierRePerHour.map(reRate).join("/")} RE at T1/T2/T3/T4, ` +
         `plus a flat kicker of +$${E.tierKickerUsdPerStep.toFixed(2)}/hr per tier above T1 on the first ${E.tierKickerHours}h. ` +
         `Tell them to give a tier + hours for an exact number.`,
     );
