@@ -292,6 +292,8 @@
       let configPick = {};
       let quantity = 1;
       let saved = false;
+      // #loggedIn, live version of Pixl.hasToken
+      let loggedIn = Pixl.hasToken;
 
       function clampQty(n) {
         n = Math.round(Number(n));
@@ -394,7 +396,7 @@
         $("detail-price").innerHTML =
           `<img src="/img/pixel.png" style="width:20px;height:20px" alt="">${price.toLocaleString()} PIXELS<span class="price-hours">${hoursOf(price)}</span>`;
         $("detail-price").classList.toggle("cant", !afford);
-        if (!Pixl.hasToken) {
+        if (!loggedIn) {
           $("buy-btn").disabled = false;
           $("buy-btn").textContent = "LOG IN TO BUY";
           $("buy-btn").classList.add("teal");
@@ -717,7 +719,7 @@
         // Signed-out visitor: there's no wallet to check affordability against,
         // so send them to log in instead of a "BUY" button that's really just
         // permanently disabled for a reason they can't see.
-        if (!Pixl.hasToken) {
+        if (!loggedIn) {
           $("buy-btn").textContent = !inStock ? "SOLD OUT" : "LOG IN TO BUY";
           $("buy-btn").disabled = !inStock;
           $("buy-btn").classList.toggle("teal", inStock);
@@ -757,7 +759,7 @@
       }
 
       async function toggleSave() {
-        if (!Pixl.hasToken) {
+        if (!loggedIn) {
           Pixl.toast("Log in to save items.", true);
           return;
         }
@@ -907,7 +909,7 @@
 
       $("buy-btn").addEventListener("click", () => {
         if (!selected) return;
-        if (!Pixl.hasToken) {
+        if (!loggedIn) {
           location.href = Pixl.loginUrl();
           return;
         }
@@ -951,7 +953,7 @@
       setInterval(refreshStock, 8000);
 
       async function boot() {
-        if (Pixl.hasToken) wallet = await Pixl.loadWallet();
+        if (loggedIn) wallet = await Pixl.loadWallet();
         try {
           const data = await Pixl.api("/api/shop/items");
           const items = (data.items || []).map((i) => ({
@@ -964,6 +966,12 @@
           claimedIds = new Set((data.claimed || []).map(Number));
           selected = items.find((i) => i.id === itemId) || null;
           saved = !!(selected && selected.saved);
+          if (data.sessionExpired && loggedIn) {
+            loggedIn = false;
+            wallet = null;
+            try { localStorage.removeItem("pixl_token"); } catch {}
+            Pixl.toast("Your session expired. Log in again.", true);
+          }
         } catch (e) {
           if (e.message !== "unauthorized")
             Pixl.toast("Couldn't reach the shop server.", true);

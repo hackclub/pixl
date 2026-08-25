@@ -429,6 +429,14 @@
       let unlockedOnly = false;
       let savedOnly = false;
       let loadingRegion = false;
+      // #loggedIn, live version of Pixl.hasToken
+      let loggedIn = Pixl.hasToken;
+
+      function showGuestState() {
+        $("guest-login-btn").hidden = false;
+        $("guest-login-btn").href = Pixl.loginUrl();
+        $("region-select").disabled = true;
+      }
 
       const CATEGORIES = [
         ["all", "ALL"],
@@ -638,7 +646,7 @@
       // already has saved (usually none yet — a plain bookmark until the
       // player configures it on the detail page).
       async function toggleSave(id) {
-        if (!Pixl.hasToken) {
+        if (!loggedIn) {
           Pixl.toast("Log in to save items.", true);
           return;
         }
@@ -722,6 +730,13 @@
           xp = Number(data.xp || 0);
           claimedIds = new Set((data.claimed || []).map(Number));
           if (data.region) $("region-select").value = data.region;
+          if (data.sessionExpired && loggedIn) {
+            loggedIn = false;
+            wallet = null;
+            try { localStorage.removeItem("pixl_token"); } catch {}
+            showGuestState();
+            Pixl.toast("Your session expired. Log in again.", true);
+          }
         } catch (e) {
           if (e.message !== "unauthorized")
             Pixl.toast("Couldn't reach the shop server.", true);
@@ -737,10 +752,8 @@
       }
 
       async function boot() {
-        if (!Pixl.hasToken) {
-          $("guest-login-btn").hidden = false;
-          $("guest-login-btn").href = Pixl.loginUrl();
-          $("region-select").disabled = true;
+        if (!loggedIn) {
+          showGuestState();
         } else {
           wallet = await Pixl.loadWallet();
         }

@@ -90,6 +90,8 @@ async function attachStock(items: Record<string, unknown>[]): Promise<void> {
 router.get("/api/shop/items", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";
   const session = token ? verifySessionToken(token) : null;
+  // invalid token != guest
+  const sessionExpired = !!token && !session;
 
   const region = session ? await regionFor(session.userId) : "US";
   const { data, error } = await fetchItems(undefined, region);
@@ -202,7 +204,7 @@ router.get("/api/shop/items", async (req, res) => {
     }
   }
 
-  res.json({ ok: true, items, xp, claimed, region });
+  res.json({ ok: true, items, xp, claimed, region, sessionExpired });
 });
 
 // Switch which regional catalog the player shops from.
