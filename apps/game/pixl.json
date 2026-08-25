@@ -54,8 +54,6 @@
       18.75,
       25
     ],
-    "tierKickerUsdPerStep": 0.5,
-    "tierKickerHours": 40,
     "trialBonusRe": 25,
     "levelBands": [
       {

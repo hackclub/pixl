@@ -7,7 +7,6 @@ import {
   levelForRe,
   pxPerHourOver,
   reForHours,
-  tierKickerUsd,
   projectPayoutPx,
 } from "./_generated/config";
 import {
@@ -451,8 +450,6 @@ interface BeneficiaryPayout {
   goalNote: string;
   referralNote: string;
   alreadyPx: number;
-  /** Flat tier bonus in pixels, on top of the hourly rate. */
-  kickerPx: number;
   /** RE this ship earned, for the "you're now level N" line. */
   projectRe: number;
   /** Community-goal multiplier applied to the payout (1 = none). */
@@ -497,18 +494,13 @@ async function creditBeneficiary(
     }
   }
 
-  // Two parts, both in packages/config: the RE-driven rate averaged across
-  // the RE this ship earns on top of the player's lifetime RE
-  // (xpBefore -> xpBefore + projectRe), so RE is player-specific and banked
-  // forever - once a player has earned enough lifetime RE to sit at the
-  // $6.00 cap, every future ship pays at that rate too (RE announced,
-  // Gabin/Ridit/Ricky, 2026-08-25) - plus a flat tier kicker on its first
-  // hours (so tier is felt on short projects, where the RE ramp alone is
-  // worth cents). pxRate below is the *effective* rate including the
-  // kicker, since that is what the player is told.
+  // The RE-driven rate averaged across the RE this ship earns on top of the
+  // player's lifetime RE (xpBefore -> xpBefore + projectRe), so RE is
+  // player-specific and banked forever - once a player has earned enough
+  // lifetime RE to sit at the $6.00 cap, every future ship pays at that rate
+  // too (RE announced, Gabin/Ridit/Ricky, 2026-08-25).
   const xpBefore = await lifetimeRe(userId, projectId);
   const projectRe = reForHours(creditHours, tier);
-  const kickerPx = tierKickerUsd(creditHours, tier) / config.economy.pixelValueUsd;
   let pxRate = pxPerHourOver(xpBefore, xpBefore + projectRe);
   const alreadyPx = await projectPixelTotal(projectId, userId);
   // A project only counts as a "new ship" for referral purposes the first
@@ -542,7 +534,7 @@ async function creditBeneficiary(
     }
   }
 
-  const totalPx = Math.round((creditHours * pxRate + kickerPx) * goalMult);
+  const totalPx = Math.round(creditHours * pxRate * goalMult);
   const deltaPx = totalPx - alreadyPx;
   // Trial ships settle later: the maker picks the Trial prize *or* these
   // pixels, so the payout is computed now and only credited once they choose
@@ -576,7 +568,7 @@ async function creditBeneficiary(
         .is("rewarded_at", null)
         .select("id")
         .maybeSingle();
-      if (!claimed) return { totalPx, deltaPx, pxRate, xpBefore, goalNote, referralNote, alreadyPx, kickerPx, projectRe, goalMult };
+      if (!claimed) return { totalPx, deltaPx, pxRate, xpBefore, goalNote, referralNote, alreadyPx, projectRe, goalMult };
       await db.rpc("adjust_user_pixels", {
         p_user_id: referral.referrer_id,
         p_amount: tier.px,
@@ -610,7 +602,7 @@ async function creditBeneficiary(
     }
   }
 
-  return { totalPx, deltaPx, pxRate, xpBefore, goalNote, referralNote, alreadyPx, kickerPx, projectRe, goalMult };
+  return { totalPx, deltaPx, pxRate, xpBefore, goalNote, referralNote, alreadyPx, projectRe, goalMult };
 }
 
 // Two-pass review. A shipped project always gets a first pass from *some*
@@ -1018,7 +1010,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
   }
   // The flat Trial bonus counts toward level and the community vault, but
   // deliberately not into pxRate above , the rate is meant to track the hours
-  // actually worked, and a flat kicker there would pay the bonus twice.
+  // actually worked.
   const trialBonusRe = linkedTrial ? config.economy.trialBonusRe : 0;
   const shipRe = ownerPayout.projectRe + trialBonusRe;
   const reLine =
@@ -1027,11 +1019,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
     `, putting you at level ${levelForRe(xpBefore + shipRe)}.`;
   if (deltaPx > 0 && !(holdForTrial && trialChoice === "item"))
     credited +=
-      ` Your rate: ${Math.round(pxRate)} px/h ($${(pxRate * config.economy.pixelValueUsd).toFixed(2)}/hr)` +
-      (ownerPayout.kickerPx > 0
-        ? ` plus a T${tierUsed} bonus of ${Math.round(ownerPayout.kickerPx)} px`
-        : "") +
-      ` ,${reLine}`;
+      ` Your rate: ${Math.round(pxRate)} px/h ($${(pxRate * config.economy.pixelValueUsd).toFixed(2)}/hr) ,${reLine}`;
   else if (linkedTrial) credited += ` Either way,${reLine}`;
   if (goalNote && deltaPx > 0) credited += goalNote;
   if (referralNote && deltaPx > 0) credited += referralNote;

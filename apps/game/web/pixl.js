@@ -56,8 +56,6 @@ const Pixl = (() => {
         18.75,
         25
       ],
-      "tierKickerUsdPerStep": 0.5,
-      "tierKickerHours": 40,
       "trialBonusRe": 25,
       "levelBands": [
         {
@@ -120,17 +118,11 @@ const Pixl = (() => {
   function averageUsdPerHourOver(reBefore, reAfter) {
     return payoutUsdPerHour(Math.max(reAfter, reBefore, 0));
   }
-  function tierKickerUsd(hours, tier) {
-    const E = config.economy;
-    const t = Math.min(Math.max(Math.trunc(tier) || 1, 1), E.tierRePerHour.length);
-    const h = Number.isFinite(hours) ? Math.max(hours, 0) : 0;
-    return E.tierKickerUsdPerStep * (t - 1) * Math.min(h, E.tierKickerHours);
-  }
   function projectPayoutUsd(hours, tier, reBefore) {
     const E = config.economy;
     const h = Number.isFinite(hours) ? Math.max(hours, 0) : 0;
     const reAfter = reBefore + reForHours(h, tier);
-    const raw = h * averageUsdPerHourOver(reBefore, reAfter) + tierKickerUsd(h, tier);
+    const raw = h * averageUsdPerHourOver(reBefore, reAfter);
     return Math.min(raw, h * E.maxPayoutUsd);
   }
   // The same total in pixels - what actually gets credited.

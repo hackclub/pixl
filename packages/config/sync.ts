@@ -166,35 +166,10 @@ export function pxPerHourOver(reBefore: number, reAfter: number): number {
   return averageUsdPerHourOver(reBefore, reAfter) / E.pixelValueUsd;
 }
 
-/**
- * Extra dollars a project earns for its tier, on top of the RE-driven rate.
- *
- * The RE ramp alone can't make tier *felt* on a short project: 5 hours moves you
- * a few dozen RE out of the 5000 needed to cap, so a tier-4 5h project paid
- * within a few cents of a tier-1 one. This kicker fixes that - +$0.50/hour per
- * tier step above T1.
- *
- * It only applies to the first \`tierKickerHours\` of a project, because a long
- * tier-4 project is *already* rewarded: it builds RE five times faster, which
- * permanently lifts the rate on everything shipped afterwards. Without the cap a
- * 150h project's tier gap more than doubles and the margin on exactly the most
- * expensive projects sags. With it, the margin stays flat across project sizes.
- *
- * Known trade-off: this makes splitting one long project into several
- * kicker-length submissions worth something. Reviewers see the submissions, so
- * it is visible rather than silent, but it is a real hole - the pure-RE version
- * had none.
- */
-export function tierKickerUsd(hours: number, tier: number): number {
-  const t = Math.min(Math.max(Math.trunc(tier) || 1, 1), E.tierRePerHour.length);
-  const h = Number.isFinite(hours) ? Math.max(hours, 0) : 0;
-  return E.tierKickerUsdPerStep * (t - 1) * Math.min(h, E.tierKickerHours);
-}
-
 export function projectPayoutUsd(hours: number, tier: number, reBefore: number): number {
   const h = Number.isFinite(hours) ? Math.max(hours, 0) : 0;
   const reAfter = reBefore + reForHours(h, tier);
-  const raw = h * averageUsdPerHourOver(reBefore, reAfter) + tierKickerUsd(h, tier);
+  const raw = h * averageUsdPerHourOver(reBefore, reAfter);
   return Math.min(raw, h * E.maxPayoutUsd);
 }
 

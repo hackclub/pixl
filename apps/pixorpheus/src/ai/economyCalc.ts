@@ -7,7 +7,7 @@ import {
 
 // Pixo is an LLM: ask it "tier 2, 50h, how much do I make" and it will confidently
 // invent a number, because the real answer is the RE-driven rate at this project's
-// own ending RE plus a capped tier kicker — not something to eyeball from the persona. So we
+// own ending RE — not something to eyeball from the persona. So we
 // detect pay/rate questions, pull the tier and hours out of the text, and hand Pixo
 // the EXACT figures from the same payout functions the server credits with. Pixo then
 // just relays them in its own voice. If we can't pull concrete numbers, we still give
@@ -119,8 +119,7 @@ export function economyBrief(texts: string[]): string | null {
     lines.push(
       `No tier/hours given, so the mechanics: base rate is ${money(E.basePayoutUsd, toPx(E.basePayoutUsd))}/hr, ` +
         `climbing in steps to a max of ${money(E.maxPayoutUsd, toPx(E.maxPayoutUsd))}/hr once your LIFETIME RE (banked forever ` +
-        `across every project) crosses ${E.reForMaxPayout.toLocaleString()} RE. Each hour earns ${E.tierRePerHour.map(reRate).join("/")} RE at T1/T2/T3/T4, ` +
-        `plus a flat kicker of +$${E.tierKickerUsdPerStep.toFixed(2)}/hr per tier above T1 on the first ${E.tierKickerHours}h. ` +
+        `across every project) crosses ${E.reForMaxPayout.toLocaleString()} RE. Each hour earns ${E.tierRePerHour.map(reRate).join("/")} RE at T1/T2/T3/T4. ` +
         `Tell them to give a tier + hours for an exact number.`,
     );
   }

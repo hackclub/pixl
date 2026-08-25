@@ -18,8 +18,6 @@ const config = {
       { re: 7500, usd: 6.0 },
     ],
     tierRePerHour: [10.714285714285714, 12.5, 15, 25],
-    tierKickerUsdPerStep: 0.5,
-    tierKickerHours: 40,
     trialBonusRe: 25,
     levelBands: [
       { throughLevel: 10, rePerLevel: 10 },

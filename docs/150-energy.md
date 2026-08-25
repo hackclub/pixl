@@ -81,14 +81,6 @@ For example, ship a {{capExampleHours}} hour T4 project from scratch and its own
 Every hour you ship, at any tier, banks RE forever and pushes your rate up for every ship after it, including the one that earned it.
 :::
 
-## The tier bonus
-
-That climb is deliberately slow, because {{reCap}} RE is a lot of shipping for one project. On a short project it would barely register, and a tier 4 weekend build would pay about the same as a tier 1 one. So tier also pays a flat bonus on top: {{kickerUsd}} an hour for every tier above T1, on the first {{kickerHours}} hours of a project.
-
-So a 10 hour T4 project earns {{kickerExampleUsd}}, about {{kickerExamplePx}}, on top of whatever its normal rate pays. Put together: a fresh player's first 10 hours at T4 earns {{exampleRampUsd}} at the base rate (its own RE barely dents {{reCap}}, so it doesn't move the payout table yet) plus the {{kickerExampleUsd}} kicker, for {{exampleTotalUsd}} total, about {{exampleTotalPx}}.
-
-After that the bonus stops, because by then a high tier project is already earning RE several times faster than a low tier one, so its own RE has already pushed the player several steps up the payout table without needing the flat bonus's help.
-
 ## Levels
 
 Your level is a display of lifetime RE and nothing more. Levels run 1 to {{maxLevel}}, each one costs more RE than the last, and they have **no effect on what you get paid**: the rate comes straight off RE. Level is just there so the shipping shows up somewhere.

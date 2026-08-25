@@ -12,8 +12,6 @@ export interface PixlConfig {
     reForMaxPayout: number;
     payoutSteps: { re: number; usd: number }[];
     tierRePerHour: number[];
-    tierKickerUsdPerStep: number;
-    tierKickerHours: number;
     trialBonusRe: number;
     levelBands: { throughLevel: number; rePerLevel: number }[];
   };
@@ -33,8 +31,6 @@ export function buildTokens(config: PixlConfig): Record<string, string> {
     maxUsd: `$${E.maxPayoutUsd.toFixed(2)}`,
     reCap: E.reForMaxPayout.toLocaleString("en-US"),
     maxLevel: String(E.levelBands[E.levelBands.length - 1]!.throughLevel),
-    kickerUsd: `$${E.tierKickerUsdPerStep.toFixed(2)}`,
-    kickerHours: String(E.tierKickerHours),
     trialBonusRe: String(E.trialBonusRe),
     t1: reRate(E.tierRePerHour[0]!),
     t2: reRate(E.tierRePerHour[1]!),
@@ -47,12 +43,6 @@ export function buildTokens(config: PixlConfig): Record<string, string> {
       timeZone: "UTC",
     }).format(new Date(config.hackatimeCutoff)),
   };
-
-  const exampleHours = 10;
-  const exampleTier = E.tierRePerHour.length;
-  const exampleUsd = E.tierKickerUsdPerStep * (exampleTier - 1) * exampleHours;
-  tokens.kickerExampleUsd = `$${exampleUsd.toFixed(2)}`;
-  tokens.kickerExamplePx = `${Math.round(exampleUsd / E.pixelValueUsd)} px`;
 
   // Flat step lookup, matching payoutUsdPerHour in packages/config/sync.ts
   // exactly - the rate is whichever step's RE threshold is the highest one
@@ -67,19 +57,11 @@ export function buildTokens(config: PixlConfig): Record<string, string> {
     return usd;
   };
 
-  const exampleProjectRe = E.tierRePerHour[exampleTier - 1]! * exampleHours;
-  const exampleRampUsd = rateAt(exampleProjectRe) * exampleHours;
-  const exampleTotalUsd = exampleRampUsd + exampleUsd;
-  tokens.exampleRampUsd = `$${exampleRampUsd.toFixed(2)}`;
-  tokens.exampleTotalUsd = `$${exampleTotalUsd.toFixed(2)}`;
-  tokens.exampleTotalPx = `${Math.round(exampleTotalUsd / E.pixelValueUsd)} px`;
-
   const capTier = E.tierRePerHour.length;
   const capHours = Math.round(E.reForMaxPayout / E.tierRePerHour[capTier - 1]!);
-  const capKickerUsd = E.tierKickerUsdPerStep * (capTier - 1) * Math.min(capHours, E.tierKickerHours);
   // Same cap projectPayoutUsd applies server-side: a project can never be paid
-  // more than its hours times the max rate, even with the kicker added on.
-  const capUsd = Math.min(rateAt(E.reForMaxPayout) * capHours + capKickerUsd, capHours * E.maxPayoutUsd);
+  // more than its hours times the max rate.
+  const capUsd = Math.min(rateAt(E.reForMaxPayout) * capHours, capHours * E.maxPayoutUsd);
   tokens.capExampleHours = String(capHours);
   tokens.capExampleUsd = `$${capUsd.toFixed(2)}`;
   tokens.capExamplePx = `${Math.round(capUsd / E.pixelValueUsd)} px`;

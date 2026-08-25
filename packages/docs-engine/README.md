@@ -38,8 +38,7 @@ Beyond normal markdown:
   `pixl.json`. Unknown tokens fail the build.
 
 Available tokens: `basePx` `maxPx` `baseUsd` `maxUsd` `reCap` `maxLevel`
-`kickerUsd` `kickerHours` `kickerExampleUsd` `kickerExamplePx` `t1`–`t4`
-`cutoff` `band1From`/`To`/`Per`/`Total` (and `band2`, `band3`).
+`t1`–`t4` `cutoff` `band1From`/`To`/`Per`/`Total` (and `band2`, `band3`).
 
 ## Output
 
