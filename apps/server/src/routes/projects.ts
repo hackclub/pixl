@@ -82,6 +82,31 @@ router.get("/api/projects", async (req, res) => {
         (earned.get(t.project_id as number) ?? 0) + Number(t.amount),
       );
   }
+  const journalSeconds = new Map<number, number>();
+  const ownedIds = (owned ?? []).map((p) => p.id as number);
+  if (ownedIds.length > 0) {
+    const { data: jrows } = await supabase
+      .from("project_journals")
+      .select("project_id, hours")
+      .in("project_id", ownedIds);
+    for (const j of jrows ?? [])
+      journalSeconds.set(
+        j.project_id as number,
+        (journalSeconds.get(j.project_id as number) ?? 0) + (Number(j.hours) || 0) * 3600,
+      );
+  }
+  if (collabProjectIds.length > 0) {
+    const { data: jrows } = await supabase
+      .from("project_journals")
+      .select("project_id, hours")
+      .in("project_id", collabProjectIds)
+      .eq("user_id", session.userId);
+    for (const j of jrows ?? [])
+      journalSeconds.set(
+        j.project_id as number,
+        (journalSeconds.get(j.project_id as number) ?? 0) + (Number(j.hours) || 0) * 3600,
+      );
+  }
   // Resolve the linked Trial name, and what the Trial actually hands over, for
   // any project shipped for one - so the client can show the name and (for an
   // approved ship still waiting on the reward choice) both sides of that choice
@@ -125,6 +150,7 @@ router.get("/api/projects", async (req, res) => {
     projects: projects.map((p) => ({
       ...p,
       pixels_earned: earned.get(p.id as number) ?? 0,
+      journal_seconds: journalSeconds.get(p.id as number) ?? 0,
       sidequest_name: p.sidequest_id
         ? (trialName.get(p.sidequest_id as number) ?? null)
         : null,

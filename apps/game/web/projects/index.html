@@ -1505,6 +1505,14 @@
         </div>`;
       }
 
+      function trackedChipHtml(p) {
+        const htSecs = linkedSeconds(p);
+        const jSecs = Number(p.journal_seconds) || 0;
+        const total = htSecs + jSecs;
+        if (!total) return "";
+        return `<span class="chip teal tip-wrap" tabindex="0"><span class="tip-main">${Pixl.hours(total)}</span><span class="tip-pop">Hackatime: ${Pixl.hours(htSecs)} · Journal: ${Pixl.hours(jSecs)}</span></span>`;
+      }
+
       function renderList() {
         $("new-btn").style.display = "";
         const view = $("view");
@@ -1534,6 +1542,7 @@
               <a class="proj-name" href="#p=${p.id}">${Pixl.esc(p.name)}</a>
               <span class="chip ${cls}">${label}</span>
               <span class="chip">${LEVELS[(p.level || 1) - 1][0]}</span>
+              ${trackedChipHtml(p)}
               ${p.trial_reward_choice === "pending" ? `<span class="chip gold">TRIAL REWARD WAITING</span>` : ""}
             </div>
             ${p.description ? `<div class="proj-meta"><span>${Pixl.esc(p.description)}</span></div>` : ""}
