@@ -90,6 +90,16 @@ export default async function AuditNotesPage() {
                         </p>
                       </div>
                     ))}
+                  {a.note?.trim() && (
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Note to player
+                      </div>
+                      <p className="text-sm text-foreground/80 mt-1 whitespace-pre-wrap">
+                        {a.note}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </Card>
             );
