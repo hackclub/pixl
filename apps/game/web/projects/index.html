@@ -1245,6 +1245,8 @@
         bom_required: "Upload a Bill of Materials (.csv) before shipping a funded project.",
         cart_screenshot_required: "Upload at least one cart screenshot (with shipping) before shipping a funded project.",
         funding_amount_required: "Enter how much funding you need before shipping.",
+        design_demo_invalid: "A CAD Models demo needs a kicanvas.org link (or a video) showing the design.",
+        build_demo_video_required: "A hardware demo needs to be a video (YouTube, Vimeo, Loom, Streamable, or Google Drive) showing it working.",
       };
       // #keep-real-reason, e.g. upload()'s "That image was rejected: ..." isn't
       // a snake_case code so it'd never match ERRORS - show it instead of
@@ -1935,14 +1937,22 @@
         }
         if ($("f-kind")) {
           const kindNote = () => {
+            const isHardware = $("f-kind").value === "hardware";
+            const isDesign = isHardware && $("f-type") && $("f-type").value === "cad";
+            const demoHint = !isHardware
+              ? ""
+              : isDesign
+                ? " Demo: a kicanvas.org link to the design, or a video."
+                : " Demo: a video showing the build working - a photo or CAD link won't ship.";
             $("f-kind-note").textContent =
-              $("f-kind").value === "hardware"
+              (isHardware
                 ? "Hardware: Hackatime is optional - journal your hours and they count too. Goes to the hardware review queue."
-                : "Software: needs Hackatime hours to ship.";
+                : "Software: needs Hackatime hours to ship.") + demoHint;
             if ($("f-funding-block"))
-              $("f-funding-block").style.display = $("f-kind").value === "hardware" ? "" : "none";
+              $("f-funding-block").style.display = isHardware ? "" : "none";
           };
           $("f-kind").addEventListener("change", kindNote);
+          if ($("f-type")) $("f-type").addEventListener("change", kindNote);
           kindNote();
         }
         bindFundingForm(p);

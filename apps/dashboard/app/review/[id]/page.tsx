@@ -153,7 +153,12 @@ export default async function ReviewDetail({
   const journalHours =
     Math.round(journals.reduce((s, j) => s + (Number(j.hours) || 0), 0) * 10) / 10;
   const hackatimeHours = Math.round(((p.hackatime_seconds ?? 0) / 3600) * 10) / 10;
-  const hours = Math.round((hackatimeHours + journalHours) * 10) / 10;
+  // For hardware ships, hackatime_seconds is already journal + Hackatime combined
+  // (see 0130_project_kind.sql / the ship route) — adding journalHours again here
+  // would double-count it. Same "hackatime if tracked, else journal" rule
+  // claimedHoursFor() in actions.ts uses for the actual payout, kept in sync so
+  // the cap shown here matches what reviewProject will credit.
+  const hours = hackatimeHours > 0 ? hackatimeHours : journalHours;
   const htPct = hours > 0 ? Math.round((hackatimeHours / hours) * 100) : 0;
 
   // Same "hackatime if tracked, else journal" source-of-truth as

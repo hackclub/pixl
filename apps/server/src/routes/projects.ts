@@ -147,6 +147,44 @@ function isGithubRepoUrl(url: string): boolean {
   return u.pathname.split("/").filter(Boolean).length >= 2;
 }
 
+// A hardware "design" ship (project_type "cad") never got built, so a
+// schematic/PCB viewer link stands in for a demo. KiCanvas is the one
+// reviewers actually use for this.
+function isKicanvasUrl(url: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== "https:" && u.protocol !== "http:") return false;
+  const host = u.hostname.replace(/^www\./, "").toLowerCase();
+  return host === "kicanvas.org";
+}
+
+const VIDEO_HOSTS = new Set([
+  "youtube.com",
+  "youtu.be",
+  "vimeo.com",
+  "loom.com",
+  "streamable.com",
+  "drive.google.com",
+]);
+
+// A hardware "build" ship must demo the physical thing actually working , a
+// screenshot or a CAD viewer link doesn't show that, only a video does.
+function isVideoUrl(url: string): boolean {
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== "https:" && u.protocol !== "http:") return false;
+  const host = u.hostname.replace(/^www\./, "").toLowerCase();
+  return VIDEO_HOSTS.has(host);
+}
+
 // Players routinely paste a link without the scheme ("foo.itch.io/game"). Store
 // it with https:// so it's a real URL — otherwise every liveness check (which
 // does fetch(url)) throws and the ship is rejected as "unreachable".
@@ -508,6 +546,21 @@ router.post("/api/projects/:id/ship", async (req, res) => {
       return res.status(400).json({ ok: false, error: "cart_screenshot_required" });
     if (!(Number(project.funding_usd) > 0))
       return res.status(400).json({ ok: false, error: "funding_amount_required" });
+  }
+
+  // A hardware "design" (CAD Models) ship never got physically built, so a
+  // schematic/PCB viewer link stands in for a demo; anything else claiming to
+  // be hardware needs a video proving the physical build actually works ,
+  // neither a screenshot nor a CAD link show that.
+  if (isHardware) {
+    const isDesign = project.project_type === "cad";
+    const demoUrl = project.demo_url as string;
+    if (isDesign) {
+      if (!isKicanvasUrl(demoUrl) && !isVideoUrl(demoUrl))
+        return res.status(400).json({ ok: false, error: "design_demo_invalid" });
+    } else if (!isVideoUrl(demoUrl)) {
+      return res.status(400).json({ ok: false, error: "build_demo_video_required" });
+    }
   }
 
   const { data: userRow } = await supabase
