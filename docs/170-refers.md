@@ -12,8 +12,8 @@ description: Bring someone into Pixl and you both get paid for it, once they act
 
 Your referral code is on the refers page, six characters, yours permanently. The person you're referring enters it on their side.
 
-::: warn Two days, then it's gone
-A code can only be applied in the referred player's **first 2 days** on Pixl. After that it's refused. Send people your code with the invite, not a week later.
+::: warn Six hours, then it's gone
+A code can only be applied in the referred player's **first 6 hours** on Pixl. After that it's refused. Send people your code with the invite, not a day later.
 :::
 
 That window exists so referrals mean actual new builders. Without it, two people who've both been shipping for months could "refer" each other after the fact and collect for nothing.

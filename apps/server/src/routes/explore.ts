@@ -3,6 +3,7 @@ import { verifySessionToken } from "../auth/session.js";
 import { supabase } from "../db/client.js";
 import { activeEvents } from "../events.js";
 import { approvedHoursFor, lifetimeRe, levelForRe } from "../xp.js";
+import { REFERRAL_WINDOW_HOURS } from "./referral.js";
 
 const router = Router();
 
@@ -13,10 +14,17 @@ router.get("/api/explore/players", async (req, res) => {
   if (!session) return res.status(401).json({ ok: false });
 
   const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  // Accounts still inside their referral window are held out of the
+  // directory , sorting newest-first otherwise turns this into a lookup
+  // table for finding fresh signups to DM a referral code at (see
+  // apps/server/src/routes/referral.ts). They show up here as soon as that
+  // window closes and there's nothing left to gain by targeting them.
+  const referralSafeCutoff = new Date(Date.now() - REFERRAL_WINDOW_HOURS * 3600_000).toISOString();
   const buildQuery = (fields: string) => {
     let query = supabase
       .from("users")
       .select(fields)
+      .lte("created_at", referralSafeCutoff)
       .order("created_at", { ascending: false })
       .limit(100);
     if (q) query = query.ilike("display_name", `%${q}%`);

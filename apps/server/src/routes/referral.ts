@@ -18,7 +18,13 @@ const BOOST_SHIP_CAP = 1;
 // each other after the fact and collect the payout with zero real user
 // acquisition , worse, veteran players are a safer bet for hitting a big
 // reward tier than an actual newcomer, which inverts the whole incentive.
-const REFERRAL_WINDOW_DAYS = 2;
+//
+// Kept short (hours, not days): a multi-day window is long enough for someone
+// to find a brand-new account on /explore and DM them a code to apply after
+// the fact, stealing referral credit for a signup they had nothing to do
+// with. /explore also hides any account still inside this window (see
+// apps/server/src/routes/explore.ts) so there's nothing to browse for.
+export const REFERRAL_WINDOW_HOURS = 6;
 
 function randomCode(): string {
   let out = "";
@@ -79,13 +85,13 @@ router.get("/api/referral/me", async (req, res) => {
   const referrals = referredByMe ?? [];
   const rewarded = referrals.filter((r) => r.rewarded_at);
   const accountAgeMs = me?.created_at ? Date.now() - new Date(me.created_at as string).getTime() : Infinity;
-  const canApply = !asReferred && accountAgeMs <= REFERRAL_WINDOW_DAYS * 86400_000;
+  const canApply = !asReferred && accountAgeMs <= REFERRAL_WINDOW_HOURS * 3600_000;
 
   res.json({
     ok: true,
     code,
     canApply,
-    referralWindowDays: REFERRAL_WINDOW_DAYS,
+    referralWindowHours: REFERRAL_WINDOW_HOURS,
     boost: asReferred
       ? {
           shipsUsed: asReferred.boosted_ships,
@@ -122,10 +128,10 @@ router.post("/api/referral/apply", async (req, res) => {
     .eq("id", session.userId)
     .single();
   const accountAgeMs = me?.created_at ? Date.now() - new Date(me.created_at as string).getTime() : Infinity;
-  if (accountAgeMs > REFERRAL_WINDOW_DAYS * 86400_000)
+  if (accountAgeMs > REFERRAL_WINDOW_HOURS * 3600_000)
     return res.status(400).json({
       ok: false,
-      reason: `Referral codes can only be applied within your first ${REFERRAL_WINDOW_DAYS} days on Pixl.`,
+      reason: `Referral codes can only be applied within your first ${REFERRAL_WINDOW_HOURS} hours on Pixl.`,
     });
 
   const { data: referrer } = await supabase
