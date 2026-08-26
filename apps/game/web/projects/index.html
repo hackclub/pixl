@@ -3086,10 +3086,20 @@
         return tlItem(icon, title, e.at, hours, note);
       }
 
+      // Resetting height to "auto" to re-measure scrollHeight briefly shrinks
+      // the textarea back to its unstyled size, which shrinks the page's total
+      // scroll extent for an instant. If you're scrolled near the bottom the
+      // browser clamps scrollTop to that shorter extent right then, so the
+      // page visibly jumps up on every keystroke once it's grown past the
+      // fold. Restoring scrollTop synchronously (before the browser paints)
+      // cancels that jump instead of letting it flash.
       function autoGrow(el) {
         if (!el) return;
+        const scroller = document.scrollingElement || document.documentElement;
+        const prevScroll = scroller.scrollTop;
         el.style.height = "auto";
         el.style.height = el.scrollHeight + "px";
+        scroller.scrollTop = prevScroll;
       }
 
       function mdApply(ta, action) {
@@ -3254,8 +3264,16 @@
       async function attachImageToJournal(file, ta = $("j-content")) {
         setImageBtnBusy(true);
         const marker = "![Uploading image…]()";
-        const inserted = (ta.value ? "\n" : "") + marker;
-        ta.value += inserted;
+        const selStart = ta.selectionStart ?? ta.value.length;
+        const selEnd = ta.selectionEnd ?? ta.value.length;
+        const before = ta.value.slice(0, selStart);
+        const after = ta.value.slice(selEnd);
+        const leadingNl = before && !before.endsWith("\n") ? "\n" : "";
+        const trailingNl = after && !after.startsWith("\n") ? "\n" : "";
+        const inserted = leadingNl + marker + trailingNl;
+        ta.value = before + inserted + after;
+        const caret = before.length + inserted.length;
+        ta.selectionStart = ta.selectionEnd = caret;
         ta.dispatchEvent(new Event("input", { bubbles: true }));
         try {
           const url = await Pixl.upload(file);
