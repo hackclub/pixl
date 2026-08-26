@@ -2787,29 +2787,27 @@
         paintImportBox();
       }
 
+      // Always visible , even with zero known candidates. Matching a shipped
+      // entry or a Stardance project depends on things outside our control
+      // (the ships.hackclub.com registry, a third-party crawler's freshness),
+      // so hiding the button on an empty result reads as "this is broken"
+      // rather than "nothing matched yet". Each picker shows its own empty
+      // state instead.
       function paintImportBox() {
         const slot = $("ysws-import-slot");
         if (!slot) return;
         const total = yswsShips.length + unshippedCandidates.length;
-        if (total === 0) {
-          slot.innerHTML = "";
-          return;
-        }
         slot.innerHTML = `
     <div class="invite-box">
       <div class="invite-box-head">
         <span class="invite-box-title">GOT SOMETHING ELSEWHERE?</span>
-        <span class="invite-box-sub">${total} project${total === 1 ? "" : "s"} from other YSWS programs , import one to keep building it here.</span>
+        <span class="invite-box-sub">${total > 0 ? `${total} project${total === 1 ? "" : "s"} found , import one to keep building it here.` : "Bring in a project you shipped elsewhere, or one still in progress on Stardance."}</span>
       </div>
       <div class="invite-box-row">
         <button class="btn" id="ysws-import-btn">IMPORT</button>
       </div>
     </div>`;
-        $("ysws-import-btn").addEventListener("click", () => {
-          if (yswsShips.length > 0 && unshippedCandidates.length > 0) openImportChooser();
-          else if (yswsShips.length > 0) openYswsPicker();
-          else openUnshippedPicker();
-        });
+        $("ysws-import-btn").addEventListener("click", openImportChooser);
       }
 
       function openImportChooser() {
@@ -2878,7 +2876,7 @@
           you track from here counts toward what you're paid , your reviewer sees the
           earlier ship either way.
         </div>
-        <div class="ysws-pick-list">${rows}</div>
+        <div class="ysws-pick-list">${rows || `<div class="faint" style="padding:12px 4px">No shipped-elsewhere projects found for your Slack account yet. If you know you have one on ships.hackclub.com, check back later , that registry updates periodically.</div>`}</div>
         <div class="ysws-modal-acts"><button class="btn dark">CANCEL</button></div>
       </div>`;
         document.body.appendChild(root);
@@ -2939,7 +2937,7 @@
           <strong>Hours logged there don't carry over.</strong> Only new time you track
           from here counts toward what you're paid.
         </div>
-        <div class="ysws-pick-list">${rows}</div>
+        <div class="ysws-pick-list">${rows || `<div class="faint" style="padding:12px 4px">No Stardance projects matched your account yet. Make sure your Stardance username matches your Pixl name and it's had time to be crawled , this can take a bit for a brand-new project.</div>`}</div>
         <div class="ysws-modal-acts"><button class="btn dark">CANCEL</button></div>
       </div>`;
         document.body.appendChild(root);
