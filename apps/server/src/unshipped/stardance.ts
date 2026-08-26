@@ -105,7 +105,10 @@ async function scrapeStardanceProjects(username: string): Promise<StardanceProje
       description: "",
       repoUrl: "",
       demoUrl: "",
-      bannerUrl: "https://stardance.hackclub.com/assets/profile/default-banner-4827579f.png",
+      // No fallback image here on purpose — Stardance's own default banner
+      // is their branding, not a real project thumbnail, and we don't want
+      // it showing up on an imported Pixl project.
+      bannerUrl: "",
     });
   }
 
@@ -124,8 +127,11 @@ async function scrapeStardanceProjects(username: string): Promise<StardanceProje
           detailHtml.match(/<meta\s+property="og:description"\s+content="([^"]*)"/i);
         if (descMatch) p.description = descMatch[1].slice(0, 2000);
 
+        // Skip it if this is just Stardance's own default banner (their
+        // og:image falls back to it when the project has no real screenshot)
+        // — that's their branding, not this project's thumbnail.
         const imageMatch = detailHtml.match(/<meta\s+property="og:image"\s+content="([^"]*)"/i);
-        if (imageMatch) p.bannerUrl = imageMatch[1];
+        if (imageMatch && !imageMatch[1].includes("default-banner")) p.bannerUrl = imageMatch[1];
 
         // repoUrl is safe to scrape this way — it's constrained to github.com
         // so a false match is unlikely. demoUrl has no such constraint (it
