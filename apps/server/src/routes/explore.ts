@@ -6,12 +6,12 @@ import { approvedHoursFor, lifetimeRe, levelForRe } from "../xp.js";
 
 const router = Router();
 
-// Public-to-players directory: browse everyone, their projects and journals.
-router.get("/api/explore/players", async (req, res) => {
-  const token = typeof req.query.token === "string" ? req.query.token : "";
-  const session = token ? verifySessionToken(token) : null;
-  if (!session) return res.status(401).json({ ok: false });
+// #public-safe-only, no ban_reason/review_note/system_note/airtable_record_id etc
+const PUBLIC_PROJECT_COLUMNS =
+  "id, user_id, name, description, type, level, status, image_url, repo_url, demo_url, shipped_at, created_at, hackatime_seconds, is_peak";
 
+// #public, no session needed - fields already safe (no slack_id/email)
+router.get("/api/explore/players", async (req, res) => {
   const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
   const buildQuery = (fields: string) => {
     let query = supabase
@@ -365,22 +365,26 @@ router.get("/api/explore/players/:id", async (req, res) => {
 
 // Browse everyone's projects (including drafts), newest first, with optional
 // search/tier/shipped filters.
+// #public, token optional (just for has_upvoted/has_downvoted)
 router.get("/api/explore/projects", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";
   const session = token ? verifySessionToken(token) : null;
-  if (!session) return res.status(401).json({ ok: false });
 
   const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
   const tier = typeof req.query.tier === "string" ? Number(req.query.tier) : NaN;
   const shipped = typeof req.query.shipped === "string" ? req.query.shipped : "";
+  const rawLimit = typeof req.query.limit === "string" ? Number(req.query.limit) : NaN;
+  const limit = Number.isInteger(rawLimit) ? Math.max(1, Math.min(100, rawLimit)) : 100;
   let query = supabase
     .from("projects")
-    .select("*")
+    .select(PUBLIC_PROJECT_COLUMNS)
     .is("archived_at", null)
     .is("rejected_at", null)
     .is("banned_at", null)
+    // #no-fraud-review-leak
+    .neq("status", "fraud_review")
     .order("created_at", { ascending: false })
-    .limit(100);
+    .limit(limit);
   if (q) query = query.ilike("name", `%${q}%`);
   if (Number.isInteger(tier) && tier >= 1 && tier <= 4) query = query.eq("level", tier);
   if (shipped === "shipped") query = query.eq("status", "approved");
@@ -392,13 +396,18 @@ router.get("/api/explore/projects", async (req, res) => {
   }
 
   const ids = [...new Set((projects ?? []).map((p) => p.user_id as string))];
-  const names = new Map<string, string>();
+  const owners = new Map<string, { id: string; display_name: string; avatar_url: string | null }>();
   if (ids.length > 0) {
     const { data: users } = await supabase
       .from("users")
-      .select("id, display_name")
+      .select("id, display_name, avatar_url")
       .in("id", ids);
-    for (const u of users ?? []) names.set(u.id as string, u.display_name as string);
+    for (const u of users ?? [])
+      owners.set(u.id as string, {
+        id: u.id as string,
+        display_name: u.display_name as string,
+        avatar_url: (u.avatar_url as string) || null,
+      });
   }
 
   // Upvote/downvote count per project + whether this viewer already voted each one.
@@ -415,12 +424,12 @@ router.get("/api/explore/projects", async (req, res) => {
     for (const u of ups ?? []) {
       const pid = u.project_id as number;
       upCounts.set(pid, (upCounts.get(pid) ?? 0) + 1);
-      if (u.voter_id === session.userId) myUp.add(pid);
+      if (session && u.voter_id === session.userId) myUp.add(pid);
     }
     for (const d of downs ?? []) {
       const pid = d.project_id as number;
       downCounts.set(pid, (downCounts.get(pid) ?? 0) + 1);
-      if (d.voter_id === session.userId) myDown.add(pid);
+      if (session && d.voter_id === session.userId) myDown.add(pid);
     }
   }
 
@@ -428,7 +437,8 @@ router.get("/api/explore/projects", async (req, res) => {
     ok: true,
     projects: (projects ?? []).map((p) => ({
       ...p,
-      owner_name: names.get(p.user_id as string) ?? "?",
+      owner_name: owners.get(p.user_id as string)?.display_name ?? "?",
+      owner: owners.get(p.user_id as string) ?? null,
       upvotes: upCounts.get(p.id as number) ?? 0,
       has_upvoted: myUp.has(p.id as number),
       downvotes: downCounts.get(p.id as number) ?? 0,
@@ -437,33 +447,35 @@ router.get("/api/explore/projects", async (req, res) => {
   });
 });
 
+// #public, token optional (just for has_upvoted/has_downvoted)
 router.get("/api/explore/projects/:id", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";
   const session = token ? verifySessionToken(token) : null;
-  if (!session) return res.status(401).json({ ok: false });
 
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ ok: false });
 
   const { data: project, error } = await supabase
     .from("projects")
-    .select("*")
+    .select(PUBLIC_PROJECT_COLUMNS)
     .eq("id", id)
     .is("archived_at", null)
     .is("rejected_at", null)
     .is("banned_at", null)
+    .neq("status", "fraud_review")
     .maybeSingle();
   if (error || !project) return res.status(404).json({ ok: false });
 
   const [owner, entries, ups, downs, reviews] = await Promise.all([
     supabase
       .from("users")
-      .select("id, display_name")
+      .select("id, display_name, avatar_url")
       .eq("id", project.user_id as string)
       .maybeSingle(),
+    // #safe-fields-only
     supabase
       .from("project_journals")
-      .select("*")
+      .select("id, content, hours, created_at, edited_at")
       .eq("project_id", id)
       .order("created_at", { ascending: false }),
     supabase
@@ -493,9 +505,9 @@ router.get("/api/explore/projects/:id", async (req, res) => {
     entries: entries.data ?? [],
     reviews: reviews.data ?? [],
     upvotes: upvoters.length,
-    has_upvoted: upvoters.some((u) => u.voter_id === session.userId),
+    has_upvoted: !!session && upvoters.some((u) => u.voter_id === session.userId),
     downvotes: downvoters.length,
-    has_downvoted: downvoters.some((u) => u.voter_id === session.userId),
+    has_downvoted: !!session && downvoters.some((u) => u.voter_id === session.userId),
   });
 });
 
