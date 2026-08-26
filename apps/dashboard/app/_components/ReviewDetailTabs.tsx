@@ -37,7 +37,11 @@ const HURT_URL = "https://hurt-xi.vercel.app";
 // colon/slashes need to reach it literal) , so this must NOT be
 // encodeURIComponent'd like a normal query value.
 function hurtSrc(repoUrl: string): string {
-  return `${HURT_URL}/?repo=${repoUrl}`;
+  // GitHub's own site tolerates a trailing .git on a repo URL, but HURT's
+  // GitHub API call doesn't , it treats ".git" as part of the repo name and
+  // 404s. Strip it so a repo_url saved from a clone link still loads.
+  const clean = repoUrl.replace(/\.git\/?$/i, "");
+  return `${HURT_URL}/?repo=${clean}`;
 }
 
 // HURT only accepts github.com URLs , anything else (GitLab, a zip, a bare
