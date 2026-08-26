@@ -150,14 +150,21 @@ export default async function ReviewDetail({
   ]);
   const claimHandle = !claim.ok && claim.by ? await slackHandle(claim.by) : null;
 
+  const hackatimeProjects = p.hackatime_projects ?? [];
   const journalHours =
     Math.round(journals.reduce((s, j) => s + (Number(j.hours) || 0), 0) * 10) / 10;
-  const hackatimeHours = Math.round(((p.hackatime_seconds ?? 0) / 3600) * 10) / 10;
-  // For hardware ships, hackatime_seconds is already journal + Hackatime combined
-  // (see 0130_project_kind.sql / the ship route) — adding journalHours again here
-  // would double-count it. Same "hackatime if tracked, else journal" rule
-  // claimedHoursFor() in actions.ts uses for the actual payout, kept in sync so
-  // the cap shown here matches what reviewProject will credit.
+  // For a hardware ship with no Hackatime project linked, hackatime_seconds
+  // isn't real Hackatime time — the ship route (projects.ts) folds journal
+  // hours into that same column so a journal-only hardware ship can meet the
+  // 1h floor (see 0130_project_kind.sql). Showing it as "Hackatime" here would
+  // double-list the same hours under both rows below.
+  const hackatimeHours =
+    p.kind === "hardware" && hackatimeProjects.length === 0
+      ? 0
+      : Math.round(((p.hackatime_seconds ?? 0) / 3600) * 10) / 10;
+  // Same "hackatime if tracked, else journal" rule claimedHoursFor() in
+  // actions.ts uses for the actual payout, kept in sync so the cap shown here
+  // matches what reviewProject will credit.
   const hours = hackatimeHours > 0 ? hackatimeHours : journalHours;
   const htPct = hours > 0 ? Math.round((hackatimeHours / hours) * 100) : 0;
 
@@ -212,7 +219,6 @@ export default async function ReviewDetail({
   // They're independent, so run them concurrently , the page is only as slow as
   // the slowest one, not their sum. The commit stats + tracked-time attach form
   // one chain (both mutate `commits`) that runs alongside the rest.
-  const hackatimeProjects = p.hackatime_projects ?? [];
   const tokenPromise = hackatimeProjects.length
     ? db
         .from("users")
