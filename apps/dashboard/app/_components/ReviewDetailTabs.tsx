@@ -32,8 +32,12 @@ export interface YswsImport {
 // never has to leave the dashboard to run a fraud check.
 const HURT_URL = "https://hurt-xi.vercel.app";
 
+// HURT reads this with URLSearchParams, which unescapes it fine either way,
+// but its own GitHub API calls choke on a percent-encoded repo URL (the
+// colon/slashes need to reach it literal) , so this must NOT be
+// encodeURIComponent'd like a normal query value.
 function hurtSrc(repoUrl: string): string {
-  return `${HURT_URL}/?repo=${encodeURIComponent(repoUrl)}`;
+  return `${HURT_URL}/?repo=${repoUrl}`;
 }
 
 // HURT only accepts github.com URLs , anything else (GitLab, a zip, a bare
@@ -103,7 +107,7 @@ export function ReviewDetailTabs({
       label: "Other YSWS",
       count: yswsShips.filter((s) => s.urlMatch).length + (yswsImport ? 1 : 0),
     },
-    ...(fraudRepo ? [{ key: "fraud" as const, label: "Fraud check" }] : []),
+    ...(fraudRepo ? [{ key: "fraud" as const, label: "HURT check" }] : []),
   ];
 
   return (
@@ -271,7 +275,7 @@ export function ReviewDetailTabs({
               <iframe
                 key={fraudRepo}
                 src={hurtSrc(fraudRepo)}
-                title="Fraud check"
+                title="HURT check"
                 className="block h-[80vh] w-full border-0 bg-white"
                 referrerPolicy="no-referrer"
               />
