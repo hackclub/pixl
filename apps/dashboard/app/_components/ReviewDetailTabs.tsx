@@ -57,6 +57,7 @@ export function ReviewDetailTabs({
   yswsImport,
   hackatime,
   repoUrl,
+  projectKind,
 }: {
   commits: CommitResult;
   journals: JournalRow[];
@@ -65,6 +66,7 @@ export function ReviewDetailTabs({
   yswsImport: YswsImport | null;
   hackatime: HackatimeReport | null;
   repoUrl: string | null;
+  projectKind: string;
 }) {
   const [tab, setTab] = useState<
     "commits" | "journals" | "reviews" | "ysws" | "hackatime" | "fraud"
@@ -72,7 +74,9 @@ export function ReviewDetailTabs({
   // Don't make every review page load a third-party app , mount the frame the
   // first time a reviewer actually opens the tab, then keep it mounted.
   const [fraudOpened, setFraudOpened] = useState(false);
-  const fraudRepo = isGithubUrl(repoUrl) ? repoUrl : null;
+  // HURT is a hardware fraud-check tool (it inspects the repo for CAD/BOM/wiring
+  // evidence) — irrelevant noise on a software project's review page.
+  const fraudRepo = projectKind === "hardware" && isGithubUrl(repoUrl) ? repoUrl : null;
 
   useEffect(() => {
     if (tab === "fraud") setFraudOpened(true);
