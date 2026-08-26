@@ -3783,11 +3783,14 @@ export async function addVaultLevel(formData: FormData): Promise<void> {
   const blurb = String(formData.get("blurb") ?? "").trim().slice(0, 400);
   const position = Number(formData.get("position") ?? level) || level;
   const rewards = parseRewards(String(formData.get("rewards") ?? ""));
+  const top1_re = Number(formData.get("top1_re") ?? 0) || 0;
+  const top2_re = Number(formData.get("top2_re") ?? 0) || 0;
+  const top3_re = Number(formData.get("top3_re") ?? 0) || 0;
   if (!level || !title)
     redirect(`/community-goals?error=${encodeURIComponent("A level needs a number and a title.")}`);
   const { error } = await db
     .from("vault_levels")
-    .insert({ level, energy_required, title, blurb, rewards, position, active: true });
+    .insert({ level, energy_required, title, blurb, rewards, position, active: true, top1_re, top2_re, top3_re });
   if (error) {
     console.error("addVaultLevel", error.message);
     redirect(`/community-goals?error=${encodeURIComponent("Couldn't save , is migration 0038 applied? (level must be unique)")}`);
@@ -3807,6 +3810,9 @@ export async function updateVaultLevel(formData: FormData): Promise<void> {
     blurb: String(formData.get("blurb") ?? "").trim().slice(0, 400),
     position: Number(formData.get("position") ?? 0),
     rewards: parseRewards(String(formData.get("rewards") ?? "")),
+    top1_re: Number(formData.get("top1_re") ?? 0) || 0,
+    top2_re: Number(formData.get("top2_re") ?? 0) || 0,
+    top3_re: Number(formData.get("top3_re") ?? 0) || 0,
   };
   const { error } = await db.from("vault_levels").update(patch).eq("id", id);
   if (error) {

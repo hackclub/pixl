@@ -20,6 +20,10 @@ Right now the Vault holds one chamber: **7,500 RE**, community-wide. Every appro
 
 There's no per-player cut of that 7,500. It's the whole community pulling together inside the chapter's window, so a project doesn't have to be huge to matter: it all adds up.
 
+## Chapter leaderboard
+
+Separately from the shared chamber rewards, the 3 players who shipped the most Restoration Energy during the chapter get a one-time RE bonus once that chapter's chamber unlocks. The Vault page shows the live standings and what's on the line while the chapter's still open. The next chapter's leaderboard starts fresh the moment the current one closes.
+
 ## Timed goals are a different thing
 
 Separately from the Vault, the team sometimes runs short timed goals: a target number of ships, sometimes limited to one kind of project, inside a fixed window. If the community hits the target before the window closes, every project shipped during that window gets a percentage bonus on its pixels.

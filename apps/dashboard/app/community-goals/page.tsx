@@ -88,6 +88,23 @@ export default async function CommunityGoalsPage({
               <Input name="position" type="number" placeholder="6" className="w-full text-sm sm:w-28" />
             </Label>
           </div>
+          <div className="grid sm:grid-cols-3 gap-4">
+            <Label className="block font-normal">
+              <span className="block text-sm font-medium mb-1.5">Top 1 chapter RE bonus</span>
+              <Input name="top1_re" type="number" min={0} placeholder="200" className="w-full text-sm" />
+            </Label>
+            <Label className="block font-normal">
+              <span className="block text-sm font-medium mb-1.5">Top 2 chapter RE bonus</span>
+              <Input name="top2_re" type="number" min={0} placeholder="100" className="w-full text-sm" />
+            </Label>
+            <Label className="block font-normal">
+              <span className="block text-sm font-medium mb-1.5">Top 3 chapter RE bonus</span>
+              <Input name="top3_re" type="number" min={0} placeholder="50" className="w-full text-sm" />
+            </Label>
+          </div>
+          <span className="block text-xs text-muted-foreground -mt-2">
+            Paid once, automatically, to whoever contributed the most RE this chapter when this level unlocks. Leave at 0 for no leaderboard prize.
+          </span>
           <PendingButton className="bg-brand text-white border-transparent" pendingText="Adding…">
             Add level
           </PendingButton>
@@ -138,6 +155,25 @@ export default async function CommunityGoalsPage({
                   <Input name="position" type="number" defaultValue={l.position} className="w-full text-sm sm:w-24" />
                 </Label>
               </div>
+              <div className="grid sm:grid-cols-3 gap-3">
+                <Label className="block font-normal">
+                  <span className="block text-xs font-medium mb-1 text-muted-foreground">Top 1 chapter RE bonus</span>
+                  <Input name="top1_re" type="number" min={0} defaultValue={l.top1_re ?? 0} className="w-full text-sm" />
+                </Label>
+                <Label className="block font-normal">
+                  <span className="block text-xs font-medium mb-1 text-muted-foreground">Top 2 chapter RE bonus</span>
+                  <Input name="top2_re" type="number" min={0} defaultValue={l.top2_re ?? 0} className="w-full text-sm" />
+                </Label>
+                <Label className="block font-normal">
+                  <span className="block text-xs font-medium mb-1 text-muted-foreground">Top 3 chapter RE bonus</span>
+                  <Input name="top3_re" type="number" min={0} defaultValue={l.top3_re ?? 0} className="w-full text-sm" />
+                </Label>
+              </div>
+              {l.unlocked_at && (
+                <div className="text-xs text-muted-foreground">
+                  Chapter closed {new Date(l.unlocked_at).toLocaleDateString()} , its leaderboard prize is already settled and won&apos;t change if you edit the numbers above.
+                </div>
+              )}
             </form>
             <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border">
               <form action={toggleVaultLevel}>

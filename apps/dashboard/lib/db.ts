@@ -2645,6 +2645,10 @@ export interface VaultLevelRow {
   rewards: VaultReward[];
   position: number;
   active: boolean;
+  unlocked_at: string | null;
+  top1_re: number;
+  top2_re: number;
+  top3_re: number;
 }
 
 export async function listVaultLevels(): Promise<VaultLevelRow[]> {
