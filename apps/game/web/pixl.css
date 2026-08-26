@@ -394,6 +394,29 @@ body.has-sidebar{padding-left:var(--sidebar);padding-top:var(--toprail)}
 .panel{border:var(--bw) solid var(--stroke);border-radius:0;background:var(--panel);box-shadow:var(--drop)}
 .panel-deep{border:var(--bw) solid var(--stroke);border-radius:0;background:var(--panel-deep);box-shadow:var(--drop)}
 
+/* Pixl.markdown() output — every page that renders a journal/project/idea
+   body (.jbody.md, .idea-body.md, the journal composer's .md-preview) shares
+   this one ruleset. It has to live here, not per-page: the global *{margin:0}
+   reset above strips every element back to flat, unspaced text, so without
+   this headings/paragraphs/lists/quotes/code all render as one undifferentiated
+   blob wherever a page forgets to redeclare it locally. */
+.md .md-h,.md-preview .md-h{font-family:var(--pixel,var(--sans));color:var(--ink);line-height:1.3;letter-spacing:.3px;margin:.9em 0 .4em}
+.md>*:first-child,.md-preview>*:first-child{margin-top:0}
+.md>*:last-child,.md-preview>*:last-child{margin-bottom:0}
+.md h1.md-h,.md-preview h1.md-h{font-size:22px}
+.md h2.md-h,.md-preview h2.md-h{font-size:19px}
+.md h3.md-h,.md-preview h3.md-h{font-size:17px}
+.md h4.md-h,.md-preview h4.md-h,.md h5.md-h,.md-preview h5.md-h,.md h6.md-h,.md-preview h6.md-h{font-size:15px;color:var(--faint)}
+.md .md-p,.md-preview .md-p{margin:0 0 .7em}
+.md .md-list,.md-preview .md-list{margin:0 0 .7em;padding-left:1.4em}
+.md .md-list li,.md-preview .md-list li{margin:.25em 0}
+.md .md-quote,.md-preview .md-quote{margin:0 0 .7em;padding:6px 12px;border-left:3px solid var(--teal);background:color-mix(in srgb,var(--teal) 10%,transparent);color:var(--faint)}
+.md .md-hr,.md-preview .md-hr{border:none;border-top:var(--bw) solid var(--stroke);margin:.9em 0}
+.md .md-pre,.md-preview .md-pre{margin:0 0 .7em;padding:10px 12px;background:var(--panel-deep);border:var(--bw) solid var(--stroke);border-radius:0;overflow-x:auto;font-size:13px;line-height:1.5}
+.md code,.md-preview code{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.9em;background:var(--panel-deep);border:1px solid var(--stroke);padding:1px 5px}
+.md .md-pre code,.md-preview .md-pre code{background:none;border:none;padding:0}
+.md img,.md-preview img{max-width:100%;max-height:260px;display:block;margin:.35rem 0}
+
 /* HUD panel — the hero surface. Landing has no pixel-notch corner anywhere, so
    the notch is gone and this is now simply the heaviest block on the page: a
    full-weight rule on every edge plus the big shadow. The class and its

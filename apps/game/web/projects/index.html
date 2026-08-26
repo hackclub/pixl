@@ -21,7 +21,7 @@
     <meta name="twitter:image" content="https://pixl.hackclub.com/projects/og.png">
     <!-- <pixl-preview:end> -->
     <link rel="icon" href="/index.icon.png" />
-    <link rel="stylesheet" href="/pixl.css?v=2" />
+    <link rel="stylesheet" href="/pixl.css?v=3" />
     <style>
       .hero {
         padding: 24px 28px;
@@ -1029,87 +1029,6 @@
         max-height: 260px;
         display: block;
         margin: 0.35rem 0;
-      }
-      /* Pixl.markdown() output (journal bodies + the composer preview) has no
-         built-in styling of its own — without this every element renders
-         at the same size with zero spacing thanks to the global *{margin:0}
-         reset, so headings/lists/quotes/code all look like one flat blob. */
-      .jbody .md-h,
-      .md-preview .md-h {
-        font-family: var(--pixel, var(--sans));
-        color: var(--ink);
-        line-height: 1.3;
-        letter-spacing: 0.3px;
-        margin: 0.9em 0 0.4em;
-      }
-      .jbody > *:first-child,
-      .md-preview > *:first-child {
-        margin-top: 0;
-      }
-      .jbody > *:last-child,
-      .md-preview > *:last-child {
-        margin-bottom: 0;
-      }
-      .jbody h1.md-h, .md-preview h1.md-h { font-size: 22px; }
-      .jbody h2.md-h, .md-preview h2.md-h { font-size: 19px; }
-      .jbody h3.md-h, .md-preview h3.md-h { font-size: 17px; }
-      .jbody h4.md-h, .md-preview h4.md-h,
-      .jbody h5.md-h, .md-preview h5.md-h,
-      .jbody h6.md-h, .md-preview h6.md-h {
-        font-size: 15px;
-        color: var(--faint);
-      }
-      .jbody .md-p,
-      .md-preview .md-p {
-        margin: 0 0 0.7em;
-      }
-      .jbody .md-list,
-      .md-preview .md-list {
-        margin: 0 0 0.7em;
-        padding-left: 1.4em;
-      }
-      .jbody .md-list li,
-      .md-preview .md-list li {
-        margin: 0.25em 0;
-      }
-      .jbody .md-quote,
-      .md-preview .md-quote {
-        margin: 0 0 0.7em;
-        padding: 6px 12px;
-        border-left: 3px solid var(--teal);
-        background: color-mix(in srgb, var(--teal) 10%, transparent);
-        color: var(--faint);
-      }
-      .jbody .md-hr,
-      .md-preview .md-hr {
-        border: none;
-        border-top: var(--bw) solid var(--stroke);
-        margin: 0.9em 0;
-      }
-      .jbody .md-pre,
-      .md-preview .md-pre {
-        margin: 0 0 0.7em;
-        padding: 10px 12px;
-        background: var(--panel-deep);
-        border: var(--bw) solid var(--stroke);
-        border-radius: 0;
-        overflow-x: auto;
-        font-size: 13px;
-        line-height: 1.5;
-      }
-      .jbody code,
-      .md-preview code {
-        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-        font-size: 0.9em;
-        background: var(--panel-deep);
-        border: 1px solid var(--stroke);
-        padding: 1px 5px;
-      }
-      .jbody .md-pre code,
-      .md-preview .md-pre code {
-        background: none;
-        border: none;
-        padding: 0;
       }
       .composer {
         padding: 16px;
