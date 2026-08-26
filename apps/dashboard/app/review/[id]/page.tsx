@@ -579,6 +579,7 @@ export default async function ReviewDetail({
             }
             hackatime={hackatimeReport}
             repoUrl={p.repo_url ?? null}
+            projectKind={p.kind}
           />
         </div>
 
