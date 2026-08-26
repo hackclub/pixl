@@ -24,7 +24,6 @@ import referralRouter from "./routes/referral.js";
 import collaboratorsRouter from "./routes/collaborators.js";
 import activityRouter from "./routes/activity.js";
 import newsRouter from "./routes/news.js";
-import pvpRouter from "./routes/pvp.js";
 import yswsRouter from "./ysws/routes.js";
 import unshippedRouter from "./unshipped/routes.js";
 import { rateLimit } from "./rateLimit.js";
@@ -95,7 +94,6 @@ app.use(referralRouter);
 app.use(collaboratorsRouter);
 app.use(activityRouter);
 app.use(newsRouter);
-app.use(pvpRouter);
 app.use(yswsRouter);
 app.use(unshippedRouter);
 
