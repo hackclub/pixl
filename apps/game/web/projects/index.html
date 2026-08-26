@@ -2762,34 +2762,78 @@
       }
 
       let yswsShips = [];
+      let unshippedCandidates = [];
 
       async function renderYswsImportBox() {
         const slot = $("ysws-import-slot");
         if (!slot) return;
-        let r = null;
-        try {
-          r = await Pixl.api("/api/projects/ysws-available");
-        } catch (e) {
+        const [shippedRes, unshippedRes] = await Promise.allSettled([
+          Pixl.api("/api/projects/ysws-available"),
+          Pixl.api("/api/projects/unshipped-available"),
+        ]);
+        yswsShips =
+          shippedRes.status === "fulfilled" && shippedRes.value?.ok && Array.isArray(shippedRes.value.ships)
+            ? shippedRes.value.ships
+            : [];
+        unshippedCandidates =
+          unshippedRes.status === "fulfilled" &&
+          unshippedRes.value?.ok &&
+          Array.isArray(unshippedRes.value.projects)
+            ? unshippedRes.value.projects
+            : [];
+        const total = yswsShips.length + unshippedCandidates.length;
+        if (total === 0) {
           slot.innerHTML = "";
           return;
         }
-        yswsShips = r && r.ok && Array.isArray(r.ships) ? r.ships : [];
-        if (yswsShips.length === 0) {
-          slot.innerHTML = "";
-          return;
-        }
-        const n = yswsShips.length;
         slot.innerHTML = `
     <div class="invite-box">
       <div class="invite-box-head">
-        <span class="invite-box-title">SHIPPED SOMETHING ELSEWHERE?</span>
-        <span class="invite-box-sub">${n} project${n === 1 ? "" : "s"} from other YSWS programs , import one to keep building it here.</span>
+        <span class="invite-box-title">GOT SOMETHING ELSEWHERE?</span>
+        <span class="invite-box-sub">${total} project${total === 1 ? "" : "s"} from other YSWS programs , import one to keep building it here.</span>
       </div>
       <div class="invite-box-row">
         <button class="btn" id="ysws-import-btn">IMPORT</button>
       </div>
     </div>`;
-        $("ysws-import-btn").addEventListener("click", openYswsPicker);
+        $("ysws-import-btn").addEventListener("click", () => {
+          if (yswsShips.length > 0 && unshippedCandidates.length > 0) openImportChooser();
+          else if (yswsShips.length > 0) openYswsPicker();
+          else openUnshippedPicker();
+        });
+      }
+
+      function openImportChooser() {
+        const root = document.createElement("div");
+        root.className = "ysws-modal";
+        root.tabIndex = -1;
+        root.innerHTML = `
+      <div class="ysws-modal-veil"></div>
+      <div class="ysws-modal-box" role="dialog" aria-modal="true">
+        <div class="ysws-modal-title">IMPORT FROM ANOTHER YSWS</div>
+        <div class="ysws-modal-body">Is the project you're bringing in already shipped there, or still in progress?</div>
+        <div class="ysws-modal-acts" style="flex-wrap:wrap">
+          <button class="btn dark" id="chooser-cancel">CANCEL</button>
+          <button class="btn ghost" id="chooser-unshipped">STILL BUILDING IT</button>
+          <button class="btn" id="chooser-shipped">ALREADY SHIPPED</button>
+        </div>
+      </div>`;
+        document.body.appendChild(root);
+        root.focus();
+        const close = () => root.remove();
+        root.querySelector(".ysws-modal-veil").onclick = close;
+        root.querySelector("#chooser-cancel").onclick = close;
+        root.querySelector("#chooser-shipped").onclick = () => {
+          close();
+          openYswsPicker();
+        };
+        root.querySelector("#chooser-unshipped").onclick = () => {
+          close();
+          openUnshippedPicker();
+        };
+        root.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") close();
+        });
       }
 
       function openYswsPicker() {
@@ -2845,6 +2889,75 @@
             if (r.ok && r.project) {
               close();
               Pixl.toast("Imported , add a thumbnail and start logging hours.");
+              await loadProjects();
+              await renderYswsImportBox();
+              location.hash = `#p=${r.project.id}`;
+              route();
+            } else {
+              btn.disabled = false;
+              Pixl.toast(
+                r.error === "already_imported"
+                  ? "You've already imported that one."
+                  : "Couldn't import that , try again.",
+                true,
+              );
+            }
+          }),
+        );
+      }
+
+      function openUnshippedPicker() {
+        const sourceLabel = { stardance: "Stardance", macondo: "Macondo" };
+        const rows = unshippedCandidates
+          .map((p) => {
+            return `
+        <button class="ysws-pick" data-source="${Pixl.esc(p.source)}" data-ref="${Pixl.esc(p.ref)}">
+          <span class="ysws-pick-name">${Pixl.esc(p.name)}</span>
+          <span class="ysws-pick-meta">${Pixl.esc(sourceLabel[p.source] || p.source)}</span>
+          ${p.description ? `<span class="ysws-pick-desc">${Pixl.esc(p.description.slice(0, 140))}</span>` : ""}
+        </button>`;
+          })
+          .join("");
+        const root = document.createElement("div");
+        root.className = "ysws-modal";
+        root.tabIndex = -1;
+        root.innerHTML = `
+      <div class="ysws-modal-veil"></div>
+      <div class="ysws-modal-box" role="dialog" aria-modal="true">
+        <div class="ysws-modal-title">IMPORT AN IN-PROGRESS PROJECT</div>
+        <div class="ysws-modal-body">
+          Pick a project to bring in as a draft. Its links, description and thumbnail
+          get filled in for you. Stardance projects also bring their devlog history in
+          as journal entries.
+          <br><br>
+          <strong>Hours logged there don't carry over.</strong> Only new time you track
+          from here counts toward what you're paid.
+        </div>
+        <div class="ysws-pick-list">${rows}</div>
+        <div class="ysws-modal-acts"><button class="btn dark">CANCEL</button></div>
+      </div>`;
+        document.body.appendChild(root);
+        root.focus();
+        const close = () => root.remove();
+        root.querySelector(".ysws-modal-veil").onclick = close;
+        root.querySelector(".ysws-modal-acts .btn").onclick = close;
+        root.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") close();
+        });
+        root.querySelectorAll("[data-ref]").forEach((btn) =>
+          btn.addEventListener("click", async () => {
+            btn.disabled = true;
+            const r = await Pixl.send("POST", "/api/projects/import-unshipped", {
+              source: btn.dataset.source,
+              ref: btn.dataset.ref,
+            });
+            if (r.ok && r.project) {
+              close();
+              Pixl.toast(
+                r.journalsImported > 0
+                  ? `Imported with ${r.journalsImported} devlog${r.journalsImported === 1 ? "" : "s"} , add a thumbnail and keep going.`
+                  : "Imported , add a thumbnail and start logging hours.",
+              );
               await loadProjects();
               await renderYswsImportBox();
               location.hash = `#p=${r.project.id}`;
