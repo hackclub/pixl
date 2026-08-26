@@ -53,6 +53,81 @@ async function fetchJson(url: string): Promise<any | null> {
   }
 }
 
+async function getSlackIdFromStardance(username: string): Promise<string | null> {
+  try {
+    const r = await fetch(`https://stardance.hackclub.com/@${encodeURIComponent(username)}`, {
+      signal: AbortSignal.timeout(6000),
+      headers: { "User-Agent": "Mozilla/5.0" }
+    });
+    if (!r.ok) return null;
+    const html = await r.text();
+    const m = html.match(/cachet\.dunkirk\.sh\/users\/(U[A-Z0-9]+)/);
+    return m ? m[1] : null;
+  } catch (e) {
+    console.error("[stardance] fallback profile fetch failed", username, e);
+    return null;
+  }
+}
+
+async function scrapeStardanceProjects(username: string): Promise<StardanceProject[]> {
+  try {
+    const r = await fetch(`https://stardance.hackclub.com/@${encodeURIComponent(username)}`, {
+      signal: AbortSignal.timeout(6000),
+      headers: { "User-Agent": "Mozilla/5.0" }
+    });
+    if (!r.ok) return [];
+    const html = await r.text();
+    const projectRegex = /href="\/projects\/(\d+)"[^>]*>(.*?)<\/a>/g;
+    const scraped: StardanceProject[] = [];
+    let match;
+    while ((match = projectRegex.exec(html)) !== null) {
+      const id = match[1];
+      const title = match[2].replace(/<[^>]*>/g, "").trim() || "Untitled project";
+      scraped.push({
+        id,
+        title,
+        description: "",
+        repoUrl: "",
+        demoUrl: "",
+        bannerUrl: "https://stardance.hackclub.com/assets/profile/default-banner-4827579f.png"
+      });
+    }
+
+    await Promise.all(
+      scraped.map(async (p) => {
+        try {
+          const detailRes = await fetch(`https://stardance.hackclub.com/projects/${p.id}`, {
+            signal: AbortSignal.timeout(5000),
+            headers: { "User-Agent": "Mozilla/5.0" }
+          });
+          if (!detailRes.ok) return;
+          const detailHtml = await detailRes.text();
+          
+          const descMatch = detailHtml.match(/<meta\s+name="description"\s+content="([^"]*)"/i) || 
+                            detailHtml.match(/<meta\s+property="og:description"\s+content="([^"]*)"/i);
+          if (descMatch) p.description = descMatch[1].slice(0, 2000);
+          
+          const imageMatch = detailHtml.match(/<meta\s+property="og:image"\s+content="([^"]*)"/i);
+          if (imageMatch) p.bannerUrl = imageMatch[1];
+          
+          const githubMatch = detailHtml.match(/href="(https:\/\/github\.com\/[^"]+)"/i);
+          if (githubMatch) p.repoUrl = githubMatch[1];
+          
+          const demoMatch = detailHtml.match(/href="((?!https:\/\/github\.com)(?!https:\/\/stardance\.hackclub\.com)https:\/\/[^"]+)"/i);
+          if (demoMatch) p.demoUrl = demoMatch[1];
+        } catch (err) {
+          console.error("[stardance] project detail scrape failed", p.id, err);
+        }
+      })
+    );
+    
+    return scraped;
+  } catch (e) {
+    console.error("[stardance] profile projects scrape failed", username, e);
+    return [];
+  }
+}
+
 const usernameCache = new Map<string, { at: number; value: string | null }>();
 
 // Stardance has no lookup-by-slack_id endpoint, so we search by the player's
@@ -68,23 +143,41 @@ export async function findStardanceUsername(
   const cached = usernameCache.get(slackId);
   if (cached && Date.now() - cached.at < CACHE_MS) return cached.value;
 
-  const search = await fetchJson(
+  let search = await fetchJson(
     `${API_BASE}/users/search?q=${encodeURIComponent(displayName)}&limit=5`,
   );
   // A failed fetch (fetchJson returns null on any non-2xx/timeout/parse
-  // error) is not the same as a confirmed "no match" — caching it as one
-  // would lock the player out of their real Stardance projects until the
-  // cache expires. Only a completed lookup gets cached, success or not.
-  if (search === null) return null;
-  const items: any[] = Array.isArray(search?.items) ? search.items : [];
-  const usernames = items.map((item) => cleanField(item?.username)).filter(Boolean);
+  // error) is not the same as a confirmed "no match" — but we can still fallback.
+  const items: any[] = search && Array.isArray(search?.items) ? search.items : [];
+  const usernamesSet = new Set<string>(items.map((item) => cleanField(item?.username)).filter(Boolean));
+
+  // If the search returned no candidates, generate common handle candidates from the display name
+  if (usernamesSet.size === 0) {
+    const clean = displayName.trim().toLowerCase();
+    if (clean) {
+      usernamesSet.add(clean);
+      usernamesSet.add(clean.replace(/\s+/g, ""));
+      usernamesSet.add(clean.replace(/\s+/g, "-"));
+      usernamesSet.add(clean.replace(/\s+/g, "_"));
+    }
+  }
+
+  const usernames = Array.from(usernamesSet);
+
   // Confirm every candidate in parallel, not one at a time — sequential
   // fetches here stacked up to 5x FETCH_TIMEOUT_MS in the worst case, which
   // was slow enough to make the whole projects page look stuck.
   const profiles = await Promise.all(
-    usernames.map((username) => fetchJson(`${API_BASE}/users/${encodeURIComponent(username)}`)),
+    usernames.map(async (username) => {
+      const apiProfile = await fetchJson(`${API_BASE}/users/${encodeURIComponent(username)}`);
+      let sId = cleanField(apiProfile?.slack_id);
+      if (!sId) {
+        sId = await getSlackIdFromStardance(username) || "";
+      }
+      return { username, slackId: sId };
+    }),
   );
-  const matchIndex = profiles.findIndex((profile) => cleanField(profile?.slack_id) === slackId);
+  const matchIndex = profiles.findIndex((p) => p.slackId === slackId);
   const found = matchIndex === -1 ? null : usernames[matchIndex];
   usernameCache.set(slackId, { at: Date.now(), value: found });
   return found;
@@ -99,9 +192,8 @@ export async function stardanceProjectsForUser(username: string): Promise<Starda
   const data = await fetchJson(
     `${API_BASE}/users/${encodeURIComponent(username)}/projects?limit=60`,
   );
-  if (data === null) return cached ? cached.value : [];
-  const items: any[] = Array.isArray(data?.items) ? data.items : [];
-  const projects = items.map((p) => ({
+  const items: any[] = data && Array.isArray(data?.items) ? data.items : [];
+  const apiItems = items.map((p) => ({
     id: cleanField(p._id),
     title: cleanField(p.title).slice(0, 120) || "Untitled project",
     description: cleanField(p.description).slice(0, 2000),
@@ -109,8 +201,17 @@ export async function stardanceProjectsForUser(username: string): Promise<Starda
     demoUrl: safeUrl(p.demo_url),
     bannerUrl: safeUrl(p.banner_url),
   }));
-  projectsCache.set(username, { at: Date.now(), value: projects });
-  return projects;
+
+  const scrapedItems = await scrapeStardanceProjects(username);
+  const combined = [...apiItems];
+  for (const s of scrapedItems) {
+    if (!combined.some((c) => c.id === s.id)) {
+      combined.push(s);
+    }
+  }
+
+  projectsCache.set(username, { at: Date.now(), value: combined });
+  return combined;
 }
 
 const MAX_DEVLOG_PAGES = 10;
