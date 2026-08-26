@@ -184,6 +184,14 @@ router.post("/api/projects/import-unshipped", async (req, res) => {
   // Devlogs land as journal entries at 0 hours each — same "hours don't
   // carry over" rule the ships.hackclub.com import already enforces, only
   // new Hackatime-tracked work here counts toward payout.
+  //
+  // The insert is all-or-nothing (one bad row rolls the whole batch back),
+  // so journalsImported below must reflect what actually landed, not what
+  // we fetched — reporting a fake success count here would tell the user
+  // their devlog history came in when the project row exists but the
+  // journal rows don't, with a unique-index-enforced dupe check blocking
+  // any retry.
+  let journalsImported = 0;
   if (devlogs.length > 0) {
     const rows = devlogs.map((d) => ({
       project_id: data.id,
@@ -195,16 +203,21 @@ router.post("/api/projects/import-unshipped", async (req, res) => {
     }));
     const { error: journalError } = await supabase.from("project_journals").insert(rows);
     if (journalError) console.error("[unshipped] devlog journal import failed", journalError);
+    else journalsImported = devlogs.length;
   }
 
   void addNotification(
     session.userId,
     "Project imported",
     `"${parsed.fields.name}" came in from ${source === "stardance" ? "Stardance" : "Macondo"}${
-      devlogs.length > 0 ? ` with ${devlogs.length} devlog${devlogs.length === 1 ? "" : "s"}` : ""
-    }. Add a thumbnail and start logging hours here.`,
+      journalsImported > 0 ? ` with ${journalsImported} devlog${journalsImported === 1 ? "" : "s"}` : ""
+    }. Add a thumbnail and start logging hours here.${
+      devlogs.length > 0 && journalsImported === 0
+        ? " (Its devlog history couldn't be brought over this time.)"
+        : ""
+    }`,
   );
-  res.json({ ok: true, project: data, journalsImported: devlogs.length });
+  res.json({ ok: true, project: data, journalsImported });
 });
 
 export default router;

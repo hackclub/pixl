@@ -21,6 +21,17 @@ function cleanField(raw: unknown): string {
   return s === "" || s === "null" || s === "undefined" ? "" : s;
 }
 
+function safeUrl(raw: unknown): string {
+  const s = cleanField(raw);
+  if (s === "") return "";
+  try {
+    const proto = new URL(s).protocol;
+    return proto === "http:" || proto === "https:" ? s : "";
+  } catch {
+    return "";
+  }
+}
+
 let cache: { at: number; data: MacondoProject[] } | null = null;
 
 async function loadAll(): Promise<MacondoProject[]> {
@@ -43,7 +54,7 @@ async function loadAll(): Promise<MacondoProject[]> {
           id: Number(p.id),
           name: cleanField(p.name).slice(0, 120) || "Untitled project",
           description: cleanField(p.description).slice(0, 2000),
-          thumbnailUrl: cleanField(p.thumbnail_url),
+          thumbnailUrl: safeUrl(p.thumbnail_url),
           ownerSlackId: slackId,
         });
       }

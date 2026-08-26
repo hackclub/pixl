@@ -7,7 +7,7 @@ const API_BASE = "https://api.stardancestats.xyz/v1";
 const CACHE_MS = 5 * 60_000;
 
 export interface StardanceProject {
-  id: number;
+  id: string;
   title: string;
   description: string;
   repoUrl: string;
@@ -66,6 +66,11 @@ export async function findStardanceUsername(
   const search = await fetchJson(
     `${API_BASE}/users/search?q=${encodeURIComponent(displayName)}&limit=5`,
   );
+  // A failed fetch (fetchJson returns null on any non-2xx/timeout/parse
+  // error) is not the same as a confirmed "no match" — caching it as one
+  // would lock the player out of their real Stardance projects until the
+  // cache expires. Only a completed lookup gets cached, success or not.
+  if (search === null) return null;
   const items: any[] = Array.isArray(search?.items) ? search.items : [];
   let found: string | null = null;
   for (const item of items) {
@@ -90,9 +95,10 @@ export async function stardanceProjectsForUser(username: string): Promise<Starda
   const data = await fetchJson(
     `${API_BASE}/users/${encodeURIComponent(username)}/projects?limit=60`,
   );
+  if (data === null) return cached ? cached.value : [];
   const items: any[] = Array.isArray(data?.items) ? data.items : [];
   const projects = items.map((p) => ({
-    id: Number(p._id),
+    id: cleanField(p._id),
     title: cleanField(p.title).slice(0, 120) || "Untitled project",
     description: cleanField(p.description).slice(0, 2000),
     repoUrl: safeUrl(p.repo_url),
@@ -104,13 +110,14 @@ export async function stardanceProjectsForUser(username: string): Promise<Starda
 }
 
 const MAX_DEVLOG_PAGES = 10;
+const DEVLOG_PAGE_SIZE = 50;
 
-export async function stardanceDevlogsForProject(projectId: number): Promise<StardanceDevlog[]> {
+export async function stardanceDevlogsForProject(projectId: string): Promise<StardanceDevlog[]> {
   const out: StardanceDevlog[] = [];
   let offset = 0;
   for (let page = 0; page < MAX_DEVLOG_PAGES; page++) {
     const data = await fetchJson(
-      `${API_BASE}/projects/${projectId}/devlogs?limit=50&offset=${offset}`,
+      `${API_BASE}/projects/${encodeURIComponent(projectId)}/devlogs?limit=${DEVLOG_PAGE_SIZE}&offset=${offset}`,
     );
     const items: any[] = Array.isArray(data?.items) ? data.items : [];
     if (items.length === 0) break;
@@ -126,7 +133,13 @@ export async function stardanceDevlogsForProject(projectId: number): Promise<Sta
       out.push({ body, postedAt: cleanField(d.posted_at), images });
     }
     offset += items.length;
-    if (offset >= (Number(data?.total) || 0)) break;
+    // A short page is the reliable end-of-stream signal — a page smaller
+    // than what we asked for means there's nothing left. `total` (when
+    // present) is just an early-exit optimization on top of that; trusting
+    // it alone truncates silently if this unofficial API ever omits it.
+    if (items.length < DEVLOG_PAGE_SIZE) break;
+    const total = Number(data?.total);
+    if (Number.isFinite(total) && offset >= total) break;
   }
   return out.sort((a, b) => (a.postedAt < b.postedAt ? -1 : a.postedAt > b.postedAt ? 1 : 0));
 }
