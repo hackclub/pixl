@@ -1246,7 +1246,11 @@
         cart_screenshot_required: "Upload at least one cart screenshot (with shipping) before shipping a funded project.",
         funding_amount_required: "Enter how much funding you need before shipping.",
       };
-      const err = (e) => ERRORS[e] || "Something went wrong, try again.";
+      // #keep-real-reason, e.g. upload()'s "That image was rejected: ..." isn't
+      // a snake_case code so it'd never match ERRORS - show it instead of
+      // crushing it to the generic fallback.
+      const err = (e) =>
+        ERRORS[e] || (e && /[ .]/.test(e) ? e : "Something went wrong, try again.");
 
       let stats = null;
       let projects = [];
