@@ -37,9 +37,14 @@ function safeUrl(raw: unknown): string {
   }
 }
 
+// Kept short because this runs synchronously in the request/response cycle
+// of an interactive page load — a slow third-party API here shouldn't make
+// the player wait anywhere near as long as a background job could tolerate.
+const FETCH_TIMEOUT_MS = 6000;
+
 async function fetchJson(url: string): Promise<any | null> {
   try {
-    const r = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    const r = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     if (!r.ok) return null;
     return await r.json();
   } catch (e) {
@@ -72,16 +77,15 @@ export async function findStardanceUsername(
   // cache expires. Only a completed lookup gets cached, success or not.
   if (search === null) return null;
   const items: any[] = Array.isArray(search?.items) ? search.items : [];
-  let found: string | null = null;
-  for (const item of items) {
-    const username = cleanField(item?.username);
-    if (username === "") continue;
-    const profile = await fetchJson(`${API_BASE}/users/${encodeURIComponent(username)}`);
-    if (cleanField(profile?.slack_id) === slackId) {
-      found = username;
-      break;
-    }
-  }
+  const usernames = items.map((item) => cleanField(item?.username)).filter(Boolean);
+  // Confirm every candidate in parallel, not one at a time — sequential
+  // fetches here stacked up to 5x FETCH_TIMEOUT_MS in the worst case, which
+  // was slow enough to make the whole projects page look stuck.
+  const profiles = await Promise.all(
+    usernames.map((username) => fetchJson(`${API_BASE}/users/${encodeURIComponent(username)}`)),
+  );
+  const matchIndex = profiles.findIndex((profile) => cleanField(profile?.slack_id) === slackId);
+  const found = matchIndex === -1 ? null : usernames[matchIndex];
   usernameCache.set(slackId, { at: Date.now(), value: found });
   return found;
 }

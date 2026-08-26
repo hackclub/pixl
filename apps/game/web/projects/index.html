@@ -2764,23 +2764,32 @@
       let yswsShips = [];
       let unshippedCandidates = [];
 
+      // The two sources are fetched and rendered independently on purpose —
+      // ysws-available used to render the moment it resolved, and a slow or
+      // failing unshipped-available (a third-party API call) must never hold
+      // that hostage. Each one repaints the box on its own as it comes in.
       async function renderYswsImportBox() {
+        if (!$("ysws-import-slot")) return;
+        try {
+          const r = await Pixl.api("/api/projects/ysws-available");
+          yswsShips = r && r.ok && Array.isArray(r.ships) ? r.ships : [];
+        } catch (e) {
+          yswsShips = [];
+        }
+        paintImportBox();
+
+        try {
+          const r = await Pixl.api("/api/projects/unshipped-available");
+          unshippedCandidates = r && r.ok && Array.isArray(r.projects) ? r.projects : [];
+        } catch (e) {
+          unshippedCandidates = [];
+        }
+        paintImportBox();
+      }
+
+      function paintImportBox() {
         const slot = $("ysws-import-slot");
         if (!slot) return;
-        const [shippedRes, unshippedRes] = await Promise.allSettled([
-          Pixl.api("/api/projects/ysws-available"),
-          Pixl.api("/api/projects/unshipped-available"),
-        ]);
-        yswsShips =
-          shippedRes.status === "fulfilled" && shippedRes.value?.ok && Array.isArray(shippedRes.value.ships)
-            ? shippedRes.value.ships
-            : [];
-        unshippedCandidates =
-          unshippedRes.status === "fulfilled" &&
-          unshippedRes.value?.ok &&
-          Array.isArray(unshippedRes.value.projects)
-            ? unshippedRes.value.projects
-            : [];
         const total = yswsShips.length + unshippedCandidates.length;
         if (total === 0) {
           slot.innerHTML = "";
