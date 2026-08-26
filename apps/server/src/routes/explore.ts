@@ -9,7 +9,7 @@ const router = Router();
 
 // #public-safe-only, no ban_reason/review_note/system_note/airtable_record_id etc
 const PUBLIC_PROJECT_COLUMNS =
-  "id, user_id, name, description, type, level, status, image_url, repo_url, demo_url, shipped_at, created_at, hackatime_seconds, is_peak";
+  "id, user_id, name, description, project_type, level, status, image_url, repo_url, demo_url, shipped_at, created_at, hackatime_seconds, is_peak";
 
 // #public, no session needed - fields already safe (no slack_id/email)
 router.get("/api/explore/players", async (req, res) => {
