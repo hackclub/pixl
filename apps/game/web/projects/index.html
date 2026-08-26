@@ -3265,15 +3265,23 @@
         } catch {}
       }
 
-      // Drops a literal placeholder line into the journal textarea itself —
-      // visible in the raw text you're editing, not just a toast or a button
-      // state — then swaps it for the real markdown once the upload resolves,
-      // or removes it cleanly if the upload fails. Dispatches "input" after
-      // each mutation (same convention as mdApply) so the hint/autosave/grow
-      // listeners all pick it up without special-casing this path.
+      function replaceInJournalTextarea(ta, find, replacement) {
+        const at = ta.value.indexOf(find);
+        if (at === -1) return;
+        const curStart = ta.selectionStart;
+        const curEnd = ta.selectionEnd;
+        ta.value = ta.value.slice(0, at) + replacement + ta.value.slice(at + find.length);
+        const delta = replacement.length - find.length;
+        const shift = (pos) =>
+          pos == null ? pos : pos <= at ? pos : pos >= at + find.length ? pos + delta : at + replacement.length;
+        ta.selectionStart = shift(curStart);
+        ta.selectionEnd = shift(curEnd);
+      }
+
+      let journalImageUploadSeq = 0;
       async function attachImageToJournal(file, ta = $("j-content")) {
         setImageBtnBusy(true);
-        const marker = "![Uploading image…]()";
+        const marker = `![Uploading image ${++journalImageUploadSeq}…]()`;
         const selStart = ta.selectionStart ?? ta.value.length;
         const selEnd = ta.selectionEnd ?? ta.value.length;
         const before = ta.value.slice(0, selStart);
@@ -3287,10 +3295,10 @@
         ta.dispatchEvent(new Event("input", { bubbles: true }));
         try {
           const url = await Pixl.upload(file);
-          ta.value = ta.value.replace(marker, `![](${url})`);
+          replaceInJournalTextarea(ta, marker, `![](${url})`);
           Pixl.toast("Image attached!");
         } catch (e) {
-          ta.value = ta.value.replace(inserted, "");
+          replaceInJournalTextarea(ta, inserted, "");
           Pixl.toast(err(e.message), true);
         } finally {
           ta.dispatchEvent(new Event("input", { bubbles: true }));
