@@ -2907,13 +2907,11 @@
       }
 
       function openUnshippedPicker() {
-        const sourceLabel = { stardance: "Stardance", macondo: "Macondo" };
         const rows = unshippedCandidates
           .map((p) => {
             return `
         <button class="ysws-pick" data-source="${Pixl.esc(p.source)}" data-ref="${Pixl.esc(p.ref)}">
           <span class="ysws-pick-name">${Pixl.esc(p.name)}</span>
-          <span class="ysws-pick-meta">${Pixl.esc(sourceLabel[p.source] || p.source)}</span>
           ${p.description ? `<span class="ysws-pick-desc">${Pixl.esc(p.description.slice(0, 140))}</span>` : ""}
         </button>`;
           })
@@ -2926,9 +2924,8 @@
       <div class="ysws-modal-box" role="dialog" aria-modal="true">
         <div class="ysws-modal-title">IMPORT AN IN-PROGRESS PROJECT</div>
         <div class="ysws-modal-body">
-          Pick a project to bring in as a draft. Its links, description and thumbnail
-          get filled in for you. Stardance projects also bring their devlog history in
-          as journal entries.
+          Pick a project from Stardance to bring in as a draft. Its links, description,
+          thumbnail and devlog history get filled in for you.
           <br><br>
           <strong>Hours logged there don't carry over.</strong> Only new time you track
           from here counts toward what you're paid.
