@@ -56,7 +56,7 @@ const Pixl = (() => {
         18.75,
         25
       ],
-      "trialBonusRe": 25,
+      "trialBonusRe": 100,
       "levelBands": [
         {
           "throughLevel": 10,

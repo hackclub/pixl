@@ -27,7 +27,7 @@
       { "re": 7500, "usd": 6.0 }
     ],
     "tierRePerHour": [12.5, 15, 18.75, 25],
-    "trialBonusRe": 25,
+    "trialBonusRe": 100,
     "levelBands": [
       { "throughLevel": 10, "rePerLevel": 10 },
       { "throughLevel": 50, "rePerLevel": 35 },

@@ -42,6 +42,31 @@ export async function fetchUserSpans(
   }
 }
 
+function secondsSinceUnix(spans: Span[], sinceUnix: number): number {
+  let sum = 0;
+  for (const s of spans) {
+    if (s.end <= sinceUnix) continue;
+    sum += s.end - Math.max(s.start, sinceUnix);
+  }
+  return Math.max(0, Math.round(sum));
+}
+
+// Same math as apps/server's fetchTrackedSecondsSince, reimplemented here
+// because the dashboard talks to Hackatime directly rather than through
+// apps/server — used by the reviewer "extend hours cutoff" override so a
+// legitimately-early-started project can count hours from before the global
+// hackatimeCutoff (see extendHoursCutoff in app/actions.ts).
+export async function fetchTrackedSecondsSince(
+  slackId: string | null | undefined,
+  token: string | null,
+  projectNames: string[],
+  sinceUnix: number,
+): Promise<number | null> {
+  const spans = await fetchUserSpans(slackId, token, projectNames);
+  if (spans === null) return null;
+  return secondsSinceUnix(spans, sinceUnix);
+}
+
 export interface TrustFactor {
   level: string;
   value: number;

@@ -212,6 +212,16 @@ async function hostIsPublic(hostname: string): Promise<boolean> {
   }
 }
 
+// Roblox's WAF blocks the bot-shaped HEAD/GET requests urlAlive sends (no browser
+// UA, no cookies) even for a game that's genuinely live and playable — every
+// roblox.com demo link was getting rejected as "unreachable". Skip the fetch for
+// these hosts once the SSRF guard clears them; still no bypass of hostIsPublic.
+const TRUSTED_UNFETCHABLE_HOSTS = new Set(["roblox.com"]);
+
+function isTrustedUnfetchableHost(hostname: string): boolean {
+  return TRUSTED_UNFETCHABLE_HOSTS.has(hostname.replace(/^www\./, "").toLowerCase());
+}
+
 async function urlAlive(url: string): Promise<boolean> {
   // Follow redirects by hand so we can re-validate the host at every hop — a
   // public URL that 302s to http://169.254.169.254 must not slip through.
@@ -228,6 +238,7 @@ async function urlAlive(url: string): Promise<boolean> {
     }
     if (u.protocol !== "https:" && u.protocol !== "http:") return false;
     if (!(await hostIsPublic(u.hostname))) return false;
+    if (isTrustedUnfetchableHost(u.hostname)) return true;
     try {
       let r = await fetch(current, {
         method: "HEAD",

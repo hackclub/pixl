@@ -158,6 +158,13 @@ export interface ProjectRow {
   // Airtable record id once this project has been pushed, so a re-send
   // updates the existing row instead of creating a duplicate.
   airtable_record_id: string | null;
+  // Reviewer override that counts Hackatime hours from before the global
+  // hackatimeCutoff for this one project, see extendHoursCutoff in
+  // app/actions.ts. hours_extended_since is the "since" date used the last
+  // time it was applied; null means no override is in effect.
+  hours_extended_since: string | null;
+  hours_extended_by: string;
+  hours_extended_note: string;
 }
 
 export interface PlayerStateRow {
@@ -2638,6 +2645,10 @@ export interface VaultLevelRow {
   rewards: VaultReward[];
   position: number;
   active: boolean;
+  unlocked_at: string | null;
+  top1_re: number;
+  top2_re: number;
+  top3_re: number;
 }
 
 export async function listVaultLevels(): Promise<VaultLevelRow[]> {

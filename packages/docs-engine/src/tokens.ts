@@ -81,9 +81,17 @@ export function buildTokens(config: PixlConfig): Record<string, string> {
     const n = i + 1;
     tokens[`step${n}Re`] = step.re.toLocaleString("en-US");
     tokens[`step${n}Usd`] = `$${step.usd.toFixed(2)}`;
-    E.tierRePerHour.forEach((rePerHour, t) => {
-      tokens[`step${n}T${t + 1}h`] = String(Math.round(step.re / rePerHour));
+    const hoursByTier = E.tierRePerHour.map((rePerHour) => Math.round(step.re / rePerHour));
+    hoursByTier.forEach((h, t) => {
+      tokens[`step${n}T${t + 1}h`] = String(h);
     });
+    // RE is pooled across whatever mix of tiers earned it, so there's no single
+    // hours figure for a threshold - only a range from "all T4" (fastest) to
+    // "all T1" (slowest). Shown alongside the RE/$ columns so readers don't
+    // have to scroll down to the per-tier tables just to get a ballpark.
+    const fastest = Math.min(...hoursByTier);
+    const slowest = Math.max(...hoursByTier);
+    tokens[`step${n}HRange`] = fastest === slowest ? `${fastest}h` : `${fastest}-${slowest}h`;
   });
 
   let from = 1;
@@ -94,6 +102,10 @@ export function buildTokens(config: PixlConfig): Record<string, string> {
     tokens[`band${i + 1}To`] = String(band.throughLevel);
     tokens[`band${i + 1}Per`] = String(band.rePerLevel);
     tokens[`band${i + 1}Total`] = cumulative.toLocaleString("en-US");
+    const hoursByTier = E.tierRePerHour.map((rePerHour) => Math.round(cumulative / rePerHour));
+    const fastest = Math.min(...hoursByTier);
+    const slowest = Math.max(...hoursByTier);
+    tokens[`band${i + 1}HRange`] = fastest === slowest ? `${fastest}h` : `${fastest}-${slowest}h`;
     from = band.throughLevel + 1;
   });
 

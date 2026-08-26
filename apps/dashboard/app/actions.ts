@@ -8,6 +8,8 @@ import {
   pxPerHourOver,
   reForHours,
   projectPayoutPx,
+  hackatimeCutoffUnix,
+  hackatimeCutoffLabel,
 } from "./_generated/config";
 import {
   notifyShopInsert,
@@ -59,6 +61,7 @@ import { buildAirtableFields, pushProjectRecord } from "@/lib/airtable";
 import { joeEnabled } from "@/lib/joe";
 import { submitToJoe } from "@/lib/joeSync";
 import { slackHandle, dmUser, slackAvatars } from "@/lib/slack";
+import { fetchTrackedSecondsSince } from "@/lib/hackatime";
 import { serializeGroups } from "@/lib/shopOptions";
 import { SHOP_REGIONS, type ShopRegion } from "@/lib/shopRegions";
 import { SHOP_CATEGORIES, type ShopCategory } from "@/lib/shopCategories";
@@ -1601,6 +1604,86 @@ export async function toggleProjectPeak(formData: FormData): Promise<void> {
     by,
   );
   revalidatePath("/", "layout");
+}
+
+// Normally only hours from hackatimeCutoffUnix onward count (see
+// HACKATIME_CUTOFF in apps/server). Some projects are legitimately started
+// earlier and picked back up , this lets a reviewer re-pull the player's
+// Hackatime spans from an earlier date for this one project and recredit
+// hackatime_seconds accordingly. Requires a note so it's auditable, and only
+// raises the stored total (never used to quietly lower it, ReviewForm's own
+// "credited hours" field already covers lowering).
+export async function extendHoursCutoff(formData: FormData): Promise<void> {
+  const access = await requirePerm("review");
+  const by = actorName(access);
+  const reviewer = await reviewerLabel(access.session.slackId, access.session.name);
+  const projectId = Number(formData.get("projectId") ?? 0);
+  const sinceRaw = String(formData.get("since") ?? "").trim();
+  const note = String(formData.get("note") ?? "").trim().slice(0, 1000);
+  const back = `/review/${projectId}`;
+  if (!projectId) return;
+  if (!note)
+    redirect(`${back}?error=${encodeURIComponent("A note is required to extend the hours cutoff.")}`);
+
+  const since = new Date(sinceRaw);
+  if (isNaN(since.getTime()) || since.getTime() >= hackatimeCutoffUnix * 1000)
+    redirect(
+      `${back}?error=${encodeURIComponent(`Pick a date before the ${hackatimeCutoffLabel} cutoff.`)}`,
+    );
+  const sinceUnix = Math.floor(since.getTime() / 1000);
+
+  const { data: project } = await db
+    .from("projects")
+    .select("user_id, name, status, hackatime_projects, hackatime_seconds")
+    .eq("id", projectId)
+    .single();
+  if (!project) return;
+  if (await isOwnProject(access, project.user_id))
+    redirect(`${back}?error=${encodeURIComponent("You can't act on your own project.")}`);
+  if (project.status !== "shipped" && project.status !== "second_review")
+    redirect(`${back}?error=${encodeURIComponent("This project isn't in the review queue.")}`);
+
+  const { data: owner } = await db
+    .from("users")
+    .select("slack_id, hackatime_token")
+    .eq("id", project.user_id)
+    .single();
+  const linked = (project.hackatime_projects as string[]) ?? [];
+  const newSeconds = await fetchTrackedSecondsSince(
+    (owner as { slack_id?: string } | null)?.slack_id ?? null,
+    (owner as { hackatime_token?: string } | null)?.hackatime_token ?? null,
+    linked,
+    sinceUnix,
+  );
+  if (newSeconds === null)
+    redirect(`${back}?error=${encodeURIComponent("Couldn't reach Hackatime, try again.")}`);
+  const currentSeconds = Number(project.hackatime_seconds) || 0;
+  if (newSeconds <= currentSeconds)
+    redirect(
+      `${back}?error=${encodeURIComponent("Hackatime didn't return more hours than already credited , nothing changed.")}`,
+    );
+
+  const { error } = await db
+    .from("projects")
+    .update({
+      hackatime_seconds: newSeconds,
+      hours_extended_since: since.toISOString(),
+      hours_extended_by: reviewer,
+      hours_extended_note: note,
+    })
+    .eq("id", projectId);
+  if (error) {
+    console.error("extendHoursCutoff failed", error.message);
+    redirect(`${back}?error=${encodeURIComponent("Failed to save , try again.")}`);
+  }
+  await logModAction(
+    project.user_id,
+    "project_hours_extended",
+    `${project.name}: counted hours from ${since.toISOString().slice(0, 10)} (${Math.round(currentSeconds / 3600)}h -> ${Math.round(newSeconds / 3600)}h) , ${note}`,
+    by,
+  );
+  revalidatePath(back);
+  redirect(back);
 }
 
 export async function rejectProject(formData: FormData): Promise<void> {
@@ -3700,11 +3783,14 @@ export async function addVaultLevel(formData: FormData): Promise<void> {
   const blurb = String(formData.get("blurb") ?? "").trim().slice(0, 400);
   const position = Number(formData.get("position") ?? level) || level;
   const rewards = parseRewards(String(formData.get("rewards") ?? ""));
+  const top1_re = Number(formData.get("top1_re") ?? 0) || 0;
+  const top2_re = Number(formData.get("top2_re") ?? 0) || 0;
+  const top3_re = Number(formData.get("top3_re") ?? 0) || 0;
   if (!level || !title)
     redirect(`/community-goals?error=${encodeURIComponent("A level needs a number and a title.")}`);
   const { error } = await db
     .from("vault_levels")
-    .insert({ level, energy_required, title, blurb, rewards, position, active: true });
+    .insert({ level, energy_required, title, blurb, rewards, position, active: true, top1_re, top2_re, top3_re });
   if (error) {
     console.error("addVaultLevel", error.message);
     redirect(`/community-goals?error=${encodeURIComponent("Couldn't save , is migration 0038 applied? (level must be unique)")}`);
@@ -3724,6 +3810,9 @@ export async function updateVaultLevel(formData: FormData): Promise<void> {
     blurb: String(formData.get("blurb") ?? "").trim().slice(0, 400),
     position: Number(formData.get("position") ?? 0),
     rewards: parseRewards(String(formData.get("rewards") ?? "")),
+    top1_re: Number(formData.get("top1_re") ?? 0) || 0,
+    top2_re: Number(formData.get("top2_re") ?? 0) || 0,
+    top3_re: Number(formData.get("top3_re") ?? 0) || 0,
   };
   const { error } = await db.from("vault_levels").update(patch).eq("id", id);
   if (error) {

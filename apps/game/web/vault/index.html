@@ -87,6 +87,26 @@
 
   .lore { margin: 34px 0 10px; padding: 16px 20px; font-size: 14px; color: var(--dim); line-height: 1.75; }
   .lore b { color: var(--teal); }
+
+  /* ---- chapter leaderboard ---- */
+  .lb-card { margin-top: 22px; padding: 18px 20px; background: var(--panel); border: var(--bw) solid var(--stroke); box-shadow: var(--drop); }
+  .lb-head { font-family: var(--pixel); font-size: 13px; letter-spacing: 2px; color: var(--teal); margin-bottom: 4px; }
+  .lb-sub { font-size: 13px; color: var(--dim); margin-bottom: 14px; }
+  .lb-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--stroke); }
+  .lb-row:first-of-type { border-top: none; }
+  .lb-rank { font-family: var(--pixel); font-size: 14px; width: 26px; text-align: center; color: var(--faint); }
+  .lb-row:nth-child(1) .lb-rank { color: var(--gold); }
+  .lb-row:nth-child(2) .lb-rank { color: var(--teal); }
+  .lb-row:nth-child(3) .lb-rank { color: var(--gold-soft); }
+  .lb-name { flex: 1; min-width: 0; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lb-re { font-family: var(--pixel); font-size: 13px; color: var(--gold); }
+
+  .top-reward { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .tr-chip { font-size: 12px; padding: 4px 8px 3px; border: 1px solid var(--stroke); color: var(--dim); }
+  .tr-chip b { color: var(--gold); }
+  .chamber.off .top-reward { opacity: .8; }
+  .winners { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .win-chip { font-size: 12px; padding: 4px 8px 3px; border: 1px solid var(--teal); color: var(--teal); background: rgba(82,174,185,.08); }
 </style>
 </head>
 <body>
@@ -103,6 +123,12 @@
       <div class="gauge-next" id="g-next"></div>
       <div class="segbar" id="segbar"></div>
     </section>
+
+    <div class="lb-card" id="lb-card" hidden>
+      <div class="lb-head">THIS CHAPTER'S TOP RESTORERS</div>
+      <div class="lb-sub" id="lb-sub"></div>
+      <div id="lb-rows"></div>
+    </div>
 
     <div class="spin" id="loading"></div>
     <div class="chambers" id="chambers"></div>
@@ -122,9 +148,28 @@ Pixl.loadWallet();
 function fmt(n) { return (n || 0).toLocaleString(); }
 const SEGMENTS = 28;
 
+function renderLeaderboard(data) {
+  const board = data.chapterLeaderboard || [];
+  const card = document.getElementById("lb-card");
+  if (!board.length) { card.hidden = true; return; }
+  card.hidden = false;
+  const next = (data.levels || []).find((l) => !l.unlocked);
+  const reward = next ? next.topReward : null;
+  document.getElementById("lb-sub").textContent = reward
+    ? `Top 3 when this chapter's Vault level unlocks get bonus RE: +${fmt(reward.first)} / +${fmt(reward.second)} / +${fmt(reward.third)}`
+    : "Ship the most Restoration Energy this chapter to top the list.";
+  document.getElementById("lb-rows").innerHTML = board.map((p, i) => `
+    <div class="lb-row">
+      <span class="lb-rank">#${i + 1}</span>
+      <span class="lb-name">${Pixl.esc(p.displayName)}</span>
+      <span class="lb-re">${fmt(p.re)} RE</span>
+    </div>`).join("");
+}
+
 function render(data) {
   const energy = data.energy || 0;
   const levels = data.levels || [];
+  renderLeaderboard(data);
 
   document.getElementById("g-num").firstChild.textContent = fmt(energy) + " ";
 
@@ -164,6 +209,15 @@ function render(data) {
           ${(l.rewards || []).map((r) => `<span class="rw">${Pixl.esc(r.icon || "")} ${Pixl.esc(r.label || "")}</span>`).join("")}
         </div>
         ${!l.unlocked ? `<div class="ch-need">◆ ${fmt(Math.max(0, l.energyRequired - energy))} more energy to recover</div>` : ""}
+        ${(l.winners && l.winners.length) ? `
+          <div class="winners">
+            ${l.winners.map((w) => `<span class="win-chip">#${w.rank} ${Pixl.esc(w.displayName)} +${fmt(w.re)} RE</span>`).join("")}
+          </div>` : (l.topReward && (l.topReward.first || l.topReward.second || l.topReward.third)) ? `
+          <div class="top-reward">
+            <span class="tr-chip">Top restorer: <b>+${fmt(l.topReward.first)} RE</b></span>
+            <span class="tr-chip">#2: <b>+${fmt(l.topReward.second)} RE</b></span>
+            <span class="tr-chip">#3: <b>+${fmt(l.topReward.third)} RE</b></span>
+          </div>` : ""}
       </div>
     </div>`).join("");
 }

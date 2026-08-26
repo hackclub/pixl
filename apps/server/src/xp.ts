@@ -61,13 +61,29 @@ export async function approvedHoursFor(
   return round1(rows.reduce((s, p) => s + hoursOf(p), 0));
 }
 
+/** RE awarded directly to a player - not tied to any project. Currently just
+ * Core Vault chapter leaderboard prizes (see [[vault-chapter-leaderboard]] /
+ * apps/server/src/routes/vault.ts), but any future flat RE grant belongs here
+ * too, not stapled onto a project row the way trialBonusRe is. */
+export async function bonusReFor(userId: string): Promise<number> {
+  const { data } = await supabase
+    .from("vault_chapter_awards")
+    .select("re_awarded")
+    .eq("user_id", userId);
+  return (data ?? []).reduce((s, r) => s + (Number(r.re_awarded) || 0), 0);
+}
+
 /**
- * Lifetime Restoration Energy - hours weighted by the tier they were shipped at.
- * This is what drives both the payout rate and the player's level.
+ * Lifetime Restoration Energy - hours weighted by the tier they were shipped at,
+ * plus any RE awarded directly. This is what drives both the payout rate and
+ * the player's level.
  */
 export async function lifetimeRe(userId: string, excludeProjectId?: number): Promise<number> {
-  const rows = await approvedProjectsFor(userId, excludeProjectId);
-  return round1(rows.reduce((s, p) => s + reOf(p), 0));
+  const [rows, bonus] = await Promise.all([
+    approvedProjectsFor(userId, excludeProjectId),
+    bonusReFor(userId),
+  ]);
+  return round1(rows.reduce((s, p) => s + reOf(p), bonus));
 }
 
 async function approvedProjectsFor(
@@ -85,6 +101,52 @@ async function approvedProjectsFor(
   return (data ?? []) as ProjectRow[];
 }
 
+/**
+ * Ranks players by RE earned during a Core Vault chapter window: from
+ * `windowStart` (exclusive; null means "since the beginning") up to now,
+ * counted by when each project got its final "approved" verdict, not when
+ * the work happened - a project's RE belongs to whichever chapter it landed
+ * in. Used for the top-3 chapter leaderboard reward in
+ * apps/server/src/routes/vault.ts.
+ */
+export async function topChapterContributors(
+  windowStart: Date | null,
+  limit: number,
+): Promise<{ userId: string; re: number }[]> {
+  let q = supabase
+    .from("review_audits")
+    .select(
+      "project_id, created_at, projects(user_id, approved_hours, hackatime_seconds, level, sidequest_id, status, banned_at)",
+    )
+    .eq("verdict", "approved")
+    .order("created_at", { ascending: false });
+  if (windowStart) q = q.gt("created_at", windowStart.toISOString());
+  const { data } = await q;
+
+  // A project can carry more than one "approved" audit if it was reverted and
+  // re-approved - keep only the most recent one per project (rows arrived
+  // newest-first) so its RE isn't double-counted.
+  const seenProjects = new Set<number>();
+  const totals = new Map<string, number>();
+  for (const row of data ?? []) {
+    const projectId = row.project_id as number;
+    if (seenProjects.has(projectId)) continue;
+    seenProjects.add(projectId);
+
+    const p = row.projects as
+      | (ProjectRow & { user_id: string; status: string; banned_at: string | null })
+      | null;
+    if (!p || p.status !== "approved" || p.banned_at) continue;
+
+    totals.set(p.user_id, (totals.get(p.user_id) ?? 0) + reOf(p));
+  }
+
+  return [...totals.entries()]
+    .map(([userId, re]) => ({ userId, re: round1(re) }))
+    .sort((a, b) => b.re - a.re)
+    .slice(0, limit);
+}
+
 /** Level from lifetime RE, for a player. */
 export async function levelFor(userId: string, excludeProjectId?: number): Promise<number> {
   return levelForRe(await lifetimeRe(userId, excludeProjectId));
@@ -98,10 +160,15 @@ export async function levelFor(userId: string, excludeProjectId?: number): Promi
 // to be rescaled to match (roughly x12.5 on the expected tier mix, but that
 // factor moves with the mix - the thresholds were flagged as guesses anyway).
 export async function communityEnergy(): Promise<number> {
-  const { data } = await supabase
-    .from("projects")
-    .select("approved_hours, hackatime_seconds, level, sidequest_id")
-    .eq("status", "approved")
-    .is("banned_at", null);
-  return Math.round((data ?? []).reduce((s, p) => s + reOf(p as ProjectRow), 0));
+  const [{ data }, { data: awards }] = await Promise.all([
+    supabase
+      .from("projects")
+      .select("approved_hours, hackatime_seconds, level, sidequest_id")
+      .eq("status", "approved")
+      .is("banned_at", null),
+    supabase.from("vault_chapter_awards").select("re_awarded"),
+  ]);
+  const projectRe = (data ?? []).reduce((s, p) => s + reOf(p as ProjectRow), 0);
+  const awardRe = (awards ?? []).reduce((s, r) => s + (Number(r.re_awarded) || 0), 0);
+  return Math.round(projectRe + awardRe);
 }

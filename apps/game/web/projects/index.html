@@ -1991,8 +1991,18 @@
         Pixl.toast("Uploading image…");
         const upload = (async () => {
           form.imageUrl = await Pixl.upload(file);
+          // The ship checklist reads p.image_url, a separate object from
+          // `form`, so patch it too, or the "Thumbnail uploaded" item stays
+          // stuck on "-" until a reload re-fetches the project from scratch.
+          const h = location.hash.replace(/^#/, "");
+          if (h.startsWith("p=")) {
+            const p = projects.find((x) => x.id === Number(h.slice(2)));
+            if (p) p.image_url = form.imageUrl;
+          }
           if ($("p-hero"))
             $("p-hero").innerHTML = `<img src="${Pixl.esc(form.imageUrl)}" alt="">`;
+          if ($("ship-thumb"))
+            $("ship-thumb").innerHTML = `<span class="ok">+</span> Thumbnail uploaded`;
           Pixl.toast("Thumbnail set!");
         })()
           .catch((e) => {
@@ -2250,7 +2260,7 @@
         <div class="ship-list">
           <div class="ship-item"><span class="${p.repo_url ? "ok" : "no"}">${p.repo_url ? "+" : "-"}</span> GitHub repo linked</div>
           <div class="ship-item"><span class="${p.demo_url ? "ok" : "no"}">${p.demo_url ? "+" : "-"}</span> Demo link added</div>
-          <div class="ship-item"><span class="${p.image_url ? "ok" : "no"}">${p.image_url ? "+" : "-"}</span> Thumbnail uploaded</div>
+          <div class="ship-item" id="ship-thumb"><span class="${p.image_url ? "ok" : "no"}">${p.image_url ? "+" : "-"}</span> Thumbnail uploaded</div>
           <div class="ship-item" id="ship-ht">${shipHtLine()}</div>
           ${
             p.kind === "hardware" && p.needs_funding

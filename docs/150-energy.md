@@ -25,15 +25,15 @@ Tier is about the project, not about you. A first timer who ships something genu
 
 Your **lifetime RE** — every hour of every project you've ever shipped, added up — is what sets your hourly rate. It never resets and nothing you ship later erases what you already earned. The rate itself is a fixed table: once your lifetime RE crosses a threshold, every ship from then on pays at that rate or higher, this one included.
 
-| {{step1Re}} RE | lifetime, reached | {{step1Usd}} / hour |
-| {{step2Re}} RE | lifetime, reached | {{step2Usd}} / hour |
-| {{step3Re}} RE | lifetime, reached | {{step3Usd}} / hour |
-| {{step4Re}} RE | lifetime, reached | {{step4Usd}} / hour |
-| {{step5Re}} RE | lifetime, reached | {{step5Usd}} / hour |
-| {{step6Re}} RE | lifetime, reached | {{step6Usd}} / hour |
-| {{step7Re}} RE | lifetime, the cap | **{{step7Usd}} / hour** |
+| {{step1Re}} RE | lifetime, reached ({{step1HRange}}) | {{step1Usd}} / hour |
+| {{step2Re}} RE | lifetime, reached ({{step2HRange}}) | {{step2Usd}} / hour |
+| {{step3Re}} RE | lifetime, reached ({{step3HRange}}) | {{step3Usd}} / hour |
+| {{step4Re}} RE | lifetime, reached ({{step4HRange}}) | {{step4Usd}} / hour |
+| {{step5Re}} RE | lifetime, reached ({{step5HRange}}) | {{step5Usd}} / hour |
+| {{step6Re}} RE | lifetime, reached ({{step6HRange}}) | {{step6Usd}} / hour |
+| {{step7Re}} RE | lifetime, the cap ({{step7HRange}}) | **{{step7Usd}} / hour** |
 
-Since RE is one pooled number no matter which tiers earned it, your real hours-to-cap depends on whatever mix of tiers you ship. But if you stuck to one tier the whole way, here's how many hours each payout level takes:
+The hours in parentheses are a range because RE is one pooled number no matter which tiers earned it: the low end is "shipped nothing but T4 Nexus the whole way," the high end is "shipped nothing but T1 Spark." Your real hours-to-cap depends on whatever mix you actually ship. If you stuck to one tier the whole way, here's exactly how many hours each payout level takes:
 
 ### If you only ship T4 Nexus
 
@@ -85,9 +85,9 @@ Every hour you ship, at any tier, banks RE forever and pushes your rate up for e
 
 Your level is a display of lifetime RE and nothing more. Levels run 1 to {{maxLevel}}, each one costs more RE than the last, and they have **no effect on what you get paid**: the rate comes straight off RE. Level is just there so the shipping shows up somewhere.
 
-| Levels {{band1From}}-{{band1To}} | {{band1Per}} RE per level | {{band1Total}} RE total |
-| Levels {{band2From}}-{{band2To}} | {{band2Per}} RE per level | {{band2Total}} RE total |
-| Levels {{band3From}}-{{band3To}} | {{band3Per}} RE per level | {{band3Total}} RE total |
+| Levels {{band1From}}-{{band1To}} | {{band1Per}} RE per level | {{band1Total}} RE total ({{band1HRange}}) |
+| Levels {{band2From}}-{{band2To}} | {{band2Per}} RE per level | {{band2Total}} RE total ({{band2HRange}}) |
+| Levels {{band3From}}-{{band3To}} | {{band3Per}} RE per level | {{band3Total}} RE total ({{band3HRange}}) |
 
 Early levels are cheap on purpose: a couple of hours on your first project already moves you a level or two. The last level and the top pay rate land on the same amount of RE, so you hit both at once. RE keeps stacking past that, it just runs out of levels to show for it.
 
