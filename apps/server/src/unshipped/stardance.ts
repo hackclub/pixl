@@ -53,79 +53,96 @@ async function fetchJson(url: string): Promise<any | null> {
   }
 }
 
-async function getSlackIdFromStardance(username: string): Promise<string | null> {
+// getSlackIdFromStardance and scrapeStardanceProjects both need the same
+// profile page for the same username — cached here so a request that needs
+// both (slack_id confirm, then project listing) only fetches it once.
+const profileHtmlCache = new Map<string, { at: number; html: string | null }>();
+
+async function fetchProfileHtml(username: string): Promise<string | null> {
+  const cached = profileHtmlCache.get(username);
+  if (cached && Date.now() - cached.at < CACHE_MS) return cached.html;
+  let html: string | null = null;
   try {
     const r = await fetch(`https://stardance.hackclub.com/@${encodeURIComponent(username)}`, {
-      signal: AbortSignal.timeout(6000),
-      headers: { "User-Agent": "Mozilla/5.0" }
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      headers: { "User-Agent": "Mozilla/5.0" },
     });
-    if (!r.ok) return null;
-    const html = await r.text();
-    const m = html.match(/cachet\.dunkirk\.sh\/users\/(U[A-Z0-9]+)/);
-    return m ? m[1] : null;
+    if (r.ok) html = await r.text();
   } catch (e) {
-    console.error("[stardance] fallback profile fetch failed", username, e);
-    return null;
+    console.error("[stardance] profile page fetch failed", username, e);
   }
+  profileHtmlCache.set(username, { at: Date.now(), html });
+  return html;
 }
 
-async function scrapeStardanceProjects(username: string): Promise<StardanceProject[]> {
-  try {
-    const r = await fetch(`https://stardance.hackclub.com/@${encodeURIComponent(username)}`, {
-      signal: AbortSignal.timeout(6000),
-      headers: { "User-Agent": "Mozilla/5.0" }
-    });
-    if (!r.ok) return [];
-    const html = await r.text();
-    const projectRegex = /href="\/projects\/(\d+)"[^>]*>(.*?)<\/a>/g;
-    const scraped: StardanceProject[] = [];
-    let match;
-    while ((match = projectRegex.exec(html)) !== null) {
-      const id = match[1];
-      const title = match[2].replace(/<[^>]*>/g, "").trim() || "Untitled project";
-      scraped.push({
-        id,
-        title,
-        description: "",
-        repoUrl: "",
-        demoUrl: "",
-        bannerUrl: "https://stardance.hackclub.com/assets/profile/default-banner-4827579f.png"
-      });
-    }
+// Fallback for when the crawler API's own slack_id field comes back empty
+// (the exact bug that broke matching for a real player earlier) — scrapes it
+// straight off the account's live avatar instead.
+async function getSlackIdFromStardance(username: string): Promise<string | null> {
+  const html = await fetchProfileHtml(username);
+  if (!html) return null;
+  const m = html.match(/cachet\.dunkirk\.sh\/users\/(U[A-Z0-9]+)/);
+  return m ? m[1] : null;
+}
 
-    await Promise.all(
-      scraped.map(async (p) => {
-        try {
-          const detailRes = await fetch(`https://stardance.hackclub.com/projects/${p.id}`, {
-            signal: AbortSignal.timeout(5000),
-            headers: { "User-Agent": "Mozilla/5.0" }
-          });
-          if (!detailRes.ok) return;
-          const detailHtml = await detailRes.text();
-          
-          const descMatch = detailHtml.match(/<meta\s+name="description"\s+content="([^"]*)"/i) || 
-                            detailHtml.match(/<meta\s+property="og:description"\s+content="([^"]*)"/i);
-          if (descMatch) p.description = descMatch[1].slice(0, 2000);
-          
-          const imageMatch = detailHtml.match(/<meta\s+property="og:image"\s+content="([^"]*)"/i);
-          if (imageMatch) p.bannerUrl = imageMatch[1];
-          
-          const githubMatch = detailHtml.match(/href="(https:\/\/github\.com\/[^"]+)"/i);
-          if (githubMatch) p.repoUrl = githubMatch[1];
-          
-          const demoMatch = detailHtml.match(/href="((?!https:\/\/github\.com)(?!https:\/\/stardance\.hackclub\.com)https:\/\/[^"]+)"/i);
-          if (demoMatch) p.demoUrl = demoMatch[1];
-        } catch (err) {
-          console.error("[stardance] project detail scrape failed", p.id, err);
-        }
-      })
-    );
-    
-    return scraped;
-  } catch (e) {
-    console.error("[stardance] profile projects scrape failed", username, e);
-    return [];
+// Fallback for when the crawler API's project list comes back empty for a
+// real account. Only ever called when the API gave us nothing to work with
+// (see stardanceProjectsForUser) — this does a full profile fetch plus one
+// fetch per scraped project, which is too slow to run unconditionally on
+// every request.
+async function scrapeStardanceProjects(username: string): Promise<StardanceProject[]> {
+  const html = await fetchProfileHtml(username);
+  if (!html) return [];
+  const projectRegex = /href="\/projects\/(\d+)"[^>]*>(.*?)<\/a>/g;
+  const scraped: StardanceProject[] = [];
+  let match;
+  while ((match = projectRegex.exec(html)) !== null) {
+    const id = match[1];
+    const title = match[2].replace(/<[^>]*>/g, "").trim() || "Untitled project";
+    scraped.push({
+      id,
+      title,
+      description: "",
+      repoUrl: "",
+      demoUrl: "",
+      bannerUrl: "https://stardance.hackclub.com/assets/profile/default-banner-4827579f.png",
+    });
   }
+
+  await Promise.all(
+    scraped.map(async (p) => {
+      try {
+        const detailRes = await fetch(`https://stardance.hackclub.com/projects/${p.id}`, {
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+          headers: { "User-Agent": "Mozilla/5.0" },
+        });
+        if (!detailRes.ok) return;
+        const detailHtml = await detailRes.text();
+
+        const descMatch =
+          detailHtml.match(/<meta\s+name="description"\s+content="([^"]*)"/i) ||
+          detailHtml.match(/<meta\s+property="og:description"\s+content="([^"]*)"/i);
+        if (descMatch) p.description = descMatch[1].slice(0, 2000);
+
+        const imageMatch = detailHtml.match(/<meta\s+property="og:image"\s+content="([^"]*)"/i);
+        if (imageMatch) p.bannerUrl = imageMatch[1];
+
+        // repoUrl is safe to scrape this way — it's constrained to github.com
+        // so a false match is unlikely. demoUrl has no such constraint (it
+        // could be any host), so "first external link that isn't github or
+        // stardance" risked grabbing a share button, an embed, anything —
+        // left blank instead; the player fills it in before shipping, same
+        // as any other draft (parseProjectBody doesn't require it at save
+        // time).
+        const githubMatch = detailHtml.match(/href="(https:\/\/github\.com\/[^"]+)"/i);
+        if (githubMatch) p.repoUrl = githubMatch[1];
+      } catch (err) {
+        console.error("[stardance] project detail scrape failed", p.id, err);
+      }
+    }),
+  );
+
+  return scraped;
 }
 
 const usernameCache = new Map<string, { at: number; value: string | null }>();
@@ -202,13 +219,14 @@ export async function stardanceProjectsForUser(username: string): Promise<Starda
     bannerUrl: safeUrl(p.banner_url),
   }));
 
-  const scrapedItems = await scrapeStardanceProjects(username);
-  const combined = [...apiItems];
-  for (const s of scrapedItems) {
-    if (!combined.some((c) => c.id === s.id)) {
-      combined.push(s);
-    }
-  }
+  // Scraping is a fallback for when the API gives us nothing to work with
+  // (a real failure mode we hit — a valid account with an empty items
+  // array), not something to run on every request. Doing it unconditionally
+  // meant every cache-miss paid for a full profile fetch plus one fetch per
+  // project even when the API's own data was already complete — exactly the
+  // kind of slow external round-trip that stalled the whole import box for
+  // other players before.
+  const combined = apiItems.length > 0 ? apiItems : await scrapeStardanceProjects(username);
 
   projectsCache.set(username, { at: Date.now(), value: combined });
   return combined;
