@@ -336,6 +336,7 @@ body.has-sidebar{padding-left:var(--sidebar);padding-top:var(--toprail)}
 /* Landing's button, verbatim: filled face, black rule that's heavy on the
    right/bottom, and a hover that lifts the block up-left while the bottom edge
    grows. No box-shadow here on purpose, the thick border IS the shadow. */
+.btn[hidden]{display:none}
 .btn{
   display:inline-flex;align-items:center;gap:7px;
   cursor:pointer;border-radius:0;

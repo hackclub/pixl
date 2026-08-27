@@ -729,7 +729,17 @@
           }));
           xp = Number(data.xp || 0);
           claimedIds = new Set((data.claimed || []).map(Number));
-          if (data.region) $("region-select").value = data.region;
+          if (data.region) {
+            const regionSelect = $("region-select");
+            regionSelect.value = data.region;
+            // pixl.js's enhanceSelect() draws a custom label over this native
+            // <select> and only resyncs it on a real "change" event - dispatching
+            // one here would also re-trigger the region-switch listener below and
+            // fire an unwanted POST /api/shop/region, so update the label directly.
+            const label = regionSelect.closest(".csel")?.querySelector(".csel-label");
+            const opt = regionSelect.options[regionSelect.selectedIndex];
+            if (label && opt) label.textContent = opt.textContent;
+          }
           if (data.sessionExpired && loggedIn) {
             loggedIn = false;
             wallet = null;
