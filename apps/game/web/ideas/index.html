@@ -81,6 +81,10 @@
     border: 2px solid var(--stroke); overflow: hidden; display: flex; align-items: center; justify-content: center;
     background: repeating-conic-gradient(rgba(22,22,30,.05) 0% 25%, transparent 0% 50%) 0 0/16px 16px, var(--panel-2); }
   .poster-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .poster-thumb-roles { display: flex; gap: 10px; }
+  .poster-thumb-role { width: 56px; height: 56px; display: flex; align-items: center; justify-content: center;
+    border: 2px solid var(--stroke); background: var(--role-color); }
+  .poster-thumb-role img { width: 36px; height: 36px; image-rendering: pixelated; }
   .poster-thumb-none { font-family: var(--pixel); font-size: 11px; letter-spacing: 1.5px; color: var(--muted); text-align: center; }
   .poster-seeking { position: absolute; left: 26px; top: 280px; width: 288px; text-align: center;
     font-family: var(--sans); font-weight: 700; font-size: 13px; letter-spacing: .3px; color: #16161e; }
@@ -211,6 +215,14 @@ function roleLabel(r) {
   return ROLE_META[r] ? ROLE_META[r].label : String(r).toUpperCase();
 }
 
+function posterThumbHtml(i, roles) {
+  if (i.image_url)
+    return `<img src="${Pixl.esc(i.image_url)}" alt="" loading="lazy" onerror="this.remove()">`;
+  if (roles.length)
+    return `<div class="poster-thumb-roles">${roles.slice(0, 3).map((r) => `<span class="poster-thumb-role" style="--role-color:${ROLE_META[r] ? ROLE_META[r].color : "#999"}"><img src="../img/icon-role-${Pixl.esc(r)}.png" alt=""></span>`).join("")}</div>`;
+  return `<span class="poster-thumb-none">NO IMAGE</span>`;
+}
+
 function posterCard(i) {
   const roles = Array.isArray(i.roles_needed) ? i.roles_needed : [];
   const roleWords = roles.map(roleLabel).join(", ");
@@ -222,7 +234,7 @@ function posterCard(i) {
   return `
     <div class="poster-layout" data-id="${Pixl.esc(i.id)}">
       <div class="poster-card">
-        <div class="poster-thumb">${i.image_url ? `<img src="${Pixl.esc(i.image_url)}" alt="" loading="lazy" onerror="this.remove()">` : `<span class="poster-thumb-none">NO IMAGE</span>`}</div>
+        <div class="poster-thumb">${posterThumbHtml(i, roles)}</div>
         ${roleWords ? `<div class="poster-seeking">${Pixl.esc(roleWords)}</div>` : ""}
         ${hours ? `<div class="poster-hours">${Pixl.esc(hours)}</div>` : ""}
       </div>
