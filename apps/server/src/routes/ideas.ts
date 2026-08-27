@@ -3,8 +3,11 @@ import { verifySessionToken } from "../auth/session.js";
 import { supabase } from "../db/client.js";
 import { withLock } from "../db/advisoryLock.js";
 import { containsBlocked } from "../moderation.js";
+import { addNotification } from "./notifications.js";
 
 const router = Router();
+
+const IDEA_ROLES = ["art", "code", "audio", "design", "writing"];
 
 // Batch vote counts + this viewer's own votes for a set of ideas — same
 // shape as explore.ts's project vote batching.
@@ -90,9 +93,25 @@ router.post("/api/ideas", async (req, res) => {
   if (containsBlocked(title) || containsBlocked(body))
     return res.status(400).json({ ok: false, error: "blocked_content" });
 
+  const isCollab = req.body?.isCollab === true;
+  const rolesNeeded = isCollab && Array.isArray(req.body?.rolesNeeded)
+    ? [...new Set(req.body.rolesNeeded.filter((r: unknown) => typeof r === "string" && IDEA_ROLES.includes(r)))]
+    : [];
+  const hoursRaw = Number(req.body?.hoursEstimate);
+  const hoursEstimate = isCollab && Number.isFinite(hoursRaw) && hoursRaw > 0
+    ? Math.min(hoursRaw, 1000)
+    : null;
+
   const { data, error } = await supabase
     .from("ideas")
-    .insert({ user_id: session.userId, title, body })
+    .insert({
+      user_id: session.userId,
+      title,
+      body,
+      is_collab: isCollab,
+      roles_needed: rolesNeeded,
+      hours_estimate: hoursEstimate,
+    })
     .select("*")
     .single();
   if (error || !data) {
@@ -200,6 +219,39 @@ router.post("/api/ideas/:id/downvote", async (req, res) => {
     console.error("[ideas] downvote insert failed", e);
     res.status(500).json({ ok: false });
   }
+});
+
+router.post("/api/ideas/:id/apply", async (req, res) => {
+  const token = typeof req.query.token === "string" ? req.query.token : "";
+  const session = token ? verifySessionToken(token) : null;
+  if (!session) return res.status(401).json({ ok: false });
+
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: "bad_id" });
+
+  const { data: idea } = await supabase
+    .from("ideas")
+    .select("id, user_id, title, is_collab")
+    .eq("id", id)
+    .is("banned_at", null)
+    .maybeSingle();
+  if (!idea) return res.status(404).json({ ok: false, error: "not_found" });
+  if (!idea.is_collab) return res.status(400).json({ ok: false, error: "not_collab" });
+  if (idea.user_id === session.userId)
+    return res.status(400).json({ ok: false, error: "own_idea" });
+
+  const authorId = idea.user_id as string;
+  void addNotification(
+    authorId,
+    "Collab application",
+    `${session.displayName} wants to collab on "${idea.title}". Link up on Slack for a better convo.`,
+  );
+  void addNotification(
+    session.userId,
+    "Collab application sent",
+    `You applied to collab on "${idea.title}". Link up on Slack if the poster reaches out.`,
+  );
+  res.json({ ok: true });
 });
 
 export default router;

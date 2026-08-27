@@ -49,6 +49,46 @@
   .idea-list { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   @media (max-width: 640px) { .idea-list { grid-template-columns: 1fr; } }
   .idea-card { padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
+
+  .collab-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--panel-2); border: var(--bw) dashed var(--stroke); }
+  .collab-row .switch { position: relative; width: 38px; height: 22px; border: var(--bw) solid var(--stroke); background: var(--panel); flex: none; cursor: pointer; }
+  .collab-row .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; background: var(--faint); transition: transform .15s ease, background .15s ease; }
+  .collab-row .switch.on { background: var(--gold); }
+  .collab-row .switch.on::after { transform: translateX(16px); background: var(--btn-ink); }
+  .collab-row .switch-label { font-size: 13.5px; color: var(--ink); font-weight: 600; }
+  .collab-row .switch-sub { font-size: 12px; color: var(--faint); }
+  .role-picker { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+  .role-picker[hidden] { display: none; }
+  .role-opt { display: inline-flex; align-items: center; gap: 6px; font-family: var(--sans); font-size: 12.5px; font-weight: 700;
+    padding: 5px 10px 5px 6px; border: var(--bw) solid var(--stroke); background: var(--panel); color: var(--dim); cursor: pointer; }
+  .role-opt.on { background: var(--role-color, var(--teal)); color: var(--btn-ink); }
+  .hours-row { display: flex; align-items: center; gap: 10px; }
+  .hours-row[hidden] { display: none; }
+  .hours-row label { font-size: 13px; color: var(--faint); }
+  .hours-row input { width: 90px; }
+
+  .idea-list .poster-layout { grid-column: 1 / -1; display: grid; grid-template-columns: 340px 1fr; gap: 28px; align-items: start; }
+  @media (max-width: 760px) { .idea-list .poster-layout { grid-template-columns: 1fr; } }
+  .poster-card { position: relative; width: 340px; height: 438px;
+    background: url(../img/poster-wanted.png) no-repeat; background-size: 340px 438px;
+    filter: drop-shadow(5px 5px 0 rgba(0,0,0,.18)); }
+  .poster-seeking { position: absolute; left: 26px; top: 258px; width: 288px; text-align: center;
+    font-family: var(--sans); font-weight: 700; font-size: 13px; letter-spacing: .3px; color: #16161e; }
+  .poster-hours { position: absolute; left: 26px; top: 280px; width: 288px; text-align: center;
+    font-family: var(--sans); font-size: 11.5px; letter-spacing: .2px; color: #6f6f78; }
+  .poster-desc { padding: 26px 28px; display: flex; flex-direction: column; gap: 14px; }
+  .poster-desc-eyebrow { font-family: var(--pixel); font-size: 12px; letter-spacing: 1.5px; color: var(--gold); }
+  .poster-desc-title { font-size: 24px; font-weight: 700; color: var(--ink); line-height: 1.28; }
+  .poster-desc-meta { font-size: 13px; color: var(--faint); padding-bottom: 14px; border-bottom: 1px solid var(--stroke); }
+  .poster-desc-body { font-size: 15.5px; color: var(--dim); line-height: 1.6; max-width: 60ch; }
+  .poster-desc-roles-h { font-family: var(--pixel); font-size: 11px; letter-spacing: 1px; color: var(--faint); margin-top: 4px; }
+  .poster-desc-roles { display: flex; gap: 6px; flex-wrap: wrap; }
+  .poster-desc-role { display: inline-flex; align-items: center; gap: 5px; font-family: var(--sans); font-size: 11.5px; font-weight: 700;
+    letter-spacing: .2px; padding: 4px 10px 4px 5px; border: var(--bw) solid var(--stroke); background: var(--role-color); color: var(--btn-ink); }
+  .poster-desc-role img { width: 18px; height: 18px; image-rendering: pixelated; display: block; }
+  .poster-desc-apply { align-self: flex-start; margin-top: 6px; }
+  .poster-desc-apply.on { background: var(--panel-2); color: var(--faint); cursor: default; }
+  .poster-desc-note { font-size: 12px; color: var(--faint); margin-top: 6px; }
   .idea-meta { font-size: 13px; color: var(--faint); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   .idea-title { font-size: 18px; color: var(--ink); }
   .idea-body { font-size: 15px; color: var(--dim); word-break: break-word; }
@@ -79,6 +119,24 @@
   <div class="panel compose" id="compose">
     <input class="field" id="i-title" maxlength="120" placeholder="Idea title…" autocomplete="off">
     <textarea class="field" id="i-body" maxlength="2000" placeholder="What is it, why's it cool… (optional)"></textarea>
+    <div class="collab-row">
+      <span class="switch" id="collab-switch"></span>
+      <div>
+        <div class="switch-label">Looking for collaborators</div>
+        <div class="switch-sub">Shows what roles you need and lets people apply</div>
+      </div>
+    </div>
+    <div class="role-picker" id="role-picker" hidden>
+      <span class="role-opt" data-role="art" style="--role-color:#e8a33d">ART</span>
+      <span class="role-opt" data-role="audio" style="--role-color:#8a6fd8">AUDIO</span>
+      <span class="role-opt" data-role="code" style="--role-color:#52aeb9">CODE</span>
+      <span class="role-opt" data-role="design" style="--role-color:#5fa8e0">DESIGN</span>
+      <span class="role-opt" data-role="writing" style="--role-color:#c96a8f">WRITING</span>
+    </div>
+    <div class="hours-row" id="hours-row" hidden>
+      <label for="i-hours">Approx hours of work needed</label>
+      <input class="field" id="i-hours" type="number" min="1" max="1000" step="1" placeholder="15">
+    </div>
     <div class="compose-foot">
       <span class="count" id="i-count">0/120</span>
       <button class="btn" id="i-post">POST IDEA</button>
@@ -127,6 +185,69 @@ function ideaCard(i) {
     </div>`;
 }
 
+const ROLE_META = {
+  art: { color: "#e8a33d", label: "ART" },
+  audio: { color: "#8a6fd8", label: "AUDIO" },
+  code: { color: "#52aeb9", label: "CODE" },
+  design: { color: "#5fa8e0", label: "DESIGN" },
+  writing: { color: "#c96a8f", label: "WRITING" },
+};
+function roleLabel(r) {
+  return ROLE_META[r] ? ROLE_META[r].label : String(r).toUpperCase();
+}
+
+function posterCard(i) {
+  const roles = Array.isArray(i.roles_needed) ? i.roles_needed : [];
+  const roleWords = roles.map(roleLabel).join(", ");
+  const hours = i.hours_estimate ? `~${Math.round(i.hours_estimate)}H OF WORK NEEDED` : "";
+  const applyBtn = i.is_mine
+    ? `<button class="btn dark poster-desc-apply" onclick="return deleteIdea(${Number(i.id)})">DELETE</button>`
+    : `<button class="btn teal poster-desc-apply" onclick="return applyToIdea(event,${Number(i.id)})">APPLY</button>
+       <div class="poster-desc-note">Link up on Slack if the poster reaches out</div>`;
+  return `
+    <div class="poster-layout" data-id="${Pixl.esc(i.id)}">
+      <div class="poster-card">
+        ${roleWords ? `<div class="poster-seeking">${Pixl.esc(roleWords)}</div>` : ""}
+        ${hours ? `<div class="poster-hours">${Pixl.esc(hours)}</div>` : ""}
+      </div>
+      <div class="panel poster-desc">
+        <div class="poster-desc-eyebrow">COLLAB WANTED</div>
+        <div class="poster-desc-title">${Pixl.esc(i.title)}</div>
+        <div class="poster-desc-meta">posted by <span class="gold">${Pixl.esc(i.author_name)}</span>${i.is_mine ? ' <span class="own-badge">· YOU</span>' : ""} · ${Pixl.timeAgo(i.created_at)}</div>
+        ${i.body ? `<div class="poster-desc-body md">${Pixl.markdown(i.body)}</div>` : ""}
+        ${roles.length ? `
+        <div class="poster-desc-roles-h">ROLES NEEDED</div>
+        <div class="poster-desc-roles">
+          ${roles.map((r) => `<span class="poster-desc-role" style="--role-color:${ROLE_META[r] ? ROLE_META[r].color : "#999"}"><img src="../img/icon-role-${Pixl.esc(r)}.png" alt="">${roleLabel(r)}</span>`).join("")}
+        </div>` : ""}
+        ${applyBtn}
+      </div>
+    </div>`;
+}
+
+window.applyToIdea = async function (e, id) {
+  e.preventDefault();
+  const wrap = document.querySelector(`.poster-layout[data-id="${id}"]`);
+  const btn = wrap ? wrap.querySelector(".poster-desc-apply") : null;
+  if (btn && btn.disabled) return false;
+  if (btn) btn.disabled = true;
+  const r = await Pixl.send("POST", "/api/ideas/" + id + "/apply");
+  if (r.ok) {
+    if (btn) {
+      btn.textContent = "APPLIED";
+      btn.classList.add("on");
+    }
+    Pixl.toast("Applied! Link up on Slack once the poster reaches out.");
+  } else {
+    if (btn) btn.disabled = false;
+    const msg = r.error === "own_idea" ? "You can't apply to your own idea."
+      : r.error === "not_collab" ? "This idea isn't looking for collaborators."
+      : "Couldn't apply right now.";
+    Pixl.toast(msg, true);
+  }
+  return false;
+};
+
 window.castVote = async function (e, id, dir) {
   e.preventDefault();
   const card = document.querySelector(`.idea-card[data-id="${id}"]`);
@@ -158,7 +279,7 @@ window.deleteIdea = async function (id) {
   if (!(await Pixl.confirm({ title: "Delete this idea?", confirmText: "Delete", danger: true }))) return false;
   const r = await Pixl.send("DELETE", "/api/ideas/" + id);
   if (r.ok) {
-    const card = document.querySelector(`.idea-card[data-id="${id}"]`);
+    const card = document.querySelector(`.idea-card[data-id="${id}"], .poster-layout[data-id="${id}"]`);
     if (card) card.remove();
   } else {
     Pixl.toast("Couldn't delete that idea.", true);
@@ -175,7 +296,7 @@ async function load() {
   const ideas = data.ideas || [];
   view.innerHTML = ideas.length === 0
     ? `<div class="empty-note">NO IDEAS YET, POST THE FIRST ONE!</div>`
-    : `<div class="idea-list">${ideas.map(ideaCard).join("")}</div>`;
+    : `<div class="idea-list">${ideas.map((i) => (i.is_collab ? posterCard(i) : ideaCard(i))).join("")}</div>`;
 }
 
 document.querySelectorAll("#tabs .tab").forEach((t) => t.addEventListener("click", () => {
@@ -205,17 +326,53 @@ function autoGrow() {
 }
 bodyInput.addEventListener("input", autoGrow);
 
+const collabSwitch = document.getElementById("collab-switch");
+const rolePicker = document.getElementById("role-picker");
+const hoursRow = document.getElementById("hours-row");
+const hoursInput = document.getElementById("i-hours");
+let isCollab = false;
+let selectedRoles = new Set();
+
+collabSwitch.addEventListener("click", () => {
+  isCollab = !isCollab;
+  collabSwitch.classList.toggle("on", isCollab);
+  rolePicker.hidden = !isCollab;
+  hoursRow.hidden = !isCollab;
+});
+rolePicker.querySelectorAll(".role-opt").forEach((opt) => {
+  opt.addEventListener("click", () => {
+    const role = opt.dataset.role;
+    if (selectedRoles.has(role)) selectedRoles.delete(role);
+    else selectedRoles.add(role);
+    opt.classList.toggle("on");
+  });
+});
+
 postBtn.addEventListener("click", async () => {
   const title = titleInput.value.trim();
   if (title.length < 3) return Pixl.toast("Give it a title (3+ characters).", true);
   postBtn.disabled = true;
-  const r = await Pixl.send("POST", "/api/ideas", { title, body: bodyInput.value.trim() });
+  const payload = { title, body: bodyInput.value.trim() };
+  if (isCollab) {
+    payload.isCollab = true;
+    payload.rolesNeeded = [...selectedRoles];
+    const hours = Number(hoursInput.value);
+    if (hours > 0) payload.hoursEstimate = hours;
+  }
+  const r = await Pixl.send("POST", "/api/ideas", payload);
   postBtn.disabled = false;
   if (r.ok) {
     titleInput.value = "";
     bodyInput.value = "";
     bodyInput.style.height = "";
     countEl.textContent = "0/120";
+    isCollab = false;
+    selectedRoles = new Set();
+    collabSwitch.classList.remove("on");
+    rolePicker.hidden = true;
+    rolePicker.querySelectorAll(".role-opt.on").forEach((o) => o.classList.remove("on"));
+    hoursRow.hidden = true;
+    hoursInput.value = "";
     load();
   } else {
     const msg = r.error === "blocked_content" ? "That idea contains blocked content."
