@@ -66,15 +66,25 @@
   .hours-row[hidden] { display: none; }
   .hours-row label { font-size: 13px; color: var(--faint); }
   .hours-row input { width: 90px; }
+  .image-row { display: flex; align-items: center; gap: 10px; }
+  .image-row[hidden] { display: none; }
+  .image-row .thumb-preview { width: 60px; height: 34px; border: var(--bw) solid var(--stroke); overflow: hidden; flex: none;
+    background: repeating-conic-gradient(rgba(22,22,30,.05) 0% 25%, transparent 0% 50%) 0 0/10px 10px, var(--panel-2); }
+  .image-row .thumb-preview img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
   .idea-list .poster-layout { grid-column: 1 / -1; display: grid; grid-template-columns: 340px 1fr; gap: 28px; align-items: start; }
   @media (max-width: 760px) { .idea-list .poster-layout { grid-template-columns: 1fr; } }
   .poster-card { position: relative; width: 340px; height: 438px;
     background: url(../img/poster-wanted.png) no-repeat; background-size: 340px 438px;
     filter: drop-shadow(5px 5px 0 rgba(0,0,0,.18)); }
-  .poster-seeking { position: absolute; left: 26px; top: 258px; width: 288px; text-align: center;
+  .poster-thumb { position: absolute; left: 65px; top: 172px; width: 210px; height: 96px;
+    border: 2px solid var(--stroke); overflow: hidden; display: flex; align-items: center; justify-content: center;
+    background: repeating-conic-gradient(rgba(22,22,30,.05) 0% 25%, transparent 0% 50%) 0 0/16px 16px, var(--panel-2); }
+  .poster-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .poster-thumb-none { font-family: var(--pixel); font-size: 11px; letter-spacing: 1.5px; color: var(--muted); text-align: center; }
+  .poster-seeking { position: absolute; left: 26px; top: 280px; width: 288px; text-align: center;
     font-family: var(--sans); font-weight: 700; font-size: 13px; letter-spacing: .3px; color: #16161e; }
-  .poster-hours { position: absolute; left: 26px; top: 280px; width: 288px; text-align: center;
+  .poster-hours { position: absolute; left: 26px; top: 302px; width: 288px; text-align: center;
     font-family: var(--sans); font-size: 11.5px; letter-spacing: .2px; color: #6f6f78; }
   .poster-desc { padding: 26px 28px; display: flex; flex-direction: column; gap: 14px; }
   .poster-desc-eyebrow { font-family: var(--pixel); font-size: 12px; letter-spacing: 1.5px; color: var(--gold); }
@@ -136,6 +146,11 @@
     <div class="hours-row" id="hours-row" hidden>
       <label for="i-hours">Approx hours of work needed</label>
       <input class="field" id="i-hours" type="number" min="1" max="1000" step="1" placeholder="15">
+    </div>
+    <div class="image-row" id="image-row" hidden>
+      <button class="btn ghost" id="i-image-btn" type="button">ADD IMAGE</button>
+      <div class="thumb-preview" id="i-image-preview" hidden></div>
+      <input type="file" id="i-image-file" accept="image/*" hidden>
     </div>
     <div class="compose-foot">
       <span class="count" id="i-count">0/120</span>
@@ -207,6 +222,7 @@ function posterCard(i) {
   return `
     <div class="poster-layout" data-id="${Pixl.esc(i.id)}">
       <div class="poster-card">
+        <div class="poster-thumb">${i.image_url ? `<img src="${Pixl.esc(i.image_url)}" alt="" loading="lazy" onerror="this.remove()">` : `<span class="poster-thumb-none">NO IMAGE</span>`}</div>
         ${roleWords ? `<div class="poster-seeking">${Pixl.esc(roleWords)}</div>` : ""}
         ${hours ? `<div class="poster-hours">${Pixl.esc(hours)}</div>` : ""}
       </div>
@@ -330,14 +346,21 @@ const collabSwitch = document.getElementById("collab-switch");
 const rolePicker = document.getElementById("role-picker");
 const hoursRow = document.getElementById("hours-row");
 const hoursInput = document.getElementById("i-hours");
+const imageRow = document.getElementById("image-row");
+const imageBtn = document.getElementById("i-image-btn");
+const imageFile = document.getElementById("i-image-file");
+const imagePreview = document.getElementById("i-image-preview");
 let isCollab = false;
 let selectedRoles = new Set();
+let pendingImageUrl = null;
+let pendingImageUpload = null;
 
 collabSwitch.addEventListener("click", () => {
   isCollab = !isCollab;
   collabSwitch.classList.toggle("on", isCollab);
   rolePicker.hidden = !isCollab;
   hoursRow.hidden = !isCollab;
+  imageRow.hidden = !isCollab;
 });
 rolePicker.querySelectorAll(".role-opt").forEach((opt) => {
   opt.addEventListener("click", () => {
@@ -348,16 +371,36 @@ rolePicker.querySelectorAll(".role-opt").forEach((opt) => {
   });
 });
 
+imageBtn.addEventListener("click", () => imageFile.click());
+imageFile.addEventListener("change", () => {
+  const file = imageFile.files[0];
+  if (!file) return;
+  imageBtn.disabled = true;
+  pendingImageUpload = (async () => {
+    pendingImageUrl = await Pixl.upload(file);
+    imagePreview.innerHTML = `<img src="${Pixl.esc(pendingImageUrl)}" alt="">`;
+    imagePreview.hidden = false;
+    imageBtn.textContent = "CHANGE IMAGE";
+  })()
+    .catch((e) => Pixl.toast(e.message, true))
+    .finally(() => {
+      imageBtn.disabled = false;
+      pendingImageUpload = null;
+    });
+});
+
 postBtn.addEventListener("click", async () => {
   const title = titleInput.value.trim();
   if (title.length < 3) return Pixl.toast("Give it a title (3+ characters).", true);
   postBtn.disabled = true;
+  if (pendingImageUpload) await pendingImageUpload;
   const payload = { title, body: bodyInput.value.trim() };
   if (isCollab) {
     payload.isCollab = true;
     payload.rolesNeeded = [...selectedRoles];
     const hours = Number(hoursInput.value);
     if (hours > 0) payload.hoursEstimate = hours;
+    if (pendingImageUrl) payload.imageUrl = pendingImageUrl;
   }
   const r = await Pixl.send("POST", "/api/ideas", payload);
   postBtn.disabled = false;
@@ -373,6 +416,12 @@ postBtn.addEventListener("click", async () => {
     rolePicker.querySelectorAll(".role-opt.on").forEach((o) => o.classList.remove("on"));
     hoursRow.hidden = true;
     hoursInput.value = "";
+    imageRow.hidden = true;
+    imageFile.value = "";
+    imagePreview.hidden = true;
+    imagePreview.innerHTML = "";
+    imageBtn.textContent = "ADD IMAGE";
+    pendingImageUrl = null;
     load();
   } else {
     const msg = r.error === "blocked_content" ? "That idea contains blocked content."

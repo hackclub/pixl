@@ -101,6 +101,7 @@ router.post("/api/ideas", async (req, res) => {
   const hoursEstimate = isCollab && Number.isFinite(hoursRaw) && hoursRaw > 0
     ? Math.min(hoursRaw, 1000)
     : null;
+  const imageUrl = String(req.body?.imageUrl ?? "").trim().slice(0, 500) || null;
 
   const { data, error } = await supabase
     .from("ideas")
@@ -111,6 +112,7 @@ router.post("/api/ideas", async (req, res) => {
       is_collab: isCollab,
       roles_needed: rolesNeeded,
       hours_estimate: hoursEstimate,
+      image_url: imageUrl,
     })
     .select("*")
     .single();
