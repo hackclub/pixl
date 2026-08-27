@@ -153,19 +153,24 @@ export default async function ReviewDetail({
   const hackatimeProjects = p.hackatime_projects ?? [];
   const journalHours =
     Math.round(journals.reduce((s, j) => s + (Number(j.hours) || 0), 0) * 10) / 10;
-  // For a hardware ship with no Hackatime project linked, hackatime_seconds
-  // isn't real Hackatime time — the ship route (projects.ts) folds journal
-  // hours into that same column so a journal-only hardware ship can meet the
-  // 1h floor (see 0130_project_kind.sql). Showing it as "Hackatime" here would
-  // double-list the same hours under both rows below.
+  const rawTrackedHours = Math.round(((p.hackatime_seconds ?? 0) / 3600) * 10) / 10;
+  // For a hardware ship, hackatime_seconds is never pure Hackatime time — the
+  // ship route (projects.ts: trackedSeconds = htSeconds + journalSeconds)
+  // always folds journal hours into that same column, whether or not a
+  // Hackatime project is linked, so a journal-only hardware ship can meet the
+  // 1h floor (see 0130_project_kind.sql). Subtract journalHours back out so
+  // this row shows real Hackatime-tracked time instead of the combined total
+  // (which would double-list the same hours under both rows below).
   const hackatimeHours =
-    p.kind === "hardware" && hackatimeProjects.length === 0
-      ? 0
-      : Math.round(((p.hackatime_seconds ?? 0) / 3600) * 10) / 10;
+    p.kind === "hardware"
+      ? Math.max(0, Math.round((rawTrackedHours - journalHours) * 10) / 10)
+      : rawTrackedHours;
   // Same "hackatime if tracked, else journal" rule claimedHoursFor() in
   // actions.ts uses for the actual payout, kept in sync so the cap shown here
-  // matches what reviewProject will credit.
-  const hours = hackatimeHours > 0 ? hackatimeHours : journalHours;
+  // matches what reviewProject will credit. Uses the raw combined column (not
+  // the split-out hackatimeHours above) so a hardware ship's journal+Hackatime
+  // total still adds up correctly.
+  const hours = rawTrackedHours > 0 ? rawTrackedHours : journalHours;
   const htPct = hours > 0 ? Math.round((hackatimeHours / hours) * 100) : 0;
 
   // Same "hackatime if tracked, else journal" source-of-truth as
