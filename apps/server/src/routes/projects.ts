@@ -577,15 +577,18 @@ router.post("/api/projects/:id/ship", async (req, res) => {
   // A hardware "design" (CAD Models) ship never got physically built, so a
   // schematic/PCB viewer link stands in for a demo; anything else claiming to
   // be hardware needs a video proving the physical build actually works ,
-  // neither a screenshot nor a CAD link show that.
+  // neither a screenshot nor a CAD link show that. A kicanvas.org link is
+  // unambiguous proof of a design ship on its own, so it's accepted
+  // regardless of project_type - don't make an unrelated dropdown (easy to
+  // leave on its default) block an otherwise-legit design submission.
   if (isHardware) {
-    const isDesign = project.project_type === "cad";
     const demoUrl = project.demo_url as string;
-    if (isDesign) {
-      if (!isKicanvasUrl(demoUrl) && !isVideoUrl(demoUrl))
-        return res.status(400).json({ ok: false, error: "design_demo_invalid" });
-    } else if (!isVideoUrl(demoUrl)) {
-      return res.status(400).json({ ok: false, error: "build_demo_video_required" });
+    if (!isKicanvasUrl(demoUrl) && !isVideoUrl(demoUrl)) {
+      const isDesign = project.project_type === "cad";
+      return res.status(400).json({
+        ok: false,
+        error: isDesign ? "design_demo_invalid" : "build_demo_video_required",
+      });
     }
   }
 
