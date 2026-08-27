@@ -26,15 +26,20 @@ export async function generateMetadata({
   params: Promise<{ lang: string }>;
 }): Promise<Metadata> {
   const { lang } = await params;
-  const dict = await getDictionary(hasLocale(lang) ? lang : defaultLocale);
+  const locale = hasLocale(lang) ? lang : defaultLocale;
+  const dict = await getDictionary(locale);
   return {
     title: dict.meta.title,
     description: dict.meta.description,
     metadataBase: new URL(config.urls.site),
+    alternates: {
+      canonical: `/${locale}`,
+      languages: Object.fromEntries(locales.map((l) => [l, `/${l}`])),
+    },
     openGraph: {
       title: dict.meta.title,
       description: dict.meta.description,
-      url: config.urls.site,
+      url: `${config.urls.site}/${locale}`,
       siteName: "Pixl",
       images: [{ url: "/og-boot-splash-v4.png", width: 1000, height: 650 }],
     },
