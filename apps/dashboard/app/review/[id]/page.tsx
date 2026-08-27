@@ -14,6 +14,7 @@ import {
 } from "@/lib/db";
 import { parseAuditNote } from "@/lib/auditNote";
 import { fetchCommits, attachCommitStats } from "@/lib/github";
+import { fetchBomRows } from "@/lib/bom";
 import { fetchUserSpans, attachTrackedTime, fetchTrustFactor, fetchHackatimeReport } from "@/lib/hackatime";
 import { yswsShipsFor } from "@/lib/ysws";
 import { renderMarkdown } from "@/lib/markdown";
@@ -247,13 +248,14 @@ export default async function ReviewDetail({
     ? tokenPromise.then((tok) => fetchHackatimeReport(p.users?.slack_id, tok, hackatimeProjects))
     : Promise.resolve(null);
 
-  const [commits, trust, yswsShips, ownerHandle, queue, hackatimeReport] = await Promise.all([
+  const [commits, trust, yswsShips, ownerHandle, queue, hackatimeReport, bomRows] = await Promise.all([
     commitsChain,
     fetchTrustFactor(p.users?.slack_id),
     yswsShipsFor(p.users?.slack_id, p.repo_url, p.demo_url),
     slackHandle(p.users?.slack_id),
     isFinalStage ? listSecondReviewProjects(viewer) : listShippedProjects(viewer),
     hackatimeReportPromise,
+    p.bom_url ? fetchBomRows(p.bom_url) : Promise.resolve(null),
   ]);
   const ownerName =
     p.users?.real_name || ownerHandle || p.users?.display_name || p.users?.slack_id || p.user_id;
@@ -347,14 +349,51 @@ export default async function ReviewDetail({
               <div>
                 <div className="text-xs font-medium text-muted-foreground mb-1">Bill of Materials</div>
                 {p.bom_url ? (
-                  <a
-                    href={p.bom_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-brand font-medium hover:underline"
-                  >
-                    Download BOM (.csv) ↗
-                  </a>
+                  <div className="space-y-1">
+                    {bomRows ? (
+                      <details>
+                        <summary className="cursor-pointer font-medium text-brand select-none">
+                          View BOM ({bomRows.length - 1} item{bomRows.length - 1 === 1 ? "" : "s"})
+                        </summary>
+                        <div className="mt-2 overflow-x-auto rounded-lg border border-emerald-300/60 dark:border-emerald-500/30">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="bg-emerald-100/60 dark:bg-emerald-500/10">
+                                {bomRows[0].map((cell, i) => (
+                                  <th key={i} className="text-left font-semibold px-2 py-1 whitespace-nowrap">
+                                    {cell}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {bomRows.slice(1).map((row, i) => (
+                                <tr key={i} className="border-t border-emerald-300/40 dark:border-emerald-500/20">
+                                  {row.map((cell, j) => (
+                                    <td key={j} className="px-2 py-1 whitespace-nowrap">
+                                      {cell}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </details>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">
+                        Couldn&apos;t load a preview , download instead.
+                      </span>
+                    )}
+                    <a
+                      href={p.bom_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block text-brand font-medium hover:underline"
+                    >
+                      Download BOM (.csv) ↗
+                    </a>
+                  </div>
                 ) : (
                   <span className="text-muted-foreground">Not uploaded.</span>
                 )}
