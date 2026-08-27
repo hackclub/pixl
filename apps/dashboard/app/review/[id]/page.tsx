@@ -725,12 +725,10 @@ export default async function ReviewDetail({
                     <dd>{p.joe_outcome}</dd>
                     <dt>Trust score</dt>
                     <dd>{p.joe_trust_score ?? "not given"}</dd>
-                    {p.joe_reason && (
-                      <>
-                        <dt>Reason</dt>
-                        <dd>{p.joe_reason}</dd>
-                      </>
-                    )}
+                    <dt>Note</dt>
+                    <dd className="whitespace-pre-wrap break-words">
+                      {p.joe_reason || "no note given"}
+                    </dd>
                     <dt>Reviewer</dt>
                     <dd>{p.joe_reviewer || "unknown"}</dd>
                     <dt>Reviewed</dt>
