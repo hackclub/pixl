@@ -867,6 +867,25 @@ export async function listReviewAudits(
   return rows;
 }
 
+// Every past review verdict for one project, straight off review_audits'
+// project_id FK. Used for the review page's "Past reviews" tab , unlike the
+// legacy mod_actions-derived `verdicts` on getProject below (matched by
+// user_id + a detail.startsWith(project.name) heuristic, which silently
+// drops entries after a rename and excludes banned/first_pass_banned
+// entirely), this can't miss a review or a verdict type.
+export async function listReviewAuditsForProject(projectId: number): Promise<ReviewAuditRow[]> {
+  const { data, error } = await db
+    .from("review_audits")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.error("listReviewAuditsForProject", error.message);
+    return [];
+  }
+  return (data ?? []).map((r) => ({ ...(r as ReviewAuditRow), player_name: "", project_name: "" }));
+}
+
 // The first pass's structured audit note for one project, so the final
 // reviewer's form can start from what the first reviewer already wrote
 // instead of a blank page. Null when there isn't one (a re-reviewed project,
@@ -2361,7 +2380,7 @@ export async function getProject(id: number) {
     .maybeSingle();
   if (error || !data) return null;
   const project = data as ProjectWithUser;
-  const [journals, actions] = await Promise.all([
+  const [journals, actions, reviewAudits] = await Promise.all([
     db
       .from("project_journals")
       .select("*")
@@ -2373,6 +2392,7 @@ export async function getProject(id: number) {
       .eq("user_id", project.user_id)
       .in("action", ["project_approved", "project_first_pass", "project_needs_changes", "review_reverted"])
       .order("created_at", { ascending: false }),
+    listReviewAuditsForProject(id),
   ]);
   const verdicts = ((actions.data ?? []) as ModActionRow[]).filter((a) =>
     detailMatchesProject(a.detail, project.name),
@@ -2381,6 +2401,7 @@ export async function getProject(id: number) {
     project,
     journals: (journals.data ?? []) as JournalRow[],
     verdicts,
+    reviewAudits,
   };
 }
 

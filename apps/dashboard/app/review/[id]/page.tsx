@@ -112,7 +112,7 @@ export default async function ReviewDetail({
     listCollaboratorsForProject(projectId),
   ]);
   if (!data) notFound();
-  const { project: p, journals, verdicts } = data;
+  const { project: p, journals, reviewAudits } = data;
   // The Trial this project was shipped for, if the player flagged one at ship
   // time (joined in getProject). null = they built their own idea.
   const trial = (
@@ -627,7 +627,7 @@ export default async function ReviewDetail({
           <ReviewDetailTabs
             commits={commits}
             journals={journals}
-            verdicts={verdicts}
+            reviewAudits={reviewAudits}
             yswsShips={yswsShips}
             yswsImport={
               p.imported_from_ysws

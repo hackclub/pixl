@@ -3,23 +3,36 @@
 import { useEffect, useState } from "react";
 import type { CommitResult } from "@/lib/github";
 import type { HackatimeReport } from "@/lib/hackatime";
-import type { JournalRow, ModActionRow } from "@/lib/db";
+import type { JournalRow, ReviewAuditRow } from "@/lib/db";
 import type { YswsShip } from "@/lib/ysws";
 import { CommitList } from "@/app/_components/CommitList";
 import { renderMarkdown } from "@/lib/markdown";
 import { HackatimePanel } from "@/app/_components/HackatimePanel";
+import { parseAuditNote, type AuditHeader } from "@/lib/auditNote";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const VERDICT_LABEL: Record<
   string,
-  { label: string; variant: "success" | "destructive" | "info" }
+  { label: string; variant: "success" | "destructive" | "info" | "secondary" }
 > = {
-  project_approved: { label: "Approved", variant: "success" },
-  project_needs_changes: { label: "Needs changes", variant: "destructive" },
-  review_reverted: { label: "Reverted", variant: "info" },
-  project_sent_to_first_pass: { label: "Sent to first pass", variant: "info" },
+  approved: { label: "Approved", variant: "success" },
+  first_pass_approved: { label: "Approved (1st pass)", variant: "success" },
+  needs_changes: { label: "Needs changes", variant: "destructive" },
+  banned: { label: "Banned", variant: "destructive" },
+  first_pass_banned: { label: "Ban proposed", variant: "destructive" },
+  reverted: { label: "Reverted", variant: "info" },
+};
+
+// Friendly labels for the structured audit-note sections (see buildAuditNote
+// in lib/auditNote.ts) — same mapping as the Audit notes page.
+const SECTION_LABEL: Record<AuditHeader, string> = {
+  "TECHNICAL FEATURES": "Technical features",
+  "HACKATIME EVIDENCE": "Hackatime evidence",
+  "DEFLATION REASON": "Deflation reason",
+  "AGE JUSTIFICATION": "Age justification",
+  NOTES: "Additional notes",
 };
 
 export interface YswsImport {
@@ -60,7 +73,7 @@ function isGithubUrl(url: string | null): url is string {
 export function ReviewDetailTabs({
   commits,
   journals,
-  verdicts,
+  reviewAudits,
   yswsShips,
   yswsImport,
   hackatime,
@@ -69,7 +82,7 @@ export function ReviewDetailTabs({
 }: {
   commits: CommitResult;
   journals: JournalRow[];
-  verdicts: ModActionRow[];
+  reviewAudits: ReviewAuditRow[];
   yswsShips: YswsShip[];
   yswsImport: YswsImport | null;
   hackatime: HackatimeReport | null;
@@ -105,7 +118,7 @@ export function ReviewDetailTabs({
     ...(hackatime?.ok
       ? [{ key: "hackatime" as const, label: "Hackatime", count: hackatime.projects.filter((p) => p.linked).length }]
       : []),
-    { key: "reviews" as const, label: "Past reviews", count: verdicts.length },
+    { key: "reviews" as const, label: "Past reviews", count: reviewAudits.length },
     {
       key: "ysws" as const,
       label: "Other YSWS",
@@ -291,30 +304,76 @@ export function ReviewDetailTabs({
 
         <TabsContent value="reviews">
           <div className="divide-y divide-border">
-            {verdicts.length === 0 && (
+            {reviewAudits.length === 0 && (
               <div className="p-5 text-sm text-muted-foreground">
                 No past reviews.
               </div>
             )}
-            {verdicts.map((v) => {
-              const meta = VERDICT_LABEL[v.action] ?? {
-                label: v.action,
+            {reviewAudits.map((v) => {
+              const meta = VERDICT_LABEL[v.verdict] ?? {
+                label: v.verdict.replaceAll("_", " "),
                 variant: "secondary" as const,
               };
+              const sections = v.audit_note ? parseAuditNote(v.audit_note) : null;
+              const sectionKeys = sections
+                ? (Object.keys(SECTION_LABEL) as AuditHeader[]).filter((h) => sections[h]?.trim())
+                : [];
+              const hasMore = sectionKeys.length > 0 || !!v.note?.trim();
               return (
-                <div
-                  key={v.id}
-                  className="p-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm"
-                >
-                  <Badge variant={meta.variant}>{meta.label}</Badge>
-                  <div className="flex-1 min-w-48">
-                    <span className="font-medium">{v.actor}</span>
-                    <div className="text-foreground/70 break-words">{v.detail}</div>
+                <details key={v.id} className="p-4 text-sm group">
+                  <summary className="flex flex-wrap items-center gap-x-4 gap-y-1 cursor-pointer select-none list-none">
+                    <Badge variant={meta.variant}>{meta.label}</Badge>
+                    <div className="flex-1 min-w-48">
+                      <span className="font-medium">
+                        {v.reviewer.replace(/\s*\([^)]*\)\s*$/, "")}
+                      </span>
+                      {v.approved_hours !== null && v.approved_hours !== v.claimed_hours ? (
+                        <span className="text-foreground/70">
+                          {" "}
+                          · {v.claimed_hours}h → {v.approved_hours}h credited
+                        </span>
+                      ) : (
+                        <span className="text-foreground/70"> · {v.claimed_hours}h credited</span>
+                      )}
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(v.created_at).toLocaleString()}
+                    </span>
+                    {hasMore && (
+                      <span className="text-xs text-brand shrink-0 basis-full sm:basis-auto">
+                        click to expand ↓
+                      </span>
+                    )}
+                  </summary>
+                  <div className="mt-3 space-y-3 pl-1 border-l-2 border-border">
+                    <div className="pl-3 space-y-3">
+                      {v.note?.trim() && (
+                        <div>
+                          <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Note to player
+                          </div>
+                          <p className="text-sm text-foreground/80 mt-1 whitespace-pre-wrap break-words">
+                            {v.note}
+                          </p>
+                        </div>
+                      )}
+                      {sections &&
+                        sectionKeys.map((h) => (
+                          <div key={h}>
+                            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              {SECTION_LABEL[h]}
+                            </div>
+                            <p className="text-sm text-foreground/80 mt-1 whitespace-pre-wrap break-words">
+                              {sections[h]}
+                            </p>
+                          </div>
+                        ))}
+                      {!hasMore && (
+                        <p className="text-sm text-muted-foreground">No additional notes.</p>
+                      )}
+                    </div>
                   </div>
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(v.created_at).toLocaleString()}
-                  </span>
-                </div>
+                </details>
               );
             })}
           </div>
