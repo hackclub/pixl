@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { requirePagePerm, requireGuidelinesAck } from "@/lib/guard";
 import { listSecondReviewProjects } from "@/lib/db";
 import { slackHandles } from "@/lib/slack";
-import { ReviewTabs } from "@/app/_components/ReviewTabs";
 import { ReviewTable } from "@/app/_components/ReviewTable";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +22,6 @@ export default async function SecondPassPage() {
   return (
     <div>
       <h1 className="text-2xl font-semibold text-foreground tracking-tight mb-3">Second pass</h1>
-      <ReviewTabs isSuper={access.isSuper} secondPassCount={rows.length} />
       <p className="text-sm text-muted-foreground mb-4">
         Projects that cleared fraud review and are waiting on a final approval, oldest first.
       </p>

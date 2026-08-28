@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requirePagePerm, requireGuidelinesAck } from "@/lib/guard";
-import { listReviewAudits, countPendingReviews } from "@/lib/db";
+import { listReviewAudits } from "@/lib/db";
 import { parseAuditNote, type AuditHeader } from "@/lib/auditNote";
-import { ReviewTabs } from "@/app/_components/ReviewTabs";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 
@@ -37,12 +36,11 @@ export default async function AuditNotesPage() {
   const access = await requirePagePerm(["review"]);
   await requireGuidelinesAck(access);
   if (!access.isSuper) redirect("/review");
-  const [audits, pending] = await Promise.all([listReviewAudits(200), countPendingReviews()]);
+  const audits = await listReviewAudits(200);
   const withNotes = audits.filter((a) => a.audit_note && a.audit_note.trim() !== "");
 
   return (
     <div>
-      <ReviewTabs isSuper={access.isSuper} pending={pending} />
       <p className="text-sm text-muted-foreground mb-4 max-w-2xl">
         Internal notes reviewers write with every verdict. Players never see these , they&apos;re
         for audits and fraud checks.

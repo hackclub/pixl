@@ -7,7 +7,6 @@ import {
   listReviewAudits,
 } from "@/lib/db";
 import { slackHandles } from "@/lib/slack";
-import { ReviewTabs } from "@/app/_components/ReviewTabs";
 import { ReviewTable } from "@/app/_components/ReviewTable";
 import { LiveReview } from "@/app/_components/LiveReview";
 import { Badge } from "@/components/ui/badge";
@@ -71,8 +70,6 @@ export default async function ReviewListPage({
 
   return (
     <div>
-      <ReviewTabs isSuper={access.isSuper} pending={total} />
-
       <div className="inline-flex items-center rounded-lg border border-border p-0.5 bg-card mb-4">
         <Button
           asChild

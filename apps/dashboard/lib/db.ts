@@ -783,6 +783,23 @@ export async function countPendingReviews(
   ).length;
 }
 
+// Second-pass queue count for the "Second pass" tab badge (super-admins
+// only) — a cheap head count, same shape as countPendingReviews above.
+export async function countSecondPassReviews(): Promise<number> {
+  const { count, error } = await db
+    .from("projects")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "second_review")
+    .is("archived_at", null)
+    .is("rejected_at", null)
+    .is("banned_at", null);
+  if (error) {
+    console.error("countSecondPassReviews", error.message);
+    return 0;
+  }
+  return count ?? 0;
+}
+
 async function attachPlayerNames(rows: (ModActionRow & { player_name?: string })[]) {
   const ids = [...new Set(rows.map((r) => r.user_id))];
   if (ids.length === 0) return;

@@ -2,7 +2,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requirePagePerm, requireGuidelinesAck } from "@/lib/guard";
 import { listReviewAudits } from "@/lib/db";
-import { ReviewTabs } from "@/app/_components/ReviewTabs";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 
@@ -39,7 +38,6 @@ export default async function ReviewLogPage() {
   return (
     <div>
       <h1 className="text-2xl font-semibold text-foreground tracking-tight mb-3">Review log</h1>
-      <ReviewTabs isSuper={access.isSuper} />
       <p className="text-sm text-muted-foreground mb-4">
         Owners only , every verdict with whether the reviewer opened the repo and
         demo, how long they spent in each, and any hour adjustments.

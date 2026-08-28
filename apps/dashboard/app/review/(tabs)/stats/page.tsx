@@ -1,6 +1,5 @@
 import { requirePagePerm, requireGuidelinesAck } from "@/lib/guard";
 import { db, type ReviewAuditRow } from "@/lib/db";
-import { ReviewTabs } from "@/app/_components/ReviewTabs";
 import { Card } from "@/components/ui/card";
 import {
   Table,
@@ -84,7 +83,6 @@ export default async function ReviewStatsPage() {
 
   return (
     <div>
-      <ReviewTabs isSuper={access.isSuper} />
       <h1 className="text-2xl font-semibold text-foreground tracking-tight mb-1">
         {access.isSuper ? "Reviewer stats" : "Your review stats"}
       </h1>
