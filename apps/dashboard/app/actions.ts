@@ -173,13 +173,20 @@ function readSeconds(value: FormDataEntryValue | null): number {
 async function claimedHoursFor(projectId: number): Promise<number> {
   const [{ data: journals }, { data: proj }] = await Promise.all([
     db.from("project_journals").select("hours").eq("project_id", projectId),
-    db.from("projects").select("hackatime_seconds").eq("id", projectId).single(),
+    db.from("projects").select("hackatime_seconds, kind").eq("id", projectId).single(),
   ]);
   const journalHours =
     Math.round((journals ?? []).reduce((s, j) => s + (Number(j.hours) || 0), 0) * 10) / 10;
-  const hackatimeHours =
+  const rawTrackedHours =
     Math.round(((Number(proj?.hackatime_seconds) || 0) / 3600) * 10) / 10;
-  return hackatimeHours > 0 ? hackatimeHours : journalHours;
+  // Hardware already folds journal hours into hackatime_seconds at ship time
+  // (see apps/server/src/routes/projects.ts), so the raw column is already
+  // the combined total there - adding journalHours again would double count.
+  // Software never folds journal in, so add it here so the review dash's
+  // payout calculator (and this cap on what Approve actually credits) counts
+  // both Hackatime and journal hours, not just Hackatime.
+  if (proj?.kind === "hardware") return rawTrackedHours > 0 ? rawTrackedHours : journalHours;
+  return rawTrackedHours + journalHours;
 }
 
 async function insertReviewAudit(

@@ -173,6 +173,14 @@ export default async function ReviewDetail({
   // total still adds up correctly.
   const hours = rawTrackedHours > 0 ? rawTrackedHours : journalHours;
   const htPct = hours > 0 ? Math.round((hackatimeHours / hours) * 100) : 0;
+  // The payout calculator (ReviewForm/TierAndPayout) should credit Hackatime
+  // and journal hours together, not one-or-the-other like `hours` above. For
+  // hardware this is already what `hours` is (the ship route folds journal
+  // into hackatime_seconds), so add hackatimeHours (the split-out real
+  // portion) + journalHours rather than journalHours twice. Kept in sync with
+  // claimedHoursFor() in actions.ts, which enforces the same cap server-side
+  // when Approve is clicked.
+  const payoutHours = Math.round((hackatimeHours + journalHours) * 10) / 10;
 
   // Same "hackatime if tracked, else journal" source-of-truth as
   // claimedHoursFor() in actions.ts uses for the owner — kept consistent so
@@ -194,7 +202,7 @@ export default async function ReviewDetail({
   });
 
   const formDefaultHours =
-    isFinalStage && p.first_pass_hours != null ? p.first_pass_hours : hours;
+    isFinalStage && p.first_pass_hours != null ? p.first_pass_hours : payoutHours;
 
   const firstPassAudit = firstPassAuditNote ? parseAuditNote(firstPassAuditNote) : null;
 
@@ -848,7 +856,7 @@ export default async function ReviewDetail({
                     projectId={p.id}
                     repoUrl={p.repo_url}
                     demoUrl={p.demo_url}
-                    claimedHours={hours}
+                    claimedHours={payoutHours}
                     defaultHours={formDefaultHours}
                     secondPass={isFinalStage}
                     bounties={bounties}
