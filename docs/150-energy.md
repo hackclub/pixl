@@ -23,7 +23,7 @@ Tier is about the project, not about you. A first timer who ships something genu
 
 ## RE decides your rate, and it's yours forever
 
-Your **lifetime RE** — every hour of every project you've ever shipped, added up — is what sets your hourly rate. It never resets and nothing you ship later erases what you already earned. Your rate ramps linearly: every {{payoutSlopeRe}} RE you earn adds $1/hr to your rate, starting at {{baseUsd}}/hr and capping at {{maxUsd}}/hr once your lifetime RE hits {{reCap}} RE. Once your rate goes up, every ship from then on pays at that rate or higher, this one included.
+Your **lifetime RE**, every hour of every project you've ever shipped, added up, is what sets your hourly rate. It never resets and nothing you ship later erases what you already earned. Your rate ramps linearly: every {{payoutSlopeRe}} RE you earn adds $1/hr to your rate, starting at {{baseUsd}}/hr and capping at {{maxUsd}}/hr once your lifetime RE hits {{reCap}} RE. Once your rate goes up, every ship from then on pays at that rate or higher, this one included.
 
 | {{step1Re}} RE | lifetime, reached ({{step1HRange}}) | {{step1Usd}} / hour |
 | {{step2Re}} RE | lifetime, reached ({{step2HRange}}) | {{step2Usd}} / hour |
@@ -75,7 +75,7 @@ The hours in parentheses are a range because RE is one pooled number no matter w
 | {{step6Usd}} / hr | {{step6Re}} RE | {{step6T1h}}h |
 | **{{step7Usd}} / hr (cap)** | {{step7Re}} RE | **{{step7T1h}}h** |
 
-For example, ship a {{capExampleHours}} hour T4 project from scratch and its own RE alone gets you to the {{step7Usd}} cap, paid {{capExampleUsd}} ({{capExamplePx}}) total. Ship a {{nextExampleHours}} hour T1 project first instead and it only earns a little RE, so it's paid close to base: around {{nextExampleRate}} an hour ({{nextExamplePx}} total) — but that RE doesn't vanish. It's sitting in your lifetime total, pushing your very next ship's rate up before it even starts.
+For example, ship a {{capExampleHours}} hour T4 project from scratch and its own RE alone gets you to the {{step7Usd}} cap, paid {{capExampleUsd}} ({{capExamplePx}}) total. Ship a {{nextExampleHours}} hour T1 project first instead and it only earns a little RE, so it's paid close to base: around {{nextExampleRate}} an hour ({{nextExamplePx}} total), but that RE doesn't vanish. It's sitting in your lifetime total, pushing your very next ship's rate up before it even starts.
 
 ::: note The short version
 Every hour you ship, at any tier, banks RE forever and pushes your rate up for every ship after it, including the one that earned it.
