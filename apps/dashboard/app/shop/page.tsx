@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requirePagePerm } from "@/lib/guard";
 import { listShopItems, listShopOptionStock, listSidequests, SHOP_REGIONS, SHOP_REGION_LABELS, SHOP_CATEGORIES, SHOP_CATEGORY_LABELS, type ShopRegion } from "@/lib/db";
-import { addShopItem, toggleShopItem, deleteShopItem, updateShopItem } from "@/app/actions";
+import { addShopItem, toggleShopItem, deleteShopItem, updateShopItem, updateShopItemPrices } from "@/app/actions";
 import { PendingButton } from "@/app/_components/PendingButton";
 import { Disclosure } from "@/app/_components/Disclosure";
 import { OptionsEditor } from "@/app/_components/OptionsEditor";
@@ -50,6 +50,17 @@ export default async function ShopPage({
   // Active Trials the admin can gate a shop item behind (unlock via completion).
   const gateTrials = allSidequests.filter((q) => q.active);
   const trophies = everyItem.filter((i) => i.unlock_xp > 0);
+  // Every region's price for a given item, by name, for the "edit prices in
+  // every region" mini-form below , so an admin can reprice all 7 regions in
+  // one place instead of switching the region tab per edit. A region with no
+  // row for this item (never stocked there) just shows 0/not-available.
+  const pricesByName = new Map<string, Partial<Record<ShopRegion, number>>>();
+  for (const it of everyItem) {
+    if (it.unlock_xp > 0) continue;
+    const m = pricesByName.get(it.name) ?? {};
+    m[it.region] = it.price;
+    pricesByName.set(it.name, m);
+  }
   let allItems = regionItems.filter((i) => i.unlock_xp === 0);
   if (query) {
     allItems = allItems.filter(
@@ -392,6 +403,38 @@ export default async function ShopPage({
                         Save changes
                       </PendingButton>
                     </form>
+
+                    <Disclosure summary="Edit price in every region" className="mt-3">
+                      <form action={updateShopItemPrices} className="space-y-3">
+                        <input type="hidden" name="item_name" value={item.name} />
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                          {SHOP_REGIONS.map((r) => (
+                            <Label key={r} className="block font-normal">
+                              <span className="block text-xs font-medium text-muted-foreground mb-1">
+                                {SHOP_REGION_LABELS[r]}
+                              </span>
+                              <Input
+                                name={`price_${r}`}
+                                type="number"
+                                min={0}
+                                defaultValue={pricesByName.get(item.name)?.[r] ?? 0}
+                                className="w-full text-sm"
+                              />
+                            </Label>
+                          ))}
+                        </div>
+                        <span className="block text-xs text-muted-foreground">
+                          0 means not for sale in that region. Only prices change here , name,
+                          description, options &amp; image stay per-region, edit those above.
+                        </span>
+                        <PendingButton
+                          className="bg-brand text-white border-transparent"
+                          pendingText="Saving…"
+                        >
+                          Save prices
+                        </PendingButton>
+                      </form>
+                    </Disclosure>
                   </Disclosure>
                 </div>
               </Card>

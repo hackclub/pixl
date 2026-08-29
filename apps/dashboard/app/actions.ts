@@ -2992,6 +2992,50 @@ export async function updateShopItem(formData: FormData): Promise<void> {
   revalidatePath("/shop");
 }
 
+// Reprices an item across every region in one save, so an admin doesn't have
+// to switch the region tab and reopen "Edit item" per region. Matched by name
+// (the same item is one row per region), same as apply_all_regions above.
+// A region with no price field submitted (shouldn't happen, the form always
+// renders all of SHOP_REGIONS) is left untouched; a region with no existing
+// row for this item is a no-op update, not an insert , stocking a brand new
+// region still goes through "Add an item" on that region's tab.
+export async function updateShopItemPrices(formData: FormData): Promise<void> {
+  await requirePerm("shop");
+  const name = String(formData.get("item_name") ?? "").trim();
+  if (!name) return;
+
+  const { data: before } = await db
+    .from("shop_items")
+    .select("*")
+    .eq("name", name)
+    .eq("unlock_xp", 0);
+
+  for (const r of SHOP_REGIONS) {
+    const raw = formData.get(`price_${r}`);
+    if (raw === null) continue;
+    const price = Math.max(0, Math.round(Number(raw) || 0));
+    const { error } = await db
+      .from("shop_items")
+      .update({ price })
+      .eq("name", name)
+      .eq("region", r)
+      .eq("unlock_xp", 0);
+    if (error) console.error("updateShopItemPrices", r, error.message);
+  }
+
+  const { data: after } = await db
+    .from("shop_items")
+    .select("*")
+    .eq("name", name)
+    .eq("unlock_xp", 0);
+  await notifyShopUpdates(
+    (before ?? []) as ShopRowSnapshot[],
+    (after ?? []) as ShopRowSnapshot[],
+  );
+
+  revalidatePath("/shop");
+}
+
 export async function toggleShopItem(formData: FormData): Promise<void> {
   await requirePerm("shop");
   const id = Number(formData.get("id") ?? 0);
