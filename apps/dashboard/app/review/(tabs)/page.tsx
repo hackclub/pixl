@@ -112,26 +112,31 @@ export default async function ReviewListPage({
             </span>{" "}
             approved by first pass sitting in this queue.
           </p>
-          <ul className="text-sm space-y-1">
-            {fraudRows.map((p) => (
-              <li key={p.id} className="flex items-center gap-2">
-                <a href={`/review/${p.id}`} className="hover:underline">
-                  {p.name}
-                </a>
-                {p.first_pass_hours != null && (
-                  <span className="text-xs text-muted-foreground">{p.first_pass_hours}h</span>
-                )}
-                <span className="text-xs text-muted-foreground">
-                  {p.first_pass_at
-                    ? `waiting ${Math.floor((Date.now() - new Date(p.first_pass_at).getTime()) / 86_400_000)}d`
-                    : "waiting"}
-                </span>
-                {p.joe_error && (
-                  <span className="text-xs text-rose-600">not submitted: {p.joe_error}</span>
-                )}
-              </li>
-            ))}
-          </ul>
+          <details>
+            <summary className="text-sm text-brand font-medium cursor-pointer select-none">
+              See all {fraudRows.length} project{fraudRows.length === 1 ? "" : "s"}
+            </summary>
+            <ul className="text-sm space-y-1 mt-2">
+              {fraudRows.map((p) => (
+                <li key={p.id} className="flex items-center gap-2">
+                  <a href={`/review/${p.id}`} className="hover:underline">
+                    {p.name}
+                  </a>
+                  {p.first_pass_hours != null && (
+                    <span className="text-xs text-muted-foreground">{p.first_pass_hours}h</span>
+                  )}
+                  <span className="text-xs text-muted-foreground">
+                    {p.first_pass_at
+                      ? `waiting ${Math.floor((Date.now() - new Date(p.first_pass_at).getTime()) / 86_400_000)}d`
+                      : "waiting"}
+                  </span>
+                  {p.joe_error && (
+                    <span className="text-xs text-rose-600">not submitted: {p.joe_error}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </details>
         </div>
       )}
 
