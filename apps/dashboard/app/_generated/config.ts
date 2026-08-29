@@ -16,39 +16,10 @@ export const config = {
   "economy": {
     "pixelValueUsd": 0.07,
     "sponsorRateUsd": 8.5,
-    "basePayoutUsd": 3.5,
+    "basePayoutUsd": 4,
     "maxPayoutUsd": 6,
-    "reForMaxPayout": 7500,
-    "payoutSteps": [
-      {
-        "re": 0,
-        "usd": 3.5
-      },
-      {
-        "re": 1250,
-        "usd": 3.75
-      },
-      {
-        "re": 2500,
-        "usd": 4
-      },
-      {
-        "re": 3750,
-        "usd": 4.5
-      },
-      {
-        "re": 5000,
-        "usd": 5
-      },
-      {
-        "re": 6250,
-        "usd": 5.5
-      },
-      {
-        "re": 7500,
-        "usd": 6
-      }
-    ],
+    "reForMaxPayout": 3750,
+    "payoutSlopeRe": 1875,
     "tierRePerHour": [
       12.5,
       15,
@@ -140,19 +111,13 @@ export function reForLevel(level: number): number {
 }
 
 /**
- * Dollars per hour for a player holding this much lifetime RE. A flat step
- * table, not a curve: E.payoutSteps is sorted ascending by RE, and the rate
- * is whichever step's threshold is the highest one still <= re, capping at
- * maxPayoutUsd once re passes the last step (reForMaxPayout).
+ * Dollars per hour for a player holding this much lifetime RE. Linear ramp
+ * from basePayoutUsd to maxPayoutUsd: rate = base + re / payoutSlopeRe,
+ * capped at maxPayoutUsd once re passes reForMaxPayout.
  */
 export function payoutUsdPerHour(re: number): number {
   const r = Math.max(re, 0);
-  let usd: number = E.payoutSteps[0].usd;
-  for (const step of E.payoutSteps) {
-    if (r < step.re) break;
-    usd = step.usd;
-  }
-  return usd;
+  return Math.min(E.basePayoutUsd + r / E.payoutSlopeRe, E.maxPayoutUsd);
 }
 
 /** Same rate expressed in pixels, which is what payouts are actually credited in. */
@@ -161,13 +126,13 @@ export function pxPerHourFor(re: number): number {
 }
 
 /**
- * The rate for a ship: the step the player's RE sits at once this ship's own
- * RE is added to their lifetime total (reBefore -> reAfter). RE is
- * player-specific and banked forever - once lifetime RE clears a step, every
- * ship from then on pays at that step or higher, this one included.
+ * The rate for a ship: the lifetime RE rate the player sits at once this
+ * ship's own RE is added to their lifetime total (reBefore -> reAfter). RE is
+ * player-specific and banked forever - once lifetime RE pushes the rate higher,
+ * every ship from then on pays at that rate or higher, this one included.
  *
  * Uses the RE *after* the ship, not an average across the span, so a ship
- * that pushes a player across a step boundary pays the new, higher step for
+ * that pushes a player's lifetime RE higher pays the new, higher rate for
  * all of its own hours too, not just the hours past the boundary.
  */
 export function averageUsdPerHourOver(reBefore: number, reAfter: number): number {

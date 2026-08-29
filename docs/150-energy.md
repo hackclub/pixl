@@ -23,7 +23,7 @@ Tier is about the project, not about you. A first timer who ships something genu
 
 ## RE decides your rate, and it's yours forever
 
-Your **lifetime RE** — every hour of every project you've ever shipped, added up — is what sets your hourly rate. It never resets and nothing you ship later erases what you already earned. The rate itself is a fixed table: once your lifetime RE crosses a threshold, every ship from then on pays at that rate or higher, this one included.
+Your **lifetime RE** — every hour of every project you've ever shipped, added up — is what sets your hourly rate. It never resets and nothing you ship later erases what you already earned. Your rate ramps linearly: every {{payoutSlopeRe}} RE you earn adds $1/hr to your rate, starting at {{baseUsd}}/hr and capping at {{maxUsd}}/hr once your lifetime RE hits {{reCap}} RE. Once your rate goes up, every ship from then on pays at that rate or higher, this one included.
 
 | {{step1Re}} RE | lifetime, reached ({{step1HRange}}) | {{step1Usd}} / hour |
 | {{step2Re}} RE | lifetime, reached ({{step2HRange}}) | {{step2Usd}} / hour |
@@ -33,7 +33,7 @@ Your **lifetime RE** — every hour of every project you've ever shipped, added 
 | {{step6Re}} RE | lifetime, reached ({{step6HRange}}) | {{step6Usd}} / hour |
 | {{step7Re}} RE | lifetime, the cap ({{step7HRange}}) | **{{step7Usd}} / hour** |
 
-The hours in parentheses are a range because RE is one pooled number no matter which tiers earned it: the low end is "shipped nothing but T4 Nexus the whole way," the high end is "shipped nothing but T1 Spark." Your real hours-to-cap depends on whatever mix you actually ship. If you stuck to one tier the whole way, here's exactly how many hours each payout level takes:
+The hours in parentheses are a range because RE is one pooled number no matter which tiers earned it: the low end is "shipped nothing but T4 Nexus the whole way," the high end is "shipped nothing but T1 Spark." Your real hours-to-cap depends on whatever mix you actually ship. If you stuck to one tier the whole way, here's exactly how many hours each rate milestone takes:
 
 ### If you only ship T4 Nexus
 

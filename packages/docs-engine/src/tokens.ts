@@ -10,7 +10,7 @@ export interface PixlConfig {
     basePayoutUsd: number;
     maxPayoutUsd: number;
     reForMaxPayout: number;
-    payoutSteps: { re: number; usd: number }[];
+    payoutSlopeRe: number;
     tierRePerHour: number[];
     trialBonusRe: number;
     levelBands: { throughLevel: number; rePerLevel: number }[];
@@ -30,6 +30,7 @@ export function buildTokens(config: PixlConfig): Record<string, string> {
     baseUsd: `$${E.basePayoutUsd.toFixed(2)}`,
     maxUsd: `$${E.maxPayoutUsd.toFixed(2)}`,
     reCap: E.reForMaxPayout.toLocaleString("en-US"),
+    payoutSlopeRe: E.payoutSlopeRe.toLocaleString("en-US"),
     maxLevel: String(E.levelBands[E.levelBands.length - 1]!.throughLevel),
     trialBonusRe: String(E.trialBonusRe),
     t1: reRate(E.tierRePerHour[0]!),
@@ -44,17 +45,11 @@ export function buildTokens(config: PixlConfig): Record<string, string> {
     }).format(new Date(config.hackatimeCutoff)),
   };
 
-  // Flat step lookup, matching payoutUsdPerHour in packages/config/sync.ts
-  // exactly - the rate is whichever step's RE threshold is the highest one
-  // still <= re, not an interpolated curve.
+  // Linear ramp matching payoutUsdPerHour in packages/config/sync.ts exactly:
+  // rate = base + re / slope, capped at max.
   const rateAt = (re: number): number => {
     const r = Math.max(re, 0);
-    let usd = E.payoutSteps[0]!.usd;
-    for (const step of E.payoutSteps) {
-      if (r < step.re) break;
-      usd = step.usd;
-    }
-    return usd;
+    return Math.min(E.basePayoutUsd + r / E.payoutSlopeRe, E.maxPayoutUsd);
   };
 
   const capTier = E.tierRePerHour.length;
@@ -73,15 +68,18 @@ export function buildTokens(config: PixlConfig): Record<string, string> {
   tokens.nextExampleRate = `$${nextRate.toFixed(2)}`;
   tokens.nextExamplePx = `${Math.round((nextRate * nextHours) / E.pixelValueUsd)} px`;
 
-  // The payout table itself, one column set per step: the RE threshold, the
-  // dollar rate it unlocks, and how many hours of lifetime work at each tier
-  // it takes to reach that much RE (re / that tier's RE-per-hour). Docs render
+  // The payout table itself: evenly-spaced RE thresholds from 0 to reForMaxPayout,
+  // with the dollar rate at each computed from the linear formula. Docs render
   // this as a table so players can see hours-to-rate without doing the math.
-  E.payoutSteps.forEach((step, i) => {
+  const stepCount = 7;
+  const stepReIncrement = E.reForMaxPayout / (stepCount - 1);
+  for (let i = 0; i < stepCount; i++) {
     const n = i + 1;
-    tokens[`step${n}Re`] = step.re.toLocaleString("en-US");
-    tokens[`step${n}Usd`] = `$${step.usd.toFixed(2)}`;
-    const hoursByTier = E.tierRePerHour.map((rePerHour) => Math.round(step.re / rePerHour));
+    const stepRe = Math.round(i * stepReIncrement);
+    const stepUsd = rateAt(stepRe);
+    tokens[`step${n}Re`] = stepRe.toLocaleString("en-US");
+    tokens[`step${n}Usd`] = `$${stepUsd.toFixed(2)}`;
+    const hoursByTier = E.tierRePerHour.map((rePerHour) => Math.round(stepRe / rePerHour));
     hoursByTier.forEach((h, t) => {
       tokens[`step${n}T${t + 1}h`] = String(h);
     });
@@ -92,7 +90,7 @@ export function buildTokens(config: PixlConfig): Record<string, string> {
     const fastest = Math.min(...hoursByTier);
     const slowest = Math.max(...hoursByTier);
     tokens[`step${n}HRange`] = fastest === slowest ? `${fastest}h` : `${fastest}-${slowest}h`;
-  });
+  }
 
   let from = 1;
   let cumulative = 0;

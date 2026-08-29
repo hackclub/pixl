@@ -2205,7 +2205,7 @@ export async function listBanLog(limit = 100): Promise<BanLogRow[]> {
 }
 
 // Referral system (see [[referral-system]] in project memory). 1px = $0.07
-// (50px/hr = $3.50/hr base, matching apps/server/src/xp.ts), NOT 10px = $1 ,
+// (~57px/hr = $4.00/hr base, matching apps/server/src/xp.ts), NOT 10px = $1 ,
 // that was a drifted assumption this file used to make; fixed 2026-08-01.
 // Cut to roughly a third of the original rates on 2026-08-11 , referral
 // payouts were too rich relative to actual submission volume this early;

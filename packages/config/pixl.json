@@ -14,18 +14,10 @@
   "economy": {
     "pixelValueUsd": 0.07,
     "sponsorRateUsd": 8.5,
-    "basePayoutUsd": 3.5,
+    "basePayoutUsd": 4.0,
     "maxPayoutUsd": 6.0,
-    "reForMaxPayout": 7500,
-    "payoutSteps": [
-      { "re": 0, "usd": 3.5 },
-      { "re": 1250, "usd": 3.75 },
-      { "re": 2500, "usd": 4.0 },
-      { "re": 3750, "usd": 4.5 },
-      { "re": 5000, "usd": 5.0 },
-      { "re": 6250, "usd": 5.5 },
-      { "re": 7500, "usd": 6.0 }
-    ],
+    "reForMaxPayout": 3750,
+    "payoutSlopeRe": 1875,
     "tierRePerHour": [12.5, 15, 18.75, 25],
     "trialBonusRe": 100,
     "levelBands": [

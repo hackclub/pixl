@@ -17,39 +17,10 @@ const Pixl = (() => {
     "economy": {
       "pixelValueUsd": 0.07,
       "sponsorRateUsd": 8.5,
-      "basePayoutUsd": 3.5,
+      "basePayoutUsd": 4,
       "maxPayoutUsd": 6,
-      "reForMaxPayout": 7500,
-      "payoutSteps": [
-        {
-          "re": 0,
-          "usd": 3.5
-        },
-        {
-          "re": 1250,
-          "usd": 3.75
-        },
-        {
-          "re": 2500,
-          "usd": 4
-        },
-        {
-          "re": 3750,
-          "usd": 4.5
-        },
-        {
-          "re": 5000,
-          "usd": 5
-        },
-        {
-          "re": 6250,
-          "usd": 5.5
-        },
-        {
-          "re": 7500,
-          "usd": 6
-        }
-      ],
+      "reForMaxPayout": 3750,
+      "payoutSlopeRe": 1875,
       "tierRePerHour": [
         12.5,
         15,
@@ -86,10 +57,11 @@ const Pixl = (() => {
   // stranded in three places.
   const BASE_PX_PER_HOUR = Math.round(config.economy.basePayoutUsd / config.economy.pixelValueUsd);
 
-  // Payout math, ported from packages/config/sync.ts's TS template (the
-  // canonical formula generated into every TS app). pixl.js isn't one of that
-  // script's generated targets - like BASE_PX_PER_HOUR above, this is hand-kept
-  // in sync with the same source rather than sync-generated.
+  // Linear ramp from basePayoutUsd to maxPayoutUsd, ported from
+  // packages/config/sync.ts's TS template (the canonical formula generated into
+  // every TS app). pixl.js isn't one of that script's generated targets - like
+  // BASE_PX_PER_HOUR above, this is hand-kept in sync with the same source
+  // rather than sync-generated.
   function rePerHour(tier) {
     const E = config.economy;
     const t = Math.min(Math.max(Math.trunc(tier) || 1, 1), E.tierRePerHour.length);
@@ -99,21 +71,15 @@ const Pixl = (() => {
     const h = Number.isFinite(hours) ? Math.max(hours, 0) : 0;
     return h * rePerHour(tier);
   }
-  // Flat step table, not a curve: E.payoutSteps is sorted ascending by RE,
-  // rate is whichever step's threshold is the highest one still <= re.
+  // Linear ramp: rate = base + re / slope, capped at max.
   function payoutUsdPerHour(re) {
     const E = config.economy;
     const r = Math.max(re, 0);
-    let usd = E.payoutSteps[0].usd;
-    for (const step of E.payoutSteps) {
-      if (r < step.re) break;
-      usd = step.usd;
-    }
-    return usd;
+    return Math.min(E.basePayoutUsd + r / E.payoutSlopeRe, E.maxPayoutUsd);
   }
-  // The rate for a ship: the step the player's lifetime RE sits at once this
+  // The rate for a ship: the lifetime RE rate the player sits at once this
   // ship's own RE is added in (reBefore -> reAfter) - RE banks forever, so
-  // this pays the new step for all of this ship's hours, not just the ones
+  // this pays the new rate for all of this ship's hours, not just the ones
   // past the boundary.
   function averageUsdPerHourOver(reBefore, reAfter) {
     return payoutUsdPerHour(Math.max(reAfter, reBefore, 0));
