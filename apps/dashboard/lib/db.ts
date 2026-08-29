@@ -165,6 +165,12 @@ export interface ProjectRow {
   hours_extended_since: string | null;
   hours_extended_by: string;
   hours_extended_note: string;
+  // Super-admin-only hold: blocks submitting any verdict on this project
+  // while set (still visible in the queue). See holdReview/releaseReviewHold
+  // in app/actions.ts. hold_at null = not held.
+  hold_at: string | null;
+  hold_by: string;
+  hold_reason: string;
 }
 
 export interface PlayerStateRow {

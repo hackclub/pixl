@@ -1831,6 +1831,61 @@ export async function unbanProject(formData: FormData): Promise<void> {
   revalidatePath("/", "layout");
 }
 
+// Super-admin-only hold on a project's review: blocks submitting any verdict
+// (first pass, final pass, extend cutoff, send back, ban) while set, but the
+// project stays visible in the queue as normal. No expiry - stays held until
+// a super admin explicitly releases it, requireSuper() gates both directions
+// so any super admin can, not just whoever set it.
+export async function holdReview(formData: FormData): Promise<void> {
+  const access = await requireSuper();
+  const by = actorName(access);
+  const projectId = Number(formData.get("projectId") ?? 0);
+  const reason = String(formData.get("reason") ?? "").trim().slice(0, 500);
+  const returnTo = String(formData.get("returnTo") ?? "") || `/review/${projectId}`;
+  if (!projectId) return;
+  if (!reason)
+    redirect(`${returnTo}${returnTo.includes("?") ? "&" : "?"}error=${encodeURIComponent("A reason is required to hold a review.")}`);
+
+  const reviewer = await reviewerLabel(access.session.slackId, access.session.name);
+  const { data: project, error } = await db
+    .from("projects")
+    .update({
+      hold_at: new Date().toISOString(),
+      hold_by: reviewer,
+      hold_reason: reason,
+    })
+    .eq("id", projectId)
+    .select("id, name, user_id")
+    .single();
+  if (error || !project) {
+    console.error("holdReview failed", error?.message);
+    return;
+  }
+  await logModAction(project.user_id, "review_held", `${project.name}: ${reason}`, by);
+  revalidatePath(`/review/${projectId}`);
+  revalidatePath("/review");
+}
+
+export async function releaseReviewHold(formData: FormData): Promise<void> {
+  const access = await requireSuper();
+  const by = actorName(access);
+  const projectId = Number(formData.get("projectId") ?? 0);
+  if (!projectId) return;
+  const { data: project, error } = await db
+    .from("projects")
+    .update({ hold_at: null, hold_by: "", hold_reason: "" })
+    .eq("id", projectId)
+    .select("id, name, user_id")
+    .single();
+  if (error || !project) {
+    console.error("releaseReviewHold failed", error?.message);
+    return;
+  }
+  await logModAction(project.user_id, "review_hold_released", project.name, by);
+  revalidatePath(`/review/${projectId}`);
+  revalidatePath("/review");
+}
+
 export async function banIdea(formData: FormData): Promise<void> {
   const access = await requirePerm("ban");
   const by = actorName(access);

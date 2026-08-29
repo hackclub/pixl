@@ -159,6 +159,15 @@ export function ReviewTable({
                         yours
                       </Badge>
                     )}
+                    {p.hold_at && (
+                      <Badge
+                        variant="secondary"
+                        className="text-[0.65rem] uppercase tracking-wide"
+                        title={p.hold_reason || "On hold"}
+                      >
+                        🔒 on hold
+                      </Badge>
+                    )}
                   </div>
                 </TableCell>
 

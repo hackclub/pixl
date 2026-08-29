@@ -27,6 +27,8 @@ import {
   forceAdvanceFraud,
   toggleProjectPeak,
   extendHoursCutoff,
+  holdReview,
+  releaseReviewHold,
 } from "@/app/actions";
 import { hackatimeCutoffUnix, hackatimeCutoffLabel } from "@/app/_generated/config";
 import { PendingButton } from "@/app/_components/PendingButton";
@@ -121,8 +123,9 @@ export default async function ReviewDetail({
 
   const isFinalStage = p.status === "second_review";
   const isOwn = !!p.users?.slack_id && p.users.slack_id === viewer && !access.isSuper;
+  const isHeld = !!p.hold_at;
   const canReview =
-    (p.status === "shipped" && !isOwn) || (isFinalStage && canSecondPass);
+    !isHeld && ((p.status === "shipped" && !isOwn) || (isFinalStage && canSecondPass));
   const shippedAt = (p as { shipped_at?: string | null }).shipped_at ?? null;
 
   // Everything below only depends on `p` (already resolved above), not on
@@ -827,6 +830,66 @@ export default async function ReviewDetail({
                   before deciding. See the audit note below.
                 </div>
               </Card>
+            )}
+
+            {isHeld && (
+              <Card className="p-5 gap-1 ring-amber-400 dark:ring-amber-500/40 bg-amber-50 dark:bg-amber-500/10">
+                <div className="font-semibold text-amber-800 dark:text-amber-300">
+                  🔒 On hold , can't be reviewed right now
+                </div>
+                <p className="text-sm text-amber-800/90 dark:text-amber-200/90 mt-1">
+                  {p.hold_reason || "No reason given."}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Held by {p.hold_by || "a super admin"}
+                  {p.hold_at ? ` on ${new Date(p.hold_at).toLocaleString()}` : ""}.
+                </p>
+                {access.isSuper && (
+                  <form action={releaseReviewHold} className="pt-2">
+                    <input type="hidden" name="projectId" value={p.id} />
+                    <PendingButton
+                      variant="outline"
+                      size="sm"
+                      pendingText="Releasing…"
+                      confirm="Release the hold on this project? It goes back to normal review."
+                    >
+                      Release hold
+                    </PendingButton>
+                  </form>
+                )}
+              </Card>
+            )}
+
+            {!isHeld && access.isSuper && (
+              <details className="rounded-xl bg-card ring-1 ring-border p-4 text-card-foreground">
+                <summary className="flex items-center gap-2 cursor-pointer text-sm font-semibold text-foreground select-none list-none">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  Put this review on hold
+                </summary>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Blocks any verdict on this project until a super admin releases it. Stays
+                  visible in the queue , this just stops it from being reviewed while it&apos;s on
+                  hold, e.g. mid-investigation.
+                </p>
+                <form action={holdReview} className="mt-3 flex flex-col gap-2">
+                  <input type="hidden" name="projectId" value={p.id} />
+                  <input type="hidden" name="returnTo" value={`/review/${p.id}`} />
+                  <Textarea
+                    name="reason"
+                    required
+                    rows={2}
+                    placeholder="Why hold this (internal, not shown to the player)…"
+                    className="text-sm resize-y"
+                  />
+                  <PendingButton
+                    variant="secondary"
+                    pendingText="Holding…"
+                    confirm="Hold this review? Nobody can submit a verdict on it until you or another super admin releases it."
+                  >
+                    Hold this review
+                  </PendingButton>
+                </form>
+              </details>
             )}
 
             {isOwn && p.status === "shipped" && (
