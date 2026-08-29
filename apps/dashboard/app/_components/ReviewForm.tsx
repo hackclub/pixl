@@ -315,6 +315,7 @@ export function ReviewForm({
   const totalSeconds = useRef<HTMLInputElement>(null);
   const away = useRef<{ kind: "repo" | "demo"; at: number } | null>(null);
   const openedAt = useRef(Date.now());
+  const submittedRef = useRef(false);
 
   const baseHours = defaultHours ?? claimedHours;
   const [hours, setHours] = useState(baseHours);
@@ -446,6 +447,20 @@ export function ReviewForm({
     };
   }, []);
 
+  // A submission only unmounts this component by actually navigating away,
+  // which only happens once reviewProject finishes and redirects - a request
+  // that never completes (network drop, the server pod getting replaced
+  // mid-deploy) leaves the reviewer stuck on this same page with the draft
+  // still intact, so they can just resubmit once it's back. A validation
+  // error redirects back to this same route too, so this only fires on a
+  // genuine success.
+  useEffect(() => {
+    return () => {
+      if (submittedRef.current) clearDraft();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const markOpen = (kind: "repo" | "demo") => {
     const el = kind === "repo" ? repoOpened.current : demoOpened.current;
     if (el) el.value = "1";
@@ -460,7 +475,14 @@ export function ReviewForm({
           totalSeconds.current.value = String(
             Math.round((Date.now() - openedAt.current) / 1000),
           );
-        clearDraft();
+        // Don't clear the draft here - this fires the instant the button is
+        // clicked, before the request even reaches the network. If the
+        // server never responds (a redeploy killing the pod mid-request is
+        // exactly this), the draft would already be gone with nothing to
+        // recover, on top of whatever pixels/verdict were lost. Flag the
+        // attempt instead; the unmount effect below only clears once the
+        // submission actually succeeded and navigated away.
+        submittedRef.current = true;
       }}
       className="mt-4 flex flex-col gap-4"
     >
