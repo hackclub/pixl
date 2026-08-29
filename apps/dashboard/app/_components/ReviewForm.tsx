@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
-import { reviewProject } from "@/app/actions";
+import { reviewProject, applySubmissionEdits } from "@/app/actions";
 import {
   averageUsdPerHourOver,
   config,
@@ -13,6 +13,7 @@ import {
   rePerHour,
 } from "@/app/_generated/config";
 import { TECHNICAL_FEATURES_MIN } from "@/lib/auditNote";
+import { PendingButton } from "@/app/_components/PendingButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -468,6 +469,57 @@ export function ReviewForm({
   };
 
   return (
+    <>
+      {secondPass && (
+        <details className="rounded-lg border p-4 mt-4">
+          <summary className="cursor-pointer text-xs font-bold uppercase tracking-wide text-muted-foreground select-none">
+            Edit submission , title, image, description
+          </summary>
+          <form action={applySubmissionEdits} className="mt-3 flex flex-col gap-3">
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Applies immediately , updates the project everywhere: the player&apos;s own
+              page, the next reviewer who opens this, and the YSWS/Airtable export. Independent
+              of your verdict below.
+            </p>
+            <input type="hidden" name="projectId" value={projectId} />
+            <Label className="flex flex-col gap-1.5 font-normal">
+              <span className="text-xs text-muted-foreground">Title</span>
+              <Input
+                name="editedName"
+                defaultValue={currentName ?? ""}
+                maxLength={200}
+                className="text-sm"
+              />
+            </Label>
+            <Label className="flex flex-col gap-1.5 font-normal">
+              <span className="text-xs text-muted-foreground">Image URL</span>
+              <Input
+                name="editedImageUrl"
+                defaultValue={currentImageUrl ?? ""}
+                placeholder="https://…"
+                className="text-sm"
+              />
+            </Label>
+            <Label className="flex flex-col gap-1.5 font-normal">
+              <span className="text-xs text-muted-foreground">Description</span>
+              <Textarea
+                name="editedDescription"
+                defaultValue={currentDescription ?? ""}
+                maxLength={5000}
+                rows={4}
+                className="text-sm"
+              />
+            </Label>
+            <PendingButton
+              variant="secondary"
+              pendingText="Applying…"
+              className="self-start"
+            >
+              Apply changes
+            </PendingButton>
+          </form>
+        </details>
+      )}
     <form
       action={reviewProject}
       onSubmit={() => {
@@ -528,47 +580,6 @@ export function ReviewForm({
           </Button>
         )}
       </div>
-      {secondPass && (
-        <details className="rounded-lg border p-4">
-          <summary className="cursor-pointer text-xs font-bold uppercase tracking-wide text-muted-foreground select-none">
-            Edit submission , title, image, description
-          </summary>
-          <div className="mt-3 flex flex-col gap-3">
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Changes here save with your verdict and update the project everywhere , the
-              player&apos;s own page, and the YSWS/Airtable export.
-            </p>
-            <Label className="flex flex-col gap-1.5 font-normal">
-              <span className="text-xs text-muted-foreground">Title</span>
-              <Input
-                name="editedName"
-                defaultValue={currentName ?? ""}
-                maxLength={200}
-                className="text-sm"
-              />
-            </Label>
-            <Label className="flex flex-col gap-1.5 font-normal">
-              <span className="text-xs text-muted-foreground">Image URL</span>
-              <Input
-                name="editedImageUrl"
-                defaultValue={currentImageUrl ?? ""}
-                placeholder="https://…"
-                className="text-sm"
-              />
-            </Label>
-            <Label className="flex flex-col gap-1.5 font-normal">
-              <span className="text-xs text-muted-foreground">Description</span>
-              <Textarea
-                name="editedDescription"
-                defaultValue={currentDescription ?? ""}
-                maxLength={5000}
-                rows={4}
-                className="text-sm"
-              />
-            </Label>
-          </div>
-        </details>
-      )}
       <Label className="flex items-center justify-between gap-2 font-normal text-muted-foreground">
         Hours to credit (decrease only)
         <Input
@@ -740,5 +751,6 @@ export function ReviewForm({
         </div>
       </div>
     </form>
+    </>
   );
 }

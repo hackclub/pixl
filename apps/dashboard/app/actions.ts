@@ -782,38 +782,6 @@ export async function reviewProject(formData: FormData): Promise<void> {
   if (stage === "second_review" && !access.isSuper && current.first_pass_by && current.first_pass_by === by)
     redirect(`${back}?error=${encodeURIComponent("A different reviewer must do the final pass.")}`);
 
-  // A final reviewer can correct the player-facing title/description/image
-  // before deciding — these are the exact same columns the player's own
-  // project page and the Airtable/YSWS export CSV read live, so a fix here is
-  // a fix everywhere with no separate sync step. Applies regardless of verdict.
-  // Optional: absent or unchanged fields are left alone.
-  if (stage === "second_review") {
-    const editedName = String(formData.get("editedName") ?? "").trim().slice(0, 200);
-    const editedDescription = String(formData.get("editedDescription") ?? "").trim().slice(0, 5000);
-    const editedImageUrl = String(formData.get("editedImageUrl") ?? "").trim();
-    const edits: Record<string, string> = {};
-    if (editedName && editedName !== current.name) edits.name = editedName;
-    if (editedDescription && editedDescription !== current.description) edits.description = editedDescription;
-    if (editedImageUrl && editedImageUrl !== current.image_url) {
-      try {
-        await assertSafeExternalUrl(editedImageUrl);
-      } catch (e) {
-        redirect(`${back}?error=${encodeURIComponent(`Image URL: ${(e as Error).message}`)}`);
-      }
-      edits.image_url = editedImageUrl;
-    }
-    if (Object.keys(edits).length > 0) {
-      await db.from("projects").update(edits).eq("id", projectId);
-      current.name = edits.name ?? current.name;
-      await logModAction(
-        current.user_id,
-        "project_edited",
-        `${current.name}: final reviewer edited ${Object.keys(edits).join(", ")}`,
-        by,
-      );
-    }
-  }
-
   const proposed = (current.first_pass_verdict as string | null) ?? null;
   const finalKey = verdict === "ban" ? "banned" : verdict;
   // The first pass gets docked if the final reviewer lands on a different call.
@@ -1305,6 +1273,62 @@ export async function reReviewProject(formData: FormData): Promise<void> {
   });
   if (notifyError) console.error("re-review notification failed", notifyError.message);
   revalidatePath("/", "layout");
+}
+
+// A final reviewer correcting the player-facing title/description/image ,
+// these are the exact same columns the player's own project page and the
+// YSWS/Airtable export CSV read live, so this is a fix everywhere with no
+// separate sync step, and it applies immediately, independent of a verdict
+// (previously these fields only saved alongside reviewProject's own verdict
+// submit , split out so a reviewer doesn't have to also decide a verdict
+// just to fix a typo in the title). Optional: absent or unchanged fields are
+// left alone.
+export async function applySubmissionEdits(formData: FormData): Promise<void> {
+  const access = await requirePerm("review");
+  const by = actorName(access);
+  const projectId = Number(formData.get("projectId") ?? 0);
+  const back = `/review/${projectId}`;
+  if (!projectId) return;
+  if (!access.canSecondPass)
+    redirect(`${back}?error=${encodeURIComponent("Only a final reviewer can edit the submission.")}`);
+
+  const { data: current } = await db
+    .from("projects")
+    .select("name, description, image_url, user_id")
+    .eq("id", projectId)
+    .single();
+  if (!current) return;
+
+  const editedName = String(formData.get("editedName") ?? "").trim().slice(0, 200);
+  const editedDescription = String(formData.get("editedDescription") ?? "").trim().slice(0, 5000);
+  const editedImageUrl = String(formData.get("editedImageUrl") ?? "").trim();
+  const edits: Record<string, string> = {};
+  if (editedName && editedName !== current.name) edits.name = editedName;
+  if (editedDescription && editedDescription !== current.description) edits.description = editedDescription;
+  if (editedImageUrl && editedImageUrl !== current.image_url) {
+    try {
+      await assertSafeExternalUrl(editedImageUrl);
+    } catch (e) {
+      redirect(`${back}?error=${encodeURIComponent(`Image URL: ${(e as Error).message}`)}`);
+    }
+    edits.image_url = editedImageUrl;
+  }
+  if (Object.keys(edits).length === 0)
+    redirect(`${back}?error=${encodeURIComponent("No changes to apply.")}`);
+
+  const { error } = await db.from("projects").update(edits).eq("id", projectId);
+  if (error) {
+    console.error("applySubmissionEdits failed", error.message);
+    redirect(`${back}?error=${encodeURIComponent("Failed to save , try again.")}`);
+  }
+  await logModAction(
+    current.user_id,
+    "project_edited",
+    `${edits.name ?? current.name}: final reviewer edited ${Object.keys(edits).join(", ")}`,
+    by,
+  );
+  revalidatePath(`/review/${projectId}`);
+  revalidatePath(`/projects/${projectId}`);
 }
 
 // A final reviewer looking at a second_review project isn't confident enough
