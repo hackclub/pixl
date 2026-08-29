@@ -60,6 +60,8 @@ This is the standard pattern almost every Roblox game with a score or currency u
 
 Once it's working, go to File, then Publish to Roblox. Give it a name, description, and a thumbnail if you've got one, then it's live and playable by anyone with the link, including Tim and his friends.
 
+Before you publish, set the game's age rating to 16+ in its settings. Roblox charges a fee to launch a game rated under 16, so leaving it on the default rating can cost you money, setting it to 16+ keeps publishing free.
+
 ## Keeping it a real trial
 
 Don't just publish the default Baseplate with one script dropped in. Add a few coins spread around a real map, a win condition, maybe a simple shop, something that shows actual game design thinking, not just a single working mechanic.

@@ -86,7 +86,15 @@ const HCA_BASE_URL = "https://auth.hackclub.com";
 const CLIENT_ID = process.env.HCA_CLIENT_ID!;
 const CLIENT_SECRET = process.env.HCA_CLIENT_SECRET!;
 const REDIRECT_URI = process.env.HCA_REDIRECT_URI!;
-const HCA_SCOPES =
+// Every login used to request phone+address up front, even though nothing
+// but a shop order ever needs them , everyone got HCA's address/phone
+// consent screen just to sign in and play. General login now only asks for
+// birthdate (needed broadly for YSWS age eligibility, not shop-specific);
+// phone/address are requested separately, only when a player actually starts
+// a purchase (see the verify-address flow below, which already existed for
+// re-verifying a stale address and now also covers a player's first order).
+const HCA_LOGIN_SCOPES = "openid profile slack_id birthdate basic_info";
+const HCA_ADDRESS_SCOPES =
   "openid profile slack_id phone birthdate address basic_info";
 
 // Maps OAuth `state` -> when it stops being valid, plus the web game's URL to
@@ -270,16 +278,18 @@ router.get("/auth/hackclub", (req, res) => {
   // Must stay a subset of the scopes the HCA app is registered for, HCA
   // rejects the whole authorize request otherwise. "email"/"name"/
   // "verification_status" were never registered names.
-  url.searchParams.set("scope", HCA_SCOPES);
+  url.searchParams.set("scope", HCA_LOGIN_SCOPES);
   url.searchParams.set("state", state);
 
   res.redirect(url.toString());
 });
 
-// Re-authorizes with HCA to pull a fresh address for an already-logged-in
-// player, without touching their session — the "verify address" button on
-// shop checkout, so a stale address on file doesn't silently ship wrong.
-// Deliberately not auto-triggered; the player has to click it.
+// Re-authorizes with HCA to pull a fresh phone+address for an
+// already-logged-in player, without touching their session — used for the
+// "verify address" button on shop checkout (a stale address on file
+// shouldn't silently ship wrong) and now also the first time a player starts
+// an order at all, since general login no longer asks HCA for this.
+// Deliberately not auto-triggered; the player has to click it / start a buy.
 router.get("/auth/hackclub/verify-address", (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";
   const session = token ? verifySessionToken(token) : null;
@@ -307,7 +317,7 @@ router.get("/auth/hackclub/verify-address", (req, res) => {
   url.searchParams.set("client_id", CLIENT_ID);
   url.searchParams.set("redirect_uri", REDIRECT_URI);
   url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", HCA_SCOPES);
+  url.searchParams.set("scope", HCA_ADDRESS_SCOPES);
   url.searchParams.set("state", state);
 
   res.redirect(url.toString());
