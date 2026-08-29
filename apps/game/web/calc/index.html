@@ -134,6 +134,7 @@
 
   <div class="card">
     <div class="card-h">A NEW PROJECT</div>
+    <div class="note" style="margin-top:0;margin-bottom:14px" id="c-rate-note"></div>
     <div class="form-row">
       <div class="lbl">Hours</div>
       <div class="stepper">
@@ -179,11 +180,17 @@
 <script src="/pixl.js?v=6"></script>
 <script>
 Pixl.mountTopbar("calc");
+const $ = (id) => document.getElementById(id);
+
+// Populate rate formula from config so it auto-updates.
+const E = Pixl.config.economy;
+$("c-rate-note").innerHTML =
+  `Rate ramps linearly from <b>$${E.basePayoutUsd.toFixed(2)}/hr</b> ` +
+  `to <b>$${E.maxPayoutUsd.toFixed(2)}/hr</b> — ` +
+  `every ${E.payoutSlopeRe.toLocaleString()} RE earned adds $1/hr.`;
 // RE is banked for life now (not reset per project), so predicting one of
 // your own projects has to start from your actual lifetime RE, not 0.
 const walletPromise = Pixl.loadWallet();
-
-const $ = (id) => document.getElementById(id);
 
 // Just a fun little touch - let the blahaj sticker be picked up and dropped
 // anywhere on the page instead of sitting fixed in the hero corner.
