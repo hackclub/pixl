@@ -625,11 +625,11 @@ router.post("/api/projects/:id/ship", async (req, res) => {
     journalSeconds = jhours * 3600;
   }
   const trackedSeconds = htSeconds + journalSeconds;
-  if (trackedSeconds < 3600)
-    return res.status(400).json({
-      ok: false,
-      error: isHardware ? "project_hours_required" : "hackatime_hours_required",
-    });
+  // Software needs at least an hour of tracked time to ship; hardware has no
+  // floor here - a build can be legitimately quick, and the BOM/cart/funding
+  // checks above (plus review) are what actually gate a funded hardware ship.
+  if (!isHardware && trackedSeconds < 3600)
+    return res.status(400).json({ ok: false, error: "hackatime_hours_required" });
 
   // Refresh each accepted collaborator's own tracked hours (their own
   // Hackatime account, filtered by the projects *they* linked) so review-time
