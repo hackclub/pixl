@@ -1,8 +1,6 @@
 import type { WebClient } from "@slack/web-api";
 import { db } from "../db/client.js";
 import { aiPost } from "../ai/client.js";
-import { answerQuestion } from "../ai/answerFromDocs.js";
-import { DOCS_LINKS } from "../ai/docs.js";
 import { checkAiRateLimit } from "../ai/rateLimit.js";
 import { app } from "../slack/app.js";
 import { normalizeTicket } from "./repo.js";
@@ -368,37 +366,18 @@ export async function handleNewQuestion(event: PendingTicketEvent, client: WebCl
 
   pendingTickets.set(event.ts, { event, timer });
 
-  // Docs-aware follow-up: a SEPARATE message from pixo, posted after the classic
-  // "someone will help you soon" reply above. If the docs answer the question,
-  // pixo posts that answer; otherwise it says to wait for a human helper (and
-  // offers a similar previously-resolved ticket if there is one).
+  // Follow-up: a SEPARATE message from pixo, posted after the classic
+  // "someone will help you soon" reply above, telling the asker to wait for a
+  // human helper and surfacing a similar previously-resolved ticket if there
+  // is one. Used to try answering from the docs first (see answerFromDocs.ts)
+  // — removed at the user's request, pixo no longer auto-answers in #pixl-help.
   try {
-    const ans = await answerQuestion(event.text || "");
-    if (ans) {
-      await client.chat.postMessage({
-        channel: event.channel,
-        thread_ts: event.ts,
-        text: ans.answer,
-        unfurl_links: false,
-        unfurl_media: false,
-        blocks: [
-          {
-            type: "section",
-            text: {
-              type: "mrkdwn",
-              text: `${ans.answer}\n\n_straight from the <${DOCS_LINKS.docs}|docs> - if that doesn't cover it, a helper will still follow up :hii:_`,
-            },
-          },
-        ],
-      });
-    } else {
-      await client.chat.postMessage({
-        channel: event.channel,
-        thread_ts: event.ts,
-        text: "the docs don't cover this one - just wait for a helper to respond to this one :D",
-      });
-      checkFAQAndSimilar(event, client).catch(() => {});
-    }
+    await client.chat.postMessage({
+      channel: event.channel,
+      thread_ts: event.ts,
+      text: "just wait for a helper to respond to this one :D",
+    });
+    checkFAQAndSimilar(event, client).catch(() => {});
   } catch (e) {
     /* the classic reply already went out; nothing more to say on failure */
   }
