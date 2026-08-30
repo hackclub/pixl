@@ -1376,6 +1376,48 @@
             : `${Pixl.hours(counted)} counts (of ${Pixl.hours(total)}, rest predates ${HT_CUTOFF_LABEL})`;
       }
 
+      // The checkbox list markup for the Hackatime picker, shared by the
+      // initial form render and refreshHackatimeStats() below so a manual
+      // refresh can't drift from the original render.
+      function htOptionsHtml(linked) {
+        return stats && stats.connected
+          ? [...stats.projects]
+              .sort((a, b) => b.seconds - a.seconds)
+              .map(
+                (h) => `
+        <label${h.beforeCutoff ? ` title="Only time coded after ${HT_CUTOFF_LABEL} counts toward shipping: this project has older activity mixed in."` : ""}><input type="checkbox" name="ht" value="${Pixl.esc(h.name)}" data-before-cutoff="${h.beforeCutoff ? "1" : ""}" ${linked.has(h.name) ? "checked" : ""}>
+        ${Pixl.esc(h.name)}<span class="h">${Pixl.hours(h.seconds)}</span>${h.beforeCutoff ? `<span class="faint" style="font-size:11px"> ⚠ only time after ${HT_CUTOFF_LABEL} counts</span>` : ""}</label>`,
+              )
+              .join("")
+          : `<span class="faint" style="font-size:13px">Connect Hackatime above to link coding time.</span>`;
+      }
+
+      // Re-fetches Hackatime stats without a full page reload. Heartbeats can
+      // take a bit to show up on Hackatime's own API, so a player who just
+      // finished a session used to have to hard-reload (sometimes more than
+      // once) before their fresh time showed up in the picker - this is the
+      // same fetch, wired to a button instead. Keeps whatever's currently
+      // checked, checked.
+      async function refreshHackatimeStats(onChange) {
+        const btn = $("f-ht-refresh");
+        if (btn) btn.disabled = true;
+        try {
+          const d = await Pixl.api("/api/hackatime/stats");
+          stats = d.stats || stats;
+          const pick = $("f-ht-pick");
+          if (pick) {
+            const linked = new Set(checkedHtBoxes().map((c) => c.value));
+            pick.innerHTML = htOptionsHtml(linked);
+            wireHtPicker(onChange);
+          }
+          Pixl.toast("Hackatime refreshed.");
+        } catch (e) {
+          Pixl.toast(err(e && e.message), true);
+        } finally {
+          if (btn) btn.disabled = false;
+        }
+      }
+
       // Wires the Hackatime picker in whichever form it's rendered in (new
       // project or existing): keeps the running total next to the label in
       // sync and warns when a ticked project has time from before the
@@ -1722,17 +1764,7 @@
 
       function formHtml(p) {
         const linked = new Set(p.hackatime_projects || []);
-        const htOpts =
-          stats && stats.connected
-            ? [...stats.projects]
-                .sort((a, b) => b.seconds - a.seconds)
-                .map(
-                  (h) => `
-        <label${h.beforeCutoff ? ` title="Only time coded after ${HT_CUTOFF_LABEL} counts toward shipping: this project has older activity mixed in."` : ""}><input type="checkbox" name="ht" value="${Pixl.esc(h.name)}" data-before-cutoff="${h.beforeCutoff ? "1" : ""}" ${linked.has(h.name) ? "checked" : ""}>
-        ${Pixl.esc(h.name)}<span class="h">${Pixl.hours(h.seconds)}</span>${h.beforeCutoff ? `<span class="faint" style="font-size:11px"> ⚠ only time after ${HT_CUTOFF_LABEL} counts</span>` : ""}</label>`,
-                )
-                .join("")
-            : `<span class="faint" style="font-size:13px">Connect Hackatime above to link coding time.</span>`;
+        const htOpts = htOptionsHtml(linked);
         return `
     <div class="form-grid panel">
       <div class="form-row">
@@ -1859,8 +1891,10 @@
         <span class="faint" id="f-level-blurb" style="font-size:11px;line-height:1.5;margin-top:4px"></span>
       </div>
       <div class="form-row">
-        <label>HACKATIME PROJECTS (proof of hours)<span class="teal" id="f-ht-total" style="margin-left:8px;font-size:12px;letter-spacing:0"></span></label>
-        <div class="ht-pick">${htOpts}</div>
+        <label>HACKATIME PROJECTS (proof of hours)<span class="teal" id="f-ht-total" style="margin-left:8px;font-size:12px;letter-spacing:0"></span>
+          <button type="button" class="btn ghost" id="f-ht-refresh" style="margin-left:8px;padding:2px 8px;font-size:11px" title="Just tracked new time? Re-check Hackatime without reloading the page.">↻ REFRESH</button>
+        </label>
+        <div class="ht-pick" id="f-ht-pick">${htOpts}</div>
       </div>
       ${
         p.status === "approved" && !p.rejected_at
@@ -2424,11 +2458,14 @@
           });
         // Keep the ship checklist's Hackatime line in sync as boxes are
         // ticked, before any save.
-        wireHtPicker(() => {
+        const onHtChange = () => {
           const el = $("ship-ht");
           if (!el) return;
           el.innerHTML = shipHtLine();
-        });
+        };
+        wireHtPicker(onHtChange);
+        if ($("f-ht-refresh"))
+          $("f-ht-refresh").addEventListener("click", () => refreshHackatimeStats(onHtChange));
         if ($("s-unship"))
           $("s-unship").addEventListener("click", () => unship(p));
         initMdBar();
