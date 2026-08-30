@@ -3010,7 +3010,24 @@ export async function updateShopItem(formData: FormData): Promise<void> {
     .getAll("unlock_trials")
     .map(Number)
     .filter((n) => Number.isFinite(n) && n > 0);
-  const patch: Record<string, unknown> = { name, description, price, options, region, category, unlock_trial_ids: unlockTrials };
+  // A second, manual way to lock an item that isn't tied to any Trial —
+  // also item-wide, mirrored below the same way the Trial gate is.
+  const manualLocked = formData.get("manual_locked") === "1";
+  const lockNote = String(formData.get("lock_note") ?? "").trim().slice(0, 300);
+  // Saving silently skips telling pixorpheus about this change (e.g. a typo
+  // fix that isn't worth a Slack ping) — see notifyShopUpdates below.
+  const silent = formData.get("silent") === "1";
+  const patch: Record<string, unknown> = {
+    name,
+    description,
+    price,
+    options,
+    region,
+    category,
+    unlock_trial_ids: unlockTrials,
+    manual_locked: manualLocked,
+    lock_note: lockNote,
+  };
   const image = formData.get("image");
   if (image instanceof File && image.size > 0) {
     if (image.size > 4 * 1024 * 1024) throw new Error("Image too big (max 4 MB).");
@@ -3052,6 +3069,14 @@ export async function updateShopItem(formData: FormData): Promise<void> {
     .eq("unlock_xp", 0);
   if (gateErr) console.error("updateShopItem (trial gate)", gateErr.message);
 
+  // Same for the manual lock , item-wide, not per-region.
+  const { error: lockErr } = await db
+    .from("shop_items")
+    .update({ manual_locked: manualLocked, lock_note: lockNote })
+    .eq("name", gateName)
+    .eq("unlock_xp", 0);
+  if (lockErr) console.error("updateShopItem (manual lock)", lockErr.message);
+
   if (applyAllRegions && originalName) {
     const { error: propErr } = await db
       .from("shop_items")
@@ -3062,11 +3087,13 @@ export async function updateShopItem(formData: FormData): Promise<void> {
     if (propErr) throw new Error(propErr.message);
   }
 
-  const { data: after } = await db.from("shop_items").select("*").in("id", affectedIds);
-  await notifyShopUpdates(
-    (before ?? []) as ShopRowSnapshot[],
-    (after ?? []) as ShopRowSnapshot[],
-  );
+  if (!silent) {
+    const { data: after } = await db.from("shop_items").select("*").in("id", affectedIds);
+    await notifyShopUpdates(
+      (before ?? []) as ShopRowSnapshot[],
+      (after ?? []) as ShopRowSnapshot[],
+    );
+  }
 
   revalidatePath("/shop");
 }

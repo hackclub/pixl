@@ -20,7 +20,7 @@ async function regionFor(userId: string): Promise<string> {
 // with 0106 — fall back gracefully before each is applied so the catalog
 // keeps loading.
 const ITEM_COLUMNS =
-  "id, name, description, price, image_url, options, unlock_xp, config_options, region, category, unlock_trial_ids";
+  "id, name, description, price, image_url, options, unlock_xp, config_options, region, category, unlock_trial_ids, manual_locked, lock_note";
 const ITEM_COLUMNS_FALLBACK = "id, name, description, price, image_url, options";
 
 // Items are scoped to the player's own region (fulfillment/shipping differ a
@@ -201,6 +201,15 @@ router.get("/api/shop/items", async (req, res) => {
         // when none of the gating trials are active yet.
         i.unlockPending = i.locked && !ids.some((id) => activeById.get(id));
       }
+    }
+  }
+
+  // A manual lock overrides everything above , always locked regardless of
+  // any Trial gate, with its own note instead of "ship this Trial" copy.
+  for (const i of items) {
+    if (i.manual_locked) {
+      i.locked = true;
+      i.unlockPending = false;
     }
   }
 
@@ -435,11 +444,15 @@ router.post("/api/shop/buy/:id", async (req, res) => {
 
   // Trial-gated items can't be bought until the player has shipped one of the
   // unlocking Trials (mirrors the `locked` flag computed for the catalog).
+  // A manual lock (see updateShopItem in the dashboard) blocks purchase
+  // outright, independent of any Trial.
   const { data: gateRow } = await supabase
     .from("shop_items")
-    .select("unlock_trial_ids")
+    .select("unlock_trial_ids, manual_locked")
     .eq("id", id)
     .maybeSingle();
+  if ((gateRow as { manual_locked?: boolean } | null)?.manual_locked)
+    return res.status(403).json({ ok: false, error: "locked" });
   const gateIds = Array.isArray((gateRow as { unlock_trial_ids?: unknown[] } | null)?.unlock_trial_ids)
     ? ((gateRow as { unlock_trial_ids: unknown[] }).unlock_trial_ids).map(Number).filter((n) => Number.isFinite(n) && n > 0)
     : [];

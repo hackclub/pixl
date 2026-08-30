@@ -396,6 +396,45 @@ export default async function ShopPage({
                           this item in every region (price, options &amp; image stay per-region)
                         </span>
                       </label>
+                      <div className="rounded-md border border-border p-3 space-y-2">
+                        <label className="flex items-start gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            name="manual_locked"
+                            value="1"
+                            defaultChecked={item.manual_locked}
+                            className="mt-0.5 h-4 w-4 rounded border-border accent-brand"
+                          />
+                          <span>
+                            <span className="font-medium text-foreground">Locked</span> , blocks
+                            purchase regardless of any Trial gate. Applies to this item in every
+                            region.
+                          </span>
+                        </label>
+                        <Label className="block font-normal">
+                          <span className="block text-xs font-medium text-muted-foreground mb-1">
+                            Unlock note (shown to players instead of the Trial prompt)
+                          </span>
+                          <Input
+                            name="lock_note"
+                            maxLength={300}
+                            defaultValue={item.lock_note}
+                            placeholder="e.g. back in stock next chapter"
+                            className="w-full text-sm"
+                          />
+                        </Label>
+                      </div>
+                      <label className="flex items-start gap-2 text-sm text-muted-foreground cursor-pointer">
+                        <input
+                          type="checkbox"
+                          name="silent"
+                          value="1"
+                          className="mt-0.5 h-4 w-4 rounded border-border accent-brand"
+                        />
+                        <span>
+                          Save silently , don&apos;t notify Pixo/Slack about this change
+                        </span>
+                      </label>
                       <PendingButton
                         className="bg-brand text-white border-transparent"
                         pendingText="Saving…"

@@ -646,9 +646,14 @@
           $("buy-btn").textContent = "LOCKED";
           $("buy-btn").disabled = true;
           $("afford-fill").style.width = "0%";
-          const trials = (selected.unlock_trials || []).map((t) => `"${t}"`).join(" or ");
-          $("afford-label").textContent = `Ship the ${trials || "required"} Trial to unlock this.`;
-          say("SHIP THE RIGHT TRIAL AND THIS UNLOCKS.", 5000);
+          if (selected.lock_note) {
+            $("afford-label").textContent = selected.lock_note;
+            say(selected.lock_note.toUpperCase(), 5000);
+          } else {
+            const trials = (selected.unlock_trials || []).map((t) => `"${t}"`).join(" or ");
+            $("afford-label").textContent = `Ship the ${trials || "required"} Trial to unlock this.`;
+            say("SHIP THE RIGHT TRIAL AND THIS UNLOCKS.", 5000);
+          }
           return;
         }
 

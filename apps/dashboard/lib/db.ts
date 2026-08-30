@@ -1928,6 +1928,11 @@ export interface ShopItemRow {
   // Sidequest ids that unlock this item; empty = not trial-gated. Comes back as
   // strings from the bigint[] column, so normalize with Number() when comparing.
   unlock_trial_ids: (number | string)[];
+  // A manual, non-Trial lock an admin can set/clear directly (see
+  // updateShopItem in app/actions.ts). lock_note is shown to players in place
+  // of the "ship this Trial" copy when this is what's locking the item.
+  manual_locked: boolean;
+  lock_note: string;
 }
 
 export interface ShopOptionStockRow {
