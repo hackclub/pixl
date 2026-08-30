@@ -107,6 +107,7 @@ function TierAndPayout({
   forTrial,
   trialMinHours,
   trialName,
+  fundingUsd = 0,
 }: {
   hours: number;
   tier: number;
@@ -116,6 +117,9 @@ function TierAndPayout({
   /** The Trial's min-hours gate, for the prize/beyond-hours split below. */
   trialMinHours?: number | null;
   trialName?: string;
+  /** Hardware funding grant requested on this project, if any - deducted from
+   * the payout below, mirroring creditBeneficiary's fundingPx exactly. */
+  fundingUsd?: number;
 }) {
   const perHour = rePerHour(tier);
   const hoursRe = reForHours(hours, tier);
@@ -141,6 +145,13 @@ function TierAndPayout({
       ? Math.min(Math.max(Math.round(projectPayoutPx(trialMinHours, tier, 0)), 0), px)
       : 0;
   const trialBeyondPx = Math.max(px - trialPrizePx, 0);
+  // Mirrors creditBeneficiary's fundingPx exactly: the hardware grant comes
+  // out of this payout, converted at today's rate, capped so it can't go
+  // negative.
+  const fundingPx =
+    fundingUsd > 0 ? Math.min(Math.round(fundingUsd / config.economy.pixelValueUsd), px) : 0;
+  const netPx = px - fundingPx;
+  const netUsd = netPx * config.economy.pixelValueUsd;
 
   return (
     <div className="rounded-md border border-border bg-muted/30 p-3 space-y-2">
@@ -225,6 +236,24 @@ function TierAndPayout({
               : "The maker picks the Trial reward or these pixels once you approve it, and only gets the one they pick."}
           </div>
         )}
+        {fundingPx > 0 && (
+          <>
+            <div className="flex justify-between pt-1">
+              <span className="text-muted-foreground">Hardware funding grant (${fundingUsd.toFixed(2)})</span>
+              <span className="font-medium">-{fundingPx.toLocaleString()} px</span>
+            </div>
+            <div className="flex justify-between border-t border-border pt-1">
+              <span className="font-medium">They actually get</span>
+              <span className="font-bold">
+                {netPx.toLocaleString()} px · ${netUsd.toFixed(2)}
+              </span>
+            </div>
+            <div className="text-[11px] text-muted-foreground leading-snug pt-1">
+              The ${fundingUsd.toFixed(2)} funding grant comes out of this payout instead of their
+              wallet, so approving credits {netPx.toLocaleString()} px, not {px.toLocaleString()}.
+            </div>
+          </>
+        )}
       </div>
       <p className="text-[11px] text-muted-foreground leading-snug">
         Changing the tier here saves it with your verdict. Community-goal bonuses and any
@@ -272,6 +301,7 @@ export function ReviewForm({
   collaborators = [],
   tier = 1,
   playerReBefore = 0,
+  fundingUsd = 0,
   firstPass,
   currentName,
   currentDescription,
@@ -293,6 +323,8 @@ export function ReviewForm({
   tier?: number;
   /** The player's lifetime RE excluding this project - what sets their rate. */
   playerReBefore?: number;
+  /** Hardware funding grant requested on this project (0 if none/not hardware). */
+  fundingUsd?: number;
   /** The first pass's own audit note + player note, so the final reviewer
    * starts from what was already written instead of a blank form. */
   firstPass?: {
@@ -611,6 +643,7 @@ export function ReviewForm({
         forTrial={!!trial}
         trialMinHours={trial?.minHours}
         trialName={trial?.name}
+        fundingUsd={fundingUsd}
       />
       {trial?.minHours != null && (
         <div

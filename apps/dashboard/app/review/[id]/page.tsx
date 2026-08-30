@@ -29,6 +29,7 @@ import {
   extendHoursCutoff,
   holdReview,
   releaseReviewHold,
+  updateFundingAmount,
 } from "@/app/actions";
 import { hackatimeCutoffUnix, hackatimeCutoffLabel } from "@/app/_generated/config";
 import { PendingButton } from "@/app/_components/PendingButton";
@@ -357,6 +358,28 @@ export default async function ReviewDetail({
               <div className="font-semibold text-emerald-800 dark:text-emerald-300">
                 Funding requested: ${Number(p.funding_usd ?? 0).toFixed(2)}
               </div>
+              <form action={updateFundingAmount} className="flex items-center gap-2">
+                <input type="hidden" name="projectId" value={p.id} />
+                <span className="text-xs text-muted-foreground">Correct amount ($)</span>
+                <Input
+                  type="number"
+                  name="fundingUsd"
+                  step="0.01"
+                  min="0"
+                  max="100000"
+                  defaultValue={Number(p.funding_usd ?? 0)}
+                  className="h-8 max-w-28 text-sm"
+                />
+                <PendingButton pendingText="Saving…" className="h-8 px-2 text-xs">
+                  Save
+                </PendingButton>
+              </form>
+              {p.funding_deducted_px > 0 && (
+                <div className="text-xs text-muted-foreground">
+                  Already approved once: {p.funding_deducted_px.toLocaleString()} px was withheld from the payout for
+                  this grant.
+                </div>
+              )}
               <div>
                 <div className="text-xs font-medium text-muted-foreground mb-1">Bill of Materials</div>
                 {p.bom_url ? (
@@ -932,6 +955,7 @@ export default async function ReviewDetail({
                     collaborators={collaboratorHours}
                     tier={Number(p.level) || 1}
                     playerReBefore={playerReBefore}
+                    fundingUsd={p.needs_funding ? Number(p.funding_usd ?? 0) : 0}
                     currentName={p.name}
                     currentDescription={p.description}
                     currentImageUrl={p.image_url}

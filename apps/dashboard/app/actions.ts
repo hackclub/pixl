@@ -464,6 +464,8 @@ interface BeneficiaryPayout {
   projectRe: number;
   /** Community-goal multiplier applied to the payout (1 = none). */
   goalMult: number;
+  /** Pixels withheld from this payout for a hardware funding grant (0 = none). */
+  fundingPx: number;
 }
 
 // Credits one beneficiary (the project owner, or an accepted collaborator)
@@ -481,6 +483,7 @@ async function creditBeneficiary(
   otherBeneficiaryIds: string[] = [],
   tier = 1,
   holdPixels = false,
+  fundingUsd = 0,
 ): Promise<BeneficiaryPayout> {
   let goalMult = 1;
   let goalNote = "";
@@ -544,7 +547,13 @@ async function creditBeneficiary(
     }
   }
 
-  const totalPx = Math.round(creditHours * pxRate * goalMult);
+  const grossPx = Math.round(creditHours * pxRate * goalMult);
+  // Hardware funding grant: the reviewer-approved dollar amount comes out of
+  // pixels rather than the maker's own wallet, converted at today's rate , so
+  // the more they ask the shop to front, the fewer pixels they're credited.
+  // Clamped so a grant can never push the payout negative.
+  const fundingPx = fundingUsd > 0 ? Math.min(Math.round(fundingUsd / config.economy.pixelValueUsd), grossPx) : 0;
+  const totalPx = grossPx - fundingPx;
   const deltaPx = totalPx - alreadyPx;
   // Trial ships settle later: the maker picks the Trial prize *or* these
   // pixels, so the payout is computed now and only credited once they choose
@@ -578,7 +587,7 @@ async function creditBeneficiary(
         .is("rewarded_at", null)
         .select("id")
         .maybeSingle();
-      if (!claimed) return { totalPx, deltaPx, pxRate, xpBefore, goalNote, referralNote, alreadyPx, projectRe, goalMult };
+      if (!claimed) return { totalPx, deltaPx, pxRate, xpBefore, goalNote, referralNote, alreadyPx, projectRe, goalMult, fundingPx };
       await db.rpc("adjust_user_pixels", {
         p_user_id: referral.referrer_id,
         p_amount: tier.px,
@@ -612,7 +621,7 @@ async function creditBeneficiary(
     }
   }
 
-  return { totalPx, deltaPx, pxRate, xpBefore, goalNote, referralNote, alreadyPx, projectRe, goalMult };
+  return { totalPx, deltaPx, pxRate, xpBefore, goalNote, referralNote, alreadyPx, projectRe, goalMult, fundingPx };
 }
 
 // Two-pass review. A shipped project always gets a first pass from *some*
@@ -631,7 +640,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
   const { data: current } = await db
     .from("projects")
     .select(
-      "status, user_id, name, description, image_url, first_pass_by, first_pass_hours, first_pass_verdict, shipped_at, sidequest_id, trial_reward_choice",
+      "status, user_id, name, description, image_url, first_pass_by, first_pass_hours, first_pass_verdict, shipped_at, sidequest_id, trial_reward_choice, needs_funding, funding_usd",
     )
     .eq("id", projectId)
     .single();
@@ -947,6 +956,9 @@ export async function reviewProject(formData: FormData): Promise<void> {
   // are held , collaborators are paid for their hours either way.
   const trialChoice = String(current.trial_reward_choice ?? "");
   const holdForTrial = !!linkedTrial && trialChoice !== "pixels";
+  // Hardware funding: only the owner's own payout gets docked , collaborators
+  // are paid their hours in full, same as the Trial hold above.
+  const fundingUsd = current.needs_funding ? Math.max(Number(current.funding_usd) || 0, 0) : 0;
 
   const ownerPayout = await creditBeneficiary(
     project.user_id,
@@ -958,8 +970,16 @@ export async function reviewProject(formData: FormData): Promise<void> {
     collaborators.map((c) => c.user_id),
     tierUsed,
     holdForTrial,
+    fundingUsd,
   );
-  const { totalPx, deltaPx, pxRate, xpBefore, goalNote, referralNote, alreadyPx, goalMult } = ownerPayout;
+  const { totalPx, deltaPx, pxRate, xpBefore, goalNote, referralNote, alreadyPx, goalMult, fundingPx } = ownerPayout;
+  if (fundingPx > 0) {
+    const { error: fundingErr } = await db
+      .from("projects")
+      .update({ funding_deducted_px: fundingPx })
+      .eq("id", projectId);
+    if (fundingErr) console.error("reviewProject (funding deduct)", fundingErr.message);
+  }
 
   const trialPrize = linkedTrial ? await trialPrizeFor(linkedTrial) : null;
 
@@ -1008,6 +1028,8 @@ export async function reviewProject(formData: FormData): Promise<void> {
   else if (linkedTrial) credited += ` Either way,${reLine}`;
   if (goalNote && deltaPx > 0) credited += goalNote;
   if (referralNote && deltaPx > 0) credited += referralNote;
+  if (fundingPx > 0)
+    credited += ` $${fundingUsd.toFixed(2)} of that (${fundingPx} px) is going toward the hardware funding you requested instead of your wallet , the team will reach out about getting it to you.`;
 
   // Split payout: every accepted collaborator is credited independently at
   // their own rate tier for their own submitted hours slice (capped at what
@@ -1119,6 +1141,13 @@ export async function reviewProject(formData: FormData): Promise<void> {
     `${project.name}: ${deltaPx >= 0 ? "+" : ""}${deltaPx} pixels (total ${totalPx})`,
     by,
   );
+  if (fundingPx > 0)
+    await logModAction(
+      project.user_id,
+      "funding_deducted",
+      `${project.name}: $${fundingUsd.toFixed(2)} hardware grant , ${fundingPx} px withheld from payout, needs fulfillment`,
+      by,
+    );
   const nextPath = await nextReviewPath(access, by, stage, projectId);
   revalidatePath("/review");
   redirect(nextPath);
@@ -1155,6 +1184,44 @@ export async function setProjectLevel(formData: FormData): Promise<void> {
     current.user_id,
     "project_level_changed",
     `${current.name}: level set to L${level} (was L${current.level ?? 1})`,
+    by,
+  );
+  revalidatePath(back);
+  redirect(back);
+}
+
+// A reviewer can correct the hardware funding grant a maker asked for (e.g.
+// the cart total didn't match, or an item got swapped out) before approving ,
+// this is what the payout calculator and the approval-time deduction actually
+// use, so it has to be settled before the verdict is submitted.
+export async function updateFundingAmount(formData: FormData): Promise<void> {
+  const access = await requirePerm("review");
+  const by = actorName(access);
+  const projectId = Number(formData.get("projectId") ?? 0);
+  const back = `/review/${projectId}`;
+  if (!projectId) return;
+  const raw = String(formData.get("fundingUsd") ?? "").trim();
+  const amount = Math.min(Math.max(Number(raw) || 0, 0), 100000);
+  if (!Number.isFinite(amount)) redirect(`${back}?error=${encodeURIComponent("Funding amount must be a number.")}`);
+
+  const { data: current } = await db
+    .from("projects")
+    .select("user_id, name, needs_funding, funding_usd")
+    .eq("id", projectId)
+    .single();
+  if (!current) return;
+  if (!current.needs_funding)
+    redirect(`${back}?error=${encodeURIComponent("This project didn't request hardware funding.")}`);
+
+  const { error } = await db.from("projects").update({ funding_usd: amount }).eq("id", projectId);
+  if (error) {
+    console.error("updateFundingAmount failed", error.message);
+    redirect(`${back}?error=${encodeURIComponent("Couldn't save the funding amount.")}`);
+  }
+  await logModAction(
+    current.user_id,
+    "funding_amount_changed",
+    `${current.name}: funding set to $${amount.toFixed(2)} (was $${Number(current.funding_usd ?? 0).toFixed(2)})`,
     by,
   );
   revalidatePath(back);

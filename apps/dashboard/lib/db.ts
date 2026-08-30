@@ -108,6 +108,7 @@ export interface ProjectRow {
   kind: string;
   needs_funding: boolean;
   funding_usd: number;
+  funding_deducted_px: number;
   bom_url: string;
   cart_screenshot_urls: string[];
   used_ai: boolean;
