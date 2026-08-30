@@ -272,7 +272,7 @@
   "shop": {
     "badge": "Gasta tus píxeles",
     "title": "La tienda",
-    "description": "1 hora de trabajo = 57 píxeles.",
+    "description": "1 hora de trabajo = 50 píxeles.",
     "moreComing": "...¡y aún más por venir!",
     "hoursRate": "{lo} h a {loRate}/h → {hi} h a {hiRate}/h",
     "items": [
@@ -544,11 +544,11 @@
       },
       {
         "question": "¿Cuánto puedo ganar?",
-        "answer": "Ganas píxeles por cada hora de trabajo entregado: 1 hora = 57 píxeles, unos 4,00 $ para empezar. A medida que sube de nivel tu Energía de Restauración, tu tasa aumenta, hasta unos 6 $/h. Gasta tus píxeles en la tienda en premios reales, desde pegatinas hasta un MacBook Air."
+        "answer": "Ganas píxeles por cada hora de trabajo entregado: 1 hora = 50 píxeles, unos 4,00 $ para empezar. A medida que sube de nivel tu Energía de Restauración, tu tasa aumenta, hasta unos 6 $/h. Gasta tus píxeles en la tienda en premios reales, desde pegatinas hasta un MacBook Air."
       },
       {
         "question": "¿Qué es la Energía de Restauración?",
-        "answer": "Es el número del que depende todo. Cada entrega gana Energía de Restauración según cuántas horas dedicas Y lo complejo que sea el proyecto (los revisores le asignan un nivel del 1 al 4), así que los proyectos más grandes y difíciles ganan más. Tu ER fija tu tasa de pago, que sube de 57 px/h a unos 86 px/h a medida que entregas, y tu nivel muestra la ER que has acumulado. La Energía de Restauración de toda la comunidad también desbloquea objetivos comunitarios, como nuevas skins para tu casa en el juego."
+        "answer": "Es el número del que depende todo. Cada entrega gana Energía de Restauración según cuántas horas dedicas Y lo complejo que sea el proyecto (los revisores le asignan un nivel del 1 al 4), así que los proyectos más grandes y difíciles ganan más. Tu ER fija tu tasa de pago, que sube de 50 px/h a unos 75 px/h a medida que entregas, y tu nivel muestra la ER que has acumulado. La Energía de Restauración de toda la comunidad también desbloquea objetivos comunitarios, como nuevas skins para tu casa en el juego."
       },
       {
         "question": "¡Tengo más preguntas!",
