@@ -2318,6 +2318,7 @@ export interface JournalRow {
   id: number;
   project_id: number;
   user_id: string;
+  title: string;
   content: string;
   hours: number;
   created_at: string;

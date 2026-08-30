@@ -2348,6 +2348,7 @@
         you use Lapse or if your project is a software project, your journals explaining your sessions need to be set at 0h.
       </div>
       <div class="composer panel">
+        <input class="field" id="j-title" maxlength="120" placeholder="Title (optional)" style="margin-bottom:8px">
         <div class="md-editor">
           <div class="md-bar" id="j-mdbar">
             <button type="button" class="md-btn" data-md="bold" title="Bold (Ctrl+B)"><b>B</b></button>
@@ -2445,6 +2446,7 @@
           autoGrow($("j-content")),
         );
         $("j-content").addEventListener("input", saveJournalDraft);
+        if ($("j-title")) $("j-title").addEventListener("input", saveJournalDraft);
         $("j-hours").addEventListener("input", updateJournalHint);
         $("j-hours").addEventListener("input", saveJournalDraft);
         loadTimeline(p.id);
@@ -2602,6 +2604,7 @@
         The hours field below is only for time it missed (planning, hardware work, and the like).
       </div>
       <div class="composer panel">
+        <input class="field" id="j-title" maxlength="120" placeholder="Title (optional)" style="margin-bottom:8px">
         <div class="md-editor">
           <div class="md-bar" id="j-mdbar">
             <button type="button" class="md-btn" data-md="bold" title="Bold (Ctrl+B)"><b>B</b></button>
@@ -2642,6 +2645,7 @@
         $("j-content").addEventListener("input", updateJournalHint);
         $("j-content").addEventListener("input", () => autoGrow($("j-content")));
         $("j-content").addEventListener("input", saveJournalDraft);
+        if ($("j-title")) $("j-title").addEventListener("input", saveJournalDraft);
         $("j-hours").addEventListener("input", updateJournalHint);
         $("j-hours").addEventListener("input", saveJournalDraft);
         updateJournalHint();
@@ -3252,11 +3256,12 @@
       function saveJournalDraft() {
         const id = currentJournalProjectId;
         if (id == null) return;
+        const title = $("j-title")?.value ?? "";
         const content = $("j-content")?.value ?? "";
         const hours = $("j-hours")?.value ?? "0";
         try {
-          if (!content.trim()) localStorage.removeItem(journalDraftKey(id));
-          else localStorage.setItem(journalDraftKey(id), JSON.stringify({ content, hours }));
+          if (!content.trim() && !title.trim()) localStorage.removeItem(journalDraftKey(id));
+          else localStorage.setItem(journalDraftKey(id), JSON.stringify({ title, content, hours }));
         } catch {}
       }
       function loadJournalDraft(id) {
@@ -3264,6 +3269,7 @@
           const raw = localStorage.getItem(journalDraftKey(id));
           if (!raw) return;
           const draft = JSON.parse(raw);
+          if (draft?.title && $("j-title")) $("j-title").value = draft.title;
           if (draft?.content) $("j-content").value = draft.content;
           if (draft?.hours != null) $("j-hours").value = draft.hours;
         } catch {}
@@ -3355,6 +3361,7 @@
           <button class="jedit" data-id="${e.id}">edit</button>
           <button class="jdel" data-id="${e.id}">delete</button>
         </div>
+        ${e.title ? `<div class="jtitle" style="font-weight:700;margin-bottom:4px">${Pixl.esc(e.title)}</div>` : ""}
         <div class="jbody md">${Pixl.markdown(e.content)}</div>
       </div>`;
       }
@@ -3362,6 +3369,7 @@
       function journalEditRow(e) {
         return `
       <div class="journal-entry panel jeditor" data-id="${e.id}">
+        <input class="field jedit-title" maxlength="120" placeholder="Title (optional)" value="${Pixl.esc(e.title || "")}" style="margin-bottom:8px">
         <textarea class="field jedit-content" maxlength="5000">${Pixl.esc(e.content)}</textarea>
         <div class="composer-foot">
           <span class="faint" style="font-size:12px">hours:</span>
@@ -3485,12 +3493,14 @@
         editRow.querySelector(".jedit-save").addEventListener("click", async () => {
           const content = ta.value.trim();
           if (!content) return Pixl.toast("Write something first!", true);
+          const titleInput = editRow.querySelector(".jedit-title");
           const saveBtn = editRow.querySelector(".jedit-save");
           saveBtn.disabled = true;
           const editedId = journalEditingId;
           let r;
           try {
             r = await Pixl.send("PATCH", `/api/projects/${id}/journal/${editedId}`, {
+              title: titleInput ? titleInput.value.trim() : "",
               content,
               hours: Number(hoursInput.value) || 0,
             });
@@ -3528,6 +3538,7 @@
         if (!content) return Pixl.toast("Write something first!", true);
         $("j-post").disabled = true;
         const r = await Pixl.send("POST", `/api/projects/${id}/journal`, {
+          title: $("j-title")?.value.trim() || "",
           content,
           hours: Number($("j-hours").value) || 0,
         });
@@ -3545,6 +3556,7 @@
             );
           return Pixl.toast(err(r.error), true);
         }
+        if ($("j-title")) $("j-title").value = "";
         $("j-content").value = "";
         $("j-hours").value = "0";
         autoGrow($("j-content"));

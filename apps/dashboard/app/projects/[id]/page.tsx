@@ -478,6 +478,9 @@ export default async function ProjectPage({
                 {new Date(j.created_at).toLocaleString()}
               </span>
             </div>
+            {j.title && (
+              <div className="text-sm font-semibold mb-1">{j.title}</div>
+            )}
             <div
               className="md text-sm break-words text-foreground/80"
               dangerouslySetInnerHTML={{ __html: renderMarkdown(j.content) }}

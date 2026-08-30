@@ -1178,6 +1178,7 @@ router.post("/api/projects/:id/journal", async (req, res) => {
   const content = String(req.body?.content ?? "").trim().slice(0, 5000);
   if (!content)
     return res.status(400).json({ ok: false, error: "content_required" });
+  const title = String(req.body?.title ?? "").trim().slice(0, 120);
   let hours = Number(req.body?.hours ?? 0);
   if (!Number.isFinite(hours) || hours < 0) hours = 0;
   hours = Math.min(Math.round(hours * 100) / 100, 100);
@@ -1198,7 +1199,7 @@ router.post("/api/projects/:id/journal", async (req, res) => {
 
   const { data, error } = await supabase
     .from("project_journals")
-    .insert({ project_id: id, user_id: session.userId, content, hours })
+    .insert({ project_id: id, user_id: session.userId, content, hours, title })
     .select()
     .single();
   if (error) {
@@ -1222,6 +1223,7 @@ router.patch("/api/projects/:id/journal/:entryId", async (req, res) => {
   const content = String(req.body?.content ?? "").trim().slice(0, 5000);
   if (!content)
     return res.status(400).json({ ok: false, error: "content_required" });
+  const title = String(req.body?.title ?? "").trim().slice(0, 120);
   let hours = Number(req.body?.hours ?? 0);
   if (!Number.isFinite(hours) || hours < 0) hours = 0;
   hours = Math.min(Math.round(hours * 100) / 100, 100);
@@ -1240,7 +1242,7 @@ router.patch("/api/projects/:id/journal/:entryId", async (req, res) => {
 
   const { data, error } = await supabase
     .from("project_journals")
-    .update({ content, hours, edited_at: new Date().toISOString() })
+    .update({ content, hours, title, edited_at: new Date().toISOString() })
     .eq("id", entryId)
     .eq("project_id", id)
     .eq("user_id", session.userId)
