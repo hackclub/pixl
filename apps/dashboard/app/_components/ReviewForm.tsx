@@ -735,6 +735,19 @@ export function ReviewForm({
             rows={3}
           />
         </div>
+        <label className="flex items-start gap-2 text-sm cursor-pointer">
+          <input
+            type="checkbox"
+            name="revealName"
+            value="1"
+            defaultChecked
+            className="mt-0.5 h-4 w-4 rounded border-border accent-brand"
+          />
+          <span className="text-muted-foreground">
+            Show my name to the player in this verdict&apos;s notification (approved / needs
+            changes) , unticked sends it as &quot;the review team&quot; instead.
+          </span>
+        </label>
       </div>
       <div className="flex flex-col gap-2">
         <Textarea

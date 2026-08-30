@@ -733,6 +733,13 @@ export async function reviewProject(formData: FormData): Promise<void> {
   );
 
   const reviewer = await reviewerLabel(access.session.slackId, access.session.name);
+  // Whether the approve/needs-changes notification below shows this reviewer's
+  // real name or a generic "the review team" — ticked by default in the form,
+  // a reviewer can opt out per verdict. Internal records (mod actions, audit
+  // rows, ban_by, first_pass_by, etc.) always keep the real reviewer; this
+  // only ever swaps the player-facing notification text.
+  const revealName = formData.get("revealName") === "1";
+  const playerFacingReviewer = revealName ? reviewer : "the review team";
 
   // First pass on a freshly-shipped project: approve and ban are only PROPOSALS,
   // regardless of the reviewer's own permissions — the project is held in
@@ -818,13 +825,13 @@ export async function reviewProject(formData: FormData): Promise<void> {
     await notifyOwner(
       project.user_id,
       "Changes requested",
-      `"${project.name}" needs changes before it can be approved , ${reviewer}:\n\n${note}\n\nUpdate your project and ship it again.`,
+      `"${project.name}" needs changes before it can be approved , ${playerFacingReviewer}:\n\n${note}\n\nUpdate your project and ship it again.`,
     );
     for (const collaboratorId of await acceptedCollaboratorUserIds(projectId)) {
       await notifyOwner(
         collaboratorId,
         "Changes requested",
-        `"${project.name}" needs changes before it can be approved , ${reviewer}:\n\n${note}`,
+        `"${project.name}" needs changes before it can be approved , ${playerFacingReviewer}:\n\n${note}`,
       );
     }
     await logModAction(project.user_id, "project_needs_changes", `${project.name}: ${note}`, by);
@@ -1104,7 +1111,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
   await notifyOwner(
     project.user_id,
     "Project approved!",
-    `"${project.name}" passed review , approved by ${reviewer}. Congrats on shipping!\n\nReviewer note: ${note}${credited}`,
+    `"${project.name}" passed review , approved by ${playerFacingReviewer}. Congrats on shipping!\n\nReviewer note: ${note}${credited}`,
   );
   await logModAction(
     project.user_id,
