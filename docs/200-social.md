@@ -14,7 +14,7 @@ Search for a player by display name, send a request, and once they accept you'll
 
 A village is a private space for you and up to **16** people, separate from the main world. Good for building alongside people you actually know rather than the whole server.
 
-Villages can be retinted with cosmetic themes bought with pixels: Autumn, Blossom and Verdant at 500 px, Dusk at 750 px. The tint is seen by everyone in the village and layers over the normal day and night cycle.
+Villages can be retinted with cosmetic themes bought with pixels: Autumn, Blossom and Verdant at 400 px, Dusk at 600 px. The tint is seen by everyone in the village and layers over the normal day and night cycle.
 
 ## Explore
 

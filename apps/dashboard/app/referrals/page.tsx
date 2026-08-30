@@ -7,7 +7,9 @@ import {
   REFERRAL_BOOST_SHIP_CAP,
   REFERRAL_MILESTONE_EVERY,
   REFERRAL_MILESTONE_PX,
+  REFERRAL_TIERS,
 } from "@/lib/db";
+import { config } from "@/app/_generated/config";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import {
@@ -47,12 +49,18 @@ export default async function ReferralsPage() {
         <h1 className="text-2xl font-semibold text-foreground tracking-tight">Referrals</h1>
         <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
           A referrer is paid once their referred player ships a project clearing an hour tier
-          (2h &rarr; 10px/$0.70, 5h &rarr; 19px/$1.33, 10h &rarr; 33px/$2.31), then the referral
-          closes. Every {REFERRAL_MILESTONE_EVERY} rewarded referrals also pays a{" "}
-          {REFERRAL_MILESTONE_PX}px (~${(REFERRAL_MILESTONE_PX * 0.07).toFixed(2)}) milestone bonus.
-          Referred players get a flat +{REFERRAL_BOOST_PX_PER_HOUR}px/hr
-          (~${(REFERRAL_BOOST_PX_PER_HOUR * 0.07).toFixed(2)}/hr) boost on their first{" "}
-          {REFERRAL_BOOST_SHIP_CAP} approved ships. 1px = $0.07.
+          (
+          {[...REFERRAL_TIERS]
+            .sort((a, b) => a.minHours - b.minHours)
+            .map((t) => `${t.minHours}h → ${t.px}px/$${(t.px * config.economy.pixelValueUsd).toFixed(2)}`)
+            .join(", ")}
+          ), then the referral closes. Every {REFERRAL_MILESTONE_EVERY} rewarded referrals also
+          pays a {REFERRAL_MILESTONE_PX}px (~$
+          {(REFERRAL_MILESTONE_PX * config.economy.pixelValueUsd).toFixed(2)}) milestone bonus.
+          Referred players get a flat +{REFERRAL_BOOST_PX_PER_HOUR}px/hr (~$
+          {(REFERRAL_BOOST_PX_PER_HOUR * config.economy.pixelValueUsd).toFixed(2)}/hr) boost on
+          their first {REFERRAL_BOOST_SHIP_CAP} approved ships. 1px = $
+          {config.economy.pixelValueUsd.toFixed(2)}.
         </p>
       </div>
 
@@ -72,7 +80,7 @@ export default async function ReferralsPage() {
         <Card className="p-4">
           <div className="text-xs uppercase tracking-wide text-muted-foreground">Pixels paid out</div>
           <div className="text-2xl font-semibold mt-1">
-            {totalPixelsPaid} <span className="text-sm text-muted-foreground">(${(totalPixelsPaid * 0.07).toFixed(2)})</span>
+            {totalPixelsPaid} <span className="text-sm text-muted-foreground">(${(totalPixelsPaid * config.economy.pixelValueUsd).toFixed(2)})</span>
           </div>
         </Card>
       </div>
@@ -100,7 +108,7 @@ export default async function ReferralsPage() {
                   </TableCell>
                   <TableCell>{r.milestones > 0 ? <Badge variant="secondary">{r.milestones}</Badge> : "—"}</TableCell>
                   <TableCell className="text-right">
-                    {r.pixelsEarned}px (${(r.pixelsEarned * 0.07).toFixed(2)})
+                    {r.pixelsEarned}px (${(r.pixelsEarned * config.economy.pixelValueUsd).toFixed(2)})
                   </TableCell>
                 </TableRow>
               ))}

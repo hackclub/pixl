@@ -12,10 +12,10 @@ const COLOR_PRIVATE := Color(1, 0.819608, 0.4)
 # world tints for these live in multiplayer_world.gd. "" is the free default.
 const THEME_CATALOG := [
 	{"id": "", "name": "Default", "price": 0},
-	{"id": "autumn", "name": "Autumn", "price": 500},
-	{"id": "blossom", "name": "Blossom", "price": 500},
-	{"id": "verdant", "name": "Verdant", "price": 500},
-	{"id": "dusk", "name": "Dusk", "price": 750},
+	{"id": "autumn", "name": "Autumn", "price": 400},
+	{"id": "blossom", "name": "Blossom", "price": 400},
+	{"id": "verdant", "name": "Verdant", "price": 400},
+	{"id": "dusk", "name": "Dusk", "price": 600},
 ]
 
 @onready var status_label: Label = %StatusLabel

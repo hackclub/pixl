@@ -15,7 +15,7 @@ const Pixl = (() => {
       "repo": "https://github.com/hackclub/pixl"
     },
     "economy": {
-      "pixelValueUsd": 0.08,
+      "pixelValueUsd": 0.1,
       "sponsorRateUsd": 8.5,
       "basePayoutUsd": 4,
       "maxPayoutUsd": 6,

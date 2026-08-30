@@ -272,7 +272,7 @@
   "shop": {
     "badge": "Dépense tes pixels",
     "title": "La boutique",
-    "description": "1 heure de travail = 50 pixels.",
+    "description": "1 heure de travail = 40 pixels.",
     "moreComing": "...et encore plus à venir !",
     "hoursRate": "{lo} h à {loRate}/h → {hi} h à {hiRate}/h",
     "items": [
@@ -544,11 +544,11 @@
       },
       {
         "question": "Combien puis-je gagner ?",
-        "answer": "Tu gagnes des pixels pour chaque heure de travail livré : 1 heure = 50 pixels, environ 4,00 $ au départ. À mesure que ton Énergie de Restauration monte en niveau, ton taux augmente, jusqu'à environ 6 $/h. Dépense tes pixels en boutique pour de vrais prix, des stickers jusqu'à un MacBook Air."
+        "answer": "Tu gagnes des pixels pour chaque heure de travail livré : 1 heure = 40 pixels, environ 4,00 $ au départ. À mesure que ton Énergie de Restauration monte en niveau, ton taux augmente, jusqu'à environ 6 $/h. Dépense tes pixels en boutique pour de vrais prix, des stickers jusqu'à un MacBook Air."
       },
       {
         "question": "C'est quoi l'Énergie de Restauration ?",
-        "answer": "C'est le chiffre sur lequel tout repose. Chaque livraison rapporte de l'Énergie de Restauration selon le nombre d'heures ET la complexité du projet (les relecteurs lui donnent un palier de 1 à 4), donc les builds plus gros et plus difficiles en rapportent plus. Ton ÉR fixe ton taux de paiement, qui monte de 50 px/h à environ 75 px/h à mesure que tu livres, et ton niveau affiche l'ÉR que tu as accumulée. L'Énergie de Restauration de toute la communauté débloque aussi des objectifs communautaires, comme de nouveaux skins pour ta maison en jeu."
+        "answer": "C'est le chiffre sur lequel tout repose. Chaque livraison rapporte de l'Énergie de Restauration selon le nombre d'heures ET la complexité du projet (les relecteurs lui donnent un palier de 1 à 4), donc les builds plus gros et plus difficiles en rapportent plus. Ton ÉR fixe ton taux de paiement, qui monte de 40 px/h à environ 60 px/h à mesure que tu livres, et ton niveau affiche l'ÉR que tu as accumulée. L'Énergie de Restauration de toute la communauté débloque aussi des objectifs communautaires, comme de nouveaux skins pour ta maison en jeu."
       },
       {
         "question": "J'ai d'autres questions !",

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { adjustPixels, searchPlayers, type PlayerHit } from "@/app/actions";
+import { config } from "@/app/_generated/config";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -27,9 +28,9 @@ function SubmitButton({ mode }: { mode: "deduct" | "grant" }) {
   );
 }
 
-// 1px = $0.07 , matches the rate everywhere else pixels get converted to
-// dollars (see actions.ts, lib/db.ts).
-const PX_PER_DOLLAR = 1 / 0.07;
+// Matches the rate everywhere else pixels get converted to dollars (see
+// actions.ts, lib/db.ts).
+const PX_PER_DOLLAR = 1 / config.economy.pixelValueUsd;
 
 // Owner-only manual pixel correction: pick a player, deduct or grant whole
 // pixels with a mandatory reason. Everything lands in the ledger.

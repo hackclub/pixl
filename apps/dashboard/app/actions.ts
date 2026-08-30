@@ -254,7 +254,7 @@ async function dmPayout(
   reason: string,
   credited: boolean,
 ): Promise<void> {
-  const dollars = `$${(full * 0.07).toFixed(2)}`;
+  const dollars = `$${(full * config.economy.pixelValueUsd).toFixed(2)}`;
   let text =
     pct === 0
       ? `You earned ${paid} pixels (${dollars}) for reviewing "${projectName}". Thanks for keeping the queue moving!`
@@ -597,7 +597,7 @@ async function creditBeneficiary(
       await db.from("notifications").insert({
         user_id: referral.referrer_id,
         title: "Referral reward!",
-        body: `Someone you referred shipped a ${creditHours}h project , you earned ${tier.px} pixels ($${(tier.px * 0.07).toFixed(2)})!`,
+        body: `Someone you referred shipped a ${creditHours}h project , you earned ${tier.px} pixels ($${(tier.px * config.economy.pixelValueUsd).toFixed(2)})!`,
       });
 
       const { count: rewardedCount } = await db
@@ -615,7 +615,7 @@ async function creditBeneficiary(
         await db.from("notifications").insert({
           user_id: referral.referrer_id,
           title: "Referral milestone!",
-          body: `${rewardedCount} of your referrals have shipped , bonus ${REFERRAL_MILESTONE_PX} pixels ($${(REFERRAL_MILESTONE_PX * 0.07).toFixed(2)})!`,
+          body: `${rewardedCount} of your referrals have shipped , bonus ${REFERRAL_MILESTONE_PX} pixels ($${(REFERRAL_MILESTONE_PX * config.economy.pixelValueUsd).toFixed(2)})!`,
         });
       }
     }
@@ -1060,7 +1060,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
       cCredited = `\n\n${cPayout.totalPx} pixels credited for ${cCreditHours}h approved.`;
     }
     if (cPayout.deltaPx > 0)
-      cCredited += ` Your rate: ${cPayout.pxRate} px/h ($${(cPayout.pxRate * 0.07).toFixed(2)}/hr).`;
+      cCredited += ` Your rate: ${cPayout.pxRate} px/h ($${(cPayout.pxRate * config.economy.pixelValueUsd).toFixed(2)}/hr).`;
     if (cPayout.goalNote && cPayout.deltaPx > 0) cCredited += cPayout.goalNote;
     if (cPayout.referralNote && cPayout.deltaPx > 0) cCredited += cPayout.referralNote;
     await notifyOwner(

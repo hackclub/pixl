@@ -33,10 +33,10 @@ const MAX_LOBBIES = 200;
 // village sees; it composes with the day/night cycle client-side (the client
 // holds the matching colours). '' is the always-owned default (no tint).
 export const VILLAGE_THEMES: Record<string, { name: string; price: number }> = {
-  autumn: { name: "Autumn", price: 500 },
-  blossom: { name: "Blossom", price: 500 },
-  verdant: { name: "Verdant", price: 500 },
-  dusk: { name: "Dusk", price: 750 },
+  autumn: { name: "Autumn", price: 400 },
+  blossom: { name: "Blossom", price: 400 },
+  verdant: { name: "Verdant", price: 400 },
+  dusk: { name: "Dusk", price: 600 },
 };
 
 export function themePrice(id: string): number {
