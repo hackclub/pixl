@@ -272,7 +272,7 @@
   "shop": {
     "badge": "Gaste seus pixels",
     "title": "A loja",
-    "description": "1 hora de trabalho = 40 pixels.",
+    "description": "1 hora de trabalho = 57 pixels.",
     "moreComing": "...e ainda mais por vir!",
     "hoursRate": "{lo} h a {loRate}/h → {hi} h a {hiRate}/h",
     "items": [
@@ -544,11 +544,11 @@
       },
       {
         "question": "Quanto posso ganhar?",
-        "answer": "Você ganha pixels por cada hora de trabalho entregue: 1 hora = 40 pixels, cerca de US$ 4,00 no começo. À medida que sua Energia de Restauração sobe de nível, sua taxa aumenta, até cerca de US$ 6/h. Gaste seus pixels na loja em prêmios reais, de adesivos a um MacBook Air."
+        "answer": "Você ganha pixels por cada hora de trabalho entregue: 1 hora = 57 pixels, cerca de US$ 4,00 no começo. À medida que sua Energia de Restauração sobe de nível, sua taxa aumenta, até cerca de US$ 6/h. Gaste seus pixels na loja em prêmios reais, de adesivos a um MacBook Air."
       },
       {
         "question": "O que é Energia de Restauração?",
-        "answer": "É o número do qual tudo depende. Cada entrega ganha Energia de Restauração com base em quantas horas você dedica E em quão complexo é o projeto (os revisores atribuem um nível de 1 a 4), então projetos maiores e mais difíceis ganham mais. Sua ER define sua taxa de pagamento, que sobe de 40 px/h para cerca de 60 px/h conforme você entrega, e seu nível mostra a ER que você acumulou. A Energia de Restauração de toda a comunidade também desbloqueia metas da comunidade, como novas skins para a sua casa no jogo."
+        "answer": "É o número do qual tudo depende. Cada entrega ganha Energia de Restauração com base em quantas horas você dedica E em quão complexo é o projeto (os revisores atribuem um nível de 1 a 4), então projetos maiores e mais difíceis ganham mais. Sua ER define sua taxa de pagamento, que sobe de 57 px/h para cerca de 86 px/h conforme você entrega, e seu nível mostra a ER que você acumulou. A Energia de Restauração de toda a comunidade também desbloqueia metas da comunidade, como novas skins para a sua casa no jogo."
       },
       {
         "question": "Tenho mais perguntas!",

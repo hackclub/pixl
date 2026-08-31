@@ -272,7 +272,7 @@
   "shop": {
     "badge": "Spend your pixels",
     "title": "The Shop",
-    "description": "1 hour of work = 40 pixels.",
+    "description": "1 hour of work = 57 pixels.",
     "moreComing": "...and even more coming!",
     "hoursRate": "{lo}h at {loRate}/h → {hi}h at {hiRate}/h",
     "items": [
@@ -544,11 +544,11 @@
       },
       {
         "question": "How much can I earn?",
-        "answer": "You earn pixels for every hour of shipped work - 1 hour = 40 pixels, about $4.00 to start. As your Restoration Energy levels up, your rate climbs, up to about $6/hr. Spend your pixels in the shop on real prizes, from stickers to a MacBook Air."
+        "answer": "You earn pixels for every hour of shipped work - 1 hour = 57 pixels, about $4.00 to start. As your Restoration Energy levels up, your rate climbs, up to about $6/hr. Spend your pixels in the shop on real prizes, from stickers to a MacBook Air."
       },
       {
         "question": "What's Restoration Energy?",
-        "answer": "It's the number everything runs on. Every ship earns Restoration Energy based on how many hours you put in AND how complex the project is (reviewers tier it 1 to 4), so bigger, harder builds earn more. Your RE sets your pay rate, which climbs from 40 px/hr to about 60 px/hr as you ship, and your level is a display of the RE you've built up. The whole community's Restoration Energy also unlocks community goals, like new skins for your in-game house."
+        "answer": "It's the number everything runs on. Every ship earns Restoration Energy based on how many hours you put in AND how complex the project is (reviewers tier it 1 to 4), so bigger, harder builds earn more. Your RE sets your pay rate, which climbs from 57 px/hr to about 86 px/hr as you ship, and your level is a display of the RE you've built up. The whole community's Restoration Energy also unlocks community goals, like new skins for your in-game house."
       },
       {
         "question": "I have more questions!",

@@ -14,7 +14,7 @@ export const config = {
     "repo": "https://github.com/hackclub/pixl"
   },
   "economy": {
-    "pixelValueUsd": 0.1,
+    "pixelValueUsd": 0.07,
     "sponsorRateUsd": 8.5,
     "basePayoutUsd": 4,
     "maxPayoutUsd": 6,

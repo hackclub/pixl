@@ -12,7 +12,7 @@
     "repo": "https://github.com/hackclub/pixl"
   },
   "economy": {
-    "pixelValueUsd": 0.10,
+    "pixelValueUsd": 0.07,
     "sponsorRateUsd": 8.5,
     "basePayoutUsd": 4.0,
     "maxPayoutUsd": 6.0,
