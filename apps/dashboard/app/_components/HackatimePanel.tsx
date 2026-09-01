@@ -91,6 +91,40 @@ export function HackatimePanel({ report }: { report: HackatimeReport }) {
         {p.firstActivity && <span>first activity {fmtDate(p.firstActivity)}</span>}
         {p.lastActivity && <span>last activity {fmtDate(p.lastActivity)}</span>}
       </div>
+      {p.lapses.length > 0 && (
+        <div className="mt-2 pt-2 border-t border-border">
+          <div className="text-xs font-semibold text-muted-foreground mb-1.5">
+            Lapses to watch ({p.lapses.length})
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {p.lapses.map((l) =>
+              l.playbackUrl ? (
+                <a
+                  key={l.id}
+                  href={l.playbackUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs hover:bg-muted"
+                  title={l.name}
+                >
+                  ▶ {l.name}
+                  {l.duration > 0 && (
+                    <span className="text-muted-foreground tabular-nums">{fmtSecs(l.duration)}</span>
+                  )}
+                </a>
+              ) : (
+                <span
+                  key={l.id}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/20 px-2 py-1 text-xs text-muted-foreground"
+                  title="Still processing"
+                >
+                  {l.name} (processing…)
+                </span>
+              ),
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 

@@ -100,6 +100,14 @@ export interface HackatimeBreakdown {
   color?: string;
 }
 
+export interface LapseTimelapse {
+  id: string;
+  name: string;
+  playbackUrl: string | null;
+  thumbnailUrl: string | null;
+  duration: number;
+}
+
 export interface HackatimeProjectReport {
   name: string;
   seconds: number;
@@ -109,6 +117,54 @@ export interface HackatimeProjectReport {
   sessions: number;
   firstActivity: number | null;
   lastActivity: number | null;
+  /** Lapse timelapse videos of this project's coding sessions, if any. */
+  lapses: LapseTimelapse[];
+}
+
+const LAPSE_BASE = "https://api.lapse.hackclub.com";
+
+// Lapse (a separate Hack Club service, not Hackatime itself) records timelapse
+// videos of coding sessions. No API token needed - confirmed live, an
+// unauthenticated request returns a normal {ok:true,...} body, not a 401.
+// hackatimeUserId is the numeric Hackatime user id (Hackatime's own
+// /stats response calls it data.user_id - see fetchHackatimeReport below),
+// not the Slack id used everywhere else in this file.
+export async function fetchLapsesForProject(
+  hackatimeUserId: string,
+  projectKey: string,
+): Promise<LapseTimelapse[]> {
+  if (!hackatimeUserId || !projectKey) return [];
+  try {
+    const r = await fetch(
+      `${LAPSE_BASE}/api/hackatime/timelapsesForProject` +
+        `?hackatimeUserId=${encodeURIComponent(hackatimeUserId)}&projectKey=${encodeURIComponent(projectKey)}`,
+      { signal: AbortSignal.timeout(8000), next: { revalidate: 300 } },
+    );
+    if (!r.ok) return [];
+    const json = (await r.json()) as {
+      ok?: boolean;
+      data?: {
+        timelapses?: {
+          id?: string;
+          name?: string;
+          playbackUrl?: string | null;
+          thumbnailUrl?: string | null;
+          duration?: number;
+        }[];
+      };
+    };
+    if (!json.ok) return [];
+    return (json.data?.timelapses ?? []).map((t) => ({
+      id: String(t.id ?? ""),
+      name: String(t.name ?? "Untitled lapse"),
+      playbackUrl: t.playbackUrl ?? null,
+      thumbnailUrl: t.thumbnailUrl ?? null,
+      duration: Number(t.duration) || 0,
+    }));
+  } catch (e) {
+    console.error("lapse fetch failed", (e as Error).message);
+    return [];
+  }
 }
 
 export interface HackatimeReport {
@@ -189,6 +245,11 @@ export async function fetchHackatimeReport(
     // Per-project sessions/first/last from spans (only for linked projects, in
     // parallel , a maker links a handful at most).
     const spanInfo = new Map<string, { sessions: number; first: number | null; last: number | null }>();
+    // Lapse (timelapse videos) needs Hackatime's own numeric user id, not the
+    // Slack id this file otherwise uses everywhere - present on the stats
+    // response as data.user_id.
+    const hackatimeUserId = data.user_id != null ? String(data.user_id) : "";
+    const lapseInfo = new Map<string, LapseTimelapse[]>();
     await Promise.all(
       [...linked].map(async (name) => {
         try {
@@ -216,6 +277,14 @@ export async function fetchHackatimeReport(
         }
       }),
     );
+    if (hackatimeUserId) {
+      await Promise.all(
+        [...linked].map(async (name) => {
+          const lapses = await fetchLapsesForProject(hackatimeUserId, name);
+          if (lapses.length > 0) lapseInfo.set(name, lapses);
+        }),
+      );
+    }
 
     // Languages scoped to just this submission's linked projects , the
     // account-wide stats above mix in everything else the maker codes.
@@ -249,6 +318,7 @@ export async function fetchHackatimeReport(
           sessions: info?.sessions ?? 0,
           firstActivity: info?.first ?? null,
           lastActivity: info?.last ?? null,
+          lapses: lapseInfo.get(p.name) ?? [],
         };
       })
       .sort((a, b) => Number(b.linked) - Number(a.linked) || b.seconds - a.seconds);
