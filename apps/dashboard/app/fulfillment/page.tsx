@@ -331,6 +331,18 @@ function OrderCard({
               Tracking: <span className="text-foreground font-mono">{o.tracking}</span> · DM&apos;d to buyer
             </div>
           )}
+          {actionable && /robux/i.test(o.item_name ?? "") && (
+            <div className="text-xs mt-1">
+              <a
+                href="https://www.roblox.com/fr/shopgiftcards?location=us&locale=us_us"
+                target="_blank"
+                rel="noreferrer"
+                className="text-brand hover:underline"
+              >
+                Buy Robux here
+              </a>
+            </div>
+          )}
           {o.buyer_note && (
             <div className="text-xs mt-1 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1">
               <span className="font-semibold">Note from buyer:</span> {o.buyer_note}
