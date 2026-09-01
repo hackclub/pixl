@@ -6,27 +6,25 @@ description: You can ship a project with other builders on it.
 
 # Building with other people
 
-^ You can ship a project with other builders on it. The important part up front: **nobody's payout comes out of anyone else's**. It isn't one prize pot getting divided.
+^ You can collaborate and ship projects with other builders. The most important rule: **collaborating never splits or reduces anyone's individual payout**.
 
-## Getting people on the project
+## Inviting team members
 
-The project owner invites players from the project page, or shares a join code. An invite has to be accepted before it counts, and the owner can remove someone who never started. Everyone on the project can see and write journal entries on it.
+The project creator invites team members from the project dashboard or shares an invite code. Collaborators must accept the invite to join. Once added, everyone on the team can view the build and add their own journal logs.
 
-## Everyone tracks their own hours
+## Everyone tracks their own time
 
-Each collaborator links their **own** Hackatime projects to the build, so the hours are never one shared number that has to be carved up. What you tracked is your slice. You can't claim more hours than you actually logged, the review caps each person at their own tracked time.
+Each team member connects their **own** Hackatime project. You are credited strictly for the hours you personally logged and coded. There is no shared pool of hours to divide up.
 
-## Everyone gets paid separately
+## Individual payouts at review
 
-At review, each accepted collaborator is credited independently:
+When a team project is reviewed and approved, every collaborator is processed independently:
+- **Your own logged hours** on the project.
+- **Your own pay rate**, based on your lifetime RE (a beginner and a max-level builder on the same team each receive their respective rates).
+- **Your own RE bump**, permanently leveling up your profile.
 
-- your own hours on the project
-- your own rate, off your own lifetime RE. A newcomer and someone at the cap can be on the same project and each get their own rate
-- your own tier bonus for the project's tier
-- your own RE, which lifts your rate on everything you ship afterwards
+A 3-person team project doesn't pay a 1/3 cut; it pays 100% of each maker's tracked hours at their full individual rates.
 
-So a three person project doesn't pay a third each. It pays each person fully for the hours they actually put in.
-
-::: warn The thing that gets projects rejected
-Adding someone who didn't build anything, so they can collect hours off your project, is fraud and reviewers do look for it. Everyone credited needs their own tracked time and their own journal entries showing what they did.
+::: warn Zero-work collaborators get rejected
+Adding friends who didn't write code so they can siphon free pixels is considered fraud and will cause the entire submission to be rejected. Everyone on a project needs clear commit activity, Hackatime logs, and journal notes.
 :::

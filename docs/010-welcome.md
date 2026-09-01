@@ -6,8 +6,10 @@ description: So here's the deal.
 
 # Welcome to Pixl
 
-^ Pixl is a **YSWS** (you ship, we ship) from Hack Club, and the whole thing actually has a backstory. Origin used to be a huge advanced civilization until *the Great Static* tore it apart into floating islands. The inhabitants decided to find their way to Hack Clubbers, and together you're rebuilding it under a new name: **Pixl**.
+^ Pixl is a Hack Club **YSWS** (You Ship, We Ship). There's some lore about an ancient civilization named Origin getting shattered by the "Great Static" into floating islands, and how everyone's teaming up to rebuild it.
 
-But you don't actually need to pay attention about any of that story to play and ship. Remove that story from your mind and Pixl is really just this: build cool hardware/software projects, ship them, get rewards! NPCs across the game openworld hand you out *trials*, which are basically ideas of projects and if you build them, you get special rewards. Instead, you can also build a completly new project that you think of, without using a trial, and this is called an *invention*. 
+Honestly? You don't need to care about the lore to play and ship. Strip away the story and Pixl is dead simple: build cool hardware or software, ship it, and get real rewards. 
 
-You explore this retro 2D world with your own character, run into NPCs, take on quests, and every hour you spend building something adds up to unlock prizes from the shop. It's not a race against other people either. Whatever you ship unlocks you rewards, no matter how the rest of the community is doing.
+NPCs scattered across the retro 2D map hand out *trials*, curated project challenges with dedicated bounties. If you already have your own idea, you can ignore the NPCs completely and build a custom *invention*. 
+
+You roam around the world with your character, meet people, log the hours you spend building, and cash those hours in for gear from the shop. It's not a competition against anyone else. Whatever you build and ship earns you real stuff, period.

@@ -1,70 +1,80 @@
 ---
 title: React Native app guide
 group: Guides
-description: Marco's traveler app is a good example of what this guide is for, a mobile app that actually does something, tracks stuff, sends notifications, works on your phone.
+description: Build real cross-platform mobile apps for iOS and Android using Expo.
 ---
 
 # React Native app guide
 
-Marco's traveler app is a good example of what this guide is for, a mobile app that actually does something, tracks stuff, sends notifications, works on your phone.
+^ Want to build an app that runs natively on your phone? React Native and Expo give you a fast workflow with hot-reloading on physical devices.
 
-## Setting up your project
+## 1. Create your Expo project
 
-The fastest way to get moving is Expo, it skips a lot of the native setup pain. Install it and start a new project:
+Run this in your terminal:
 
 ```bash
-npx create-expo-app my-app
-cd my-app
+npx create-expo-app my-mobile-app
+cd my-mobile-app
 npx expo start
 ```
 
-That last command gives you a QR code, scan it with the Expo Go app on your phone and your app shows up live, and updates as you save files.
+Scan the terminal QR code with the **Expo Go** app on your iPhone or Android phone to test your app live as you write code.
 
-## The basic structure
+## 2. Building a screen
 
-Expo projects come with a file based router by default, every file inside the app folder becomes a screen. A simple screen looks like:
+Create a clean screen with native layout components:
 
 ```javascript
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { useState } from 'react';
 
-export default function HomeScreen() {
+export default function App() {
+  const [count, setCount] = useState(0);
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Marco's Routes</Text>
+      <Text style={styles.title}>Pixl Mobile</Text>
+      <Text style={styles.counter}>Count: {count}</Text>
+      <TouchableOpacity 
+        style={styles.button} 
+        onPress={() => setCount(count + 1)}
+      >
+        <Text style={styles.buttonText}>Tap Me</Text>
+      </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, paddingTop: 60 },
-  title: { fontSize: 24, fontWeight: 'bold' }
+  container: {
+    flex: 1,
+    backgroundColor: '#121110',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20
+  },
+  title: { fontSize: 24, fontWeight: 'bold', color: '#f5eedc', marginBottom: 12 },
+  counter: { fontSize: 18, color: '#e5a93c', marginBottom: 20 },
+  button: { backgroundColor: '#e5a93c', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 },
+  buttonText: { color: '#121110', fontWeight: 'bold' }
 });
 ```
 
-## Storing data locally
+## 3. Local data persistence
 
-For something like tracking routes or logging inventory, AsyncStorage is the easiest starting point, it's basically a simple key value store on the device:
+Use `@react-native-async-storage/async-storage` to save data across app restarts:
 
 ```javascript
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-await AsyncStorage.setItem('routes', JSON.stringify(routeList));
-const saved = await AsyncStorage.getItem('routes');
+// Saving data
+await AsyncStorage.setItem('@saved_data', JSON.stringify({ level: 5 }));
+
+// Loading data
+const jsonValue = await AsyncStorage.getItem('@saved_data');
+const data = jsonValue != null ? JSON.parse(jsonValue) : null;
 ```
 
-## Notifications
+## 4. Submitting your build
 
-Expo has a notifications module built in. After asking the user for permission, you can schedule a local notification like this:
-
-```javascript
-import * as Notifications from 'expo-notifications';
-
-await Notifications.scheduleNotificationAsync({
-  content: { title: "New region reached", body: "You've arrived somewhere new" },
-  trigger: null
-});
-```
-
-## Getting it onto your phone for real
-
-While you're building, Expo Go is fine. Once it's finished, you can either keep it as an Expo Go project for your submission, or build a real standalone app with `eas build` if you want something closer to a real App Store style release.
+For your Pixl ship, record a quick video demo of the app running on your phone or provide an Expo snack / test build link alongside your GitHub repository.

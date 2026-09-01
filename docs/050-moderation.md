@@ -6,31 +6,36 @@ description: Pixl is full of teenagers building things together, and it's modera
 
 # Reports, warnings and bans
 
-^ Pixl is full of teenagers building things together, and it's moderated like that matters. Here's what's actually enforced and what happens when it isn't followed.
+^ Pixl is a community of teen hackers building projects together. We keep the space safe, honest, and welcoming. Here is how moderation works.
 
-## Chat
+## In-game chat
 
-Chat runs through a filter that censors slurs and abuse automatically, including the usual attempts to sneak them past with numbers, symbols, spacing or lookalike characters. Display names get checked the same way, which is why a name can come back refused with a warning attached.
+Chat messages pass through an automated filter that blocks slurs, harassment, and spam. Attempting to bypass the filter with leetspeak, spacing, or unicode tricks triggers automated flags. Display names are checked against the same standard.
 
 ## Reporting someone
 
-Use the report page. Reports are **anonymous by default**: the review team sees what you reported and why, not who filed it. You can choose to attach your name if you want them to be able to follow up with you. You can see the reports you've filed on that same page.
+Use the in-game report menu or the report page. Reports are **anonymous by default**: reviewers see what happened and the evidence provided, never who filed it. You can optionally attach your name if you want a moderator to follow up with you directly.
 
-Report the behaviour rather than fighting it in chat. Filing a report is not a public act and nobody is told you did it.
+If someone is being toxic or trying to scam, file a report instead of arguing in chat. Nobody is notified that you reported them.
 
-## What can happen
+## Escalation steps
 
-- **A warning.** Pixo sends it to you on Slack, saying what it was for. Most things stop here
-- **A temporary ban.** You can't log in until it expires, and you're shown the reason and the end date
-- **A permanent ban**, for the serious stuff or for repeating after warnings
-- **A banned project.** A single project can be taken down without touching your account, which is what happens to a fraudulent submission
+1. **Warning:** Pixo sends a direct notification on Slack explaining the issue. Most minor friction stops here.
+2. **Temporary Ban:** Locks your account out of the game for a set duration. The reason and expiration date are shown on login.
+3. **Permanent Ban:** Reserved for severe abuse, harassment, fraud, or repeated offenses after warnings.
+4. **Project Removal:** A single fraudulent project can be rejected or purged without banning the maker's account.
 
-Serious moderation isn't one person's call: a moderator raises it and an admin has to confirm it.
+Major disciplinary actions require confirmation between multiple moderators and admins.
 
-## What gets you banned rather than warned
+## What leads straight to a ban?
 
-Warnings are for language and friction. Bans are for dishonesty about work: shipping someone else's project as your own, inflating tracked hours, or adding a collaborator who didn't build anything so they can collect for it. That's the line, because everything in Pixl pays out real money and real prizes.
+Warnings are for minor rule slips or chat friction. Bans are for **fraud and dishonesty**:
+- Stealing someone else's code and submitting it as your own.
+- Artificially inflating Hackatime hours.
+- Adding fake collaborators to siphon pixels.
 
-::: note If you think it's wrong
-Reach out to the Pixl team on Slack and say so. A ban notice tells you the reason, and getting it reviewed is a case of asking. There's no form for it.
+Because Pixl rewards real money, hardware, and prizes, fraud is taken very seriously.
+
+::: note Disputing a moderation decision
+If you believe a moderation action was made in error, message the team in `#pixl-help` on Slack. Every ban notice includes the reason, and appeals are handled directly by human staff.
 :::

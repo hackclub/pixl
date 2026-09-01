@@ -6,37 +6,40 @@ description: Every hour you ship becomes Restoration Energy, or RE.
 
 # Restoration Energy and levels
 
-^ Every hour you ship becomes **Restoration Energy**, or RE. It's the number the whole economy runs on: RE decides what an hour of your work pays, and your level is a readout of how much of it you've built up.
+^ Every hour you ship turns into **Restoration Energy (RE)**. RE is the core engine behind the game's economy: it sets your hourly pixel payout rate, and your level reflects how much RE you've accumulated.
 
-You never spend RE. It only goes up, nothing decays, and nothing anyone else ships takes any of it away from you. Pixels are the thing you spend; RE is the thing that decides how many pixels an hour is worth.
+RE is permanent. You never spend it, it never decays, and nobody can take it away. You spend **pixels** in the shop; **RE** simply dictates how many pixels each hour of your work is worth.
 
-## Tiers decide what an hour is worth
+## Tiers determine RE per hour
 
-When a reviewer approves your project they also give it a **tier**, 1 to 4, based on how ambitious the build actually is. The tier sets how much RE each shipped hour on that project earns.
+When a reviewer approves your project, they assign it a **Tier (1 to 4)** based on ambition, technical depth, and execution:
 
-| T1 Spark | A first spark of Restoration: a simple site, script or tiny tool. | {{t1}} RE / hour |
-| T2 Signal | A focused app, CLI or game with real polish, one system back online. | {{t2}} RE / hour |
-| T3 Grid | Several systems working together: backend, state, infrastructure. | {{t3}} RE / hour |
-| T4 Nexus | Deep systems work: complex architecture and serious scope. | {{t4}} RE / hour |
+| T1 Spark | A beginner build: a personal site, simple script, or small helper tool. | {{t1}} RE / hour |
+| T2 Signal | A polished app, CLI tool, or game with clean UX and solid functionality. | {{t2}} RE / hour |
+| T3 Grid | Multi-component system: backend, persistent state, real-time sync, or custom hardware. | {{t3}} RE / hour |
+| T4 Nexus | Advanced systems engineering: complex architecture, kernel drivers, or deep scope. | {{t4}} RE / hour |
 
-Tier is about the project, not about you. A first timer who ships something genuinely hard gets the high tier for it. Padding a simple site out with hours doesn't move it up either, since reviewers look at the actual repo.
+Tiers evaluate the build itself, not who built it. If a first-time coder builds something legitimately impressive, they get the higher tier. Padding a simple project with artificial hours won't bump the tier; reviewers inspect the actual codebase.
 
-## RE decides your rate, and it's yours forever
+## Your rate ramps permanently
 
-Your **lifetime RE**, every hour of every project you've ever shipped, added up, is what sets your hourly rate. It never resets and nothing you ship later erases what you already earned. Your rate ramps linearly: every {{payoutSlopeRe}} RE you earn adds $1/hr to your rate, starting at {{baseUsd}}/hr and capping at {{maxUsd}}/hr once your lifetime RE hits {{reCap}} RE. Once your rate goes up, every ship from then on pays at that rate or higher, this one included.
+Your **lifetime RE** (the sum of all RE earned across all approved ships) sets your hourly rate. It scales linearly: every {{payoutSlopeRe}} RE you earn adds $1.00/hr to your rate, starting at {{baseUsd}}/hr and topping out at {{maxUsd}}/hr once you hit {{reCap}} RE.
 
-| {{step1Re}} RE | lifetime, reached ({{step1HRange}}) | {{step1Usd}} / hour |
-| {{step2Re}} RE | lifetime, reached ({{step2HRange}}) | {{step2Usd}} / hour |
-| {{step3Re}} RE | lifetime, reached ({{step3HRange}}) | {{step3Usd}} / hour |
-| {{step4Re}} RE | lifetime, reached ({{step4HRange}}) | {{step4Usd}} / hour |
-| {{step5Re}} RE | lifetime, reached ({{step5HRange}}) | {{step5Usd}} / hour |
-| {{step6Re}} RE | lifetime, reached ({{step6HRange}}) | {{step6Usd}} / hour |
-| {{step7Re}} RE | lifetime, the cap ({{step7HRange}}) | **{{step7Usd}} / hour** |
+Once your rate climbs, every future ship pays at that higher rate or above (including the ship that pushed you over the milestone).
 
-The hours in parentheses are a range because RE is one pooled number no matter which tiers earned it: the low end is "shipped nothing but T4 Nexus the whole way," the high end is "shipped nothing but T1 Spark." Your real hours-to-cap depends on whatever mix you actually ship. If you stuck to one tier the whole way, here's exactly how many hours each rate milestone takes:
+| {{step1Re}} RE | Lifetime milestone ({{step1HRange}}) | {{step1Usd}} / hour |
+| {{step2Re}} RE | Lifetime milestone ({{step2HRange}}) | {{step2Usd}} / hour |
+| {{step3Re}} RE | Lifetime milestone ({{step3HRange}}) | {{step3Usd}} / hour |
+| {{step4Re}} RE | Lifetime milestone ({{step4HRange}}) | {{step4Usd}} / hour |
+| {{step5Re}} RE | Lifetime milestone ({{step5HRange}}) | {{step5Usd}} / hour |
+| {{step6Re}} RE | Lifetime milestone ({{step6HRange}}) | {{step6Usd}} / hour |
+| {{step7Re}} RE | Maximum cap reached ({{step7HRange}}) | **{{step7Usd}} / hour** |
 
-### If you only ship T4 Nexus
+*The hours in parentheses show ranges from pure T4 builds (fastest) to pure T1 builds (slowest).*
 
+### Rate progression by tier
+
+#### If you only ship T4 Nexus builds:
 | {{step1Usd}} / hr | {{step1Re}} RE | {{step1T4h}}h |
 | {{step2Usd}} / hr | {{step2Re}} RE | {{step2T4h}}h |
 | {{step3Usd}} / hr | {{step3Re}} RE | {{step3T4h}}h |
@@ -45,8 +48,7 @@ The hours in parentheses are a range because RE is one pooled number no matter w
 | {{step6Usd}} / hr | {{step6Re}} RE | {{step6T4h}}h |
 | **{{step7Usd}} / hr (cap)** | {{step7Re}} RE | **{{step7T4h}}h** |
 
-### If you only ship T3 Grid
-
+#### If you only ship T3 Grid builds:
 | {{step1Usd}} / hr | {{step1Re}} RE | {{step1T3h}}h |
 | {{step2Usd}} / hr | {{step2Re}} RE | {{step2T3h}}h |
 | {{step3Usd}} / hr | {{step3Re}} RE | {{step3T3h}}h |
@@ -55,8 +57,7 @@ The hours in parentheses are a range because RE is one pooled number no matter w
 | {{step6Usd}} / hr | {{step6Re}} RE | {{step6T3h}}h |
 | **{{step7Usd}} / hr (cap)** | {{step7Re}} RE | **{{step7T3h}}h** |
 
-### If you only ship T2 Signal
-
+#### If you only ship T2 Signal builds:
 | {{step1Usd}} / hr | {{step1Re}} RE | {{step1T2h}}h |
 | {{step2Usd}} / hr | {{step2Re}} RE | {{step2T2h}}h |
 | {{step3Usd}} / hr | {{step3Re}} RE | {{step3T2h}}h |
@@ -65,8 +66,7 @@ The hours in parentheses are a range because RE is one pooled number no matter w
 | {{step6Usd}} / hr | {{step6Re}} RE | {{step6T2h}}h |
 | **{{step7Usd}} / hr (cap)** | {{step7Re}} RE | **{{step7T2h}}h** |
 
-### If you only ship T1 Spark
-
+#### If you only ship T1 Spark builds:
 | {{step1Usd}} / hr | {{step1Re}} RE | {{step1T1h}}h |
 | {{step2Usd}} / hr | {{step2Re}} RE | {{step2T1h}}h |
 | {{step3Usd}} / hr | {{step3Re}} RE | {{step3T1h}}h |
@@ -75,22 +75,22 @@ The hours in parentheses are a range because RE is one pooled number no matter w
 | {{step6Usd}} / hr | {{step6Re}} RE | {{step6T1h}}h |
 | **{{step7Usd}} / hr (cap)** | {{step7Re}} RE | **{{step7T1h}}h** |
 
-For example, ship a {{capExampleHours}} hour T4 project from scratch and its own RE alone gets you to the {{step7Usd}} cap, paid {{capExampleUsd}} ({{capExamplePx}}) total. Ship a {{nextExampleHours}} hour T1 project first instead and it only earns a little RE, so it's paid close to base: around {{nextExampleRate}} an hour ({{nextExamplePx}} total), but that RE doesn't vanish. It's sitting in your lifetime total, pushing your very next ship's rate up before it even starts.
+For example: shipping a fresh {{capExampleHours}}-hour T4 project gets you straight to the {{step7Usd}}/hr cap on its own, paying {{capExampleUsd}} ({{capExamplePx}}) total. If you start with a {{nextExampleHours}}-hour T1 project instead, it earns a modest chunk of RE, paying around {{nextExampleRate}}/hr ({{nextExamplePx}} total), and that RE stays locked in your profile, boosting the hourly rate of whatever you build next.
 
-::: note The short version
-Every hour you ship, at any tier, banks RE forever and pushes your rate up for every ship after it, including the one that earned it.
+::: note The TL;DR
+Every hour you build banks permanent RE, permanently raising your rate for future builds.
 :::
 
 ## Levels
 
-Your level is a display of lifetime RE and nothing more. Levels run 1 to {{maxLevel}}, each one costs more RE than the last, and they have **no effect on what you get paid**: the rate comes straight off RE. Level is just there so the shipping shows up somewhere.
+Your Level (1 to {{maxLevel}}) is a direct readout of your lifetime RE. Levels don't calculate your pay directly: they're just milestones to show how much you've shipped.
 
 | Levels {{band1From}}-{{band1To}} | {{band1Per}} RE per level | {{band1Total}} RE total ({{band1HRange}}) |
 | Levels {{band2From}}-{{band2To}} | {{band2Per}} RE per level | {{band2Total}} RE total ({{band2HRange}}) |
 | Levels {{band3From}}-{{band3To}} | {{band3Per}} RE per level | {{band3Total}} RE total ({{band3HRange}}) |
 
-Early levels are cheap on purpose: a couple of hours on your first project already moves you a level or two. The last level and the top pay rate land on the same amount of RE, so you hit both at once. RE keeps stacking past that, it just runs out of levels to show for it.
+Early levels are fast: a few hours on your first build will already jump you a couple of levels.
 
-## Where to see all this
+## Where to check your stats
 
-The bar at the top of your Builder Terminal shows your level, your lifetime RE and your current rate in pixels per hour. It updates as soon as a project is approved.
+The top bar of your Builder Terminal displays your level, lifetime RE, and current pixel payout rate. It updates the second a project approval goes through.

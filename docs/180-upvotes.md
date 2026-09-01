@@ -6,14 +6,14 @@ description: Upvotes are a second, much smaller currency.
 
 # Upvotes and collectibles
 
-^ Upvotes are a second, much smaller currency. They have nothing to do with pixels, they can't be bought, and the only way to get them is other people liking what you shipped.
+^ Upvotes are community recognition for cool builds. They cannot be purchased, and they don't convert into cash or pixels: they exist purely to celebrate great projects.
 
-## Giving them
+## Voting on projects
 
-You can upvote any approved project that isn't yours, from the explore page. One per person per project, and it's **permanent**: you can't take it back, and you can't upvote and downvote the same project. Downvotes work the same way in the other direction.
+Explore the community feed and upvote projects that inspire you. Votes are **permanent** (one vote per player per project). You cannot upvote your own projects.
 
-## Spending them
+## Collectibles
 
-Your balance is every upvote your projects have ever received, minus whatever you've already spent. Spend them on **collectibles**, cosmetics for your Builder that can't be bought with pixels at any price. They're the one thing in the game that only comes from other people rating your work.
+Your upvote score equals the total upvotes your projects have received. You can spend upvotes on **Collectibles**, rare in-game cosmetic gear and badges for your character that cannot be bought with pixels in the normal shop.
 
-Because upvotes are permanent, your balance can only ever go up as people find your older projects. Nothing expires.
+Because upvotes are permanent, your balance continues growing as other builders discover your older portfolio projects.

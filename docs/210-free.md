@@ -6,9 +6,9 @@ description: Hack Club doesn't want money to be the reason you can't build somet
 
 # Free stuff to help you build
 
-Hack Club doesn't want money to be the reason you can't build something, so here's what's available to you for free:
+^ Money shouldn't stop you from building great software or hardware. Hack Club provides these tools for free:
 
-- **AI credits**, meant for building your own agents and tools, not for running someone else's pre built coding assistant
-- **Free hosting on Nest**, a Linux server you can put basically any project on
-- **Free domains**, open a PR on the DNS repo and claim one for your project
-- **Free CDN** for hosting images, video, and other assets
+- **Free AI Credits:** API keys and compute to build custom LLM apps, bots, and agents.
+- **Free Linux Hosting (Nest):** A full Linux server environment to host web apps, databases, and background bots 24/7.
+- **Free Custom Subdomains:** Claim a custom `*.hackclub.app` or project domain via a pull request on the Hack Club DNS repo.
+- **Free Asset CDN:** Fast storage for hosting game sprites, demo videos, and project media.

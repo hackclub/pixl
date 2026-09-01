@@ -1,31 +1,36 @@
 ---
 title: Slack app guide
 group: Guides
-description: Since #pixl lives on Slack, a Slack bot or app is a genuinely good trial idea, and a lot of NPCs might ask for exactly this kind of thing.
+description: Build interactive bots, slash commands, and automations for Slack.
 ---
 
 # Slack app guide
 
-Since #pixl lives on Slack, a Slack bot or app is a genuinely good trial idea, and a lot of NPCs might ask for exactly this kind of thing.
+^ Because Hack Club runs on Slack, building a Slack bot or integration is one of the most practical projects you can ship.
 
-## Setting up your app
+## 1. Create your Slack app
 
-Head to [api.slack.com/apps](https://api.slack.com/apps) and create a new app. Slack will ask if you want to start from scratch or from a manifest, from scratch is fine for your first one. Pick the workspace you want to test in (your own test workspace, not the Hack Club Slack, while you're building).
+1. Head to [api.slack.com/apps](https://api.slack.com/apps) and click **Create New App**.
+2. Select **From scratch**.
+3. Choose your development testing workspace (use a private test workspace while building, not the main Hack Club workspace).
 
-## Bot tokens and scopes
+## 2. Configure OAuth scopes
 
-Under OAuth & Permissions, add some scopes depending on what your bot needs to do. A few common ones:
+Under **OAuth & Permissions**, add the bot token scopes your app needs:
+- `chat:write`: Allows the bot to post messages.
+- `channels:history`: Allows reading messages in public channels.
+- `commands`: Enables custom slash commands (like `/pixl-stats`).
+- `app_mentions:read`: Triggers events when someone @mentions your bot.
 
-- `chat:write` lets your bot post messages
-- `channels:history` lets it read messages in channels it's in
-- `commands` if you want slash commands
-- `app_mentions:read` if you want it to respond when someone @s it
+Click **Install to Workspace** and copy your **Bot User OAuth Token** (`xoxb-...`).
 
-Install the app to your workspace and grab your Bot User OAuth Token, it starts with `xoxb-`. Keep this secret, don't commit it to GitHub.
+::: warn Keep tokens private
+Never commit your Slack API keys or tokens to GitHub. Store them in a `.env` file and add `.env` to your `.gitignore`.
+:::
 
-## Actually running the bot
+## 3. Starter code with `@slack/bolt`
 
-You'll want a small backend, Node with the `@slack/bolt` package is probably the easiest way in:
+Using Node.js and the official Bolt framework in Socket Mode makes local development seamless without exposing public ports:
 
 ```javascript
 const { App } = require('@slack/bolt');
@@ -37,19 +42,17 @@ const app = new App({
   appToken: process.env.SLACK_APP_TOKEN
 });
 
-app.message('hello', async ({ message, say }) => {
-  await say(`hey <@${message.user}>`);
+// Responds when a user says "ping"
+app.message('ping', async ({ message, say }) => {
+  await say(`pong! 🏓 <@${message.user}>`);
 });
 
-app.start();
+(async () => {
+  await app.start();
+  console.log('⚡️ Slack bot is running!');
+})();
 ```
 
-Socket mode is nice while you're building because you don't need a public URL yet, you can just run it on your own laptop.
+## 4. Deploying 24/7
 
-## Where to host it
-
-Once it works, throw it on Nest, the free Linux hosting Hack Club gives you. That way your bot stays online even when your laptop's closed.
-
-## Trial ideas
-
-A bot that tracks Hackatime stats and posts leaderboards, a bot that reminds people about chapter deadlines, a slash command that pulls a random trial, all of these are solid, real, shippable projects.
+Once your bot works locally, deploy it to **Nest** (Hack Club's free Linux hosting) so it stays online 24/7 without needing your laptop open.

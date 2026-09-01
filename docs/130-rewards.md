@@ -1,21 +1,19 @@
 ---
 title: Rewards
 group: Build & ship
-description: Pixels are the currency of Pixl.
+description: Pixels are the core currency of Pixl.
 ---
 
 # Rewards
 
-Pixels are the currency of Pixl. You earn them by shipping.
+^ Everything you ship pays out in **pixels**, which can be exchanged for real physical and digital rewards.
 
-## Earning pixels
+## How you earn
 
-- {{basePx}} for every hour of shipped work, tracked through Hackatime
-- that rate climbs to {{maxPx}} an hour as a single project builds up Restoration Energy (see [Energy and levels](/docs/energy/))
-- most trials have a prize attached. the prize covers the trial's minimum hours, so when your ship is approved you keep the prize **and** get pixels at the normal rate for every hour you put in beyond that minimum
-- prefer pixels? you can skip the prize when it's approved and take all of your hours as pixels instead (no prize). it's one or the other for that first-minimum slice, and it's final
-- every approved trial ship also banks {{trialBonusRe}} bonus Restoration Energy, whichever way you go
+- **Hourly Base:** Every approved hour pays at your current pixel rate, starting at {{basePx}}/hr and rising to {{maxPx}}/hr as your Restoration Energy climbs.
+- **Trial Bounties:** Completing a trial gives you the choice between the trial's featured prize (plus surplus pixels for hours exceeding the minimum) or taking the entire value as raw pixels.
+- **Restoration Energy Bonus:** Approved trial ships drop an extra {{trialBonusRe}} RE bonus on your profile, accelerating your level progress.
 
-## Spending pixels
+## What you can get
 
-Head to the in game shop and spend what you've earned. The catalog ranges from stickers and small gear up to bigger prizes like a MacBook Air. The more you ship, the more you can afford, and new stuff gets added to the shop as the Restoration goes on.
+Head over to the in-game Shop to browse the catalogue: stickers, soldering irons, microcontrollers, mechanical keyboards, Apple gear, and more.

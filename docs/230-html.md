@@ -1,61 +1,73 @@
 ---
 title: HTML guide
 group: Guides
-description: If you've never built a website before, this is the place to start.
+description: Practical basics for building and styling your first clean web page.
 ---
 
 # HTML guide
 
-If you've never built a website before, this is the place to start. HTML is the skeleton of every website you'll ever see, it's what tells the browser "this is a heading, this is a paragraph, this is a button."
+^ Web development doesn't require complex frameworks to start. Plain HTML and CSS can build fast, clean, and interactive websites.
 
-## Getting set up
+## Core HTML skeleton
 
-You don't need anything fancy. Open VS Code, make a new folder for your project, and create a file called `index.html`. That's it, that's your website.
-
-## The basics
-
-Every HTML page starts with a bit of boilerplate:
+Every web page starts with this boilerplate:
 
 ```html
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>My Site</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Project</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>Hello world</h1>
-  <p>This is my first page.</p>
+  <h1>Hello World</h1>
+  <p>Building something cool on Pixl.</p>
 </body>
 </html>
 ```
 
-Save that file and open it in your browser. Congrats, you just built a website.
+## Essential tags
 
-## A few tags worth knowing
+- `<h1>` to `<h6>`: Headings for page hierarchy.
+- `<p>`: Paragraphs for text content.
+- `<a href="URL">`: Hyperlinks to external pages or local files.
+- `<img src="image.png" alt="description">`: Images.
+- `<button>` and `<input>`: Interactive elements and form controls.
+- `<div>` and `<main>`: Structural layout containers.
 
-- `<h1>` through `<h6>` for headings, biggest to smallest
-- `<p>` for paragraphs
-- `<a href="...">` for links
-- `<img src="...">` for images
-- `<button>` for buttons
-- `<div>` for grouping stuff together
+## Adding modern styling (`style.css`)
 
-## Making it not look terrible
+Drop this into `style.css` for clean typography and centered dark-mode styling:
 
-HTML alone gives you the structure but no style. That's what CSS is for. You can either put styles in a separate `style.css` file and link it, or just throw a `<style>` tag in the `<head>`. Something like:
+```css
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #121110;
+  color: #ede5d8;
+}
 
-```html
-<style>
-  body {
-    font-family: sans-serif;
-    background: #111;
-    color: white;
-  }
-</style>
+main {
+  max-width: 600px;
+  padding: 2rem;
+  background: #1c1a18;
+  border-radius: 8px;
+  border: 1px solid #332f2a;
+}
 ```
 
-That alone already looks better than plain HTML.
+## Building a showcase project
 
-## For a Zara style storefront trial
+If you're tackling a trial like an item shop or personal portfolio, break the UI into distinct sections:
+1. A clean header with your project title.
+2. A grid of cards (items, projects, or blog posts) with images and descriptions.
+3. A footer with social/GitHub links.
 
-Think about what a real storefront needs: a header with the merchant's name, a list of items with images and prices, and a contact form at the bottom. Build it section by section instead of trying to do the whole page at once. Ship something simple and working before you try to make it fancy.
+Get the layout working first, then refine the details.

@@ -6,47 +6,51 @@ description: Everything below is enforced by the software, not by vibes.
 
 # Ship requirements
 
-^ Everything below is enforced by the software, not by vibes. If a ship gets refused, it's almost always one of these.
+^ These rules are checked programmatically and by human reviewers. If a submission gets blocked or kicked back, it's almost always due to one of these.
 
 ## What every ship needs
 
-- **A GitHub repo link.** It has to be an actual GitHub repository, and it has to load. Private repos and dead links get rejected
-- **A demo link.** Something a reviewer can open and use: a live site, a playable build, a releases page. It **can't** be your repo again
-- **A thumbnail image**
-- **The eligibility checkbox**, confirming it isn't a school assignment or paid Hack Club work
-- **Your AI notes**, if you used AI (see below)
+- **A live GitHub repo.** It must be public and accessible. Dead links or private repos fail immediately.
+- **A working demo link.** Reviewers need to test what you built: a hosted site, a playable build, a video walkthrough, or a releases page. It **cannot** just be another link to your repo.
+- **A thumbnail image** showing your project in action.
+- **The eligibility checkbox** confirming this isn't school homework or duplicate YSWS work.
+- **AI disclosure notes** explaining where and how AI was used (details below).
 
-Re-shipping a project that's already approved is allowed as an update, but you have to write update notes saying what changed.
+If you're updating an already-approved project, you can ship an update: just write clear changelog notes explaining what new features you built.
 
-## Journals have a length rule
+## Journal character rules
 
-Journal entries that log hours need **at least 100 characters per hour**, with a 100 character floor. Log 4 hours and the entry needs about 400 characters, a couple of real sentences about what you actually did. Anything shorter is refused outright.
+Journal entries that claim tracked hours must have **at least 100 characters per logged hour** (with an absolute floor of 100 characters). 
 
-This is why journalling as you go beats writing it all up at the end. Log the session while you remember it, one entry per stint, and the writeup is already done by the time you ship.
+If you log a 4-hour session, write at least ~400 characters describing what you implemented, what broke, and how you fixed it. Entries with lazy placeholders or one-liners get rejected.
 
-## Say how you used AI
+The easiest way to handle this is to journal after every build session while the work is fresh. Don't leave 10 hours of journalling for the last 5 minutes before submitting.
 
-If you used AI on a project, you have to describe how. Not a yes or no box, an actual sentence about what it did for you. Using AI isn't a problem and won't cost you anything; hiding it is the problem, and it's the kind of thing reviewers notice in commit history anyway.
+## Be honest about AI
 
-## Hours only count from the cutoff
+Using AI tools (Claude, Copilot, ChatGPT) is fine and won't penalize your payout. Hiding it will. 
 
-Hackatime hours logged before {{cutoff}} don't count, no matter how long your Hackatime account has existed. That's what stops old, unrelated coding time getting shipped as new work.
+When submitting, write an honest sentence or two describing what AI helped you with (e.g. debugging, scaffolding boilerplate, styling). Reviewers check commit histories anyway, so just be upfront.
 
-::: warn Before that date
-Everyone reads as zero countable hours and nothing can be shipped yet. That's expected, not your setup being broken. Install Hackatime now anyway, so the moment the cutoff passes your time is already tracking.
+## Hours only count after the cutoff
+
+Only Hackatime hours logged after {{cutoff}} count toward Pixl. Pre-existing coding time logged before that date is ignored. This keeps the playing field fair and ensures rewards go toward fresh work.
+
+::: warn Before the cutoff date
+Your countable hours will show as zero until the cutoff passes. Install and configure Hackatime now so your hours automatically log the moment the window opens.
 :::
 
-## Some trials have a minimum
+## Trial hour minimums
 
-A trial can carry a minimum number of tracked hours, and you can't ship it below that. It's there so a trial with a real prize attached can't be cleared in twenty minutes. The project page tells you how far off you are.
+Certain high-value trials have minimum hour requirements. You cannot submit the trial until you've logged at least that many hours in Hackatime. Your project dashboard shows your exact progress toward the threshold.
 
-## Two deadlines that catch people out
+## Two gotchas to remember
 
-- **Referral codes** only work in your first **2 days** on Pixl. After that the code is refused, so apply it the day you sign up
-- **An address before checkout.** Not before you earn pixels, but the shop will refuse the order itself if there's no address on file
+- **Referral codes expire in 2 days.** You have 48 hours after account creation to enter a referral code. After that, the system locks it out.
+- **Address required before shop orders.** You can earn pixels anytime, but you cannot checkout in the shop without a verified mailing address on your account.
 
-## If a submission gets sent back
+## What happens if a submission is returned?
 
-It's not one shot. Fix whatever was flagged and ship it again. The usual reasons are a broken link, a demo that doesn't run, Hackatime data that doesn't line up with the size of the build, or a project that's a tutorial with the names changed.
+Getting a project sent back isn't a penalty, it's feedback. Fix the issue (e.g., dead demo link, vague journal entries, missing features) and submit again. 
 
-Reviewers can also approve you for **fewer hours than you logged** if the tracked time doesn't match what got built. You keep the project and the approval, it just pays for the hours they credited.
+Reviewers may also approve a project for fewer hours than logged if the tracked time doesn't match the scope of what was built. You keep your approval and get paid for the credited hours.

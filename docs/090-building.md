@@ -1,17 +1,17 @@
 ---
 title: Building
 group: Build & ship
-description: You can build pretty much anything here, software or hardware, as long as it's real and it's yours.
+description: How to take an idea from zero to a finishable project.
 ---
 
 # Building
 
-You can build pretty much anything here, software or hardware, as long as it's real and it's yours.
+^ The hardest part of building isn't writing code, it's keeping your project small enough to actually finish and ship.
 
-**Software** covers websites, apps, games, bots, AI tools, browser extensions, whatever. Useful tools to know about: VS Code, GitHub, and Hackatime for tracking time.
+## Three rules of thumb
 
-**Hardware** covers PCBs, electronics, robotics, 3D printed stuff, physical builds. You'll want CAD software, a PCB design tool, and whatever hardware guides fit your project.
+1. **Scope small:** A working 5-hour project you ship beats an ambitious 50-hour engine you abandon midway. Finish the core feature first, then expand if you still have energy.
+2. **Build something you'd use:** You stay motivated much longer when you're solving an annoying personal problem or making a game you actually want to play.
+3. **Commit often:** Push code to GitHub after every session. It backs up your work, builds proof of progress for reviewers, and keeps your Hackatime stats clean.
 
-## Tracking your time
-
-Hackatime tracks your build time automatically once it's set up in your editor. Every hour it logs from a shipped project turns into pixels, so get it installed early, don't build for hours and then realize none of it got tracked.
+Check out [Build your first project](/docs/first-project/) for the step-by-step setup checklist.

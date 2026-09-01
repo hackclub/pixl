@@ -6,30 +6,33 @@ description: Bring someone into Pixl and you both get paid for it, once they act
 
 # Referrals
 
-^ Bring someone into Pixl and you both get paid for it, once they actually ship something.
+^ Invite friends into Pixl and earn bonus pixels once they build and ship their first project.
 
 ## How it works
 
-Your referral code is on the refers page, six characters, yours permanently. The person you're referring enters it on their side.
+Your 6-character referral code is located on the Referrals page. When a friend signs up, they enter your code.
 
-::: warn Six hours, then it's gone
-A code can only be applied in the referred player's **first 6 hours** on Pixl. After that it's refused. Send people your code with the invite, not a day later.
+::: warn 48-Hour window
+A referral code must be applied within the referred player's **first 2 days** on Pixl. After 48 hours, the prompt locks out. Share your code when they join.
 :::
 
-That window exists so referrals mean actual new builders. Without it, two people who've both been shipping for months could "refer" each other after the fact and collect for nothing.
+## What the new builder gets
 
-## What the referred player gets
-
-An extra **5 pixels an hour**, roughly 35 cents an hour, on top of their normal rate. It applies to their **first newly approved ship only**, so it's a welcome bonus rather than a permanent rate change.
+A **+5 px/hr bonus** on top of their standard rate for their **first approved project**. It's a starter boost to kickstart their pixel balance.
 
 ## What the referrer gets
 
-A one time reward once the person you referred lands their first qualifying ship, sized by how many hours that ship was approved for:
+A one-time bounty when your referral lands their first approved ship, scaled by the size of their project:
 
-- 2h+ → 10px, 5h+ → 19px, 10h+ → 33px, 25h+ → 71px, 50h+ → 105px, 100h+ → 190px
+- **2h+** → 10 px
+- **5h+** → 19 px
+- **10h+** → 33 px
+- **25h+** → 71 px
+- **50h+** → 105 px
+- **100h+** → 190 px
 
-Once that pays out, the referral is closed and settled. You're rewarded for the person actually getting somewhere, not for the signup.
+Rewards trigger when real builds get shipped, not for empty account registrations.
 
-## Milestones
+## Milestone bonuses
 
-Every 10th referral that pays out also pays a **119 pixel** milestone on top. Ten people who all shipped is a real contribution to the Restoration, and it's treated like one.
+Every 10 successful referrals that complete a ship unlocks an extra **119 px milestone bonus** on top.

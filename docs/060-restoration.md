@@ -1,21 +1,18 @@
 ---
 title: How the Restoration works
 group: The Restoration
-description: The overall story is called the Restoration, and it's split into two kinds of time periods.
+description: Pixl is a collaborative effort to restore a broken world.
 ---
 
 # How the Restoration works
 
-The overall story is called the Restoration, and it's split into two kinds of time periods.
+^ Pixl is built around a collective community goal: rebuilding Origin island by island.
 
-## Chapters
+Every time anyone in the community ships a project, they generate **Restoration Energy (RE)**. RE flows into the world in two ways:
 
-Chapters run for about three weeks each. Every chapter is centered on repairing one part of Origin. While a chapter is live, you're picking trials from whatever regions are already unlocked and shipping real projects toward that chapter's goal. Once the community collectively hits the goal, the story moves forward, a new region opens up, NPCs come back online, and new trials appear.
+1. **Your Personal Level:** Pushes up your own hourly pixel payout rate permanently.
+2. **The Core Vault:** Fuels global world unlocks that benefit every player in the game.
 
-## Operations
+As the community hits Vault milestones, new zones unlock, higher tier trials become available, new shop inventory drops, and the map evolves. You don't have to coordinate with anyone, just build your own projects, ship them, and your hours contribute to the global progress bar automatically.
 
-In between chapters there are operations, shorter one week events built around a single theme, like a game jam or a hackathon or a tool building week. These are good if you want something with a hard deadline and a tighter scope.
-
-## Showing up late is fine
-
-Regions don't close once they're unlocked. Whenever you join, you can pick from any trial that's currently available and ship it for the same rewards as everyone else. Chapters only decide what unlocks next, they don't gate what you're allowed to build.
+Check the Core Vault in the center of the world or open the Vault dashboard to see current progress toward the next community tier.

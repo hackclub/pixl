@@ -1,20 +1,22 @@
 ---
 title: Your trial
 group: The Restoration
-description: Trials come from NPCs around the world who have some kind of problem they need help with.
+description: Trials are guided challenges with exclusive rewards.
 ---
 
 # Your trial
 
-Trials come from NPCs around the world who have some kind of problem they need help with. Zara the merchant needs a storefront, Marco needs a travel app, GHOST needs a network intrusion system, stuff like that. You can take one of these on, or if the Core hasn't thought of your idea yet, you can just build your own thing instead: that's an **Invention**, your own original build rather than an NPC's Trial. Both count the same toward Restoration Energy.
+^ When exploring the world, you'll encounter NPCs offering **Trials**: specific project briefs designed around hardware, game dev, web apps, or systems engineering.
 
-## What makes a good trial submission
+## Taking on a trial
 
-- it actually solves the problem the NPC describes, or does something real if it's your own idea
-- you can explain what you built and what you learned building it
-- there's something in it that's clearly yours, not just default template stuff
-- it's a finished project, not a half done tutorial follow along
+- Walk up to any NPC with an active quest icon and talk to them to inspect the trial.
+- Accept the trial to bind it to your builder terminal.
+- Each trial specifies what to build, suggested tech stacks, minimum hour targets, and an exclusive reward (like hardware tools, gaming perks, or specialized grants).
 
-::: warn The one rule
-Don't just copy paste someone else's project or clone a tutorial line by line. Learning from tutorials is completely fine, encouraged even, but what you submit needs to have your own fingerprints on it somewhere.
-:::
+## Inventions vs. Trials
+
+- **Trials:** Structured prompts with custom physical/digital prizes + bonus {{trialBonusRe}} RE on completion.
+- **Inventions:** Freeform builds. If you have an original idea that doesn't fit any NPC prompt, create an Invention. Inventions pay out full pixel rates based on your tracked hours.
+
+You can work on trials and custom inventions in parallel. Pick what excites you and start coding.

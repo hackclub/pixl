@@ -1,35 +1,33 @@
 ---
 title: The shop and your orders
 group: Build & ship
-description: Pixels come out of shipping, and the shop is where they go.
+description: Turn your shipped hours into real gear and rewards.
 ---
 
 # The shop and your orders
 
-^ Pixels come out of shipping, and the shop is where they go. Everything in it is a real object or a real service that gets sent to you.
+^ Shipped work turns into pixels, and the shop is where you spend them. Everything listed is a real physical item or digital grant sent directly to you.
 
-## What you'll see
+## Regional catalogues
 
-The catalogue is scoped to your region, because what we can actually post to you differs a lot depending on where you are. Prices are set at the payout floor, so every item shows a range: the hours it costs at the floor rate, and the fewer hours it costs once your Restoration Energy has lifted your rate.
+Because international shipping and customs vary around the world, the shop catalogue automatically filters items available in your region (US, North America, South America, Europe, Asia, India, Africa). You will only see items we can reliably deliver to your address.
 
-You can buy up to 999 of the same thing in one order, which mostly matters for stickers and small stuff.
+## Level trophies
 
-## Trophies are different
+Certain special items are **Level Trophies**. These aren't purchased with pixels: they unlock automatically for free once your account hits specific level milestones!
 
-Some items aren't bought at all. Trophies unlock at a **level** and are claimed for free once you reach it. They're the same for everyone no matter which region you're in, since nothing about them depends on shipping costs.
+## Address verification
 
-## Checkout needs an address
+Before placing an order, make sure you have a valid mailing address saved on your profile. The shop will block checkout until your address is set.
 
-Your address has to be on file before the shop will take an order. It comes from your Hack Club account, and the account page is where you check it's right. Pixels are taken when the order is placed, so a double click can't spend them twice.
+## Order status stages
 
-## Tracking an order
+Track your shipments directly on your Orders page:
 
-Orders move through five stages, and the orders page shows where yours is:
+- **NEW:** Order received and logged. Pixels are deducted immediately.
+- **ORDERED:** Our fulfillment team has ordered or packed the item.
+- **PAID:** Payment and processing confirmed on our end.
+- **SHIPPED:** Package is in transit with carrier tracking details attached.
+- **DELIVERED:** Arrived at your door.
 
-- **NEW**, we've got the order and haven't acted on it yet. Your pixels are already taken at this point
-- **ORDERED**, we've bought or requisitioned the thing
-- **PAID**, it's paid for on our side
-- **SHIPPED**, it's on its way, with a tracking number attached when there is one
-- **DELIVERED**, it reached you and the order is closed
-
-If an order gets cancelled, your pixels come back. Nothing is lost by an order falling through on our end.
+If an item is out of stock or cancelled, your pixels are refunded back to your balance automatically.

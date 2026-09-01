@@ -6,16 +6,20 @@ description: Hackatime is how your build time gets tracked, and it's what turns 
 
 # Hackatime setup
 
-Hackatime is how your build time gets tracked, and it's what turns hours into pixels, so get it set up before you start your first trial.
+^ Hackatime logs the time you spend coding in your editor, converting your real build hours into pixels. Set it up before you begin working on a project.
 
-## Installing it
+## Installation steps
 
-Hackatime plugs into your editor through a WakaTime style extension. For VS Code, search "WakaTime" in the extensions tab, install it, and when it asks for an API key, use the one from your Hackatime account instead of a regular WakaTime one, along with the Hackatime API URL.
+1. Install the **WakaTime** extension in your editor (VS Code, Cursor, Neovim, JetBrains, etc.).
+2. When prompted for your API Key, use your personal **Hackatime API Key** from your Pixl/Hack Club profile.
+3. Set your custom API URL endpoint to `https://waka.hackclub.com/api`.
 
-## Making sure it's actually tracking
+## Verifying tracking
 
-Open your Hackatime dashboard after coding for a few minutes and check that time is showing up under the right project. If nothing shows, double check the API key and URL are right, that's almost always the issue.
+Write code in your project for 5 minutes, then check your Hackatime dashboard. You should see active coding time appear under your current project folder name.
 
-## Splitting time between projects
+If hours aren't tracking, double-check that your API URL and Secret Key are pasted correctly into your editor settings.
 
-If you're working on more than one trial at once, make sure each one lives in its own folder, Hackatime uses the folder name as the project name by default. Rename projects in your dashboard if the auto detected name doesn't match what you want on your submission.
+## Project folder naming
+
+Hackatime uses your local folder name as the project identifier. Keep each build in its own dedicated directory so your hours log to the correct submission.

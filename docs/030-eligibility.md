@@ -6,35 +6,37 @@ description: Pixl runs under Hack Club, so it inherits Hack Club's YSWS rules ab
 
 # Who can join
 
-^ Pixl runs under Hack Club, so it inherits Hack Club's YSWS rules about who's eligible and what counts as a project. Worth reading once before you sink hours into something.
+^ Pixl is an official Hack Club YSWS, so standard Hack Club eligibility rules apply. Read this once before sinking 20 hours into a project.
 
 ## Age
 
-You need to be **18 or under** when you ship. That's the Hack Club YSWS rule, not ours, and it's checked against the birthday on your account.
+You must be **18 or under** at the moment you ship. This is a global Hack Club rule, checked against the birthday on your account.
 
-If your 19th birthday lands between shipping a project and a reviewer getting to it, the project gets flagged rather than dropped, and a reviewer has to write down a justification before deciding either way. So if you're close to the line, ship early rather than sitting on a finished project.
+If you turn 19 while your project is sitting in the review queue, it doesn't get automatically rejected. Instead, it gets flagged for manual review, and a reviewer writes a justification before making a call. That said, don't sit on a completed build until the last minute. Ship it as soon as it's ready.
 
 ## What we need from you
 
-Two things, and you've already given both to Hack Club:
+Two things, both linked directly to your Hack Club account:
 
-- **Your birthday**, for the age check above
-- **A mailing address**, because prizes and shop orders are real objects that get posted to you
+- **Your birthday** (for the age verification above).
+- **A physical mailing address** (because shop items and prizes are real physical packages sent to your door).
 
-Both come across from your Hack Club account when you sign in, so there's nothing to fill in twice. Your account page is where you check what we've got and correct it if something's out of date, which mostly matters for the address when you move.
+Both sync over automatically when you log in with Hack Club. Check your account page to make sure your info is accurate, especially your shipping address if you recently moved.
 
-They go to Hack Club's YSWS Unified Database, which is how the program tracks who shipped what. The one place it bites: the shop won't take an order until there's an address on file, so if checkout refuses, that's what it's asking for.
+Our backend talks to Hack Club's Unified Database to track shipments. The main place this matters: checkout will block orders if you don't have a valid mailing address on file.
 
 ## Projects that don't count
 
-Two hard exclusions, both from Hack Club's YSWS project exceptions: anything set as **school coursework**, and anything Hack Club has **already paid you for**. Either one, and it can't be shipped here.
+Two hard lines you cannot cross:
+1. **School coursework** (anything assigned for a class grade).
+2. **Projects Hack Club has already funded or paid you for**.
 
-You confirm both with a checkbox every time you ship. It isn't a formality: shipping without ticking it fails, and misusing it is the kind of thing that gets a project banned rather than sent back.
+Every time you submit a ship, you tick a box confirming neither of these applies. Don't click through without reading: submitting ineligible projects is how accounts get banned rather than just returned for edits.
 
-::: note Shipping a project that already exists
-Reusing an old project of yours isn't automatically out, but it gets checked against Hack Club's archive of previously shipped projects. If there's a match you didn't mention, the reviewer is told. Say so up front in your writeup and it's a conversation, not a problem.
+::: note Shipping an existing project?
+Revisiting an older project of yours isn't automatically banned, but our system cross-checks Hack Club's archive of shipped projects. If you're building on top of prior work, explain what's new clearly in your writeup. Honesty turns a potential flag into a normal conversation.
 :::
 
 ## Where you live
 
-Anyone eligible can build and ship. The shop is the part that varies: its catalogue is scoped to your region (US, North America, South America, Europe, Asia, India, Africa) because shipping costs and what we can actually post differ a lot. You'll only see what can reach you.
+Anyone eligible can participate globally. The only thing that changes is the shop catalogue: items are filtered by region (US, North America, South America, Europe, Asia, India, Africa) based on shipping logistics and carrier limits. You'll only see what we can reliably deliver to your country.

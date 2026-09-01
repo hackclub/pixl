@@ -8,18 +8,18 @@ description: Search for a player by display name, send a request, and once they 
 
 ## Friends
 
-Search for a player by display name, send a request, and once they accept you'll see each other around. You can remove a friend at any point, from either side.
+Find other builders by searching their display name and sending a friend request. Once connected, you can track each other's activity and see when friends are online.
 
 ## Villages
 
-A village is a private space for you and up to **16** people, separate from the main world. Good for building alongside people you actually know rather than the whole server.
+A **Village** is a private instance for you and up to **16 friends** to hang out and build together away from the main world hub.
 
-Villages can be retinted with cosmetic themes bought with pixels: Autumn, Blossom and Verdant at 500 px, Dusk at 750 px. The tint is seen by everyone in the village and layers over the normal day and night cycle.
+Villages can be customized with dynamic color themes purchased with pixels (Autumn, Blossom, Verdant for 500 px; Dusk for 750 px), altering the atmospheric lighting for everyone inside.
 
-## Explore
+## Explore feed
 
-Every approved project is browsable, with leaderboards for the most upvoted creators. It's the best place to see what a good ship actually looks like before you write your own, and it's where you upvote things.
+The Explore feed showcases all approved community ships. It's the fastest way to see how other hackers structure their repos, demos, and project writeups.
 
-## Notifications and your timeline
+## Notifications & activity timeline
 
-Notifications are your inbox for anything that happened to you: a project approved, a friend request, a collaborator invite, an order moving. Your timeline is the history of everything you've shipped and earned, in order.
+Your Notifications tab alerts you when projects get approved, orders ship, or collaborator invites arrive. Your personal Timeline tracks your complete shipping history in chronological order.

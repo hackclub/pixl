@@ -6,10 +6,12 @@ description: A board for "someone should build this".
 
 # The ideas board
 
-^ A board for "someone should build this". Post an idea, browse other people's, vote on the good ones.
+^ Have an idea you don't have time to build? Or looking for something interesting to tackle? Check the **Ideas Board**.
 
-Posting is instant, there's no review queue, because it's a prompt board and not a submission. Sort by newest or top, or search by title. You can delete your own ideas whenever.
+## Posting & browsing
 
-Voting works exactly like project upvotes: one per person, permanent, and not on your own posts. Unlike project upvotes, idea votes aren't a currency, they just sort the board.
+- Post an idea instantly, no review queue required.
+- Filter by newest, trending, or search by keywords.
+- Vote on prompts you'd love to see built.
 
-If you're stuck on what to build, this is the place to look before you go asking. If you have an idea you know you'll never get to, post it and let someone else run with it.
+If you're facing builder's block, browse the board for inspiration. If you think of a fun mechanic, bot, or hardware concept, post it so another maker can bring it to life.
