@@ -711,7 +711,8 @@
           $("buy-btn").textContent = "NOT AVAILABLE YET";
           $("buy-btn").disabled = true;
           $("afford-fill").style.width = "0%";
-          $("afford-label").textContent = "Coming soon to this region.";
+          $("afford-label").textContent =
+            selected.name === "Food Grant" ? "Available soon." : "Coming soon to this region.";
           return;
         }
         const total = Number(selected.price) * quantity;

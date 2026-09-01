@@ -609,7 +609,7 @@
                   : `Ship ${item.unlock_trials && item.unlock_trials.length ? item.unlock_trials.map((t) => `“${Pixl.esc(t)}”`).join(" or ") : "the required Trial"} to unlock this`
               }</span></div>`
             : isPending(item)
-            ? `<div class="price-wrap"><span class="price cant">NOT AVAILABLE</span><span class="price-hours">Coming soon to this region</span></div>`
+            ? `<div class="price-wrap"><span class="price cant">NOT AVAILABLE</span><span class="price-hours">${item.name === "Food Grant" ? "Available soon" : "Coming soon to this region"}</span></div>`
             : `<div class="price-wrap">
           <span class="price ${canAfford(item) ? "" : "cant"}"><img src="/img/pixel.png" alt="">${item.config_options ? `FROM ${basePrice(item).toLocaleString()}` : basePrice(item).toLocaleString()} PX</span>
           <span class="price-hours">${hoursOf(basePrice(item))}</span>
