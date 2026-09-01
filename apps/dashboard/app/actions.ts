@@ -1148,6 +1148,16 @@ export async function reviewProject(formData: FormData): Promise<void> {
       `${project.name}: $${fundingUsd.toFixed(2)} hardware grant , ${fundingPx} px withheld from payout, needs fulfillment`,
       by,
     );
+  // Fire-and-log: a failed Airtable push (bad address data, Airtable being
+  // down, etc.) must never block the approval itself - the "Re-send to
+  // Airtable" button on the project page is the fallback for that case.
+  try {
+    const airtableResult = await pushProjectToAirtable(projectId);
+    if (!airtableResult.ok)
+      console.error(`reviewProject: Airtable push failed for project ${projectId}`, airtableResult.error);
+  } catch (err) {
+    console.error(`reviewProject: Airtable push threw for project ${projectId}`, (err as Error).message);
+  }
   const nextPath = await nextReviewPath(access, by, stage, projectId);
   revalidatePath("/review");
   redirect(nextPath);
@@ -1591,12 +1601,11 @@ export async function archiveProject(formData: FormData): Promise<void> {
 // checkbox - a teammate does that by hand after reviewing what lands here.
 // Re-running this on an already-pushed project updates the same Airtable
 // row (via the stored airtable_record_id) instead of creating a duplicate.
-export async function sendProjectToAirtable(formData: FormData): Promise<void> {
-  await requirePerm("ban");
-  const projectId = Number(formData.get("projectId") ?? 0);
-  if (!projectId) return;
-  const back = `/projects/${projectId}`;
-
+// Shared by the automatic push on final approval (see reviewProject) and the
+// manual "Send to Airtable" / "Re-send to Airtable" button on the project
+// page - one place owns the field-building/push logic so the two callers
+// can't drift apart.
+async function pushProjectToAirtable(projectId: number): Promise<{ ok: boolean; error?: string }> {
   const { data: project, error: projectError } = await db
     .from("projects")
     .select(
@@ -1604,12 +1613,9 @@ export async function sendProjectToAirtable(formData: FormData): Promise<void> {
     )
     .eq("id", projectId)
     .single();
-  if (projectError || !project) {
-    redirect(`${back}?error=${encodeURIComponent("Project not found.")}`);
-  }
-  if (project.status !== "approved" || project.banned_at || project.rejected_at) {
-    redirect(`${back}?error=${encodeURIComponent("Only approved projects can be sent to Airtable.")}`);
-  }
+  if (projectError || !project) return { ok: false, error: "Project not found." };
+  if (project.status !== "approved" || project.banned_at || project.rejected_at)
+    return { ok: false, error: "Only approved projects can be sent to Airtable." };
 
   const { data: user, error: userError } = await db
     .from("users")
@@ -1618,9 +1624,7 @@ export async function sendProjectToAirtable(formData: FormData): Promise<void> {
     )
     .eq("id", project.user_id)
     .maybeSingle();
-  if (userError) {
-    redirect(`${back}?error=${encodeURIComponent("Could not look up this project's owner - try again.")}`);
-  }
+  if (userError) return { ok: false, error: "Could not look up this project's owner - try again." };
 
   const [fallbackFirst, ...fallbackRest] = (user?.real_name ?? "").split(" ");
   const firstName = user?.first_name || fallbackFirst || "";
@@ -1634,9 +1638,7 @@ export async function sendProjectToAirtable(formData: FormData): Promise<void> {
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (auditError) {
-    redirect(`${back}?error=${encodeURIComponent("Could not look up the approval note - try again.")}`);
-  }
+  if (auditError) return { ok: false, error: "Could not look up the approval note - try again." };
   const auditSections = parseAuditNote(audit?.audit_note ?? "");
 
   const fields = buildAirtableFields({
@@ -1660,21 +1662,34 @@ export async function sendProjectToAirtable(formData: FormData): Promise<void> {
   });
 
   const result = await pushProjectRecord(fields, project.airtable_record_id ?? null);
-  if (!result.ok) {
-    // result.error comes from Airtable's own API error message or a network
-    // failure reason - never from decrypted PII, so it's safe to show.
-    redirect(`${back}?error=${encodeURIComponent(`Airtable push failed: ${result.error}`)}`);
-  }
+  // result.error comes from Airtable's own API error message or a network
+  // failure reason - never from decrypted PII, so it's safe to show/log.
+  if (!result.ok) return { ok: false, error: `Airtable push failed: ${result.error}` };
 
   const { error: updateError } = await db
     .from("projects")
     .update({ airtable_record_id: result.recordId })
     .eq("id", projectId);
   if (updateError) {
-    console.error("sendProjectToAirtable: airtable_record_id save failed", updateError.message);
-    redirect(
-      `${back}?error=${encodeURIComponent("Pushed to Airtable, but failed to save the record link - check Airtable for a duplicate before pushing again.")}`,
-    );
+    console.error("pushProjectToAirtable: airtable_record_id save failed", updateError.message);
+    return {
+      ok: false,
+      error:
+        "Pushed to Airtable, but failed to save the record link - check Airtable for a duplicate before pushing again.",
+    };
+  }
+  return { ok: true };
+}
+
+export async function sendProjectToAirtable(formData: FormData): Promise<void> {
+  await requirePerm("ban");
+  const projectId = Number(formData.get("projectId") ?? 0);
+  if (!projectId) return;
+  const back = `/projects/${projectId}`;
+
+  const result = await pushProjectToAirtable(projectId);
+  if (!result.ok) {
+    redirect(`${back}?error=${encodeURIComponent(result.error ?? "Airtable push failed.")}`);
   }
 
   revalidatePath(back);
