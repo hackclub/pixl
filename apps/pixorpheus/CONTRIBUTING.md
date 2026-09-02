@@ -17,13 +17,13 @@ You'll need:
 
 ## Project Structure
 
-Pixorpheus is a TypeScript Bun project, organized by feature under `src/` (tickets, chat, ai, memory, commands, etc — see the Architecture section in the README for the full breakdown). There's no separate dashboard process anymore — helper/admin ticket moderation lives in `apps/dashboard` elsewhere in this monorepo, which calls back into this bot's external API to resolve tickets.
+Pixorpheus is a TypeScript Bun project, organized by feature under `src/` (tickets, chat, ai, memory, commands, etc, see the Architecture section in the README for the full breakdown). There's no separate dashboard process anymore, helper/admin ticket moderation lives in `apps/dashboard` elsewhere in this monorepo, which calls back into this bot's external API to resolve tickets.
 
 Before touching the ticket system or the AI prompt, read the relevant sections in the README so you understand the full flow.
 
 ## Making Changes
 
-- Keep PRs focused — one thing at a time
+- Keep PRs focused - one thing at a time
 - If you're changing the system prompt, test it against edge cases (chime mode, DMs, thread context)
 - If you're touching the ticket system, test the full flow: new message, title modal, claim, resolve, reopen
 - Don't change the AI model without checking costs and latency

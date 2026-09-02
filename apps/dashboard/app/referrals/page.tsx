@@ -24,7 +24,7 @@ import {
 export const dynamic = "force-dynamic";
 
 function fmtDate(iso: string | null): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   return new Date(iso).toLocaleDateString("en-GB", {
     day: "numeric",
     month: "short",
@@ -106,7 +106,7 @@ export default async function ReferralsPage() {
                   <TableCell>
                     {r.rewarded} / {r.total}
                   </TableCell>
-                  <TableCell>{r.milestones > 0 ? <Badge variant="secondary">{r.milestones}</Badge> : "—"}</TableCell>
+                  <TableCell>{r.milestones > 0 ? <Badge variant="secondary">{r.milestones}</Badge> : "-"}</TableCell>
                   <TableCell className="text-right">
                     {r.pixelsEarned}px (${(r.pixelsEarned * config.economy.pixelValueUsd).toFixed(2)})
                   </TableCell>

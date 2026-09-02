@@ -39,7 +39,7 @@ export function serializeGroups(groups: OptionGroup[]): string[] {
     const choices = g.choices
       .map((c) => String(c).trim())
       .filter(Boolean)
-      // 40, not 20 — the Indie Game of Your Choice picklist alone has 27.
+      // 40, not 20 - the Indie Game of Your Choice picklist alone has 27.
       .slice(0, 40);
     if (choices.length === 0) continue;
     const name = String(g.name ?? "").trim();

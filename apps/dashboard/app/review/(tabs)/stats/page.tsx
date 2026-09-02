@@ -140,7 +140,7 @@ export default async function ReviewStatsPage() {
                     </span>
                   </TableCell>
                   <TableCell className="p-3 text-muted-foreground">
-                    {s.lastActive ? new Date(s.lastActive).toLocaleDateString() : "—"}
+                    {s.lastActive ? new Date(s.lastActive).toLocaleDateString() : "-"}
                   </TableCell>
                 </TableRow>
               ))}

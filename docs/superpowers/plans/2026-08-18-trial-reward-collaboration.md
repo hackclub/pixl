@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Each collaborator on a Trial-linked ship who individually clears the Trial's `min_hours` gets their own full Trial reward (prize-or-pixels choice), not just the owner — and the ship can be approved as long as *anyone* on it clears the minimum, not only the owner.
+**Goal:** Each collaborator on a Trial-linked ship who individually clears the Trial's `min_hours` gets their own full Trial reward (prize-or-pixels choice), not just the owner, and the ship can be approved as long as *anyone* on it clears the minimum, not only the owner.
 
 **Architecture:** Mirror the existing owner-side mechanism (`projects.trial_reward_choice`/`trial_held_px`/`trial_prize_px` + the `POST /api/projects/:id/trial-reward` settlement route) onto `project_collaborators`, reusing the exact prize/pixel-slice math the owner path already uses. No new tables, no change to the owner's existing flow.
 
-**Tech Stack:** Bun/Express server (`apps/server`), Next.js dashboard (`apps/dashboard`, Next 16/React 19), plain HTML/JS web-shell (`apps/game/web`), Postgres via a Supabase-shaped `pgCompat` client. No automated test suite exists for `apps/server`/`apps/dashboard` (confirmed — CLAUDE.md: "no root-level test suite"), so verification steps use `bunx tsc --noEmit` / `tsc --noEmit` typechecks plus manual end-to-end checks against a local dev server, not a fabricated test framework.
+**Tech Stack:** Bun/Express server (`apps/server`), Next.js dashboard (`apps/dashboard`, Next 16/React 19), plain HTML/JS web-shell (`apps/game/web`), Postgres via a Supabase-shaped `pgCompat` client. No automated test suite exists for `apps/server`/`apps/dashboard` (confirmed, CLAUDE.md: "no root-level test suite"), so verification steps use `bunx tsc --noEmit` / `tsc --noEmit` typechecks plus manual end-to-end checks against a local dev server, not a fabricated test framework.
 
 Spec: `docs/superpowers/specs/2026-08-18-trial-reward-collaboration-design.md`
 
@@ -25,7 +25,7 @@ Spec: `docs/superpowers/specs/2026-08-18-trial-reward-collaboration-design.md`
 
 ---
 
-### Task 1: Migration — trial-reward columns on `project_collaborators`
+### Task 1: Migration - trial-reward columns on `project_collaborators`
 
 **Files:**
 - Create: `apps/server/drizzle/0131_collaborator_trial_reward.sql`
@@ -43,7 +43,7 @@ Spec: `docs/superpowers/specs/2026-08-18-trial-reward-collaboration-design.md`
 --   trial_held_px: the full payout this collaborator's own hours produced,
 --     held back at approval instead of credited immediately.
 --   trial_prize_px: the pixel value of the Trial's minimum-hours slice for
---     THIS collaborator's hours — what they forfeit by keeping the prize.
+--     THIS collaborator's hours , what they forfeit by keeping the prize.
 --
 -- Target: the orchard/CNPG database. Idempotent. Run in psql.
 
@@ -60,11 +60,11 @@ create index if not exists project_collaborators_trial_reward_choice_idx
 
 Run: `grep -n "project_collaborators" /home/ridit/Documents/Pixl/apps/server/src/db/schema.ts`
 
-If it returns matches, add the three new columns to that table definition, matching the existing style for the other columns on that table (e.g. `approvedHours: integer("approved_hours")` pattern — check the exact style used for `hackatime_seconds`/`approved_hours` on the same table and copy it exactly, don't guess a different casing/type convention). If it returns nothing, `project_collaborators` isn't Drizzle-declared (queries go through `pgCompat`'s Supabase-shaped `.from()` builder instead) and this step is a no-op — skip to Step 3.
+If it returns matches, add the three new columns to that table definition, matching the existing style for the other columns on that table (e.g. `approvedHours: integer("approved_hours")` pattern, check the exact style used for `hackatime_seconds`/`approved_hours` on the same table and copy it exactly, don't guess a different casing/type convention). If it returns nothing, `project_collaborators` isn't Drizzle-declared (queries go through `pgCompat`'s Supabase-shaped `.from()` builder instead) and this step is a no-op, skip to Step 3.
 
 - [ ] **Step 3: Apply the migration**
 
-This repo's migrations run via `apps/server/src/scripts/apply-migrations.js` against Orchard Postgres in the deployed pod (`drizzle-kit migrate` OOMs there — see `[[orchard-migration-2026-08]]`). Confirm with the user whether to apply it now via `exec_in_pod` (see `[[feedback_prod_db_access_pattern]]` memory for the exact no-credentials-exposed pattern) or let it ride on the next deploy's migration step — don't apply it unprompted given this session's history with prod actions.
+This repo's migrations run via `apps/server/src/scripts/apply-migrations.js` against Orchard Postgres in the deployed pod (`drizzle-kit migrate` OOMs there, see `[[orchard-migration-2026-08]]`). Confirm with the user whether to apply it now via `exec_in_pod` (see `[[feedback_prod_db_access_pattern]]` memory for the exact no-credentials-exposed pattern) or let it ride on the next deploy's migration step - don't apply it unprompted given this session's history with prod actions.
 
 - [ ] **Step 4: Commit**
 
@@ -77,7 +77,7 @@ git commit -m "db: add trial reward columns to project_collaborators"
 
 ---
 
-### Task 2: Loosen the approval gate — anyone clears `min_hours`, not just the owner
+### Task 2: Loosen the approval gate - anyone clears `min_hours`, not just the owner
 
 **Files:**
 - Modify: `apps/dashboard/app/actions.ts:862-873`
@@ -95,7 +95,7 @@ Find this block (currently right after the approval status update, around line 9
   const collaborators = (collabRows ?? []) as { id: number; user_id: string; hackatime_seconds: number | null }[];
 ```
 
-Delete it from that location — it moves earlier in Step 2.
+Delete it from that location - it moves earlier in Step 2.
 
 - [ ] **Step 2: Replace the existing gate check**
 
@@ -167,18 +167,18 @@ Replace with:
 
 - [ ] **Step 3: Remove the now-duplicate collaborator fetch after the approval update**
 
-A second copy of the `collabRows`/`collaborators` fetch still exists right after the `projects` status-update-to-`approved` query (this is the block Step 1 told you to delete — do it now if you haven't). After deleting it, the line right below it:
+A second copy of the `collabRows`/`collaborators` fetch still exists right after the `projects` status-update-to-`approved` query (this is the block Step 1 told you to delete, do it now if you haven't). After deleting it, the line right below it:
 
 ```ts
   const allBeneficiaryIds = [project.user_id, ...collaborators.map((c) => c.user_id)];
 ```
 
-should now reference the `collaborators` computed in Step 2 (same variable name, now defined earlier) — no change needed to this line itself, just confirm it still compiles once the earlier duplicate declaration is gone (two `const collaborators = ...` in the same function scope is a syntax error, so this step isn't optional).
+should now reference the `collaborators` computed in Step 2 (same variable name, now defined earlier) - no change needed to this line itself, just confirm it still compiles once the earlier duplicate declaration is gone (two `const collaborators = ...` in the same function scope is a syntax error, so this step isn't optional).
 
 - [ ] **Step 4: Typecheck**
 
 Run: `cd /home/ridit/Documents/Pixl/apps/dashboard && bunx tsc --noEmit 2>&1 | head -50`
-Expected: no errors mentioning `actions.ts`. (Pre-existing unrelated errors elsewhere in the dashboard, if any, aren't this task's concern — only check for new ones in the file you touched.)
+Expected: no errors mentioning `actions.ts`. (Pre-existing unrelated errors elsewhere in the dashboard, if any, aren't this task's concern - only check for new ones in the file you touched.)
 
 - [ ] **Step 5: Commit**
 
@@ -192,7 +192,7 @@ git commit -m "reviewProject: approve if anyone on the ship clears the trial's m
 ### Task 3: Per-collaborator Trial hold + reward in the payout loop
 
 **Files:**
-- Modify: `apps/dashboard/app/actions.ts` (the collaborator split-payout loop, ~line 995-1032 in the pre-Task-2 file — line numbers shift after Task 2's edits, find it by the comment below)
+- Modify: `apps/dashboard/app/actions.ts` (the collaborator split-payout loop, ~line 995-1032 in the pre-Task-2 file, line numbers shift after Task 2's edits, find it by the comment below)
 
 - [ ] **Step 1: Replace the collaborator payout loop**
 
@@ -241,9 +241,9 @@ Replace with:
 ```ts
   // Split payout: every accepted collaborator is credited independently at
   // their own rate tier for their own submitted hours slice (capped at what
-  // they actually tracked — see claimedHoursForCollaborator). A collaborator
+  // they actually tracked , see claimedHoursForCollaborator). A collaborator
   // whose own hours clear the Trial's min_hours gets the same held-reward
-  // treatment the owner gets — see [[trial-reward-collaboration]] — instead
+  // treatment the owner gets , see [[trial-reward-collaboration]] , instead
   // of an immediate payout.
   for (const c of collaborators) {
     const cCreditHours = collaboratorCreditHours.get(c.id)!;
@@ -304,7 +304,7 @@ Replace with:
   }
 ```
 
-Note: `trialMinHours` and `trialPrize` are already computed once earlier in the function for the owner's payout (`const trialMinHours = ...`, `const trialPrize = linkedTrial ? await trialPrizeFor(linkedTrial) : null;`) — this loop reuses those same two variables, it does not recompute them.
+Note: `trialMinHours` and `trialPrize` are already computed once earlier in the function for the owner's payout (`const trialMinHours = ...`, `const trialPrize = linkedTrial ? await trialPrizeFor(linkedTrial) : null;`) - this loop reuses those same two variables, it does not recompute them.
 
 - [ ] **Step 2: Typecheck**
 
@@ -351,7 +351,7 @@ router.post("/api/projects/:id/trial-reward", async (req, res) => {
   if (!project) return res.status(404).json({ ok: false });
 
   // Owner, or an accepted collaborator with their own pending Trial reward on
-  // this ship (see [[trial-reward-collaboration]]) — each settles against
+  // this ship (see [[trial-reward-collaboration]]) , each settles against
   // their own row, independently of what the other picks.
   const isOwner = project.user_id === session.userId;
   let collabRow: {
@@ -434,7 +434,7 @@ router.post("/api/projects/:id/trial-reward", async (req, res) => {
   // anything bought with pixels. Prefers the Trial's linked catalog item,
   // falls back to its free-text reward as a custom order ops fulfils by hand.
   // The order is attributed to session.userId (owner or collaborator) via
-  // shop_orders.user_id — fulfilment doesn't need to know which one it was.
+  // shop_orders.user_id , fulfilment doesn't need to know which one it was.
   let itemId: number | null = null;
   let itemName = (trial!.reward as string) || (trial!.name as string);
   if (trial!.prize_shop_item_id) {
@@ -465,7 +465,7 @@ router.post("/api/projects/:id/trial-reward", async (req, res) => {
     await supabase.from(table).update({ trial_reward_choice: "pending" }).eq("id", matchId);
     return res.status(500).json({ ok: false });
   }
-  // trial_prize_order_id only exists on `projects` (owner-only column) —
+  // trial_prize_order_id only exists on `projects` (owner-only column) ,
   // nothing currently reads it back for a collaborator, and the order is
   // already correctly attributed via shop_orders.user_id regardless of who
   // claimed it, so no equivalent column was added to project_collaborators.
@@ -534,7 +534,7 @@ Replace with:
     .eq("status", "accepted");
   const collabProjectIds = (collabRows ?? []).map((r) => r.project_id as number);
   // A collaborator's own Trial-reward state, separate from the project row's
-  // (owner's) fields of the same name — see [[trial-reward-collaboration]].
+  // (owner's) fields of the same name , see [[trial-reward-collaboration]].
   // Prefixed "my_" so the client can tell the two apart on the same object.
   const myCollabTrialFields = new Map(
     (collabRows ?? []).map((r) => [
@@ -601,7 +601,7 @@ git commit -m "projects: GET /api/projects exposes a collaborator's own trial re
 
 ---
 
-### Task 6: Web UI — collaborator trial-claim block
+### Task 6: Web UI - collaborator trial-claim block
 
 **Files:**
 - Modify: `apps/game/web/projects/index.html`
@@ -847,5 +847,5 @@ git commit -m "review: show reviewers whether each collaborator's hours clear th
 ## Self-Review Notes
 
 - **Spec coverage:** all six numbered design sections have a task (schema → Task 1, gate → Task 2, payout loop → Task 3, settlement route → Task 4, web UI → Task 6, reviewer indicator → Task 7); Task 5 (exposing the fields via `GET /api/projects`) is the concrete answer to the spec's open question about "where exactly a collaborator sees their own pending reward." Edge cases from the spec (re-approval not reopening an already-settled choice) are handled by the `cTrialChoice !== "pixels"` / `!== "item"` guards in Task 3, mirroring the owner's existing guards exactly.
-- **Type consistency:** `collaboratorCreditHours` (Task 2) is read in both the gate check and Task 3's loop by the same key (`c.id`, the `project_collaborators` row id) — confirmed consistent. `my_trial_reward_choice`/`my_trial_held_px`/`my_trial_prize_px` (Task 5) are read by exactly those names in Task 6's `collabTrialRewardHtml`/button-wiring — confirmed consistent. `trialMinHours`/`trialName` prop names (Task 7) match `trial?.minHours`/`trial?.name`, the same `TrialInfo` shape already used elsewhere in `ReviewForm.tsx`.
+- **Type consistency:** `collaboratorCreditHours` (Task 2) is read in both the gate check and Task 3's loop by the same key (`c.id`, the `project_collaborators` row id) - confirmed consistent. `my_trial_reward_choice`/`my_trial_held_px`/`my_trial_prize_px` (Task 5) are read by exactly those names in Task 6's `collabTrialRewardHtml`/button-wiring - confirmed consistent. `trialMinHours`/`trialName` prop names (Task 7) match `trial?.minHours`/`trial?.name`, the same `TrialInfo` shape already used elsewhere in `ReviewForm.tsx`.
 - **No placeholders:** every step has complete, copy-pasteable code; the one deliberately-deferred decision (Task 1 Step 3, when to actually run the migration against prod) is a scheduling question for the user given this session's history with prod actions, not a missing detail.

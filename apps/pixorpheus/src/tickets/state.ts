@@ -12,7 +12,7 @@ export const pendingTickets = new Map<
   { event: PendingTicketEvent; timer: ReturnType<typeof setTimeout> }
 >();
 
-/** "Set a title" prompt messages, keyed by ticket msg_ts — deleted once the
+/** "Set a title" prompt messages, keyed by ticket msg_ts, deleted once the
  * user sets/skips the title or the ticket gets resolved. */
 export const titlePrompts = new Map<string, { channel: string; ts: string }>();
 

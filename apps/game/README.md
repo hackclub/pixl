@@ -68,7 +68,7 @@ A real-time top-down world. Explore the shared **open world** with other players
 The more project you ship, the best merchants you unlock in your village, meaning that they will pay you more !
 
 ### Pixel Economy (for the future ysws, not implemented yet)
-Earn **Pixels** by shipping projects. Spend them in the shop on prizes. Prices are enforced server-side — no spoofing possible.
+Earn **Pixels** by shipping projects. Spend them in the shop on prizes. Prices are enforced server-side, no spoofing possible.
 
 ### Character Customisation 
 Choose from 5 preset character skins, or open the **Skin Editor** to draw a completely custom 16×16 avatar. Your skin is saved to your account and broadcast to all nearby players.
@@ -92,7 +92,7 @@ Client
 
 - Accounts and tokens are stored in the SQLite `accounts` table with a 30-day sliding session expiry.
 - Game state (position, pixels) is keyed by Hack Club account ID.
-- **One active session per account** — a new login kicks the previous session.
+- **One active session per account** - a new login kicks the previous session.
 
 ---
 

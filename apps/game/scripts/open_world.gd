@@ -18,8 +18,8 @@ func _process(_delta: float) -> void:
 	_dialogue_was_open = Dialogue.is_open
 
 # A Trial-giver (Ridit/Wren/Rill/Cass) hides from the open world once their
-# Trial is accepted — they've relocated to the village to check in on the
-# player — and reappears once it's completed, with a one-time "welcome back"
+# Trial is accepted, they've relocated to the village to check in on the
+# player, and reappears once it's completed, with a one-time "welcome back"
 # pixel-dust burst. Mirrors village.gd's _reveal_trial_npcs poll.
 func _sync_trial_givers() -> void:
 	if NetworkManager.session_token == "":

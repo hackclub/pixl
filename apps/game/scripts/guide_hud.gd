@@ -86,7 +86,7 @@ func fetch_onboarding_step(cb: Callable) -> void:
 	_fetch_onboarding(cb)
 
 # Read the player's shared onboarding step, then call cb(step). Silently does
-# nothing on any error (offline, pre-migration) — better to skip onboarding than
+# nothing on any error (offline, pre-migration), better to skip onboarding than
 # to spam it.
 func _fetch_onboarding(cb: Callable) -> void:
 	if NetworkManager.session_token == "":

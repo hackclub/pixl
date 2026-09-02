@@ -1,5 +1,5 @@
 extends CanvasLayer
-## First-Trial checklist — a persistent, NON-blocking tracker that walks every new
+## First-Trial checklist, a persistent, NON-blocking tracker that walks every new
 ## Builder through their first Trial, one step at a time: meet the Trial-giver
 ## (Ridit, out in the frontier) → create the project → set up Hackatime → build it
 ## → ship it.
@@ -7,7 +7,7 @@ extends CanvasLayer
 ## onboarding.gd calls begin() for everyone at the end of arrival. From then on the
 ## tracker lives across scenes and sessions, follows real progress by polling the
 ## server (projects + Hackatime + sidequests), checks steps off as they land, and
-## pops a short Pixo line at each milestone. It never pushes a UI blocker — the
+## pops a short Pixo line at each milestone. It never pushes a UI blocker, the
 ## player can walk, chat and tab out to the browser the whole time.
 
 const THEME := preload("res://themes/main_theme.tres")
@@ -90,7 +90,7 @@ func _ready() -> void:
 
 # ── public ───────────────────────────────────────────────────────────────────
 
-## Start (or restart) the guide — called from the beginner onboarding opt-in.
+## Start (or restart) the guide, called from the beginner onboarding opt-in.
 func begin() -> void:
 	_active = true
 	_step = S_MEET
@@ -113,7 +113,7 @@ func _process(_delta: float) -> void:
 	var scene := _current_scene_name()
 	if scene != _last_scene:
 		_last_scene = scene
-		# Left the world (quit to menu / logout) — clear any milestone line of ours
+		# Left the world (quit to menu / logout), clear any milestone line of ours
 		# so it doesn't linger over the main menu or login.
 		if not _in_gameplay() and _said_open and Dialogue.is_open:
 			Dialogue.close()
@@ -145,7 +145,7 @@ func _notification(what: int) -> void:
 func _poll() -> void:
 	if not _active or NetworkManager.session_token == "":
 		return
-	# A poll is in flight — skip, unless it's been stuck too long (safety net so a
+	# A poll is in flight - skip, unless it's been stuck too long (safety net so a
 	# wedged request can never permanently stop the checklist from updating).
 	if _busy and Time.get_ticks_msec() - _busy_at < 20000:
 		return
@@ -169,7 +169,7 @@ func _poll() -> void:
 		if st == "shipped" or st == "fraud_review" or st == "second_review" or st == "approved":
 			shipped = true
 			break
-	# The "meet" step clears once a Trial is accepted (unlocked, not yet done) —
+	# The "meet" step clears once a Trial is accepted (unlocked, not yet done),
 	# or once they've started a project on their own (going off-map is fine).
 	var accepted := false
 	var quest_list: Array = quests.get("quests", []) if typeof(quests.get("quests")) == TYPE_ARRAY else []
@@ -196,7 +196,7 @@ func _apply_step(new_step: int) -> void:
 	if new_step == _step:
 		return
 	# Announce the most recent completion (index new_step - 1), but only while the
-	# player's actually in the world — a poll can advance the step on the main menu
+	# player's actually in the world, a poll can advance the step on the main menu
 	# / login (e.g. a stale saved step catching up on load), and a Pixo line has no
 	# business popping over the menu.
 	if new_step > _step and _in_gameplay():
@@ -222,7 +222,7 @@ func _build_ui() -> void:
 	_root.visible = false
 	add_child(_root)
 
-	# Pinned to the right edge — the left side is crowded with the wallet/chat/HUD.
+	# Pinned to the right edge, the left side is crowded with the wallet/chat/HUD.
 	var panel := PanelContainer.new()
 	panel.anchor_left = 1.0
 	panel.anchor_right = 1.0
@@ -366,7 +366,7 @@ func _render() -> void:
 		_hint.text = STEP_HINT[_step]
 		_action_btn.text = STEP_ACTIONS[_step]
 		# The "meet Ridit" step reads differently once you're already out in the
-		# frontier — don't tell (or send) someone to the Lobbies they're standing in.
+		# frontier, don't tell (or send) someone to the Lobbies they're standing in.
 		if _step == S_MEET and _current_scene_name() == "open_world":
 			_hint.text = "You're in the frontier. Walk up to Ridit and talk to him to take his Trial. (Or start your own project instead.)"
 			_action_btn.text = "Start my own project"
@@ -376,8 +376,8 @@ func _toggle_collapse() -> void:
 	_skip_armed = false
 	_render()
 
-## Skipping is one-way — the guide only comes back through the onboarding opt-in
-## — so it takes two taps rather than throwing the trial away on a stray click.
+## Skipping is one-way, the guide only comes back through the onboarding opt-in,
+## so it takes two taps rather than throwing the trial away on a stray click.
 func _on_skip() -> void:
 	if not _skip_armed:
 		_skip_armed = true
@@ -407,7 +407,7 @@ func _on_action() -> void:
 	WebPages.open(STEP_PAGES[_step])
 
 func _say(line: String) -> void:
-	# Non-blocking nudge — Dialogue doesn't freeze movement, and we don't await it.
+	# Non-blocking nudge, Dialogue doesn't freeze movement, and we don't await it.
 	if line == "":
 		return
 	Dialogue.open(PIXO, [line])
@@ -444,7 +444,7 @@ func _api_get(path: String) -> Dictionary:
 	add_child(req)
 	var url := NetworkManager.SERVER_HTTP_URL + path
 	url += ("&" if path.contains("?") else "?") + "token=" + NetworkManager.session_token.uri_encode()
-	# If request() itself fails, request_completed never fires — bail now so the
+	# If request() itself fails, request_completed never fires - bail now so the
 	# caller's await can't hang forever (which would wedge _busy and stop polling).
 	if req.request(url, PackedStringArray(), HTTPClient.METHOD_GET) != OK:
 		req.queue_free()

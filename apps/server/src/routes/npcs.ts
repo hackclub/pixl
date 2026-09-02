@@ -4,7 +4,7 @@ import { supabase } from "../db/client.js";
 
 const router = Router();
 
-// Worlds the client can ask for. Anything else is a typo or a probe — reject it
+// Worlds the client can ask for. Anything else is a typo or a probe, reject it
 // rather than running a query that can only return nothing.
 const WORLDS = new Set(["village", "open_world"]);
 
@@ -15,7 +15,7 @@ const WORLDS = new Set(["village", "open_world"]);
 // `trial_name` is resolved from the joined sidequests row rather than stored on
 // the NPC: npc.gd matches its Trial by name, and reading the live name here means
 // renaming a Trial in the dashboard can't silently orphan its giver. An inactive
-// Trial resolves to "" for the same reason /api/sidequests hides it — the NPC
+// Trial resolves to "" for the same reason /api/sidequests hides it, the NPC
 // then falls through to its flavor-text branch instead of offering a dead quest.
 router.get("/api/npcs", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";

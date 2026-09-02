@@ -22,7 +22,7 @@ func _step() -> void:
 
 # Pump frames until `pred` is true or we hit `budget` frames (guards against a
 # hang if the condition never holds). Headless delta is tiny, so the typewriter
-# reveals ~1 char/frame — a short line still needs a few dozen frames.
+# reveals ~1 char/frame, a short line still needs a few dozen frames.
 func _pump_until(pred: Callable, budget: int = 400) -> bool:
 	for i in budget:
 		if pred.call():
@@ -87,7 +87,7 @@ func _run() -> void:
 	var typed1 = await _pump_until(func(): return not D._typing)
 	check(typed1, "first prompt line finishes typing")
 	check(not D._choices.visible, "choices hidden until the last prompt line")
-	D.advance()  # [E] on line 1 — must move to line 2, NOT be a no-op (the bug)
+	D.advance()  # [E] on line 1, must move to line 2, NOT be a no-op (the bug)
 	check(D._body.text.begins_with("How much"), "[E] walks to the next prompt line in choice mode")
 	var shown2 = await _pump_until(func(): return D._choices.visible and D._choices.get_child_count() == 2)
 	check(shown2, "choices reveal after the final prompt line")

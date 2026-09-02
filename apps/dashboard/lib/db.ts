@@ -622,7 +622,7 @@ export async function listFraudReviewProjects(): Promise<ShippedProject[]> {
 // project they first-passed). Returns null when the queue is empty for them.
 export async function nextReviewId(opts: {
   viewer: string; // reviewer slack id
-  by: string; // actorName(access) — matches first_pass_by
+  by: string; // actorName(access), matches first_pass_by
   canSecondPass: boolean;
   isSuper: boolean;
   excludeId: number;
@@ -687,7 +687,7 @@ export async function revokeProjectPixels(
 }
 
 // Net pixels one beneficiary has been credited on a project so far (for delta
-// display). Scoped by user_id, not just project_id — a collaborative project
+// display). Scoped by user_id, not just project_id, a collaborative project
 // can have several independent beneficiaries, and credit_project_pixels
 // (0081_project_collaborators.sql) scopes its own "already credited" lookup
 // the same way.
@@ -762,7 +762,7 @@ export async function countPendingReviews(
 }
 
 // Second-pass queue count for the "Second pass" tab badge (super-admins
-// only) — a cheap head count, same shape as countPendingReviews above.
+// only), a cheap head count, same shape as countPendingReviews above.
 export async function countSecondPassReviews(): Promise<number> {
   const { count, error } = await db
     .from("projects")
@@ -2315,7 +2315,7 @@ export interface CollaboratorRow {
 }
 
 // Accepted (and, for the reviewer's own visibility, pending) collaborators on
-// one project — the owner in `projects.user_id` is never included here.
+// one project, the owner in `projects.user_id` is never included here.
 export async function listCollaboratorsForProject(projectId: number): Promise<CollaboratorRow[]> {
   const { data, error } = await db
     .from("project_collaborators")
@@ -2330,7 +2330,7 @@ export async function listCollaboratorsForProject(projectId: number): Promise<Co
   return (data ?? []) as CollaboratorRow[];
 }
 
-// Bulk lookup for list views — only accepted collaborators (what's actually
+// Bulk lookup for list views, only accepted collaborators (what's actually
 // worth showing next to the owner in a table row).
 export async function collaboratorsByProject(
   projectIds: number[],

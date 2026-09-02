@@ -111,7 +111,7 @@ app.command("/pixl-urban", async ({ command, ack, respond }) => {
   }
 });
 
-// /pixl-fact — random interesting fact
+// /pixl-fact - random interesting fact
 app.command("/pixl-fact", async ({ command, ack, client }) => {
   await ack();
   if (!checkAiRateLimit(command.user_id)) {

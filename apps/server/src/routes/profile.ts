@@ -99,7 +99,7 @@ router.get("/api/profile/experience", async (req, res) => {
     .select("coding_experience")
     .eq("id", session.userId)
     .maybeSingle();
-  // Before 0050 the column doesn't exist — treat as "not asked yet".
+  // Before 0050 the column doesn't exist, treat as "not asked yet".
   const raw = error ? null : (data?.coding_experience ?? null);
   const experience = EXPERIENCE_VALUES.includes(raw as Experience)
     ? (raw as Experience)
@@ -211,7 +211,7 @@ router.post("/api/profile/card-image", async (req, res) => {
   res.json({ ok: true });
 });
 
-// Cross-app onboarding progress — a single forward-only counter shared by the
+// Cross-app onboarding progress, a single forward-only counter shared by the
 // in-game first-run guide (apps/game/scripts/guide_hud.gd) and the web dashboard
 // tour (apps/game/web/pixl.js) so they hand off to each other rather than
 // running as two separate walkthroughs. 0 = new, 1 = game intro done (dashboard
@@ -220,7 +220,7 @@ const ONBOARDING_DONE = 2;
 
 // Rollout gate: while the redesigned arrival flow was being tested, only these
 // Slack IDs got it. Everyone else read as fully onboarded so neither the game
-// nor the dashboard ran it. Empty set = allow everyone — flipped for launch.
+// nor the dashboard ran it. Empty set = allow everyone, flipped for launch.
 // Both apps gate on this one endpoint, so this keeps the game and the
 // dashboard in sync automatically.
 const ONBOARDING_ALLOWLIST = new Set<string>([]);
@@ -244,7 +244,7 @@ router.get("/api/profile/onboarding", async (req, res) => {
     return res.json({ ok: true, step: ONBOARDING_DONE, done: true });
   }
 
-  // Before the 0046 migration is applied the column doesn't exist — treat that
+  // Before the 0046 migration is applied the column doesn't exist, treat that
   // as "brand new" rather than failing the request.
   const step = error ? 0 : Math.max(0, Number(data?.onboarding_step) || 0);
   res.json({ ok: true, step, done: step >= ONBOARDING_DONE });
@@ -298,7 +298,7 @@ router.post("/api/profile/card-pixelate", async (req, res) => {
 
 // Birthday + mailing address now come from Hack Club Auth at login (see
 // src/routes/auth.ts's extractBirthday/extractAddress) rather than a
-// self-report form — self-reporting a birthday would defeat the point of
+// self-report form, self-reporting a birthday would defeat the point of
 // using it for the YSWS age-eligibility check below, so there's no write
 // path for either field here anymore.
 const ADDRESS_FIELDS = [

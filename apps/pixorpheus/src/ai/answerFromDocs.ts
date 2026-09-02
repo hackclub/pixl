@@ -1,12 +1,12 @@
 // "Answer from the docs" pipeline. Given a question:
-//   1. check the answered-questions cache (pixo_qa_cache) — an exact or very
+//   1. check the answered-questions cache (pixo_qa_cache), an exact or very
 //      similar past question is answered instantly, no docs fetch, no model call
 //   2. otherwise fetch the (cached) docs corpus and ask the model to answer
 //      using ONLY the docs; if the docs don't cover it, we return null
 //   3. a fresh answer is stored so the next similar question is a cache hit
 //
-// The docs text only ever enters this dedicated call — never the main chat
-// system prompt — so ordinary messages don't pay the doc token cost.
+// The docs text only ever enters this dedicated call, never the main chat
+// system prompt, so ordinary messages don't pay the doc token cost.
 
 import { aiPost } from "./client.js";
 import { getDocsCorpus } from "./docs.js";
@@ -90,7 +90,7 @@ async function storeAnswer(question: string, norm: string, answer: string): Prom
  * Answer a question from the docs, or return null if the docs don't cover it
  * (the signal to fall back to a human helper). Only ever called on messages
  * already posted in the #pixl-help ticket channel (see tickets/service.ts),
- * so an answer that tells the asker to go post in #pixl-help is nonsensical —
+ * so an answer that tells the asker to go post in #pixl-help is nonsensical,
  * they're already there. The system prompt below rules that out statically
  * rather than interpolating the channel per-message, which would bust the
  * prompt cache (see the "never interpolate per-message values" invariant).
@@ -118,11 +118,11 @@ export async function answerQuestion(rawQuestion: string): Promise<DocsAnswer | 
         {
           role: "system",
           content:
-            "You are pixo, the Pixl help bot. Answer the user's question using ONLY the Pixl docs and the remembered facts provided below — the remembered facts are hand-entered by the support team and take priority over the docs if they conflict. " +
+            "You are pixo, the Pixl help bot. Answer the user's question using ONLY the Pixl docs and the remembered facts provided below, the remembered facts are hand-entered by the support team and take priority over the docs if they conflict. " +
             "Be concise, friendly and clear (casual lowercase is fine, no markdown headers, 1-4 sentences). " +
             `If neither the docs nor the remembered facts contain the answer, reply with exactly ${NO_ANSWER} and nothing else. ` +
             "Never invent facts that aren't in the docs or the remembered facts. " +
-            "This answer is always posted as a reply in the #pixl-help channel, where the user already is — never tell them to ask in #pixl-help or contact the support team, they're already talking to a helper thread there.\n\n=== PIXL DOCS ===\n" +
+            "This answer is always posted as a reply in the #pixl-help channel, where the user already is, never tell them to ask in #pixl-help or contact the support team, they're already talking to a helper thread there.\n\n=== PIXL DOCS ===\n" +
             corpus +
             facts,
         },

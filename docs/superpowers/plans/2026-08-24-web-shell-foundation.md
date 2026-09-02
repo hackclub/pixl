@@ -18,13 +18,13 @@ catch one thing: `apps/web-shell/next.config.ts` currently sets
 `basePath: "/docs"`, chosen when this app only ever served docs pages
 (see that file's own comment: "this app's own route tree has no literal
 `docs` segment"). `basePath` prefixes **every** route in the app, not just
-the ones that need it — so the moment this plan adds `/dashboard` as a
+the ones that need it - so the moment this plan adds `/dashboard` as a
 second, non-`/docs` route, `basePath` would silently serve it at
 `/docs/dashboard` instead. That was never a live problem before because
 docs was the *only* content this app had. Task 2 below removes `basePath`
 entirely and gives docs pages their real `/docs/...` path segment
 literally instead, matching every other page family from here on. This is
-a mechanical fix, not a design change — nothing about the docs *content*
+a mechanical fix, not a design change - nothing about the docs *content*
 or its cutover in `apps/landing/next.config.ts` (already live) is affected.
 
 ---
@@ -40,10 +40,10 @@ Moved:
 - `apps/web-shell/public/icon.svg` → `apps/web-shell/public/docs/icon.svg`
 
 Deleted:
-- `apps/web-shell/public/img/cursor/` (both PNGs) — becomes a dead duplicate once the cursor rule points at the always-available `/img/cursor/...` path (see Task 2)
+- `apps/web-shell/public/img/cursor/` (both PNGs) - becomes a dead duplicate once the cursor rule points at the always-available `/img/cursor/...` path (see Task 2)
 
 New:
-- `apps/web-shell/app/docs/page.tsx` — the real `/docs` index redirect (was the root `app/page.tsx`, relying on `basePath`)
+- `apps/web-shell/app/docs/page.tsx` - the real `/docs` index redirect (was the root `app/page.tsx`, relying on `basePath`)
 - `apps/web-shell/.env.example`
 - `apps/web-shell/lib/session.ts` + `lib/session.test.ts`
 - `apps/web-shell/lib/server-api.ts`
@@ -59,25 +59,25 @@ New:
 - `apps/web-shell/public/dashboard/og.png` (copied from `apps/game/web/dashboard/og.png`)
 
 Modified:
-- `apps/web-shell/next.config.ts` — remove `basePath`
-- `apps/web-shell/app/page.tsx` — now redirects to `/docs` (was redirecting to the first slug directly, relying on `basePath` to add the `/docs` prefix)
-- `apps/web-shell/app/docs/[slug]/layout.tsx` — fix the `docs.css` import path, now that it moved alongside instead of one level up
-- `apps/web-shell/app/docs/[slug]/docs-shell.tsx` — fix nav `Link` hrefs to include the literal `/docs/` prefix
-- `apps/web-shell/app/globals.css` — fix the cursor rule's asset path, append the shared shell/component CSS
-- `apps/web-shell/package.json` — add `jsonwebtoken` + `@types/jsonwebtoken`
-- `CLAUDE.md` — describe the new route structure, auth, and shell layout
+- `apps/web-shell/next.config.ts` - remove `basePath`
+- `apps/web-shell/app/page.tsx` - now redirects to `/docs` (was redirecting to the first slug directly, relying on `basePath` to add the `/docs` prefix)
+- `apps/web-shell/app/docs/[slug]/layout.tsx` - fix the `docs.css` import path, now that it moved alongside instead of one level up
+- `apps/web-shell/app/docs/[slug]/docs-shell.tsx` - fix nav `Link` hrefs to include the literal `/docs/` prefix
+- `apps/web-shell/app/globals.css` - fix the cursor rule's asset path, append the shared shell/component CSS
+- `apps/web-shell/package.json` - add `jsonwebtoken` + `@types/jsonwebtoken`
+- `CLAUDE.md` - describe the new route structure, auth, and shell layout
 
 ---
 
 ### Task 1: Read the Next 16 docs for middleware/proxy, route handlers, and Server Component params
 
-**Files:** none (research only — already done once while writing this plan; documented here so the finding is on record and Task 4 reflects it)
+**Files:** none (research only, already done once while writing this plan; documented here so the finding is on record and Task 4 reflects it)
 
 - [x] **Step 1: Confirm the App Router APIs this plan assumes**
 
 Read from `apps/web-shell/node_modules/next/dist/docs/`:
 - Route `params` in a page/layout/route handler are `Promise`-typed
-  (`params: Promise<{ slug: string }>`, `await params`) — confirmed both
+  (`params: Promise<{ slug: string }>`, `await params`) - confirmed both
   for pages (already true for this app since the docs slice) and for
   Route Handlers specifically
   (`01-app/03-api-reference/03-file-conventions/route.md`: `{ params }:
@@ -90,9 +90,9 @@ Read from `apps/web-shell/node_modules/next/dist/docs/`:
   and `03-file-conventions/proxy.md`: "The `middleware` file convention is
   deprecated and has been renamed to `proxy`"). The exported function is
   now named `proxy` (or a default export), not `middleware`; everything
-  else — `NextResponse.redirect`/`.next()`/`.json()`, `res.cookies.set()`,
-  the `matcher` config shape — is unchanged. `apps/dashboard/middleware.ts`
-  predates this rename and keeps working (deprecated, not removed) — that
+  else - `NextResponse.redirect`/`.next()`/`.json()`, `res.cookies.set()`,
+  the `matcher` config shape - is unchanged. `apps/dashboard/middleware.ts`
+  predates this rename and keeps working (deprecated, not removed) - that
   file is unrelated to this plan and out of scope to update. Task 4 below
   is written as `proxy.ts`/`export function proxy`, the current
   convention, since this is new code in a new app with no reason to
@@ -100,7 +100,7 @@ Read from `apps/web-shell/node_modules/next/dist/docs/`:
 
 ---
 
-### Task 2: Fix the basePath conflict — give docs pages a literal `/docs` route
+### Task 2: Fix the basePath conflict - give docs pages a literal `/docs` route
 
 **Files:**
 - Move: `app/[slug]/page.tsx` → `app/docs/[slug]/page.tsx`
@@ -126,7 +126,7 @@ git mv public/icon.svg public/docs/icon.svg
 
 - [ ] **Step 2: Remove `basePath` from `next.config.ts`**
 
-**Modify** `apps/web-shell/next.config.ts` — replace the whole file:
+**Modify** `apps/web-shell/next.config.ts` - replace the whole file:
 
 ```ts
 import type { NextConfig } from "next";
@@ -144,14 +144,14 @@ const nextConfig: NextConfig = {
 export default nextConfig;
 ```
 
-`basePath: "/docs"` is gone — every route now lives at its own literal
+`basePath: "/docs"` is gone - every route now lives at its own literal
 path segment (`app/docs/...` for docs, `app/(shell)/dashboard` for
 dashboard, and so on for future slices), same as every other app in this
 repo. No app-wide prefix to reason about.
 
 - [ ] **Step 3: Split the root page into a dev-convenience redirect, and add the real `/docs` index redirect**
 
-**Modify** `apps/web-shell/app/page.tsx` — replace the whole file:
+**Modify** `apps/web-shell/app/page.tsx` - replace the whole file:
 
 ```tsx
 import { redirect } from "next/navigation";
@@ -182,7 +182,7 @@ export default async function DocsIndexPage() {
 - [ ] **Step 4: Confirm the moved layout's CSS import still resolves**
 
 After Task 2 Step 1's `git mv`, `layout.tsx` sits at
-`app/docs/[slug]/layout.tsx` and `docs.css` sits at `app/docs/docs.css` —
+`app/docs/[slug]/layout.tsx` and `docs.css` sits at `app/docs/docs.css`,
 the same one-level-up relationship they had before the move
 (`app/[slug]/layout.tsx` → `app/[slug]/../docs.css`). So the existing
 `import "../docs.css";` line is already correct and needs no edit; just
@@ -193,7 +193,7 @@ Expected: `import "../docs.css";`
 
 - [ ] **Step 5: Fix the docs sidebar's nav links to the literal `/docs/` prefix**
 
-**Modify** `apps/web-shell/app/docs/[slug]/docs-shell.tsx` — the nav
+**Modify** `apps/web-shell/app/docs/[slug]/docs-shell.tsx` - the nav
 `Link` used to read `href={`/${i.slug}/`}` and rely on `basePath` to add
 `/docs`. Find:
 
@@ -217,24 +217,24 @@ Replace with:
 
 Also find the icon image reference, which correctly already carries an
 explicit `/docs/` prefix (plain `<img>`, never auto-prefixed by
-`basePath` even before this change) — leave it as-is, just confirm it
+`basePath` even before this change) - leave it as-is, just confirm it
 still resolves now that the file backing it moved to `public/docs/icon.svg`:
 
 Run: `grep -n 'src="/docs/icon.svg"' "apps/web-shell/app/docs/[slug]/docs-shell.tsx"`
-Expected: one match — no edit needed, the path was already right.
+Expected: one match, no edit needed, the path was already right.
 
 - [ ] **Step 6: Fix the global cursor rule, and drop the now-redundant duplicate PNGs**
 
-**Modify** `apps/web-shell/app/globals.css` — the cursor rule was written
+**Modify** `apps/web-shell/app/globals.css` - the cursor rule was written
 with an explicit `/docs/` prefix because, under `basePath`, that was the
 only way to reach this app's own `public/img/cursor/*.png`. Without
 `basePath`, `public/img/cursor/*.png` serves at plain `/img/cursor/*.png`
-— which collides with `apps/landing/next.config.ts`'s existing
+, which collides with `apps/landing/next.config.ts`'s existing
 `{ source: "/img/:path*", destination: GAME_ORIGIN/img/:path* }` rewrite,
 meaning that path is already, always served by the old game origin
 regardless of which app rendered the referring page. `apps/game/web/img/cursor/`
 holds the identical two files, so switching to the bare path is not a
-functional change — it just means this app no longer needs its own copy.
+functional change, it just means this app no longer needs its own copy.
 Find:
 
 ```css
@@ -276,7 +276,7 @@ Expected: no errors.
 Run: `bun run --cwd apps/web-shell dev`
 Visit `http://localhost:4901/` → should redirect to `/docs` → redirect to `/docs/welcome/`.
 Click through a few doc pages, confirm the sidebar, nav-group expand/collapse persistence, and theme picker all still work exactly as before (this task moved files and fixed paths, it must not change docs' behavior at all).
-Confirm the pixel cursor still renders over links/buttons (open dev tools' Network tab, reload, and check `/img/cursor/cursor-arrow.png` returns 200 — it's served by the proxy to the game origin in production, but in local dev without `apps/landing` running, this request will 404 harmlessly; that's expected and not a regression to chase down here).
+Confirm the pixel cursor still renders over links/buttons (open dev tools' Network tab, reload, and check `/img/cursor/cursor-arrow.png` returns 200 - it's served by the proxy to the game origin in production, but in local dev without `apps/landing` running, this request will 404 harmlessly; that's expected and not a regression to chase down here).
 
 - [ ] **Step 8: Commit**
 
@@ -288,7 +288,7 @@ git commit -m "fix apps/web-shell's basePath conflict: docs gets a literal /docs
 
 ---
 
-### Task 3: Auth infrastructure — session verification + server-side API helper
+### Task 3: Auth infrastructure - session verification + server-side API helper
 
 **Files:**
 - Create: `apps/web-shell/lib/session.ts`
@@ -299,7 +299,7 @@ git commit -m "fix apps/web-shell's basePath conflict: docs gets a literal /docs
 
 - [ ] **Step 1: Add `jsonwebtoken` to `apps/web-shell`**
 
-**Modify** `apps/web-shell/package.json` — add to `dependencies`:
+**Modify** `apps/web-shell/package.json` - add to `dependencies`:
 
 ```json
     "jsonwebtoken": "^9.0.2",
@@ -352,7 +352,7 @@ describe("verifySessionToken", () => {
 - [ ] **Step 3: Run the tests to verify they fail**
 
 Run: `bun test apps/web-shell/lib/session.test.ts`
-Expected: FAIL — `Cannot find module './session.ts'`
+Expected: FAIL - `Cannot find module './session.ts'`
 
 - [ ] **Step 4: Write `lib/session.ts`**
 
@@ -407,7 +407,7 @@ Expected: PASS (4 tests)
 - [ ] **Step 6: Write the server-side authenticated fetch helper**
 
 Server Components render with the request's cookies already available via
-`next/headers`, so they can call `apps/server` directly — no need to
+`next/headers`, so they can call `apps/server` directly, no need to
 round-trip through this app's own proxy route (that's only for Client
 Components, see Task 5).
 
@@ -462,7 +462,7 @@ git commit -m "add web-shell's session verification and server-side API helper"
 
 ---
 
-### Task 4: Proxy (formerly "middleware") — catch the HCA token handoff on any page
+### Task 4: Proxy (formerly "middleware") - catch the HCA token handoff on any page
 
 **Files:**
 - Create: `apps/web-shell/proxy.ts`
@@ -470,14 +470,14 @@ git commit -m "add web-shell's session verification and server-side API helper"
 - [ ] **Step 1: Write `proxy.ts`**
 
 Named `proxy.ts` with an exported `proxy` function, not the older
-`middleware.ts`/`middleware` — Next.js 16 deprecated that convention (see
+`middleware.ts`/`middleware`, Next.js 16 deprecated that convention (see
 Task 1's finding). `apps/dashboard/middleware.ts` predates the rename and
 keeps working as-is; it's a separate app and out of scope here.
 
 Unlike `apps/dashboard` (which runs its own OAuth exchange and always
 lands on one `/api/auth/callback`), `apps/server` still owns the whole
 Hack Club Auth exchange and redirects back to whatever `web_redirect`
-pointed at — the page the player started login from — with `?token=`
+pointed at - the page the player started login from - with `?token=`
 appended (see `apps/game/web/pixl.js`'s `loginUrl()`, ported to this app
 in Task 7's `lib/urls.ts`). This has to run on every request, not one
 route, to catch that redirect landing anywhere.
@@ -514,7 +514,7 @@ export const config = {
 ```
 
 This never verifies the token (that's `lib/session.ts`'s job, run later
-by whatever Server Component reads the cookie) — this function's only job
+by whatever Server Component reads the cookie) - this function's only job
 is "a token showed up in the URL, move it into the cookie and clean the
 URL up," identically whether the token turns out to be valid or not. An
 invalid/expired token just means `getSession()` returns `null` downstream,
@@ -617,7 +617,7 @@ describe("proxyRequest", () => {
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `bun test "apps/web-shell/app/api/proxy/[...path]/route.test.ts"`
-Expected: FAIL — `Cannot find module './route.ts'`
+Expected: FAIL - `Cannot find module './route.ts'`
 
 - [ ] **Step 3: Write `route.ts`**
 
@@ -679,7 +679,7 @@ export const DELETE = handle;
 Run: `bun test "apps/web-shell/app/api/proxy/[...path]/route.test.ts"`
 Expected: PASS (3 tests). If constructing `NextRequest` fails under
 `bun:test` (Task 1's docs check didn't cover this specifically), that's a
-real finding — read the error, and if `next/server`'s `NextRequest`
+real finding, read the error, and if `next/server`'s `NextRequest`
 genuinely isn't usable standalone under Bun's test runner, fall back to
 building the test around a plain `Request` cast to `NextRequest` for the
 `req.method`/`req.headers`/`req.arrayBuffer()` calls `proxyRequest` uses,
@@ -707,17 +707,17 @@ git commit -m "add the generic authenticated proxy route for client-side mutatio
 - [ ] **Step 1: Append the shared design-system CSS**
 
 Ported from `apps/game/web/pixl.css`, verbatim (same class names, same
-rules) — same "structural port, not a redesign" approach the docs slice
+rules), same "structural port, not a redesign" approach the docs slice
 already took for `docs.css`. Scoped to what this Foundation slice and
 `dashboard` actually render: the sidebar/topbar shell chrome, and the
 generic component classes every future page will also need (`.btn`,
 `.card`, `.panel`, page headers, the progress bar, chips, dots, the
 spinner, toasts, and the signed-out gate). Deliberately **not** ported
 here (add when a slice first needs them, not speculatively): `.csel`
-(custom `<select>` styling — no page in this slice has a `<select>`),
+(custom `<select>` styling, no page in this slice has a `<select>`),
 `.overlay`/`.modal`, `.trial-picker`, `.hud`.
 
-**Modify** `apps/web-shell/app/globals.css` — append after the existing
+**Modify** `apps/web-shell/app/globals.css` - append after the existing
 `:root[data-theme="dark"] { ... }` block:
 
 ```css
@@ -1040,7 +1040,7 @@ git commit -m "port the shared shell/component CSS from pixl.css into web-shell"
 
 - [ ] **Step 1: Write `lib/urls.ts`**
 
-Only `gameUrl` is needed for this slice (the gate's CTA) — a `loginUrl`
+Only `gameUrl` is needed for this slice (the gate's CTA) - a `loginUrl`
 helper for a direct in-place web login (the design doc's section 5 quotes
 `pixl.js`'s own comment on this) belongs to whichever future slice
 actually renders a "LOG IN" button (e.g. `calc`'s public, trimmed nav);
@@ -1138,11 +1138,11 @@ export const PALETTE_ICON = `<rect x="4" y="2" width="8" height="2"/><rect x="2"
 - [ ] **Step 3: Write the interactive nav Client Component**
 
 The mobile MORE sheet and the theme picker dropdown are the only genuinely
-interactive pieces — active-link highlighting derives from `usePathname()`
+interactive pieces, active-link highlighting derives from `usePathname()`
 so future pages need zero wiring to appear correctly highlighted, and the
 wallet/restoration numbers arrive as props already computed by the parent
 Server Component (Task 7 Step 4). The onboarding-tour help button
-(`pixl-help-btn` in `pixl.js`) is intentionally omitted — there's nothing
+(`pixl-help-btn` in `pixl.js`) is intentionally omitted, there's nothing
 for it to launch yet (see the migration design doc's addendum: the tour
 redesign is deferred to the `projects` slice).
 
@@ -1342,7 +1342,7 @@ export function ShellNav({
 relied on a `body.has-sidebar` CSS class (`padding-left: var(--sidebar);
 padding-top: var(--toprail);`, ported into `globals.css` in Task 6) to
 push page content right of the fixed-position sidebar and below the
-fixed-position toprail — matching how the old vanilla-JS `mountTopbar()`
+fixed-position toprail, matching how the old vanilla-JS `mountTopbar()`
 did it via `document.body.classList.add("has-sidebar")`. That doesn't
 work here: only the ROOT layout (`app/layout.tsx`, a different file, out
 of scope for this task) renders `<html>`/`<body>` in the App Router: a
@@ -1354,7 +1354,7 @@ the fixed sidebar.
 The fix (already reflected in the code sample below): a new `.shell-main`
 wrapper `<div>` that does the same padding job as `body.has-sidebar`, but
 scoped to an element this layout actually controls. This needed one small
-CSS addition alongside Task 6's port (not in `pixl.css` — a necessary
+CSS addition alongside Task 6's port (not in `pixl.css`, a necessary
 adaptation for this app's Server Component architecture, not a
 speculative addition): immediately after the existing `body.has-sidebar`
 rule in `apps/web-shell/app/globals.css`, add
@@ -1367,7 +1367,7 @@ harmless part of the verbatim `pixl.css` port).
 
 Fetches the wallet + restoration numbers server-side (no client loading
 flash), and renders the full-page gate for a signed-out visitor instead of
-any page content — matching `pixl.js`'s `gate()` behavior exactly (its CTA
+any page content, matching `pixl.js`'s `gate()` behavior exactly (its CTA
 always links to the game, never a web login link, even though a web login
 link exists elsewhere; this port keeps that same behavior rather than
 redesigning it).
@@ -1440,7 +1440,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
 Run: `bun run --cwd apps/web-shell typecheck`
 Expected: no errors. The `.shell-main` wrapper (see Step 4's correction
 note above) is what actually offsets page content around the fixed
-sidebar/toprail here — `body.has-sidebar` stays in `globals.css` unused,
+sidebar/toprail here, `body.has-sidebar` stays in `globals.css` unused,
 since a nested `(shell)` layout can't apply a class to `<body>`. Confirm
 this looks right visually in Task 9's manual check.
 
@@ -1579,7 +1579,7 @@ describe("barTrial", () => {
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `bun test "apps/web-shell/app/(shell)/dashboard/lib.test.ts"`
-Expected: FAIL — `Cannot find module './lib.ts'`
+Expected: FAIL - `Cannot find module './lib.ts'`
 
 - [ ] **Step 3: Write `lib.ts`, ported from `apps/game/web/dashboard/index.html`**
 
@@ -1713,7 +1713,7 @@ Expected: PASS (11 tests)
 
 - [ ] **Step 5: Port the dashboard-specific CSS**
 
-**Create** `apps/web-shell/app/(shell)/dashboard/dashboard.css` — copied
+**Create** `apps/web-shell/app/(shell)/dashboard/dashboard.css` - copied
 verbatim from the `<style>` block in `apps/game/web/dashboard/index.html`
 (lines 25-113):
 
@@ -1812,7 +1812,7 @@ cp apps/game/web/dashboard/og.png apps/web-shell/public/dashboard/og.png
 
 Entirely a Server Component: every value that used to arrive via a
 post-mount `boot()` fetch (and a `.spin` loading state in between) is
-fetched and computed before the first byte renders — a real improvement
+fetched and computed before the first byte renders, a real improvement
 over the original, not just a port, since there's no loading flash for a
 page whose whole job is "show status at a glance." JSX also escapes text
 content automatically, so none of the original's `Pixl.esc(...)` calls
@@ -2094,16 +2094,16 @@ git commit -m "add the /dashboard page, entirely server-rendered"
 
 - [ ] **Step 1: Update CLAUDE.md's `apps/web-shell` section**
 
-**Modify** `CLAUDE.md` — find the `### \`apps/web-shell\`` section and
+**Modify** `CLAUDE.md` - find the `### \`apps/web-shell\`` section and
 replace its bullet list with:
 
 ```markdown
 ### `apps/web-shell` (React migration of the player-facing web shell)
 - Next.js 16 App Router, deployed on Orchard (`pixl-web-shell`, no public
-  hostname of its own — reached only through `apps/landing/next.config.ts`'s
+  hostname of its own - reached only through `apps/landing/next.config.ts`'s
   `rewrites()`, over the Orchard cluster's internal service DNS). Each page
   family lives at its own literal route segment (`app/docs/[slug]`,
-  `app/(shell)/dashboard`, and so on as later slices land) — there is no
+  `app/(shell)/dashboard`, and so on as later slices land) - there is no
   app-wide `basePath` (removed 2026-08-24 once a second family joined docs;
   see `docs/superpowers/specs/2026-08-23-react-migration-design.md`'s
   addendum for why one was ever needed and why it stopped working).
@@ -2116,27 +2116,27 @@ replace its bullet list with:
   Client Components that need to mutate go through
   `app/api/proxy/[...path]/route.ts` instead, since the cookie is
   unreadable by client JS by design. This only applies to `apps/web-shell`
-  — the Godot client and any page still on the old static site
+  - the Godot client and any page still on the old static site
   (`apps/game/web/`) keep using the token-in-localStorage flow unchanged.
 - The `(shell)` route group (`app/(shell)/layout.tsx`) renders the
-  sidebar/topbar chrome — ported from `apps/game/web/pixl.js`'s
-  `mountTopbar()` — around every signed-in page. `app/(shell)/nav-data.ts`
+  sidebar/topbar chrome, ported from `apps/game/web/pixl.js`'s
+  `mountTopbar()`, around every signed-in page. `app/(shell)/nav-data.ts`
   holds the nav structure; `shell-nav.tsx` is the interactive Client
   Component (mobile sheet, theme picker); the layout itself is a Server
   Component that renders the full-page signed-out gate or fetches the
   wallet/Restoration numbers before the page ever reaches the browser.
 - The RE/payout economy formulas (`rePerHour`, `projectPayoutUsd`, etc. in
-  `pixl.js`) aren't ported here yet — `/dashboard` only ever displays
+  `pixl.js`) aren't ported here yet - `/dashboard` only ever displays
   values `apps/server` already computed (wallet pixels/RE/level), it never
   runs the formulas itself. Port them as their own tested module (matching
   `packages/docs-engine/src/tokens.ts`'s pattern: byte-for-byte identical
   to `apps/server`'s own math, this must never drift) when a slice first
-  needs to compute a payout number client-side — likely `calc` or `projects`.
+  needs to compute a payout number client-side, likely `calc` or `projects`.
 - Reads `docs/*.md` directly via `packages/docs-engine`'s `render()`/
-  `buildTokens()` (a workspace-package import — this app's Dockerfile uses
+  `buildTokens()` (a workspace-package import - this app's Dockerfile uses
   a repo-root build context specifically so that resolves, unlike
   `apps/dashboard`'s isolated per-app context).
-- Docker image uses Next's `output: "standalone"` — required in this
+- Docker image uses Next's `output: "standalone"` - required in this
   monorepo, not just an optimization: without it, the runtime stage would
   need to drag along the whole workspace's hoisted `node_modules` (Bun
   installs into a shared `/repo/node_modules/.bun/...` store for any
@@ -2181,13 +2181,13 @@ Run: `bun run --cwd apps/web-shell dev`
    `https://pixl.hackclub.com/dashboard/` (the old static page) shows for
    the same account.
 4. Click the mobile MORE sheet (resize the window under 900px) and the
-   theme picker — confirm both open, close on outside click and Escape,
+   theme picker, confirm both open, close on outside click and Escape,
    and the theme picker's choice persists across a reload.
 5. Confirm the `.shell-main` layout offset actually looks right (see
-   Task 7 Step 4's correction note) — the sidebar/toprail shouldn't
+   Task 7 Step 4's correction note) - the sidebar/toprail shouldn't
    overlap the page content.
 
-If anything in this step doesn't match, fix it now — this is the
+If anything in this step doesn't match, fix it now - this is the
 Foundation slice's whole reason to exist, and every later slice inherits
 whatever's wrong here.
 
@@ -2198,7 +2198,7 @@ git add CLAUDE.md
 git commit -m "document apps/web-shell's routing, auth, and shell layout in CLAUDE.md"
 ```
 
-- [ ] **Step 5: Stop — do not repoint `/dashboard` in `apps/landing/next.config.ts` yet**
+- [ ] **Step 5: Stop - do not repoint `/dashboard` in `apps/landing/next.config.ts` yet**
 
 Per the migration design doc's ground rules, cutting a family's rewrite
 over to `apps/web-shell` for real players needs explicit sign-off, the

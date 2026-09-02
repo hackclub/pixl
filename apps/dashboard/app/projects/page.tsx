@@ -138,11 +138,11 @@ export default async function ProjectsPage({
                         demo
                       </a>
                     )}
-                    {!p.repo_url && !p.demo_url && <span className="text-muted-foreground">—</span>}
+                    {!p.repo_url && !p.demo_url && <span className="text-muted-foreground">-</span>}
                   </div>
                 </TableCell>
                 <TableCell className="p-3 text-foreground/70">
-                  {p.hackatime_projects?.length ? p.hackatime_projects.join(", ") : "—"}
+                  {p.hackatime_projects?.length ? p.hackatime_projects.join(", ") : "-"}
                 </TableCell>
                 <TableCell className="p-3 text-muted-foreground">
                   {new Date(p.created_at).toLocaleDateString()}

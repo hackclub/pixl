@@ -40,7 +40,7 @@ export default async function ShopPage({
     : "US";
   const query = (q ?? "").trim().toLowerCase();
   // Trophies (unlock_xp > 0, e.g. the 3D Printed Blahaj) are earned by
-  // leveling up, not bought with pixels or tied to a region — pull them out
+  // leveling up, not bought with pixels or tied to a region, pull them out
   // into their own section regardless of which region tab is selected.
   const [regionItems, everyItem, allSidequests] = await Promise.all([
     listShopItems(region),

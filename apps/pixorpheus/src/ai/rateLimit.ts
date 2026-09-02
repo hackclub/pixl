@@ -1,7 +1,7 @@
 import { GABIN_ID, RIDIT_ID, RICKY_ID } from "../constants.js";
 
 // Per-user sliding-window limiter shared by every AI (OpenRouter) and search
-// (Brave) call site — slash commands and the in-thread chat pipeline alike —
+// (Brave) call site, slash commands and the in-thread chat pipeline alike,
 // so one person spamming can't burn through the workspace's shared credits.
 
 const buckets = new Map<string, number[]>();

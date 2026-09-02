@@ -1,6 +1,6 @@
 extends Control
 ## Logic for the "Customise your look" screen. The UI lives in
-## character_editor.tscn — this script just wires the nodes and applies the
+## character_editor.tscn, this script just wires the nodes and applies the
 ## chosen skin (sent to the server, which persists and broadcasts it). Done
 ## returns to whichever scene opened the editor.
 

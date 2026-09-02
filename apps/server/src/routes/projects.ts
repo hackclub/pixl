@@ -28,7 +28,7 @@ const PROJECT_TYPES = [
   "other",
 ];
 
-// List the logged-in user's projects, newest first — their own plus any
+// List the logged-in user's projects, newest first , their own plus any
 // they're an accepted collaborator on (view/log-hours only, not editable).
 router.get("/api/projects", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";
@@ -212,7 +212,7 @@ function isVideoUrl(url: string): boolean {
 }
 
 // Players routinely paste a link without the scheme ("foo.itch.io/game"). Store
-// it with https:// so it's a real URL — otherwise every liveness check (which
+// it with https:// so it's a real URL , otherwise every liveness check (which
 // does fetch(url)) throws and the ship is rejected as "unreachable".
 function ensureProtocol(raw: string): string {
   const s = String(raw ?? "").trim();
@@ -241,7 +241,7 @@ function normalizeDemoUrl(raw: string): { error: string } | { url: string } {
 // SSRF guard for the ship-time liveness checks. A player fully controls demo_url
 // (any host is accepted by normalizeDemoUrl) and a repo link can redirect
 // anywhere, so before we ever fetch() a player-supplied URL we make sure the
-// host doesn't resolve to a loopback / private / link-local address — otherwise
+// host doesn't resolve to a loopback / private / link-local address , otherwise
 // urlAlive becomes a probe for internal services and the cloud metadata IP.
 function isBlockedIp(ip: string): boolean {
   const v = isIP(ip);
@@ -262,7 +262,7 @@ function isBlockedIp(ip: string): boolean {
     if (s.startsWith("fe80")) return true; // link-local
     return false;
   }
-  return true; // not a parseable IP — refuse rather than guess
+  return true; // not a parseable IP - refuse rather than guess
 }
 
 async function hostIsPublic(hostname: string): Promise<boolean> {
@@ -277,7 +277,7 @@ async function hostIsPublic(hostname: string): Promise<boolean> {
 }
 
 // Roblox's WAF blocks the bot-shaped HEAD/GET requests urlAlive sends (no browser
-// UA, no cookies) even for a game that's genuinely live and playable — every
+// UA, no cookies) even for a game that's genuinely live and playable , every
 // roblox.com demo link was getting rejected as "unreachable". Skip the fetch for
 // these hosts once the SSRF guard clears them; still no bypass of hostIsPublic.
 const TRUSTED_UNFETCHABLE_HOSTS = new Set(["roblox.com"]);
@@ -287,7 +287,7 @@ function isTrustedUnfetchableHost(hostname: string): boolean {
 }
 
 async function urlAlive(url: string): Promise<boolean> {
-  // Follow redirects by hand so we can re-validate the host at every hop — a
+  // Follow redirects by hand so we can re-validate the host at every hop , a
   // public URL that 302s to http://169.254.169.254 must not slip through.
   // (Note: this does not close DNS-rebinding between the check and fetch's own
   // resolution; blocking literal internal targets and redirect chains is the
@@ -492,7 +492,7 @@ router.put("/api/projects/:id", async (req, res) => {
   fields.sidequest_id = trial.id;
 
   // On an approved project, neither the tier nor the Trial link may change (both
-  // feed payout/RE that already settled) — keep whatever the reviewer approved.
+  // feed payout/RE that already settled) , keep whatever the reviewer approved.
   if ((cur as { status?: string } | null)?.status === "approved") {
     fields.level = (cur as { level?: number }).level ?? 1;
     fields.sidequest_id = (cur as { sidequest_id?: number | null }).sidequest_id ?? null;
@@ -545,7 +545,7 @@ router.post("/api/projects/:id/ship", async (req, res) => {
     return res.status(400).json({ ok: false, error: "demo_required" });
   if (!String(project.image_url ?? "").trim())
     return res.status(400).json({ ok: false, error: "image_required" });
-  // Hard exclusion under Hack Club's YSWS "Project Exceptions" — school
+  // Hard exclusion under Hack Club's YSWS "Project Exceptions" , school
   // assignments and paid Hack Club work can't go into the Unified Database.
   if (req.body?.eligibilityAttested !== true)
     return res.status(400).json({ ok: false, error: "eligibility_attestation_required" });
@@ -614,7 +614,7 @@ router.post("/api/projects/:id/ship", async (req, res) => {
   if (!isHardware && !stats.connected && stats.error)
     return res.status(502).json({ ok: false, error: "hackatime_unavailable" });
   const linked = (project.hackatime_projects as string[]) ?? [];
-  // Only hours logged from the cutoff onward count — see HACKATIME_CUTOFF.
+  // Only hours logged from the cutoff onward count , see HACKATIME_CUTOFF.
   const htSeconds = await fetchTrackedSecondsSince(ownerSlackId, htToken, linked);
   // Hardware also counts journalled hours toward the tracked total, so journals
   // alone can carry a hardware ship; the total is journal + Hackatime. Software
@@ -641,7 +641,7 @@ router.post("/api/projects/:id/ship", async (req, res) => {
 
   // Refresh each accepted collaborator's own tracked hours (their own
   // Hackatime account, filtered by the projects *they* linked) so review-time
-  // crediting has up-to-date numbers per person. Purely informational — it
+  // crediting has up-to-date numbers per person. Purely informational , it
   // never gates whether this ship goes through.
   const { data: collaborators } = await supabase
     .from("project_collaborators")
@@ -799,7 +799,7 @@ router.post("/api/projects/:id/ship", async (req, res) => {
 
 // Withdraw a project from the review queue back to a draft so the owner can
 // edit it. Only allowed before any human has weighed in ("shipped" = waiting
-// for first pass, untouched) — NOT once it's in second_review/fraud_review,
+// for first pass, untouched) - NOT once it's in second_review/fraud_review,
 // since by then a first-pass reviewer has already proposed a verdict
 // (possibly a ban) and this update doesn't clear first_pass_* fields. Letting
 // a maker unship+reship from that stage let them silently dodge a pending
@@ -979,7 +979,7 @@ router.post("/api/projects/:id/trial-reward", async (req, res) => {
 });
 
 // True for the project's owner, or an accepted collaborator (view/log-hours
-// only — journal and timeline reads/writes are gated on this; edit/ship/
+// only , journal and timeline reads/writes are gated on this; edit/ship/
 // unship/delete stay owner-only via their own direct .eq("user_id", ...)).
 async function canAccessProject(userId: string, projectId: number): Promise<boolean> {
   const { data, error } = await supabase
@@ -1031,7 +1031,7 @@ router.get("/api/projects/:id/journal", async (req, res) => {
 // Total tracked hours for a project. For the owner: their Hackatime since
 // cutoff + everyone's journal hours. For an accepted collaborator viewing
 // their own project page: THEIR linked Hackatime projects (on their own
-// account) + their own journal hours, not the owner's — a collaborator's own
+// account) + their own journal hours, not the owner's , a collaborator's own
 // Hackatime link would otherwise never show up as tracked time anywhere.
 router.get("/api/projects/:id/hours", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";
@@ -1138,7 +1138,7 @@ router.get("/api/projects/:id/timeline", async (req, res) => {
       note: a.note ?? "",
       claimedHours: a.claimed_hours ?? null,
       // First-pass hours are only a proposal until a different second-pass
-      // reviewer confirms them — don't leak that number to the player early.
+      // reviewer confirms them , don't leak that number to the player early.
       approvedHours: a.verdict?.startsWith("first_pass_") ? null : (a.approved_hours ?? null),
     });
   if (proj?.shipped_at && ["shipped", "fraud_review", "second_review"].includes(proj.status))
@@ -1151,7 +1151,7 @@ router.get("/api/projects/:id/timeline", async (req, res) => {
     ok: true,
     events,
     status: proj?.status ?? null,
-    // Joe (the fraud pass) is optional per event — a project only ever goes
+    // Joe (the fraud pass) is optional per event , a project only ever goes
     // through it if it was actually submitted there.
     joeUsed: Boolean(proj?.joe_project_id),
     fraudReviewAt: proj?.joe_submitted_at ?? null,

@@ -18,7 +18,7 @@ import {
 export async function checkFAQAndSimilar(event: PendingTicketEvent, client: WebClient): Promise<void> {
   const question = event.text || "";
   if (question.length < 15) return;
-  // Nothing else gated this AI call — spamming ticket creation was an
+  // Nothing else gated this AI call, spamming ticket creation was an
   // unthrottled way to burn through the shared OpenRouter credit budget.
   if (!checkAiRateLimit(event.user)) return;
 
@@ -51,7 +51,7 @@ export async function checkFAQAndSimilar(event: PendingTicketEvent, client: WebC
         {
           role: "system",
           content:
-            "You help match support questions to previously resolved tickets. If the new question is clearly similar to one of the listed past tickets, reply with only that ticket's number. If none match well enough, reply with NONE. Be strict — only match if it's genuinely the same problem.",
+            "You help match support questions to previously resolved tickets. If the new question is clearly similar to one of the listed past tickets, reply with only that ticket's number. If none match well enough, reply with NONE. Be strict, only match if it's genuinely the same problem.",
         },
         {
           role: "user",
@@ -179,7 +179,7 @@ export async function createTicket(
     ticketRow = normalizeTicket(r.data);
     if (!ticketRow) {
       // Likely a unique violation if another call snuck in (supabase-js reports it
-      // via r.error instead of throwing) — try SELECT again
+      // via r.error instead of throwing), try SELECT again
       const retry = await db().from("tickets").select("*").eq("msg_ts", event.ts).limit(1).maybeSingle();
       ticketRow = normalizeTicket(retry.data);
     }
@@ -247,7 +247,7 @@ export async function handleNewQuestion(event: PendingTicketEvent, client: WebCl
   setTimeout(() => processedHelpMsgs.delete(event.ts), 10 * 60 * 1000);
 
   // Timed so a slow ticket reply can actually be diagnosed from the logs
-  // next time — is it our own code, or Slack's API round-trip?
+  // next time, is it our own code, or Slack's API round-trip?
   const startedAt = Date.now();
 
   // The classic reply people are watching for goes out first, before any
@@ -283,7 +283,7 @@ export async function handleNewQuestion(event: PendingTicketEvent, client: WebCl
   });
   console.log(`[handleNewQuestion] reply posted in ${Date.now() - startedAt}ms`);
 
-  // Fire-and-forget from here — nothing downstream needs these to have
+  // Fire-and-forget from here, nothing downstream needs these to have
   // landed before we move on. createTicket() already falls back to
   // inserting the ticket row itself if this hasn't finished yet.
   db()
@@ -312,7 +312,7 @@ export async function handleNewQuestion(event: PendingTicketEvent, client: WebCl
     })
     .catch(() => {});
 
-  // Posted as a real thread message (not ephemeral) so it can be deleted later —
+  // Posted as a real thread message (not ephemeral) so it can be deleted later,
   // Slack offers no API to delete an ephemeral after the fact (e.g. on resolve).
   try {
     const prompt = await client.chat.postMessage({
@@ -368,7 +368,7 @@ export async function handleNewQuestion(event: PendingTicketEvent, client: WebCl
 
   // Surfaces a similar previously-resolved ticket if there is one, after the
   // classic "someone will help you soon" reply above. Used to try answering
-  // from the docs first (see answerFromDocs.ts) — removed at the user's
+  // from the docs first (see answerFromDocs.ts), removed at the user's
   // request, pixo no longer auto-answers in #pixl-help.
   checkFAQAndSimilar(event, client).catch(() => {});
 }
@@ -505,7 +505,7 @@ export async function runMacro(
 export async function resolveTicket(msgTs: string, resolverSlackId: string, client: WebClient): Promise<string> {
   // Conditional update (status = "open" in the WHERE, not just a prior
   // SELECT) so two concurrent resolves on the same ticket can't both pass a
-  // check-then-act race and both fire off the closing side effects below —
+  // check-then-act race and both fire off the closing side effects below,
   // only the call that actually flips the row wins.
   const { data: won } = await db()
     .from("tickets")
@@ -586,7 +586,7 @@ export async function resolveTicket(msgTs: string, resolverSlackId: string, clie
 }
 
 export async function reopenTicket(msgTs: string, reopenerSlackId: string, client: WebClient): Promise<string> {
-  // Same conditional-update pattern as resolveTicket — only the caller that
+  // Same conditional-update pattern as resolveTicket, only the caller that
   // actually flips status "closed" -> "open" proceeds.
   const { data: won } = await db()
     .from("tickets")
@@ -639,7 +639,7 @@ export async function reopenTicket(msgTs: string, reopenerSlackId: string, clien
   return "ok";
 }
 
-// The title prompt is now a public thread message — only the ticket author
+// The title prompt is now a public thread message, only the ticket author
 // should act on it.
 export async function isTicketAuthor(msgTs: string, userId: string): Promise<boolean> {
   const pending = pendingTickets.get(msgTs);

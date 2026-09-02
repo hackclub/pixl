@@ -21,7 +21,7 @@ func _ready() -> void:
 	# (duplicate first so we don't mutate the resource other menus share).
 	theme = theme.duplicate(true)
 	theme.default_font = OLD_MENU_FONT
-	# Menu is laid out for a 1600x900 desktop canvas — on touch devices, bump
+	# Menu is laid out for a 1600x900 desktop canvas, on touch devices, bump
 	# the theme's font sizes and the explicit control sizes below instead of
 	# Control.scale (a transform just blurs the already-rasterized pixel
 	# font instead of actually growing it).

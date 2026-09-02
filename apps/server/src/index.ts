@@ -34,7 +34,7 @@ app.disable("x-powered-by");
 
 // Trust exactly one hop (the platform's ingress/edge proxy) so req.ip is the
 // proxy-appended real client address, not whatever a client stuffs into its
-// own X-Forwarded-For — Express reads XFF from the right by this many hops,
+// own X-Forwarded-For, Express reads XFF from the right by this many hops,
 // so a spoofed prefix a client sends is ignored rather than trusted.
 app.set("trust proxy", 1);
 
@@ -47,10 +47,10 @@ app.use((req, res, next) => {
   res.header("Access-Control-Allow-Headers", "Content-Type");
   res.header("Cross-Origin-Resource-Policy", "cross-origin");
   // Session tokens travel in the query string (see the comment above). A
-  // same-origin navigation would otherwise forward the full URL — token
-  // included — as the Referer header on any subresource request it makes.
+  // same-origin navigation would otherwise forward the full URL, token
+  // included, as the Referer header on any subresource request it makes.
   res.header("Referrer-Policy", "no-referrer");
-  // This is a pure JSON API, never HTML — a locked-down CSP/frame policy
+  // This is a pure JSON API, never HTML, a locked-down CSP/frame policy
   // costs nothing and closes off any accidental HTML error response as an
   // XSS/clickjacking vector.
   res.header("X-Content-Type-Options", "nosniff");
@@ -100,7 +100,7 @@ app.use(yswsRouter);
 app.get("/", (_req, res) => res.json({ name: "pixl-server", status: "ok" }));
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
-// This is a pure JSON API — nothing upstream turns a thrown error into JSON,
+// This is a pure JSON API, nothing upstream turns a thrown error into JSON,
 // so without this an oversized/malformed body (e.g. body-parser's raw-size
 // limit) falls through to Express's default HTML error page, which every
 // client here parses with res.json() and silently treats as "went wrong".

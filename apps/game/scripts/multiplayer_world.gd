@@ -71,7 +71,7 @@ func _network_scene_name() -> String:
 #
 # Worlds must `await` this in _ready() before anything that walks their NPC
 # children (village.gd's _spawn_npcs/_reveal_trial_npcs, open_world.gd's
-# _sync_trial_givers) — otherwise those run against an empty tree.
+# _sync_trial_givers), otherwise those run against an empty tree.
 func spawn_world_npcs() -> void:
 	var world := _network_scene_name()
 	var rows := await _fetch_npcs(world)

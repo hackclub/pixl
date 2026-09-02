@@ -1,7 +1,7 @@
 // Shop-change notifications for pixorpheus (the Slack bot).
 //
 // The original design was a Postgres trigger calling pg_net (migration 0103),
-// which only works on Supabase — pg_net is a Supabase extension and is not
+// which only works on Supabase, pg_net is a Supabase extension and is not
 // available (nor installable) on the CNPG cluster the stack runs on now, so on
 // CNPG the trigger silently skips itself. So the POST is made here, from the
 // app, right after a successful shop_items write. That works regardless of the
@@ -13,7 +13,7 @@
 const PIXORPHEUS_URL = (process.env.PIXORPHEUS_URL ?? "https://pixo.pixl.rsvp").replace(/\/+$/, "");
 
 // pixorpheus answers 200 and processes asynchronously, so this is quick. It
-// must never block or fail a shop mutation — the write already succeeded by the
+// must never block or fail a shop mutation, the write already succeeded by the
 // time we get here.
 const TIMEOUT_MS = 5000;
 

@@ -86,7 +86,7 @@ func _ready() -> void:
 	nl.reset_size()
 	nl.position = Vector2(-nl.size.x * nl.scale.x / 2.0, -33.0 - nl.size.y * nl.scale.y)
 	# A node placed hidden (a conditional check-in copy) must also start
-	# non-interactive until its world reveals it — otherwise its InteractArea keeps
+	# non-interactive until its world reveals it, otherwise its InteractArea keeps
 	# monitoring and the player can talk to thin air.
 	if not visible:
 		set_present(false)
@@ -287,7 +287,7 @@ func _start_trial_quest() -> void:
 		return
 	var trial := _find_trial(quests)
 	if trial.is_empty():
-		# Trial row missing (e.g. migration not run) — fall back to flavor text so
+		# Trial row missing (e.g. migration not run), fall back to flavor text so
 		# the NPC never feels broken.
 		Dialogue.open(npc_name, (quest_offer if quest_offer != "" else dialogue).split("\n"))
 		_update_prompt()
@@ -313,7 +313,7 @@ func _start_trial_quest() -> void:
 		_update_prompt()
 		return
 
-	# Already accepted, not yet done — remind and open the Terminal.
+	# Already accepted, not yet done, remind and open the Terminal.
 	if unlocked:
 		var lines := (trial_reminder if trial_reminder != "" else quest_offer).split("\n")
 		Dialogue.open(npc_name, lines)
@@ -348,7 +348,7 @@ func _start_trial_quest() -> void:
 
 func _find_trial(quests: Array) -> Dictionary:
 	# Match this NPC's assigned Trial by exact name. No fallback to "some other
-	# starter Trial" here on purpose — that used to silently swap in an unrelated
+	# starter Trial" here on purpose, that used to silently swap in an unrelated
 	# quest whenever a Trial got renamed *or deleted* in the dashboard, which made
 	# a deletion invisible instead of surfacing it. A genuine rename should update
 	# this NPC's trial_name in the same change; a real deletion should fall through

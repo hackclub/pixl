@@ -35,7 +35,7 @@ export interface AIResponse {
 }
 
 /**
- * Minimal Slack postMessage params — every streaming call site builds one
+ * Minimal Slack postMessage params, every streaming call site builds one
  * of these (channel is required, thread_ts is the only other field used).
  */
 export interface SlackPostParams {

@@ -148,7 +148,7 @@ static func has_changed(trial_name: String, current_state: String) -> bool:
 	data[user_key] = seen
 	_save(data)
 	# previous == "" means this device has never recorded this trial before
-	# (fresh install, or the trial existed before this feature shipped) —
+	# (fresh install, or the trial existed before this feature shipped) ,
 	# treated as a baseline, not a transition, so we don't fire a flourish
 	# for something that didn't just happen.
 	return previous != "" and previous != current_state
@@ -213,7 +213,7 @@ In `apps/game/scripts/npc.gd`, inside `_start_trial_quest()`, find:
 ```gdscript
 	if choice == "accept":
 		await _accept_trial(tid)
-		Dialogue.open(npc_name, ["Then it's yours. Get building — I'll be around your village if you need me."])
+		Dialogue.open(npc_name, ["Then it's yours. Get building, I'll be around your village if you need me."])
 		# Fresh accept → run the Builder Terminal walkthrough, tuned to this Trial.
 		var accept_path := "projects?onboard=first-project&trial=%d" % tid if tid > 0 else "projects?onboard=first-project"
 		Dialogue.closed.connect(func(): WebPages.open(accept_path), CONNECT_ONE_SHOT)
@@ -228,7 +228,7 @@ Replace with:
 		play_teleport_fx()
 		await get_tree().create_timer(0.35).timeout
 		set_present(false)
-		Dialogue.open(npc_name, ["Then it's yours. Get building — I'll be around your village if you need me."])
+		Dialogue.open(npc_name, ["Then it's yours. Get building, I'll be around your village if you need me."])
 		# Fresh accept → run the Builder Terminal walkthrough, tuned to this Trial.
 		var accept_path := "projects?onboard=first-project&trial=%d" % tid if tid > 0 else "projects?onboard=first-project"
 		Dialogue.closed.connect(func(): WebPages.open(accept_path), CONNECT_ONE_SHOT)
@@ -297,8 +297,8 @@ func _process(_delta: float) -> void:
 		Loader.change_scene("res://scenes/village.tscn", "Loading")
 
 # A Trial-giver (Ridit/Wren/Rill/Cass) hides from the open world once their
-# Trial is accepted — they've relocated to the village to check in on the
-# player — and reappears once it's completed, with a one-time "welcome back"
+# Trial is accepted , they've relocated to the village to check in on the
+# player , and reappears once it's completed, with a one-time "welcome back"
 # pixel-dust burst. Mirrors village.gd's _reveal_trial_npcs poll.
 func _sync_trial_givers() -> void:
 	if NetworkManager.session_token == "":
@@ -422,7 +422,7 @@ Replace with:
 		i += 1
 ```
 
-(Every NPC reaching this point is already filtered to `unlocked && !completed` earlier in the same loop, so it's always the "active" state — see the `continue` guard a few lines above this block.)
+(Every NPC reaching this point is already filtered to `unlocked && !completed` earlier in the same loop, so it's always the "active" state - see the `continue` guard a few lines above this block.)
 
 - [ ] **Step 3: Verify the script parses**
 
@@ -453,7 +453,7 @@ git commit -m "play a teleport burst when a trial check-in npc appears in the vi
 
 Find:
 ```
-quest_done = "Mabel's wall is back up, partner. Proud of you. The frontier's wide open now — plenty more Trials where that came from."
+quest_done = "Mabel's wall is back up, partner. Proud of you. The frontier's wide open now, plenty more Trials where that came from."
 ```
 Replace with:
 ```
@@ -468,7 +468,7 @@ quest_done = "Now that's a region I'd sign my name to. Nice work."
 ```
 Replace with:
 ```
-quest_done = "Good job — that draft came together exactly right."
+quest_done = "Good job, that draft came together exactly right."
 ```
 
 - [ ] **Step 3: Update Rill's line**
@@ -486,7 +486,7 @@ quest_done = "Good job. The well's finally got eyes on it."
 
 Find:
 ```
-quest_done = "Signal's still clean. You've got a knack for this — welcome to keeping the relay."
+quest_done = "Signal's still clean. You've got a knack for this, welcome to keeping the relay."
 ```
 Replace with:
 ```
@@ -516,12 +516,12 @@ There's no automated way to visually confirm particle effects or scene transitio
 
 - [ ] Open the project in the Godot editor, run `open_world.tscn` (or the full game from the main menu), and find Ridit.
 - [ ] Interact with Ridit, choose "Accept this Trial". Confirm: a burst of gold pixel motes appears at Ridit's feet, then Ridit disappears (no longer visible, can't be interacted with) before the "Then it's yours..." dialogue line shows.
-- [ ] Leave the Builder Terminal web overlay, walk to the village door, enter `village.tscn`. Confirm: the check-in Ridit is present near the village, and a pixel-dust burst played as the scene loaded (watch closely near scene fade-in — it's quick).
+- [ ] Leave the Builder Terminal web overlay, walk to the village door, enter `village.tscn`. Confirm: the check-in Ridit is present near the village, and a pixel-dust burst played as the scene loaded (watch closely near scene fade-in, it's quick).
 - [ ] Re-enter the village a second time (walk back out and back in) with the same trial still active. Confirm: Ridit is still present, but the burst does **not** replay this time (one-time-per-transition).
 - [ ] With a test account, mark the trial's linked project as reviewed/approved from the dashboard (or directly flip `completed` for that `sidequest_unlocks` row in the DB for a throwaway test account) so the Trial shows `completed: true` from `/api/sidequests`.
-- [ ] Re-enter `village.tscn`. Confirm: check-in Ridit is now gone (hidden, no burst — matches spec).
+- [ ] Re-enter `village.tscn`. Confirm: check-in Ridit is now gone (hidden, no burst, matches spec).
 - [ ] Re-enter `open_world.tscn`. Confirm: Ridit is back, a "welcome back" pixel-dust burst plays once, and interacting with Ridit now shows the new "Good job, partner..." line.
 - [ ] Re-enter `open_world.tscn` a second time. Confirm: Ridit is present but the burst does **not** replay.
 - [ ] Repeat the accept step for one other giver (Wren, Rill, or Cass) to confirm the mechanism isn't Ridit-specific.
 
-If any step fails, note which one and check the corresponding task above before moving on — this task has no code changes of its own, so there's nothing to commit here.
+If any step fails, note which one and check the corresponding task above before moving on - this task has no code changes of its own, so there's nothing to commit here.

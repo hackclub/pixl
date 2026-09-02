@@ -2,7 +2,7 @@ import type { WebClient } from "@slack/web-api";
 
 /**
  * #pixl-logs event logging. Resolves the channel once, then posts. Never
- * throws — logging must not break the feature that triggered it.
+ * throws, logging must not break the feature that triggered it.
  *
  * In a huge workspace (Hack Club), paginating conversations.list to find the
  * channel is hopeless: Slack rate-limits non-Marketplace apps hard on that
@@ -46,7 +46,7 @@ async function resolveChannel(slack: WebClient): Promise<string | null> {
       if (!warned) {
         warned = true;
         console.warn(
-          `[pixl-logs] #${LOG_CHANNEL_NAME} not found within ${MAX_PAGES} pages of conversations.list — set the PIXL_LOGS_CHANNEL_ID env var to the channel ID to enable logging without scanning`,
+          `[pixl-logs] #${LOG_CHANNEL_NAME} not found within ${MAX_PAGES} pages of conversations.list, set the PIXL_LOGS_CHANNEL_ID env var to the channel ID to enable logging without scanning`,
         );
       }
       return null;

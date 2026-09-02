@@ -29,7 +29,7 @@ export const LOBBY_SCENE_PREFIX = "lobby:";
 export const LOBBY_CAPACITY = 16;
 const MAX_LOBBIES = 200;
 
-// Cosmetic village themes — the first village upgrade. Each is a tint the whole
+// Cosmetic village themes, the first village upgrade. Each is a tint the whole
 // village sees; it composes with the day/night cycle client-side (the client
 // holds the matching colours). '' is the always-owned default (no tint).
 export const VILLAGE_THEMES: Record<string, { name: string; price: number }> = {
@@ -161,7 +161,7 @@ export function setLobbyVisibility(l: Lobby, isPublic: boolean) {
 }
 
 // Apply an already-owned theme (or clear it with ''). Buying an unlock is
-// separate — this only swaps between what the village already owns.
+// separate, this only swaps between what the village already owns.
 export function setLobbyTheme(l: Lobby, theme: string): boolean {
   if (theme !== "" && !l.themesUnlocked.has(theme)) return false;
   l.theme = theme;

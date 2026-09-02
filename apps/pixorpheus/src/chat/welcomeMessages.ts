@@ -4,7 +4,7 @@ import { botIdentity } from "../slack/identity.js";
 import { recordMemberJoin } from "./newMembersDigest.js";
 
 // Private welcome DM sent to each new main-channel member (the public welcome is
-// the daily digest — see newMembersDigest.ts).
+// the daily digest, see newMembersDigest.ts).
 const WELCOME_DM = `hey! welcome to Pixl :yay:
 
 i'm pixo, i answer questions from the Pixl docs. you can:

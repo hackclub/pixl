@@ -20,7 +20,7 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
-          // This admin panel shows moderation reports and PII — never
+          // This admin panel shows moderation reports and PII, never
           // embeddable in a third-party frame (clickjacking).
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },

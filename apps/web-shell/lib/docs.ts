@@ -1,4 +1,4 @@
-// Reads docs/*.md straight off the filesystem — no client router existed to
+// Reads docs/*.md straight off the filesystem , no client router existed to
 // route between static pages before, so this is the only place that
 // content now gets loaded. docs/ lives three levels up from this file (repo
 // root), the same relative position in dev (`bun run --cwd apps/web-shell

@@ -53,9 +53,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey and event.pressed and not event.echo):
 		return
 	if event.keycode == KEY_1:
-		_log.text = "playing line run — press E"
+		_log.text = "playing line run - press E"
 		Dialogue.open("Pixo", [
-			"Oh — you actually came. Good. I wasn't sure anyone would.",
+			"Oh, you actually came. Good. I wasn't sure anyone would.",
 			"I'm Pixo. I've kept this little Hub lit since the Static hit.",
 			"First things first, though. Let's get you sorted.",
 		])

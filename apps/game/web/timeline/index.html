@@ -238,7 +238,7 @@ const NODES = [
 function kindClass(k) { return k === "operation" || k === "op" ? "op" : k === "prologue" ? "prologue" : "chapter"; }
 
 // outcome comes from the dashboard-authored /api/story table, not just the
-// hardcoded seed above — escape it fully, then re-open only <b></b> so a
+// hardcoded seed above, escape it fully, then re-open only <b></b> so a
 // compromised/malicious editor account can't inject a script tag or event
 // handler through it.
 function escOutcome(s) {

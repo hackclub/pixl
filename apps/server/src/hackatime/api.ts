@@ -27,7 +27,7 @@ const DISCONNECTED: HackatimeStats = { connected: false, projects: [], totalSeco
 // Hours logged before this date predate the challenge and don't count toward
 // ship eligibility, even for Hackatime projects/accounts that existed long
 // before someone joined Pixl. Until this date passes, *everyone* reads as 0h
-// countable and nothing can be shipped — that's intended, but it means the
+// countable and nothing can be shipped, that's intended, but it means the
 // client copy has to explain it (see htBlockerText in web/projects/index.html,
 // which mirrors this date; change both together).
 export const HACKATIME_CUTOFF = hackatimeCutoffUnix;

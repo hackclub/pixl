@@ -15,7 +15,7 @@ export interface GuidelinePage {
 function Key({ children }: { children: ReactNode }) {
   return (
     <p className="rounded-md border-l-4 border-amber-500 bg-amber-500/10 px-3 py-2 text-sm">
-      <strong>Important — </strong>
+      <strong>Important - </strong>
       {children}
     </p>
   );
@@ -33,7 +33,7 @@ export const GUIDELINE_PAGES: GuidelinePage[] = [
           project to be accepted. For exceptions, see <em>Project Exceptions</em>.
         </p>
         <p>
-          These docs aren&apos;t a cage — they&apos;re a recompilation of the
+          These docs aren&apos;t a cage, they&apos;re a recompilation of the
           rules that have been in place so YSWS authors have something to
           reference. They evolve as Hack Club does; if a new program conflicts
           with a rule, the guidelines get revised.
@@ -63,7 +63,7 @@ export const GUIDELINE_PAGES: GuidelinePage[] = [
         <p>
           <strong>Paid Hack Club work.</strong> Projects built as part of Hack
           Club employment or other paid Hack Club work cannot be submitted. This
-          only applies to the paid work itself — personal projects built on your
+          only applies to the paid work itself, personal projects built on your
           own unpaid time can still be submitted.
         </p>
         <p>
@@ -78,7 +78,7 @@ export const GUIDELINE_PAGES: GuidelinePage[] = [
     body: (
       <div className="space-y-3 text-sm leading-relaxed">
         <p>
-          <strong>Playable URL</strong> — a publicly accessible link where
+          <strong>Playable URL</strong> - a publicly accessible link where
           anyone can experience the project without significant technical
           knowledge. Valid: a browser game / web app, a downloadable executable,
           a hosted demo or interactive prototype.
@@ -91,7 +91,7 @@ export const GUIDELINE_PAGES: GuidelinePage[] = [
           at least one platform (Windows, macOS, Linux, or web).
         </Key>
         <p>
-          <strong>Code URL</strong> — a version-control repo (GitHub preferred).
+          <strong>Code URL</strong> - a version-control repo (GitHub preferred).
           Must be <strong>public</strong> and accessible without auth, should be
           open source (license encouraged), and must contain a{" "}
           <strong>README</strong> explaining what it is, how to set it up and run
@@ -104,22 +104,22 @@ export const GUIDELINE_PAGES: GuidelinePage[] = [
           commit does not follow the guidelines).
         </Key>
         <p>
-          <strong>Screenshot</strong> — must visually demonstrate the project (a
+          <strong>Screenshot</strong> - must visually demonstrate the project (a
           running app/game, a photo of hardware/3D model). Must be a static image:{" "}
           <strong>no video (.mp4) and no animation (.gif)</strong>.
         </p>
         <p>
-          <strong>Description</strong> — a clear, concise summary of what the
+          <strong>Description</strong> - a clear, concise summary of what the
           project is and what it&apos;s for.
         </p>
         <p>
-          <strong>Reproducibility</strong> — projects are meant to be used and
+          <strong>Reproducibility</strong> - projects are meant to be used and
           recreated by someone with minimal technical knowledge using only the
           submission. Software: a README on how to experience it and what tech
           was used. Games: instructions on how to play / set up (README or the
           host page, e.g. itch.io). Hardware: the repo must contain everything to
-          build it — PCB schematics/wiring diagrams, CAD in a{" "}
-          <strong>modifiable</strong> format (.STEP, .blend — <strong>not</strong>{" "}
+          build it - PCB schematics/wiring diagrams, CAD in a{" "}
+          <strong>modifiable</strong> format (.STEP, .blend - <strong>not</strong>{" "}
           .STL), and a README.
         </p>
       </div>
@@ -137,7 +137,7 @@ export const GUIDELINE_PAGES: GuidelinePage[] = [
         </p>
         <Key>
           <strong>Default to deflation.</strong> When in doubt, deflate
-          aggressively — it&apos;s far better to under-approve than to let
+          aggressively, it&apos;s far better to under-approve than to let
           inflated hours into the database. Give submitters the benefit of the
           doubt on <em>intent</em>, but never on the <em>number</em>.
         </Key>
@@ -145,23 +145,23 @@ export const GUIDELINE_PAGES: GuidelinePage[] = [
           <strong>Outright fraud → reject, don&apos;t record.</strong> Fabricated
           Hackatime (scripted heartbeats), plagiarized projects, fake/manufactured
           commit history, or any deliberate deception should not be entered at
-          all. Do not deflate to zero — simply do not create a record.
+          all. Do not deflate to zero, simply do not create a record.
         </Key>
         <p>
-          <strong>Deflation 1 — Inflated hours.</strong> Hours must be
+          <strong>Deflation 1 - Inflated hours.</strong> Hours must be
           proportional to complexity/scope (a plain HTML page isn&apos;t 10
-          hours). This is <em>not</em> to penalize beginners — learning time
+          hours). This is <em>not</em> to penalize beginners, learning time
           counts. Deflate when these converge: no commits showing incremental
           progress, fraud-like Hackatime patterns, and complexity that
           doesn&apos;t match the hours.
         </p>
         <p>
-          <strong>Deflation 2 — AI-generated code.</strong> AI use is permitted
+          <strong>Deflation 2 - AI-generated code.</strong> AI use is permitted
           (even mostly-AI projects) as long as there was genuine effort, it works,
           and the submitter learned something. The question is &quot;how much
           genuine effort?&quot; not &quot;how much did AI write?&quot;.{" "}
           <strong>AI slop</strong> (one prompt, no iteration/testing/refinement,
-          no engagement) is not eligible — reject it. When unsure, deflate to what
+          no engagement) is not eligible - reject it. When unsure, deflate to what
           you&apos;re confident they did. Programs may be stricter, never more
           relaxed.
         </p>
@@ -181,7 +181,7 @@ export const GUIDELINE_PAGES: GuidelinePage[] = [
         <p>
           The standard: someone <em>not</em> involved in the review should be
           able to read your justification, follow the links, and reach the same
-          conclusion. It must contain specific, verifiable info — links, numbers,
+          conclusion. It must contain specific, verifiable info - links, numbers,
           concrete observations. It is <strong>internal</strong> (the submitter
           never sees it) and is <strong>not</strong> for encouragement or
           feedback.
@@ -191,26 +191,26 @@ export const GUIDELINE_PAGES: GuidelinePage[] = [
         </p>
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            <strong>Hackatime project name(s) &amp; date range(s)</strong> —
+            <strong>Hackatime project name(s) &amp; date range(s)</strong> -
             comma-separated. E.g.{" "}
             <code>hackatime-project 7/20/2026-7/22/2026, project-2 7/21-7/23</code>
             . For an update, only dates after the previous submission.
           </li>
           <li>
-            <strong>Specific technical features</strong> — what specifically
+            <strong>Specific technical features</strong> - what specifically
             explains the hours (not just a list of languages).
           </li>
           <li>
-            <strong>Alternate tracking method</strong> — what method (self-report,
+            <strong>Alternate tracking method</strong> - what method (self-report,
             base amount, in-house tracker) and why you trust the number.
           </li>
           <li>
-            <strong>Deflation justification</strong> — the number deflated to, and
+            <strong>Deflation justification</strong> - the number deflated to, and
             why. E.g. &quot;Deflated 10h → 2.5h: only basic HTML/CSS/JS, user has
             built sites before, UI clearly AI-made.&quot;
           </li>
           <li>
-            <strong>Additional justification</strong> — for suspicious submissions
+            <strong>Additional justification</strong> - for suspicious submissions
             (few significant commits vs hours, suspicious heartbeats, high AI% vs
             commits). Include submitter experience with evidence and why it does
             or doesn&apos;t match the features. Missing this on a suspicious
@@ -248,7 +248,7 @@ export const GUIDELINE_PAGES: GuidelinePage[] = [
           multiplayer + 3 levels; approving 4h for the update.&quot;
         </p>
         <p>
-          <strong>Cross-program updates:</strong> new record, new hours only —
+          <strong>Cross-program updates:</strong> new record, new hours only -
           hours already approved under the original program must not be counted
           again.
         </p>
@@ -262,20 +262,20 @@ export const GUIDELINE_PAGES: GuidelinePage[] = [
         <p>Possible verdicts on a spot-check:</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            <strong>Accepted</strong> — no changes needed; stays in the Unified
+            <strong>Accepted</strong> - no changes needed; stays in the Unified
             Database.
           </li>
           <li>
-            <strong>Needs Changes (fine issued)</strong> — doesn&apos;t qualify as
+            <strong>Needs Changes (fine issued)</strong> - doesn&apos;t qualify as
             is, but can be resubmitted after changes.
           </li>
           <li>
-            <strong>Rejected (fine issued)</strong> — can&apos;t qualify even with
+            <strong>Rejected (fine issued)</strong> - can&apos;t qualify even with
             changes; should not be resubmitted.
           </li>
         </ul>
         <p>
-          <strong>Disputes:</strong> spot-checkers make mistakes — you can raise
+          <strong>Disputes:</strong> spot-checkers make mistakes, you can raise
           one. You must <em>prove with evidence</em> the criteria were met and the
           checker erred (e.g. the screenshot does match, it&apos;s just dark
           mode). You can&apos;t dispute with an after-the-fact excuse; issues
@@ -299,7 +299,7 @@ export const GUIDELINE_PAGES: GuidelinePage[] = [
           be shipped. Generally, a shipped project:
         </p>
         <ul className="list-disc space-y-1 pl-5">
-          <li>Works — at least as a minimum viable product.</li>
+          <li>Works - at least as a minimum viable product.</li>
           <li>Has its full code published somewhere like GitHub.</li>
           <li>Can be experienced by anyone with minimal technical knowledge.</li>
           <li>Requires &lt; 2 minutes of setup.</li>
@@ -318,7 +318,7 @@ export const GUIDELINE_PAGES: GuidelinePage[] = [
     ),
   },
   {
-    title: "🔑 Recap — the rules that matter most",
+    title: "🔑 Recap - the rules that matter most",
     body: (
       <div className="space-y-3 text-sm leading-relaxed">
         <p className="text-muted-foreground">
@@ -353,7 +353,7 @@ export const GUIDELINE_PAGES: GuidelinePage[] = [
           <li>
             <Key>
               <strong>Required fields:</strong> Playable URL (publicly
-              experienceable — not source-only / compile-from-source / notebooks),
+              experienceable - not source-only / compile-from-source / notebooks),
               Code URL (public + README + multiple commits; single commit ≠ ok for
               big hours), Screenshot (static image, no gif/mp4), Description,
               Reproducibility.
@@ -361,7 +361,7 @@ export const GUIDELINE_PAGES: GuidelinePage[] = [
           </li>
           <li>
             <Key>
-              <strong>Justification must be verifiable by an outsider</strong> —
+              <strong>Justification must be verifiable by an outsider</strong> -
               Hackatime name + dates, links, numbers. No &quot;checks out&quot; /
               &quot;looks good&quot; / &quot;good job&quot;.
             </Key>

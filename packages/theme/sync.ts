@@ -1,7 +1,7 @@
 /**
  * Pushes palette.json out to every consumer that can't import a workspace
  * package at runtime, the same way packages/config/sync.ts does for program
- * facts — see that file's header for why (Railway/Vercel per-app roots, the
+ * facts , see that file's header for why (Railway/Vercel per-app roots, the
  * Godot export runs from a PCK).
  *
  *   bun run theme:sync

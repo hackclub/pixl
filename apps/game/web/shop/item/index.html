@@ -305,7 +305,7 @@
         $("qty-input").value = quantity;
         $("qty-minus").disabled = quantity <= 1;
         $("qty-plus").disabled = quantity >= 999;
-        // Not a full renderDetail() — that resets optionPick back to each
+        // Not a full renderDetail(), that resets optionPick back to each
         // group's first choice, which would silently undo a picked option
         // (e.g. "Gabin") every time the quantity stepper is touched.
         if (selected && !isTrophy(selected) && !selected.config_options) updatePlainPriceUI();
@@ -446,7 +446,7 @@
         for (const s of Array.isArray(item && item.stock) ? item.stock : []) m.set(s.choice, s);
         return m;
       }
-      // The option group whose choices are all stock-tracked, if any — that's
+      // The option group whose choices are all stock-tracked, if any, that's
       // the group that gets remaining counts and sold-out chips.
       function stockGroupIndex(groups, stock) {
         if (!stock.size) return -1;
@@ -516,7 +516,7 @@
       }
 
       // Whether the currently picked stock-tracked choice (if any) can cover
-      // the requested quantity — used to grey out BUY on top of affordability.
+      // the requested quantity, used to grey out BUY on top of affordability.
       function stockOk() {
         const groups = optionGroups(selected);
         const stock = stockMap(selected);
@@ -702,7 +702,7 @@
       }
 
       // Price/afford/buy-button state for a plain (non-configurator) priced
-      // item — pulled out of renderDetail() so the stock-poll refresh and the
+      // item, pulled out of renderDetail() so the stock-poll refresh and the
       // qty stepper can update it without resetting the picked option/note.
       function updatePlainPriceUI() {
         if (Number(selected.price) <= 0) {
@@ -753,7 +753,7 @@
         $("save-btn").classList.toggle("dark", !saved);
       }
 
-      // Re-posts the current option/config picks under the existing save —
+      // Re-posts the current option/config picks under the existing save,
       // fired on every configurator change once an item is saved, so a
       // player's build stays in sync as they keep deciding, without them
       // having to hit SAVE again after every tweak.
@@ -803,7 +803,7 @@
       }
 
       // Redirects through Hack Club Auth to re-fetch this player's address
-      // live (not just whatever Pixl already has cached) — only ever fired
+      // live (not just whatever Pixl already has cached), only ever fired
       // by an explicit button click, never automatically.
       function startAddressVerification(id) {
         const back = new URL(location.href);
@@ -816,7 +816,7 @@
       }
 
       // Every order ships physically, so confirm the on-file address before
-      // spending pixels — same pattern as a checkout confirm step.
+      // spending pixels, same pattern as a checkout confirm step.
       async function confirmAddressThenBuy(id) {
         let elig = null;
         try { elig = await Pixl.api("/api/profile/eligibility"); } catch {}
@@ -954,7 +954,7 @@
               : "");
       }, 1000);
 
-      // Live stock refresh — so "12/15 left" updates while someone's looking
+      // Live stock refresh, so "12/15 left" updates while someone's looking
       // at the page, not just after their own purchase.
       setInterval(refreshStock, 8000);
 
@@ -990,7 +990,7 @@
         $("detail").hidden = false;
         renderDetail();
 
-        // Bounced back here after clicking "Verify address" mid-checkout —
+        // Bounced back here after clicking "Verify address" mid-checkout,
         // report the result and pick the purchase flow back up.
         const params = new URLSearchParams(location.search);
         if (params.has("addr_verified_return")) {

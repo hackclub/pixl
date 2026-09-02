@@ -81,7 +81,7 @@ router.get("/api/sidequests", async (req, res) => {
   });
 });
 
-// Accept a Trial — the "I'll take it" from an NPC. Idempotent: the unique
+// Accept a Trial - the "I'll take it" from an NPC. Idempotent: the unique
 // (sidequest_id, user_id) on sidequest_unlocks means re-accepting is a no-op.
 // Only active Trials can be accepted.
 router.post("/api/sidequests/:id/accept", async (req, res) => {
@@ -114,7 +114,7 @@ router.post("/api/sidequests/:id/accept", async (req, res) => {
 });
 
 // Pixo's first-Trial recommendation. Picks one active *starter* Trial whose
-// difficulty best matches the player's coding experience — but always returns
+// difficulty best matches the player's coding experience, but always returns
 // the full starter list too, so the Trial Board can offer "browse all" and
 // never forces the pick. Requires drizzle/0050 (difficulty/starter columns).
 const EXPERIENCE_DIFFICULTY: Record<string, number> = {

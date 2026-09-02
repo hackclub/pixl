@@ -61,7 +61,7 @@ func _run() -> void:
 	check(C2._panel == 1, "next_panel advances index")
 	C2.skip()
 	check(C2._done and fired2[0] == 1, "skip() finishes once from mid-sequence")
-	C2.skip()  # idempotent — must not re-fire
+	C2.skip()  # idempotent, must not re-fire
 	check(fired2[0] == 1, "skip() is idempotent (no double finish)")
 
 	if _fail == 0: print("\nALL CINEMATIC TESTS PASSED")

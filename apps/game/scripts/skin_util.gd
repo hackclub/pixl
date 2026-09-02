@@ -10,7 +10,7 @@ const SHEET_SIZE := Vector2i(160, 576)
 # Named skins reserved for NPCs, addressed as "npc:<name>" on an NPC node's
 # `skin` export. Each value is a full 160x576 CozyValley-format sheet. These are
 # deliberately NOT accepted by is_valid() and never listed in the character
-# editor, so a player can never wear one — they're NPC-only.
+# editor, so a player can never wear one, they're NPC-only.
 const NPC_SHEETS := {
 	"pixo": NPC_DIR + "pixo_char.png",
 	"cheetah": NPC_DIR + "cheetah_char.png",

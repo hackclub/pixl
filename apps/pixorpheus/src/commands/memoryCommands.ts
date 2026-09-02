@@ -70,7 +70,7 @@ app.command("/pixl-memories", async ({ command, ack, respond, client }) => {
   });
 });
 
-// /pixl-mymemory [@user] — shows what pixorpheus remembers about you or someone else
+// /pixl-mymemory [@user] - shows what pixorpheus remembers about you or someone else
 app.command("/pixl-mymemory", async ({ command, ack, respond }) => {
   await ack();
   if (!checkAiRateLimit(command.user_id)) {
@@ -81,7 +81,7 @@ app.command("/pixl-mymemory", async ({ command, ack, respond }) => {
   const targetId = mentionMatch ? mentionMatch[1] : command.user_id;
   const isSelf = targetId === command.user_id;
 
-  // Memory is harvested from private DMs and can contain sensitive facts —
+  // Memory is harvested from private DMs and can contain sensitive facts,
   // only the subject themself or a helper/admin can look it up.
   if (!isSelf && !(await checkIsHelper(command.user_id))) {
     await respond({ text: "you can only look up your own memory.", response_type: "ephemeral" });
@@ -111,15 +111,15 @@ app.command("/pixl-mymemory", async ({ command, ack, respond }) => {
       .join("\n");
 
     // Memory can contain sensitive facts about the subject, so this always
-    // goes back through respond() (ephemeral, visible only to the caller) —
+    // goes back through respond() (ephemeral, visible only to the caller),
     // never posted into the channel, even for the "someone else" case.
     const res = await aiPost({
       messages: [
         {
           role: "system",
           content: isSelf
-            ? `You are Pixorpheus, a sarcastic Slack bot. The person asking is the subject — speak DIRECTLY to them using "you". Write 1-2 casual sentences summarizing what you know about them. Lowercase, conversational, gen Z energy. No lists. Only mention real concrete things — skip anything vague.`
-            : `You are Pixorpheus, a sarcastic Slack bot. Write 1-2 casual sentences summarizing who ${displayName} is. Use their name or "they". Lowercase, conversational, gen Z energy. No lists. Only mention real concrete things — skip anything vague.`,
+            ? `You are Pixorpheus, a sarcastic Slack bot. The person asking is the subject, speak DIRECTLY to them using "you". Write 1-2 casual sentences summarizing what you know about them. Lowercase, conversational, gen Z energy. No lists. Only mention real concrete things, skip anything vague.`
+            : `You are Pixorpheus, a sarcastic Slack bot. Write 1-2 casual sentences summarizing who ${displayName} is. Use their name or "they". Lowercase, conversational, gen Z energy. No lists. Only mention real concrete things, skip anything vague.`,
         },
         { role: "user", content: input },
       ],
@@ -144,7 +144,7 @@ app.command("/pixl-mymemory", async ({ command, ack, respond }) => {
   });
 });
 
-// /pixl-leaderboard — show who has the most memory facts stored (most active)
+// /pixl-leaderboard - show who has the most memory facts stored (most active)
 app.command("/pixl-leaderboard", async ({ command, ack, client }) => {
   await ack();
   try {

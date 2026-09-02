@@ -1,9 +1,9 @@
 extends CanvasLayer
-## Opening cinematic — the Day-0 arrival. A sequence of full-screen illustrated
+## Opening cinematic, the Day-0 arrival. A sequence of full-screen illustrated
 ## panels (see ONBOARDING_REDESIGN.md §3 for why panels over web video): each
 ## panel fades in, its caption lines type on, it holds, then auto-advances.
 ## Skippable and replayable. Emits `finished` when the last panel completes or
-## the player skips — the caller then loads the village (arrival mode).
+## the player skips, the caller then loads the village (arrival mode).
 ##
 ## Art: PANELS[].texture is null on beats without art yet (currently THE GREAT
 ## STATIC), which render as a tinted placeholder with the title instead. Drop a
@@ -113,7 +113,7 @@ func _build_ui() -> void:
 	_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE  # was STOP by default, ate every click before root's gui_input saw it
 	root.add_child(_bg)
 
-	# Reserved slot for a future pre-rendered cut — inert (no stream) for now.
+	# Reserved slot for a future pre-rendered cut, inert (no stream) for now.
 	_video = VideoStreamPlayer.new()
 	_video.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_video.expand = true
@@ -136,7 +136,7 @@ func _build_ui() -> void:
 	_static_fx.material.shader = preload("res://shaders/tv_static.gdshader")
 	root.add_child(_static_fx)
 
-	# Placeholder title, centred, big — stands in for the art until stills exist.
+	# Placeholder title, centred, big - stands in for the art until stills exist.
 	_title = Label.new()
 	_title.set_anchors_preset(Control.PRESET_CENTER)
 	_title.grow_horizontal = Control.GROW_DIRECTION_BOTH
@@ -228,7 +228,7 @@ func _next_line() -> void:
 	_typing = _type_len > 0
 
 # [E]/click: snap a still-typing line to full first; otherwise advance to the
-# next line (or panel). Player-driven — nothing auto-advances.
+# next line (or panel). Player-driven, nothing auto-advances.
 func _advance() -> void:
 	if _done:
 		return
@@ -254,7 +254,7 @@ func _finish() -> void:
 
 func _process(delta: float) -> void:
 	# Only drives the typewriter reveal; advancing a finished line waits for the
-	# player ([E]/click/space) — see _advance / _unhandled_input.
+	# player ([E]/click/space), see _advance / _unhandled_input.
 	if _done or not _typing:
 		return
 	_caption.visible_characters = mini(

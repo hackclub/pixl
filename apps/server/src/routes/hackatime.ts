@@ -5,7 +5,7 @@ import { supabase } from "../db/client.js";
 import { fetchHackatimeStats, fetchProjectActivitySummary, HACKATIME_CUTOFF } from "../hackatime/api.js";
 import { config } from "../config.generated.js";
 
-// OAuth app config — set these as env vars on the server (never in the repo).
+// OAuth app config - set these as env vars on the server (never in the repo).
 const BASE = (process.env.HACKATIME_BASE ?? "https://hackatime.hackclub.com").replace(/\/$/, "");
 const CLIENT_ID = process.env.HACKATIME_CLIENT_ID ?? "";
 const CLIENT_SECRET = process.env.HACKATIME_CLIENT_SECRET ?? "";

@@ -49,7 +49,7 @@ func player_movement(delta: float)-> void:
 		if !is_on_stairs:
 			speed = 150
 	move_and_slide()
-	# Only hit the network when something actually changed — sending every
+	# Only hit the network when something actually changed, sending every
 	# physics frame floods the WebSocket (and the JS bridge) on the web build.
 	if global_position.distance_squared_to(_last_sent_pos) > 1.0 or current_dir != _last_sent_dir:
 		_last_sent_pos = global_position

@@ -100,7 +100,7 @@ function actorName(access: AdminAccess): string {
 // Where to send a reviewer after they finish a verdict: straight to the next
 // project in their queue if there is one, otherwise back to the list. `stage`
 // is the stage of the project they just closed, so we keep them in the same
-// pass (first vs final) when possible. Never throws — returns a path to redirect.
+// pass (first vs final) when possible. Never throws, returns a path to redirect.
 async function nextReviewPath(
   access: AdminAccess,
   by: string,
@@ -382,7 +382,7 @@ async function voidFirstPassPayouts(projectId: number): Promise<void> {
 
 // How a reviewer is credited in maker-facing notes. Prefers the Slack @handle;
 // never leaks a raw Slack user id (login stores the id as the name when Slack
-// gives us no real name) — attribute it to the review team instead.
+// gives us no real name), attribute it to the review team instead.
 async function reviewerLabel(slackId: string, name: string): Promise<string> {
   const handle = await slackHandle(slackId);
   if (handle) return handle;
@@ -470,7 +470,7 @@ interface BeneficiaryPayout {
 
 // Credits one beneficiary (the project owner, or an accepted collaborator)
 // at their own rate tier for their own share of credited hours. This is what
-// "split payout" means for a collaborative project — each person is treated
+// "split payout" means for a collaborative project, each person is treated
 // like an independent earner (own lifetime-hours rate, own referral boost),
 // just for their own hours slice instead of the whole project.
 async function creditBeneficiary(
@@ -743,7 +743,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
 
   const reviewer = await reviewerLabel(access.session.slackId, access.session.name);
   // Whether the approve/needs-changes notification below shows this reviewer's
-  // real name or a generic "the review team" — ticked by default in the form,
+  // real name or a generic "the review team", ticked by default in the form,
   // a reviewer can opt out per verdict. Internal records (mod actions, audit
   // rows, ban_by, first_pass_by, etc.) always keep the real reviewer; this
   // only ever swaps the player-facing notification text.
@@ -751,7 +751,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
   const playerFacingReviewer = revealName ? reviewer : "the review team";
 
   // First pass on a freshly-shipped project: approve and ban are only PROPOSALS,
-  // regardless of the reviewer's own permissions — the project is held in
+  // regardless of the reviewer's own permissions, the project is held in
   // 'second_review' carrying what was proposed so a different final reviewer
   // confirms or overturns it. "Request changes" is the exception: it never needs
   // a second pass, so it falls through to bounce straight back to the maker.
@@ -790,7 +790,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
   }
 
   // From here the project is in 'second_review' (a final reviewer confirming or
-  // overturning the first-pass proposal) — or it's a first-pass "request changes"
+  // overturning the first-pass proposal), or it's a first-pass "request changes"
   // falling through to bounce straight back to the maker. These two guards only
   // apply to the second_review case.
   if (stage === "second_review" && !access.canSecondPass)
@@ -1033,7 +1033,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
 
   // Split payout: every accepted collaborator is credited independently at
   // their own rate tier for their own submitted hours slice (capped at what
-  // they actually tracked — see claimedHoursForCollaborator).
+  // they actually tracked, see claimedHoursForCollaborator).
   for (const c of collaborators) {
     const cClaimedHours = await claimedHoursForCollaborator(projectId, c.user_id, c.hackatime_seconds);
     const rawHours = Number(String(formData.get(`collabHours_${c.id}`) ?? cClaimedHours));
@@ -2929,7 +2929,7 @@ export async function deletePlayerAccount(formData: FormData): Promise<void> {
 }
 
 // Upload a shop image to Supabase Storage (public "shop" bucket, created on
-// first use) and return its public URL. Resized/re-encoded to WebP first —
+// first use) and return its public URL. Resized/re-encoded to WebP first,
 // shop images are shown at most at 300×300 (the item detail page), but
 // admins often upload straight-from-phone photos that can be several MB,
 // which made shop pages painfully slow to load. Capping at 900×900 (a 3x
@@ -3024,7 +3024,7 @@ function readOptions(raw: string): string[] {
 // comma-separated list from the form (falls back to the single `region`
 // field so old bookmarked/scripted submits with just that field still work);
 // each region can override the shared `price` via a `price_<REGION>` field,
-// e.g. `price_INDIA` — a region with no such field just uses `price`.
+// e.g. `price_INDIA`, a region with no such field just uses `price`.
 export async function addShopItem(formData: FormData): Promise<void> {
   const access = await requirePerm("shop");
   const name = String(formData.get("name") ?? "").trim().slice(0, 60);
@@ -3099,12 +3099,12 @@ export async function updateShopItem(formData: FormData): Promise<void> {
     .getAll("unlock_trials")
     .map(Number)
     .filter((n) => Number.isFinite(n) && n > 0);
-  // A second, manual way to lock an item that isn't tied to any Trial —
+  // A second, manual way to lock an item that isn't tied to any Trial,
   // also item-wide, mirrored below the same way the Trial gate is.
   const manualLocked = formData.get("manual_locked") === "1";
   const lockNote = String(formData.get("lock_note") ?? "").trim().slice(0, 300);
   // Saving silently skips telling pixorpheus about this change (e.g. a typo
-  // fix that isn't worth a Slack ping) — see notifyShopUpdates below.
+  // fix that isn't worth a Slack ping), see notifyShopUpdates below.
   const silent = formData.get("silent") === "1";
   const patch: Record<string, unknown> = {
     name,
@@ -3148,7 +3148,7 @@ export async function updateShopItem(formData: FormData): Promise<void> {
   if (error) throw new Error(error.message);
 
   // A Trial gate is item-wide, so mirror it onto every region row of this item
-  // (matched by its name before any rename) — never locked in one region and
+  // (matched by its name before any rename), never locked in one region and
   // open in another. The edited row itself already got it via `patch`.
   const gateName = originalName || name;
   const { error: gateErr } = await db
@@ -3717,7 +3717,7 @@ export async function deleteSidequest(formData: FormData): Promise<void> {
 const NPC_WORLDS = new Set(["village", "open_world"]);
 
 // Mirrors what the game can resolve for an NPC: a cvc: preset, a cv1: composite,
-// or an npc:<name> NPC-only sheet (SkinUtil.NPC_SHEETS — pixo, cheetah). The
+// or an npc:<name> NPC-only sheet (SkinUtil.NPC_SHEETS - pixo, cheetah). The
 // npc: skins are intentionally NPC-only: SkinUtil.is_valid() still rejects them
 // so a player can never wear one, but NPCs placed from here may. Keep the npc:
 // list in sync with SkinUtil.NPC_SHEETS in apps/game/scripts/skin_util.gd.
@@ -3989,7 +3989,7 @@ export async function resolveReport(formData: FormData): Promise<void> {
 }
 
 // Grant/revoke is a super-admin-only action, distinct from being able to
-// view reports — otherwise any report viewer (a widely-granted role that
+// view reports, otherwise any report viewer (a widely-granted role that
 // also includes moderators) could add or remove other viewers and widen
 // access to reports full of chat logs, addresses, and other PII.
 export async function addReportViewerAction(formData: FormData): Promise<void> {
@@ -4245,7 +4245,7 @@ export async function acknowledgeGuidelines() {
 
 // Escape hatch off the same gate: records the ack (so they aren't bounced back
 // to the gate every page load) without requiring the read-through, but pings
-// every owner via Pixo DM so a skip never goes unnoticed. Fire-and-forget —
+// every owner via Pixo DM so a skip never goes unnoticed. Fire-and-forget,
 // a Slack hiccup shouldn't block the reviewer from reaching the queue.
 export async function skipGuidelines() {
   const access = await requirePerm("review");

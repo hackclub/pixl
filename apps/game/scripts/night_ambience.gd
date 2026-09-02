@@ -1,7 +1,7 @@
 extends Node2D
 
 # Fireflies. A single particle emitter that rides along with the camera and only
-# lights up after dark, driven entirely by DayNight.night_amount() — so it comes
+# lights up after dark, driven entirely by DayNight.night_amount(), so it comes
 # and goes with the sky and never shows up indoors, in menus, or during the day.
 
 var _p: CPUParticles2D

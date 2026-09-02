@@ -214,7 +214,7 @@ function handleShopChange(payload: WebhookPayload): void {
 
 // Supabase Database Webhooks POST JSON here, protected by a shared secret
 // sent as a custom header (set SHOP_WEBHOOK_SECRET and add the matching
-// header in the Supabase webhook config / trigger). The secret is required —
+// header in the Supabase webhook config / trigger). The secret is required,
 // without it configured, the endpoint refuses all requests rather than
 // accepting unverified ones.
 receiver.app.post("/webhooks/shop", express.json({ limit: "1mb" }), (req, res) => {

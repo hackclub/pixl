@@ -10,7 +10,7 @@
  * model regularly mixes up (e.g. writes :yay_gay: instead of :yay-gay:).
  * Rather than trust the model to get the exact separator right, normalize
  * by matching on a punctuation-insensitive key and rewriting to the real
- * name — for both the REACT: line and any :emoji: written inline in the
+ * name, for both the REACT: line and any :emoji: written inline in the
  * reply text.
  */
 export const CUSTOM_EMOJIS = [
@@ -76,7 +76,7 @@ const CUSTOM_EMOJI_BY_LOOSE_KEY = new Map<string, string>(
 
 /**
  * Standard edit-distance, used as a fallback when the model doesn't just mix
- * up -/_ (already handled above) but flat-out typos a name — e.g. writes
+ * up -/_ (already handled above) but flat-out typos a name, e.g. writes
  * :huhj3d: instead of :huh3d: (an extra letter, not a separator swap).
  */
 function levenshtein(a: string, b: string): number {

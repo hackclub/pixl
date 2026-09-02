@@ -198,7 +198,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func pet() -> void:
 	_pop_heart()
 	if _state == "follow":
-		# already a companion — a fresh pet just keeps it around longer
+		# already a companion, a fresh pet just keeps it around longer
 		_follow_time = follow_duration
 		return
 	_affection += 1

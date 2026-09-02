@@ -197,7 +197,7 @@ interface HackClubMeResponse {
     primary_email?: string;
     slack_id?: string;
     // Confirmed against hackclub/auth's own jbuilder templates
-    // (app/views/api/v1/identities/_identity.jb, _address.jb) — NOT the OIDC
+    // (app/views/api/v1/identities/_identity.jb, _address.jb) , NOT the OIDC
     // standard claim names the "birthdate"/"address" scopes might suggest.
     // The "birthdate" scope's field is `birthday`, and "address" grants an
     // `addresses` ARRAY (one entry per address on file), not a single object.
@@ -285,7 +285,7 @@ router.get("/auth/hackclub", (req, res) => {
 });
 
 // Re-authorizes with HCA to pull a fresh phone+address for an
-// already-logged-in player, without touching their session — used for the
+// already-logged-in player, without touching their session , used for the
 // "verify address" button on shop checkout (a stale address on file
 // shouldn't silently ship wrong) and now also the first time a player starts
 // an order at all, since general login no longer asks HCA for this.
@@ -468,7 +468,7 @@ router.get("/auth/hackclub/callback", async (req, res) => {
     if (identity.first_name) patch.first_name = identity.first_name;
     if (identity.last_name) patch.last_name = identity.last_name;
     // Birthday/address now come from HCA (the /account self-report form is
-    // gone) — keep them in sync every login the same way name/email are.
+    // gone) , keep them in sync every login the same way name/email are.
     if (hcaBirthday) patch.birthday = encryptPII(hcaBirthday);
     if (hcaAddress) {
       patch.address_line1 = encryptPII(hcaAddress.address_line1);

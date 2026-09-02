@@ -9,7 +9,7 @@ const router = Router();
 
 const IDEA_ROLES = ["art", "code", "audio", "design", "writing"];
 
-// Batch vote counts + this viewer's own votes for a set of ideas — same
+// Batch vote counts + this viewer's own votes for a set of ideas, same
 // shape as explore.ts's project vote batching.
 async function voteInfo(ideaIds: number[], viewerId: string) {
   const upCounts = new Map<number, number>();
@@ -81,7 +81,7 @@ router.get("/api/ideas", async (req, res) => {
   res.json({ ok: true, ideas: out });
 });
 
-// Post an idea. Instant — no review queue, this is just a prompt board.
+// Post an idea. Instant - no review queue, this is just a prompt board.
 router.post("/api/ideas", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";
   const session = token ? verifySessionToken(token) : null;
@@ -145,7 +145,7 @@ router.delete("/api/ideas/:id", async (req, res) => {
 });
 
 // Permanent upvote on an idea. One per voter, never taken back, can't vote
-// your own idea — same rules as project upvotes.
+// your own idea, same rules as project upvotes.
 router.post("/api/ideas/:id/upvote", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";
   const session = token ? verifySessionToken(token) : null;
@@ -184,7 +184,7 @@ router.post("/api/ideas/:id/upvote", async (req, res) => {
   }
 });
 
-// Permanent downvote on an idea — same rules as upvote, opposite direction.
+// Permanent downvote on an idea, same rules as upvote, opposite direction.
 router.post("/api/ideas/:id/downvote", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";
   const session = token ? verifySessionToken(token) : null;

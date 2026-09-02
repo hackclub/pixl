@@ -241,7 +241,7 @@ router.post("/api/collaborators/:id/decline", async (req, res) => {
 });
 
 // Owner removes an accepted collaborator, or a collaborator leaves on their
-// own — either way the row is marked 'removed' (not deleted) to keep past
+// own, either way the row is marked 'removed' (not deleted) to keep past
 // payout history intact.
 router.post("/api/collaborators/:id/remove", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";
@@ -275,7 +275,7 @@ router.post("/api/collaborators/:id/remove", async (req, res) => {
 });
 
 // An accepted collaborator links their own Hackatime projects (their own
-// account, tracked separately from the owner's — see parseProjectBody's
+// account, tracked separately from the owner's, see parseProjectBody's
 // hackatime_projects handling in projects.ts for the same shape).
 router.put("/api/collaborators/:id/hackatime", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";
@@ -304,7 +304,7 @@ router.put("/api/collaborators/:id/hackatime", async (req, res) => {
   if (!data) return res.status(404).json({ ok: false });
 
   // Recompute their tracked seconds right away instead of leaving it stale
-  // until the owner's next ship — otherwise linking a project here has no
+  // until the owner's next ship, otherwise linking a project here has no
   // visible effect until then, which reads as "save does nothing."
   const { data: userRow } = await supabase
     .from("users")
@@ -323,14 +323,14 @@ router.put("/api/collaborators/:id/hackatime", async (req, res) => {
   res.json({ ok: true, hackatimeSeconds });
 });
 
-const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I — easy to read aloud
+const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I - easy to read aloud
 function randomCode(): string {
   let s = "";
   for (let i = 0; i < 6; i++) s += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
   return `${s.slice(0, 3)}-${s.slice(3)}`;
 }
 
-// Owner gets (or generates, first time) a shareable join code — an
+// Owner gets (or generates, first time) a shareable join code, an
 // alternative to the name-search invite above. Anyone holding the code can
 // redeem it to join instantly, no lookup needed.
 router.post("/api/projects/:id/collaborators/code", async (req, res) => {
@@ -361,7 +361,7 @@ router.post("/api/projects/:id/collaborators/code", async (req, res) => {
 });
 
 // Any player redeems a code to join that project as an accepted
-// collaborator immediately — the code itself is the invitation, so there's
+// collaborator immediately, the code itself is the invitation, so there's
 // no separate pending/accept step like the name-search invite has.
 router.post("/api/collaborators/redeem", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";

@@ -9,12 +9,12 @@ Change a value here and every consumer that generates off it picks it up.
 `palette.json` has `web` and `godot` top-level keys, each with a `dark`
 theme object (`web` also has `light`) using the same token names (`ink`,
 `gold`, `panel`, ...). Unlike the DUSK/Light palette this replaced, `web.dark`
-and `godot.dark` now share the same gold, ink and panel family on purpose —
+and `godot.dark` now share the same gold, ink and panel family on purpose -
 that's the point of LEDGER: the currency icon, the game's UI and the web
 shell's accent all read as the same gold, not three independently-chosen
 ones. `godot.dark` only carries the subset of tokens the Godot side actually
 consumes today (`gold`, `gold-soft`, `ink`, `panel`, `panel-deep`, `btn-ink`,
-`good`, `bad`) — `apps/game/scripts/pixl_theme.gd`'s `apply()` only repaints
+`good`, `bad`) - `apps/game/scripts/pixl_theme.gd`'s `apply()` only repaints
 a specific subset of `main_theme.tres` and a couple of scripts so far (see
 that file's comments for the current scope and what's still deferred).
 
@@ -25,12 +25,12 @@ still sees Ledger Dark in-game, unchanged, until someone designs a Godot
 light variant.
 
 `web.dark.effects` / `web.light.effects` (`drop`, `dropLg`, `dither`) are
-literal CSS value strings, not derived from `ink` — the shadow/dither rgba
+literal CSS value strings, not derived from `ink`, the shadow/dither rgba
 values are hand-tuned per theme and don't reduce to a clean tint of `ink`.
 Godot has no consumer for these, so they're omitted from the generated
 `apps/game/theme.json`.
 
-`--img-slot` in `pixl.css` stays out of this file entirely — it's explicitly
+`--img-slot` in `pixl.css` stays out of this file entirely - it's explicitly
 fixed, never redefined per theme (see the comment next to it in `pixl.css`).
 
 ## Consuming it
@@ -46,7 +46,7 @@ bun run theme:sync
 
 Run that after editing `palette.json`. It rewrites:
 
-- `apps/game/theme.json` — read by `apps/game/scripts/pixl_theme.gd`
+- `apps/game/theme.json` - read by `apps/game/scripts/pixl_theme.gd`
 - the color-token lines inside `apps/game/web/pixl.css`'s `:root{}` and
   `:root[data-theme="light"]{}` blocks, between `/* <pixl-theme:...> */`
   markers. Everything else in those blocks (the LEDGER design-philosophy
@@ -58,5 +58,5 @@ just docs) reads `web.dark` directly at build time, so the previews always
 match whatever LEDGER DARK currently is without a separate copy.
 
 Both `theme.json` and `pixl.css` are committed (the game and the web shell
-need them at runtime) but are **generated — do not hand-edit them**, the next
+need them at runtime) but are **generated - do not hand-edit them**, the next
 sync overwrites your changes.

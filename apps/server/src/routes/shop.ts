@@ -17,18 +17,18 @@ async function regionFor(userId: string): Promise<string> {
 
 // Base columns plus unlock_xp (trophies), region and category. unlock_xp/
 // config_options arrived with migration 0032/0058, region with 0063, category
-// with 0106 — fall back gracefully before each is applied so the catalog
+// with 0106 , fall back gracefully before each is applied so the catalog
 // keeps loading.
 const ITEM_COLUMNS =
   "id, name, description, price, image_url, options, unlock_xp, config_options, region, category, unlock_trial_ids, manual_locked, lock_note";
 const ITEM_COLUMNS_FALLBACK = "id, name, description, price, image_url, options";
 
 // Items are scoped to the player's own region (fulfillment/shipping differ a
-// lot by where they live) — pass `region` to filter, or omit it to get every
+// lot by where they live) , pass `region` to filter, or omit it to get every
 // region (not currently used, but keeps this function generally useful).
 // Restoration reward trophies (unlock_xp > 0) are the exception: they're
 // earned, not shipped, so every player sees the same trophies at the same
-// XP requirement regardless of region — never scope them to a region.
+// XP requirement regardless of region , never scope them to a region.
 async function fetchItems(filterIds?: number[], region?: string) {
   const build = (cols: string, withRegion: boolean) => {
     let q = supabase.from("shop_items").select(cols);
@@ -56,7 +56,7 @@ async function fetchItems(filterIds?: number[], region?: string) {
 }
 
 // Per-choice stock pools (e.g. 15 "Ridit" Signed Org Photos) for whichever of
-// the given item ids have any — attached to the item as `stock: [{choice,
+// the given item ids have any , attached to the item as `stock: [{choice,
 // remaining, total}]` so the client can show live counts and grey out
 // sold-out choices. Items with no pool just don't get a `stock` key.
 async function attachStock(items: Record<string, unknown>[]): Promise<void> {
@@ -79,12 +79,12 @@ async function attachStock(items: Record<string, unknown>[]): Promise<void> {
   }
 }
 
-// Active catalog, plus mystery-merchant items while their event runs — those
+// Active catalog, plus mystery-merchant items while their event runs , those
 // stay inactive in the dashboard so they vanish the moment the event ends.
 // Trophy items (unlock_xp > 0) come back flagged with the player's own progress.
 // Signed out visitors get the same catalog (browsable, so the shop can be
-// shared/linked to anyone) with every personal field defaulted — no saves, no
-// trophy progress, gated items locked — since there's no session to look any
+// shared/linked to anyone) with every personal field defaulted , no saves, no
+// trophy progress, gated items locked , since there's no session to look any
 // of that up against. Buying/saving/claiming still require a session, same
 // as before.
 router.get("/api/shop/items", async (req, res) => {
@@ -118,7 +118,7 @@ router.get("/api/shop/items", async (req, res) => {
   await attachStock(items);
 
   // Saved (pinned) items, and for a config_options item the last spec the
-  // player put together — restored on the detail page instead of resetting
+  // player put together , restored on the detail page instead of resetting
   // to the first choice of every group on each visit. Nothing to look up for
   // a signed-out visitor, so every item defaults to unsaved.
   const savesById = session
@@ -170,7 +170,7 @@ router.get("/api/shop/items", async (req, res) => {
   ].filter((id) => Number.isFinite(id) && id > 0);
   if (gatedIds.length > 0) {
     // A signed-out visitor hasn't shipped anything, so every gated item is
-    // locked for them — skip the shipped-projects lookup entirely rather than
+    // locked for them , skip the shipped-projects lookup entirely rather than
     // querying it against no user.
     const [{ data: shipped }, { data: trials }] = await Promise.all([
       session
@@ -196,7 +196,7 @@ router.get("/api/shop/items", async (req, res) => {
         i.unlock_trials = ids.map((id) => nameById.get(id)).filter((n): n is string => !!n);
         // Distinguishes "go ship the trial, it's right there" (Music Grant)
         // from "the trial doesn't exist yet, there's nothing to do" (a
-        // placeholder trial seeded for an unlaunched region) — the client
+        // placeholder trial seeded for an unlaunched region) , the client
         // shows a plain "coming soon" instead of a lock + call to action
         // when none of the gating trials are active yet.
         i.unlockPending = i.locked && !ids.some((id) => activeById.get(id));
@@ -257,7 +257,7 @@ router.get("/api/shop/item/:id/public", async (req, res) => {
 });
 
 // Live remaining counts for a stock-limited item's choices (e.g. how many
-// "Ridit" Signed Org Photos are left) — polled from the item detail page so
+// "Ridit" Signed Org Photos are left) , polled from the item detail page so
 // counts stay current as other players buy without a full page reload.
 router.get("/api/shop/stock/:id", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";
@@ -323,7 +323,7 @@ router.post("/api/shop/claim/:id", async (req, res) => {
 // Pin an item (with its current option/config picks, for a configurable
 // item) so it's easy to find again and, on the detail page, so an
 // in-progress build restores instead of resetting to the first choice of
-// every group. Re-posting while already saved overwrites the stored picks —
+// every group. Re-posting while already saved overwrites the stored picks ,
 // the detail page calls this again on every config change once an item is
 // pinned, so a saved build stays in sync as the player keeps deciding.
 router.post("/api/shop/save/:id", async (req, res) => {
@@ -410,7 +410,7 @@ router.post("/api/shop/buy/:id", async (req, res) => {
   if (!session) return res.status(401).json({ ok: false });
 
   // We physically ship every order, so an address has to be on file before we
-  // let the purchase through — see /account in apps/game/web.
+  // let the purchase through , see /account in apps/game/web.
   const { data: buyer } = await supabase
     .from("users")
     .select("address_line1, address_city, address_country, address_postal")
@@ -433,7 +433,7 @@ router.post("/api/shop/buy/:id", async (req, res) => {
   const config =
     req.body?.config && typeof req.body.config === "object" ? req.body.config : null;
   // How many of this item to buy in one order. Clamped again server-side
-  // inside buy_shop_item — this is just so a garbage value doesn't even reach it.
+  // inside buy_shop_item , this is just so a garbage value doesn't even reach it.
   const rawQty = Number(req.body?.quantity);
   const quantity = Number.isFinite(rawQty) ? Math.max(1, Math.min(999, Math.round(rawQty))) : 1;
   // Free-text note to whoever fulfils the order, and (for items with a

@@ -1,5 +1,5 @@
 // Minimal RFC 4180 CSV parser (quoted fields, escaped "" quotes, commas and
-// newlines inside quotes) — good enough for BOM exports from spreadsheet
+// newlines inside quotes), good enough for BOM exports from spreadsheet
 // tools without pulling in a dependency for one small parser.
 export function parseCsv(text: string): string[][] {
   const rows: string[][] = [];

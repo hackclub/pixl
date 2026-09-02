@@ -1,11 +1,11 @@
 const MODEL = "google/gemini-2.5-flash-lite";
-// Exported so uploads.ts can cap the accepted body size at exactly this —
+// Exported so uploads.ts can cap the accepted body size at exactly this,
 // anything bigger than what we actually moderate must never be accepted at all.
 export const MAX_MODERATE_BYTES = 15_000_000;
 
 // Vision moderation for user-uploaded images (journals, chat, thumbnails).
 // Fails OPEN on missing key / network / parse errors so uploads never hard-break
-// when the model is down — it only rejects on an explicit "unsafe" verdict.
+// when the model is down, it only rejects on an explicit "unsafe" verdict.
 export async function checkImageSafe(
   buf: Buffer,
   mime: string,

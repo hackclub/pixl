@@ -148,7 +148,7 @@ export function containsBlocked(raw: string): boolean {
     .some((token) => isExactBlocked(normalize(token)));
 }
 
-// Stars out every span whose folded letters spell a blocked word — across
+// Stars out every span whose folded letters spell a blocked word, across
 // spaces, dots, leetspeak, homoglyphs and stretched letters ("s h 1 t",
 // "fuuuck", "fατ" all get censored). Everything else is left intact.
 export function censorChat(text: string): string {
@@ -234,7 +234,7 @@ export function censorChat(text: string): string {
 const WARN_AFTER = 3;
 const BAN_AFTER = 7;
 
-// No fallback here on purpose — a hardcoded default would silently route
+// No fallback here on purpose, a hardcoded default would silently route
 // player Slack IDs and violation text to whatever domain happens to be
 // baked in if the env var is ever unset, rather than failing closed.
 const EXTERNAL_DM_URL = process.env.EXTERNAL_DM_URL;

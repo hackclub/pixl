@@ -35,7 +35,7 @@ export async function extractStyle(messages: string[]): Promise<string | null> {
         {
           role: "system",
           content:
-            "You are analyzing the writing style of French/English-speaking gen Z users. Extract specific speech patterns, vocabulary, expressions, humor style, and quirks from their messages. Output a concise style guide (10-15 points max) that another AI could use to naturally imitate their writing. Focus on: vocabulary, abbreviations, humor type, punctuation habits, emoji use, sentence structure, tone, recurring expressions. Write in English, be specific and concrete — no vague generalities.",
+            "You are analyzing the writing style of French/English-speaking gen Z users. Extract specific speech patterns, vocabulary, expressions, humor style, and quirks from their messages. Output a concise style guide (10-15 points max) that another AI could use to naturally imitate their writing. Focus on: vocabulary, abbreviations, humor type, punctuation habits, emoji use, sentence structure, tone, recurring expressions. Write in English, be specific and concrete, no vague generalities.",
         },
         { role: "user", content: `Analyze these messages and extract the speaking style:\n\n${combined}` },
       ],

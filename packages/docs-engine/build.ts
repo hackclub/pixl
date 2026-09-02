@@ -1,4 +1,4 @@
-// Only OG preview cards now — docs/*.md rendering itself moved into
+// Only OG preview cards now - docs/*.md rendering itself moved into
 // apps/web-shell/lib/docs.ts. Still runs from the repo root via
 // `bun run docs:build`, but now writes into apps/web-shell/public/docs/<slug>/
 // instead of static HTML pages under apps/game/web/docs/. apps/web-shell has

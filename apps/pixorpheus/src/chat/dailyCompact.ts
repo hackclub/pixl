@@ -6,7 +6,7 @@ import { aiPost } from "../ai/client.js";
 import { ensureUserName, getDisplayName } from "../memory/users.js";
 
 // Pixo's "/compact" feature (see pixo:compact in messageHandler.ts): an
-// end-of-day summary of #pixl, generated once per day and stored silently —
+// end-of-day summary of #pixl, generated once per day and stored silently,
 // never posted on its own. A player only ever sees it by asking.
 //
 // Time/timezone are configurable the same way newMembersDigest.ts is; default
@@ -99,7 +99,7 @@ async function summarizeMessages(client: WebClient, msgs: CompactMessage[]): Pro
 
 /**
  * Generates and stores the compact for one local day (default: yesterday,
- * the day that just ended) in `channel`. Silent on a quiet day — nothing to
+ * the day that just ended) in `channel`. Silent on a quiet day, nothing to
  * store just means no row, not an empty one.
  */
 export async function generateDailyCompact(daysAgo = 1, channel = PIXL_MAIN_CHANNEL): Promise<void> {
@@ -135,7 +135,7 @@ export async function getStoredCompact(
   return { summary: (data as any).summary, messageCount: (data as any).message_count };
 }
 
-/** Live-computes a compact for "today so far" — there's no stored row for an in-progress day. */
+/** Live-computes a compact for "today so far", there's no stored row for an in-progress day. */
 export async function computeCompactSince(
   daysAgo: number,
   channel = PIXL_MAIN_CHANNEL,

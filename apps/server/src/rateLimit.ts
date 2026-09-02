@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 
 // Fixed-window in-memory rate limiter keyed by IP. Relies on `trust proxy`
 // being set in index.ts so req.ip is the platform proxy's own account of the
-// client address, not a header a client can freely rewrite — never read
+// client address, not a header a client can freely rewrite, never read
 // X-Forwarded-For directly here. Good enough for a single instance; swap for
 // Redis if the server ever scales horizontally.
 interface Bucket {

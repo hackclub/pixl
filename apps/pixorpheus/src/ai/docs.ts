@@ -1,5 +1,5 @@
 // Docs knowledge for pixo. The docs and the landing FAQ live on the web
-// (pixl.hackclub.com), not in this repo — pixo fetches them on demand and
+// (pixl.hackclub.com), not in this repo, pixo fetches them on demand and
 // caches the extracted text in memory so answering a question the second time
 // is instant. This text is ONLY ever passed to the dedicated "answer from docs"
 // model call (see answerFromDocs.ts); it is never added to the main chat system
@@ -70,7 +70,7 @@ function docPageLinks(html: string): string[] {
     if (href.startsWith(origin)) href = href.slice(origin.length);
     if (!href.startsWith("/docs")) continue;
     const lastSeg = href.replace(/\/+$/, "").split("/").pop() || "";
-    if (lastSeg.includes(".")) continue; // .css/.js/etc — not a doc page
+    if (lastSeg.includes(".")) continue; // .css/.js/etc, not a doc page
     out.add(origin + href.replace(/\/+$/, "") + "/");
   }
   return [...out].slice(0, MAX_PAGES);
@@ -118,7 +118,7 @@ async function buildCorpus(): Promise<string> {
     const faq = extractFaqPairs(await fetchText(LANDING_URL));
     if (faq) chunks.push(`# Pixl FAQ (from the landing)\n${faq}`);
   } catch {
-    /* landing unreachable — docs cover the FAQ topics anyway */
+    /* landing unreachable, docs cover the FAQ topics anyway */
   }
 
   // 2. Docs: seed from the welcome page (real content + full sidebar), then

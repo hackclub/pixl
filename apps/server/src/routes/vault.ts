@@ -96,7 +96,7 @@ async function displayInfoFor(userIds: string[]): Promise<Map<string, { displayN
 
 // The Core Vault: the community's pooled Restoration Energy recovers vault
 // levels for everyone. A level unlocks once the total energy crosses its
-// threshold — the rewards are equipment the Core has finally recovered, plus
+// threshold, the rewards are equipment the Core has finally recovered, plus
 // a bonus RE prize for whoever contributed the most to that chapter.
 router.get("/api/vault", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";
@@ -117,7 +117,7 @@ router.get("/api/vault", async (req, res) => {
 
   // A level is "unlocked" once community energy has crossed its threshold.
   // The first time that's true for a level that hasn't recorded its winners
-  // yet, settle the chapter award before responding — same lazy-on-read
+  // yet, settle the chapter award before responding, same lazy-on-read
   // pattern referral codes use for assignment.
   let windowStart: Date | null = null;
   for (const level of rawLevels) {

@@ -1262,7 +1262,7 @@
       let activity = []; // synthesized action log, newest first
       let news = []; // program news, newest first
       let activeTrial = null; // the Trial the player arrived to build for, if any
-      let hasBirthday = true; // assume yes until we hear otherwise — avoids a flash of the banner
+      let hasBirthday = true; // assume yes until we hear otherwise, avoids a flash of the banner
       let form = null;
       // The player's current $/hour ship rate (from /api/profile/wallet), used
       // only for the funding "~Xh to cover this" estimate below, falls back to
@@ -1284,7 +1284,7 @@
         if (!stats || !stats.connected) return 0;
         const linked = new Set(p.hackatime_projects || []);
         // secondsSinceCutoff (when the server has computed it) so this matches
-        // what actually counts toward shipping — same reasoning as
+        // what actually counts toward shipping, same reasoning as
         // checkedHtTotals() below. Without this, a linked project with any
         // activity before HACKATIME_CUTOFF inflates the Trial progress bar and
         // per-project hour badge with time that will never actually ship.
@@ -1315,7 +1315,7 @@
 
       // `counted` is what the server will actually credit (time after the
       // cutoff); `total` is the projects' whole tracked time. They diverge
-      // whenever someone's hours predate the cutoff — the usual reason a
+      // whenever someone's hours predate the cutoff, the usual reason a
       // player links projects and still can't ship.
       function checkedHtTotals() {
         if (!stats || !stats.connected) return { counted: 0, total: 0 };
@@ -1335,14 +1335,14 @@
       }
 
       // The blocker used to always read "link a Hackatime project with >= 1h",
-      // which is baffling when you've linked ten of them — the hours are real,
+      // which is baffling when you've linked ten of them, the hours are real,
       // they just fall before the cutoff (or the cutoff hasn't arrived yet).
       function htBlockerText() {
         const { counted, total } = checkedHtTotals();
         if (!stats || !stats.connected)
           return "connect Hackatime so your hours can count";
         if (total === 0) return "link a Hackatime project with ≥ 1h";
-        // Only claim "all of it predates the cutoff" when none of it counts —
+        // Only claim "all of it predates the cutoff" when none of it counts,
         // otherwise some time did land after the cutoff, just not enough yet.
         if (counted === 0)
           return Date.now() < HT_CUTOFF_MS
@@ -1353,7 +1353,7 @@
 
       // Shared by the initial checklist render and the live refresh as boxes
       // are ticked, so the two can't drift apart. Hardware has no hour floor
-      // at ship time (see apps/server/src/routes/projects.ts) — always show
+      // at ship time (see apps/server/src/routes/projects.ts), always show
       // this line as met there instead of the misleading red "-".
       function shipHtLine(isHardware) {
         const { counted, total } = checkedHtTotals();
@@ -1719,7 +1719,7 @@
         </label>`;
       }
 
-      // Wires the custom Trial dropdown built by trialPickerHtml() — open/close
+      // Wires the custom Trial dropdown built by trialPickerHtml(), open/close
       // the menu, and keep the hidden #s-trial input (what ship() actually
       // reads) plus the button label in sync with the picked option. Called
       // fresh on every renderProject(), so per-instance listeners go on the
@@ -2183,7 +2183,7 @@
         const silent = !!opts.silent;
         clearTimeout(autosaveTimer);
         // Guards every early-return validation path below, not just the
-        // network call — without this, mashing the save button while a
+        // network call, without this, mashing the save button while a
         // validation error is showing stacked a fresh toast per click.
         if ($("f-save") && $("f-save").disabled) return false;
         if ($("f-save")) $("f-save").disabled = true;
@@ -2196,7 +2196,7 @@
           await Promise.all(fundingUploads);
         }
         const reenable = () => { if ($("f-save")) $("f-save").disabled = false; };
-        // Trial chosen at creation — a locked (not-accepted) pick can't be saved.
+        // Trial chosen at creation, a locked (not-accepted) pick can't be saved.
         let sidequestId = null;
         const trialSel = $("f-trial");
         if (trialSel) {
@@ -2247,7 +2247,7 @@
         }
         if (silent) {
           // Keep the in-memory list current without the full list refetch or
-          // hash rewrite a manual save does — this fires mid-edit, on a timer,
+          // hash rewrite a manual save does, this fires mid-edit, on a timer,
           // and shouldn't yank focus or reset scroll under the player.
           const idx = projects.findIndex((x) => x.id === p.id);
           if (idx !== -1) projects[idx] = { ...projects[idx], ...r.project, id: Number(r.project.id) };
@@ -2263,7 +2263,7 @@
       // Autosave: 5s after the player stops touching a field, silently PUT
       // the form so a closed tab / crash doesn't lose edits. Only wired for
       // an existing project's editor (bindForm({}) on the "new project" form
-      // has no p.id, so it's skipped there — draft creates shouldn't happen
+      // has no p.id, so it's skipped there, draft creates shouldn't happen
       // just from typing). Deliberately not applied to the journal composer:
       // posting a journal entry is a real, deliberate action.
       let autosaveTimer = null;
@@ -2289,7 +2289,7 @@
           el.addEventListener("change", schedule);
         });
         // Flush a still-pending autosave immediately on refresh/close instead of
-        // silently dropping it — picking "Not for a Trial" (or editing any other
+        // silently dropping it, picking "Not for a Trial" (or editing any other
         // autosaved field) and refreshing inside the 5s debounce window used to
         // lose the change entirely, since nothing had been sent to the server yet.
         // keepalive lets the fetch survive the page tearing down mid-flight.
@@ -2315,7 +2315,7 @@
         }
         await loadTrials();
         $("new-btn").style.display = "none";
-        // Collaborators are view/log-hours only — they get a trimmed read-only
+        // Collaborators are view/log-hours only, they get a trimmed read-only
         // page instead of the owner's full editor.
         if (p.is_owner === false) return renderCollabProjectView(p);
         const [label, cls] = statusInfo(p);
@@ -2645,7 +2645,7 @@
       }
 
       // Read-only view for a project the viewer collaborates on but doesn't
-      // own — they can journal their own hours and link their own Hackatime
+      // own, they can journal their own hours and link their own Hackatime
       // projects, but can't edit fields, ship, or delete.
       async function renderCollabProjectView(p) {
         const view = $("view");
@@ -2829,7 +2829,7 @@
         );
       }
 
-      // A standing "join a project with a code" box — the redeem-side of the
+      // A standing "join a project with a code" box, the redeem-side of the
       // owner's GET INVITE CODE button in renderCollaborators.
       function renderJoinCodeBox() {
         const slot = $("join-code-slot");
@@ -3088,7 +3088,7 @@
         if (!p.repo_url) b.push("add a GitHub repo");
         if (!p.demo_url) b.push("add a demo / playable link");
         if (!p.image_url) b.push("upload a thumbnail");
-        // Hardware doesn't require Hackatime — journal hours count on the server,
+        // Hardware doesn't require Hackatime, journal hours count on the server,
         // so don't gate it on the Hackatime picker here.
         const isHw = ($("f-kind") ? $("f-kind").value : p.kind) === "hardware";
         if (!isHw && checkedHtSeconds() < 3600) b.push(htBlockerText());
@@ -3174,7 +3174,7 @@
         renderProject(p.id);
       }
 
-      // [dot colour class, title]. The dot is a small node on the rail — the
+      // [dot colour class, title]. The dot is a small node on the rail, the
       // event title already names the verdict, so no status word in the marker.
       const VERDICTS = {
         approved: ["ok", "Approved"],
@@ -3195,7 +3195,7 @@
 
       // Same shell as tlItem, but for a pipeline stage that has no per-event
       // timestamp of its own (a step still pending, or one only tracked as a
-      // status field rather than a review_audits row) — takes a plain label
+      // status field rather than a review_audits row), takes a plain label
       // instead of computing timeAgo from an ISO date.
       function tlStageItem(dotClass, title, timeLabel) {
         return `<div class="tl-item">
@@ -3209,7 +3209,7 @@
       // After a first pass proposes approve/ban, the project still has to
       // clear the fraud pass (only if it was actually submitted there) and a
       // different final reviewer's second pass before anything is credited.
-      // Rendered only while that's still in flight — once a final verdict
+      // Rendered only while that's still in flight, once a final verdict
       // lands it becomes its own event in the list above.
       function tlPipelineRows(d) {
         const rows = [];
@@ -3365,7 +3365,7 @@
       }
 
       // Swaps the IMAGE toolbar button for a spinner for the life of the
-      // upload promise — the "Uploading…" toast auto-dismisses on its own
+      // upload promise, the "Uploading…" toast auto-dismisses on its own
       // timer regardless of how long the request actually takes, so it's not
       // a real progress signal on a slow connection or a big journal.
       function setImageBtnBusy(busy) {
@@ -3382,7 +3382,7 @@
       }
 
       // Autosaves the new-entry composer to localStorage as the player types,
-      // so a reload/crash/tab-close mid-journal doesn't lose it — restored
+      // so a reload/crash/tab-close mid-journal doesn't lose it, restored
       // the next time this project's composer is opened, cleared once the
       // entry actually posts. Scoped to the "new entry" composer only, not
       // the inline edit-existing-entry textareas.
@@ -3472,7 +3472,7 @@
         }
         let html = events.map(tlRow).join("");
         const last = events[events.length - 1];
-        // A first-pass approve/ban is only a proposal, not the final word —
+        // A first-pass approve/ban is only a proposal, not the final word,
         // show what's still ahead until a final verdict event replaces this.
         if (
           d &&
@@ -3750,7 +3750,7 @@
       async function route() {
         if (!Pixl.hasToken) return;
         // A pending autosave targets this render's #f-name/#f-desc/etc DOM
-        // nodes by id — those ids get reused by whatever renders next, so an
+        // nodes by id, those ids get reused by whatever renders next, so an
         // in-flight timer left running would silently write the new view's
         // fields onto the old project.
         clearTimeout(autosaveTimer);
@@ -3766,7 +3766,7 @@
         $("ysws-import-slot").style.display = onList ? "" : "none";
         if (onList) renderLegend();
         if (h === "new") {
-          // allTrials/trials were loaded once at page boot and never since —
+          // allTrials/trials were loaded once at page boot and never since,
           // a Trial accepted in-game after that (very likely, since this page
           // is opened as a reused popup window rather than freshly navigated
           // each time) would still show here as locked, wrongly blocking
@@ -3808,7 +3808,7 @@
           (trials.length === 1 ? trials[0] : null);
       }
 
-      // "Building for this Trial" brief — shown atop the new-project form and the
+      // "Building for this Trial" brief, shown atop the new-project form and the
       // editor so the player builds to the Trial's spec.
       function trialBriefHtml(t) {
         if (!t) return "";
@@ -3915,7 +3915,7 @@
       }
       window.addEventListener("hashchange", route);
 
-      // This page fetches projects once on boot and never again on its own —
+      // This page fetches projects once on boot and never again on its own,
       // a review verdict (needs_changes, approved, etc.) landing while the
       // tab is backgrounded left the status stuck showing whatever it was at
       // load time until a manual reload. Refetch when the tab regains focus,

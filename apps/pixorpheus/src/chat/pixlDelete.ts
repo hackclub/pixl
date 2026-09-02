@@ -1,7 +1,7 @@
 import { app } from "../slack/app.js";
 import { checkIsHelper } from "../tickets/service.js";
 
-// React with :pixl-delete: on any Pixo message to delete it — except help
+// React with :pixl-delete: on any Pixo message to delete it, except help
 // tickets. Ticket messages (the original question in the help channel, and
 // the status card in the private ticket channel) are records the support
 // team relies on; letting anyone erase them with a reaction would nuke
@@ -13,7 +13,7 @@ app.event("reaction_added", async ({ event, client }) => {
   if (e.item.channel === process.env.SLACK_HELP_CHANNEL || e.item.channel === process.env.SLACK_TICKET_CHANNEL) {
     return;
   }
-  // Only the message's own author or a helper/admin can delete it — otherwise
+  // Only the message's own author or a helper/admin can delete it, otherwise
   // anyone could nuke anyone else's messages by reacting.
   const authorId = e.item_user;
   const reactorId = e.user;

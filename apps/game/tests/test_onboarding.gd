@@ -29,7 +29,7 @@ func _run() -> void:
 
 	var done := [false]
 	O.finished.connect(func(): done[0] = true)
-	O.start()  # coroutine — runs alongside our driver loop
+	O.start()  # coroutine, runs alongside our driver loop
 
 	var guard := 0
 	while not done[0] and guard < 2000:

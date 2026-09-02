@@ -32,7 +32,7 @@ async function nameFor(userId: string): Promise<string> {
 // to actually be inside a lobby (any member can invite, not just the owner) and
 // to be accepted friends with the target. Persists a pending invite so the
 // friend can accept later while the village still exists, pings their inbox,
-// and — if they're online — pushes a live prompt over the game socket.
+// and, if they're online, pushes a live prompt over the game socket.
 router.post("/api/village/invite", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";
   const session = token ? verifySessionToken(token) : null;

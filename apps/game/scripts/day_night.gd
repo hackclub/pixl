@@ -1,12 +1,12 @@
 extends CanvasModulate
 
 # World day/night tint. This is a CanvasModulate autoload, so it colours every
-# CanvasItem on the default canvas (layer 0) — i.e. the game world — while the
+# CanvasItem on the default canvas (layer 0), i.e. the game world, while the
 # HUDs, which each live on their own CanvasLayer, stay at full brightness.
 #
 # The time of day is derived from real wall-clock time (Time.get_unix_time...),
 # so every client independently lands on the exact same phase without any
-# networking — two players standing together always see the same sky.
+# networking, two players standing together always see the same sky.
 
 # Only the outdoor scenes get a sky; interiors and menus stay neutral white.
 const OUTDOOR := ["village", "open_world"]
@@ -19,7 +19,7 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	color = Color.WHITE
 	_grad = Gradient.new()
-	# Kept deliberately gentle — even midnight stays plenty bright to play in.
+	# Kept deliberately gentle, even midnight stays plenty bright to play in.
 	_grad.offsets = PackedFloat32Array([0.0, 0.22, 0.28, 0.35, 0.65, 0.72, 0.80, 1.0])
 	_grad.colors = PackedColorArray([
 		Color(0.36, 0.42, 0.68),  # deep night (blue)

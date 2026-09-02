@@ -13,7 +13,7 @@ var day_night_enabled := true
 var theme_name := "dark"
 
 func _ready() -> void:
-	# HUD text is sized for a 1600x900 desktop canvas — bump the default on
+	# HUD text is sized for a 1600x900 desktop canvas, bump the default on
 	# touch devices so it's actually readable before a saved preference (if
 	# any) overrides it below.
 	if DisplayServer.is_touchscreen_available():
@@ -74,7 +74,7 @@ func fs(base: int) -> int:
 # shrinks the whole UI by min(real_width/1600, real_height/900) to fit the
 # actual screen. That's barely noticeable for small HUD elements but main
 # menu/pause menu are big and central, so the shrink alone makes them "small
-# af" on a phone — work out how much got shrunk and hand back a multiplier
+# af" on a phone, work out how much got shrunk and hand back a multiplier
 # that undoes it, then stack the user's own font_scale on top like everywhere
 # else.
 func menu_scale_factor() -> float:
@@ -88,7 +88,7 @@ func menu_scale_factor() -> float:
 	return clampf(undo * font_scale, 1.0, 2.2)
 
 # Duplicates a theme and scales every font size / constant / stylebox margin
-# by menu_scale_factor(), instead of Control.scale — a transform just
+# by menu_scale_factor(), instead of Control.scale, a transform just
 # stretches the already-rasterized glyph bitmaps, which blurs a pixel font
 # like this one and reads as a completely different (wrong) font. This
 # re-rasterizes text at the real target size instead, so it stays crisp.

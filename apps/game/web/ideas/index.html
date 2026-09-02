@@ -346,7 +346,7 @@ const countEl = document.getElementById("i-count");
 const postBtn = document.getElementById("i-post");
 titleInput.addEventListener("input", () => { countEl.textContent = `${titleInput.value.length}/120`; });
 
-// Grows with the text up to max-height (280px, set in CSS), then scrolls —
+// Grows with the text up to max-height (280px, set in CSS), then scrolls,
 // stays roomy without letting one huge idea take over the page.
 function autoGrow() {
   bodyInput.style.height = "auto";

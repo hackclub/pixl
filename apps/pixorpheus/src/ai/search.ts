@@ -31,7 +31,7 @@ const WEB_HINTS =
   /\b(news|latest|current(ly)?|today|tonight|tomorrow|yesterday|recent(ly)?|price|prices|cost|worth|stock|weather|forecast|score|scored|winner|won|released?|releasing|launch(ed|ing)?|announce[ds]?|update[ds]?|version|patch|trending|happening|right now|this (week|month|year)|20\d\d|look ?up|google|search (for|up))\b/i;
 
 /**
- * A lookup-shaped question. Deliberately does not require a "?" — people
+ * A lookup-shaped question. Deliberately does not require a "?", people
  * type "who is the ceo of hack club" without one all the time.
  */
 const FACTUAL_Q =
@@ -43,7 +43,7 @@ const SMALL_TALK =
 
 /**
  * Cheap gate in front of the classifier below. That classifier is a full
- * model round-trip, and it used to run on literally every reply — so "yo
+ * model round-trip, and it used to run on literally every reply, so "yo
  * pixo" paid for an entire extra LLM call, in series, before Pixo could
  * even start writing. The overwhelming majority of messages in a Slack
  * channel obviously need no web search, and a regex can tell for free.
@@ -76,7 +76,7 @@ export async function extractSearchQuery(messages: string[]): Promise<string | n
     const out = res.data.choices?.[0]?.message?.content?.trim();
     // Require the affirmative marker rather than trusting anything that
     // simply isn't a refusal token. This model does not reliably follow the
-    // "say SKIP" half of an instruction like this — asked about "yo pixo
+    // "say SKIP" half of an instruction like this, asked about "yo pixo
     // whats up" it answers the greeting instead, and treating that reply as
     // a query fed whole sentences to Brave and pasted the junk results into
     // Pixo's context as fact. Anything not shaped like SEARCH: is no search.
@@ -104,11 +104,11 @@ export async function shouldChimeIn(messages: string[]): Promise<ChimeVerdict> {
       messages: [
         {
           role: "system",
-          content: `${botIdHint}You are deciding whether Pixorpheus (a sarcastic Slack bot) should respond. Reply with exactly one word — nothing else.
+          content: `${botIdHint}You are deciding whether Pixorpheus (a sarcastic Slack bot) should respond. Reply with exactly one word, nothing else.
 
-DIRECT — someone is clearly talking TO the bot. Signs: mentions "pixorpheus", "pix", "pixo", "bot", asks a question in a way that expects the bot to answer, replies directly to something the bot said, or the message is clearly addressed to no one else in the conversation.
-CHIME — people are talking among themselves BUT there's a genuinely perfect, funny, or obvious 1-line opening for the bot (rare — only if it's really there)
-SKIP — just people chatting between themselves, bot has no business here
+DIRECT - someone is clearly talking TO the bot. Signs: mentions "pixorpheus", "pix", "pixo", "bot", asks a question in a way that expects the bot to answer, replies directly to something the bot said, or the message is clearly addressed to no one else in the conversation.
+CHIME - people are talking among themselves BUT there's a genuinely perfect, funny, or obvious 1-line opening for the bot (rare, only if it's really there)
+SKIP - just people chatting between themselves, bot has no business here
 
 When in doubt between DIRECT and CHIME, pick DIRECT. When in doubt between CHIME and SKIP, pick SKIP.`,
         },

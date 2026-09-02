@@ -78,7 +78,7 @@ export function GuidelinesGate() {
         <h1 className="text-2xl font-semibold">Before you review</h1>
         <p className="text-muted-foreground text-sm">
           Reviewing decides whether real people get paid. Everyone reads the YSWS
-          Project Submission Guidelines once before joining the queue — step
+          Project Submission Guidelines once before joining the queue, step
           through every page, spending at least a few seconds on each (shorter
           pages take less time, up to {MIN_SECONDS_PER_PAGE}s for the longest).
           This only happens the first time (and again if the guidelines change).
@@ -156,7 +156,7 @@ export function GuidelinesGate() {
               {remaining > 0
                 ? `Keep reading… ${remaining}s`
                 : allRead
-                  ? "I've read all the guidelines — enter review"
+                  ? "I've read all the guidelines - enter review"
                   : "Read every page to continue"}
             </Button>
           </form>

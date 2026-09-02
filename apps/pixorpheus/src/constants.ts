@@ -13,7 +13,7 @@ export const PIXL_PROMO = `\n\n_Join <#${PIXL_MAIN_CHANNEL}> to discover more Pi
 export const TRAINING_CHANNEL = "C0BD7JSTQNM";
 
 /**
- * Channels Pixo must never speak in — not even a mention, chime-in, or
+ * Channels Pixo must never speak in, not even a mention, chime-in, or
  * easter egg. Checked first thing in the message handler, before anything
  * else runs. These are other people's channels, not Pixl's.
  */

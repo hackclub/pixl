@@ -8,7 +8,7 @@ import { autoCloseOldTickets } from "./tickets/service.js";
 import { scheduleNewMembersDigest } from "./chat/newMembersDigest.js";
 import { scheduleDailyCompact } from "./chat/dailyCompact.js";
 
-// Side-effect imports — each of these registers its Bolt listeners
+// Side-effect imports, each of these registers its Bolt listeners
 // (commands/actions/events/routes) against the shared `app`/`receiver`.
 import "./tickets/events.js";
 import "./tickets/actions.js";

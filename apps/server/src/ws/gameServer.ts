@@ -40,7 +40,7 @@ interface ConnectedPlayer {
 
 // Client sprint speed tops out around 200px/s (see apps/game/scripts/player.gd).
 // This is a generous multiple of that so normal play, batched frames, and
-// network jitter never trip it — it only rejects the kind of instant,
+// network jitter never trip it, it only rejects the kind of instant,
 // unbounded jump a modified/scripted client sends.
 const MAX_MOVE_SPEED_PX_PER_SEC = 600;
 const MOVE_SLACK_PX = 200;
@@ -149,7 +149,7 @@ function closeLobby(id: string) {
 
 const SAVE_INTERVAL_MS = 5000;
 
-// Images are not allowed in chat/DMs — strip [img]…[/img] server-side so they
+// Images are not allowed in chat/DMs, strip [img]…[/img] server-side so they
 // never broadcast, store, or reach any client.
 const IMG_TAG_RE = /\[img\b[^\]]*\][\s\S]*?\[\/img\]/gi;
 
@@ -321,7 +321,7 @@ export function listOnlinePlayers(): {
 }
 
 // Push a one-off frame to a specific player's socket if they're connected.
-// Returns whether it was delivered — callers (e.g. village invites) fall back
+// Returns whether it was delivered, callers (e.g. village invites) fall back
 // to the inbox for offline players. Best-effort: never throws.
 export function sendToUser(userId: string, payload: unknown): boolean {
   const p = players.get(userId);
@@ -401,12 +401,12 @@ async function sweepBans() {
 // Cap on new /ws connection attempts per IP. This is enforced on the raw
 // 'upgrade' event because a WebSocketServer bound with { server } attaches
 // straight to http.Server's upgrade event, which never passes through
-// Express — the app-level rate limiter in index.ts never sees this traffic.
+// Express, the app-level rate limiter in index.ts never sees this traffic.
 const UPGRADE_WINDOW_MS = 60_000;
 const UPGRADE_MAX_PER_WINDOW = 30;
 const upgradeAttempts = new Map<string, number[]>();
 
-// Mirrors the Express `trust proxy: 1` setting in index.ts — this handler
+// Mirrors the Express `trust proxy: 1` setting in index.ts, this handler
 // runs on the raw http.Server 'upgrade' event, outside Express, so req.ip
 // isn't available. With exactly one trusted hop (the platform's edge/ingress
 // proxy) in front of us, the rightmost X-Forwarded-For entry is the address
@@ -651,7 +651,7 @@ export function attachWebSocketServer(httpServer: Server) {
             ? msg.direction.slice(0, 16)
             : player.direction;
 
-        // Reject anything that isn't a real, finite coordinate outright — a
+        // Reject anything that isn't a real, finite coordinate outright, a
         // client sending a string/object/NaN here would otherwise get
         // broadcast verbatim to every other player in the scene and
         // persisted into player_state.
@@ -755,7 +755,7 @@ export function attachWebSocketServer(httpServer: Server) {
 
             // Move into the new scene at its own saved position. If there's no
             // saved position yet, tell the client to use the scene's spawn point.
-            // Re-entering the same scene skips the DB read — the in-memory
+            // Re-entering the same scene skips the DB read, the in-memory
             // position is already the latest.
             const saved: Pick<PlayerStateRow, "pos_x" | "pos_y" | "direction"> | null =
               oldScene === newScene
@@ -943,7 +943,7 @@ export function attachWebSocketServer(httpServer: Server) {
         // route by id; fall back to case-insensitive display-name matching
         // for the current client, which only ever sends a name. Display
         // names aren't guaranteed unique (they come from Hack Club
-        // Auth/Slack), so the fallback can still misdeliver on a collision —
+        // Auth/Slack), so the fallback can still misdeliver on a collision,
         // routing by id is the real fix once the client sends one.
         let target: ConnectedPlayer | undefined = players.get(targetName);
         if (!target) {

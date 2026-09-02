@@ -87,7 +87,7 @@ app.command("/pixl-remind", async ({ command, ack, respond, client }) => {
   }, ms);
 });
 
-// /pixl-countdown — countdown timer that posts updates
+// /pixl-countdown - countdown timer that posts updates
 app.command("/pixl-countdown", async ({ command, ack, respond, client }) => {
   await ack();
   const match = command.text?.trim().match(/^(\d+)(s|min|h)\s+(.+)$/i);

@@ -33,7 +33,7 @@ function useCountdown(target: number) {
 }
 
 // How long the "WE'RE LAUNCHED!!!" celebration stays up before the card
-// removes itself — nothing left to count down to after that.
+// removes itself , nothing left to count down to after that.
 const CELEBRATION_MS = 5 * 3600000;
 
 // A one-shot pixel-art particle burst, fired once when the countdown flips
@@ -117,7 +117,7 @@ export function Story() {
   const t = dict.story;
   const countdown = useCountdown(LAUNCH_DATE);
 
-  // Fire the burst exactly once, the instant the countdown flips to done —
+  // Fire the burst exactly once, the instant the countdown flips to done ,
   // not on every render while `done` stays true.
   const [showBurst, setShowBurst] = useState(false);
   const burstFired = useRef(false);
@@ -130,8 +130,8 @@ export function Story() {
     }
   }, [countdown?.done]);
 
-  // After the celebration window, the card has nothing left to show — no
-  // countdown target, no reason to keep celebrating — so it removes itself.
+  // After the celebration window, the card has nothing left to show , no
+  // countdown target, no reason to keep celebrating , so it removes itself.
   const selfDestruct = !!countdown?.done && countdown.msSinceLaunch > CELEBRATION_MS;
 
   return (

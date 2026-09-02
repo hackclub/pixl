@@ -37,7 +37,7 @@ export async function postNewMembersDigest(): Promise<void> {
     .order("joined_at", { ascending: true });
 
   const ids = (rows ?? []).map((r: any) => String(r.user_id));
-  if (ids.length === 0) return; // nobody new today — stay quiet
+  if (ids.length === 0) return; // nobody new today, stay quiet
 
   const mentions = ids.map((id) => `<@${id}>`).join(" ");
   const header =

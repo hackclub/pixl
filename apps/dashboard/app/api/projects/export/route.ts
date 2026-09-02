@@ -52,7 +52,7 @@ export async function GET(): Promise<NextResponse> {
     if (!auditByProject.has(a.project_id)) auditByProject.set(a.project_id, a.audit_note ?? "");
   }
 
-  // A cell starting with =, +, -, or @ is a live formula to Excel/Sheets —
+  // A cell starting with =, +, -, or @ is a live formula to Excel/Sheets,
   // prefix with a leading quote so these (name, description, audit notes...)
   // render as inert text instead of executing when the sheet is opened.
   const esc = (s: string) => {

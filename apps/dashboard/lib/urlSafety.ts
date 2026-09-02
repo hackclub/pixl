@@ -36,7 +36,7 @@ function isPrivateIpv6(ip: string): boolean {
     norm.startsWith("fe9") ||
     norm.startsWith("fea") ||
     norm.startsWith("feb") ||
-    // IPv4-mapped IPv6 (::ffff:a.b.c.d) — check the embedded IPv4 too.
+    // IPv4-mapped IPv6 (::ffff:a.b.c.d), check the embedded IPv4 too.
     (norm.startsWith("::ffff:") && isPrivateIpv4(norm.slice(7)))
   );
 }

@@ -30,8 +30,8 @@ router.get("/api/explore/players", async (req, res) => {
     if (q) query = query.ilike("display_name", `%${q}%`);
     return query;
   };
-  // card_pixelate arrives with migration 0030 — fall back gracefully before it.
-  // slack_id is deliberately not selected — /api/pixify takes our internal
+  // card_pixelate arrives with migration 0030 , fall back gracefully before it.
+  // slack_id is deliberately not selected , /api/pixify takes our internal
   // user id now, so player Slack member IDs never need to reach the client.
   const first = await buildQuery(
     "id, display_name, skin, created_at, avatar_url, card_pixelate",
@@ -118,7 +118,7 @@ router.get("/api/explore/leaderboard", async (req, res) => {
   }
 
   // During a leaderboard sprint, a second board counts only pixels earned
-  // inside the event window (approvals and bounties — nothing manual).
+  // inside the event window (approvals and bounties - nothing manual).
   let sprint: Record<string, unknown> | null = null;
   const [sprintEvent] = await activeEvents(["leaderboard_sprint"]);
   if (sprintEvent) {
@@ -158,10 +158,10 @@ router.get("/api/explore/leaderboard", async (req, res) => {
 });
 
 // Top referrers by how many people they've referred (see [[referral-system]]
-// in project memory) — every row in `referrals` counts here, rewarded or
+// in project memory) , every row in `referrals` counts here, rewarded or
 // still pending, since "who referred the most" is a headcount, not a payout.
 // Pixels earned (the rewarded-only metric) rides along as secondary context.
-// Mirrors apps/dashboard/lib/db.ts's referrerLeaderboard pixel metric —
+// Mirrors apps/dashboard/lib/db.ts's referrerLeaderboard pixel metric ,
 // duplicated here rather than imported since that's a "use server" module
 // the game server can't pull in.
 const REFERRAL_MILESTONE_EVERY = 10;
@@ -250,7 +250,7 @@ router.get("/api/explore/leaderboard/upvotes", async (req, res) => {
 
 // Proxy to Pixo's avatar pixelator so the API key never reaches the client.
 // Returns the player's Slack avatar as an already-pixelated PNG.
-// No fallback domain here on purpose — see the same call in moderation.ts;
+// No fallback domain here on purpose , see the same call in moderation.ts;
 // player Slack IDs and avatar traffic must never silently route to whatever
 // domain happens to be baked in as a default.
 const EXTERNAL_PIXIFY_URL = process.env.EXTERNAL_PIXIFY_URL;
@@ -260,7 +260,7 @@ router.get("/api/pixify", async (req, res) => {
   const session = token ? verifySessionToken(token) : null;
   if (!session) return res.status(401).json({ ok: false });
 
-  // Takes our own internal user id, not a raw Slack member ID — the client
+  // Takes our own internal user id, not a raw Slack member ID , the client
   // never needs to see anyone's slack_id, this route resolves it itself.
   const userId = typeof req.query.user === "string" ? req.query.user : "";
   const size = Math.min(Math.max(Number(req.query.size) || 32, 2), 64);
@@ -494,7 +494,7 @@ router.get("/api/explore/projects/:id", async (req, res) => {
       .from("project_downvotes")
       .select("voter_id")
       .eq("project_id", id),
-    // Only verdict + created_at go public here — the reviewer identity and
+    // Only verdict + created_at go public here , the reviewer identity and
     // review/audit notes stay internal to the dashboard.
     supabase
       .from("review_audits")

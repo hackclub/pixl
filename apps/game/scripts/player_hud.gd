@@ -2,7 +2,7 @@ extends CanvasLayer
 
 const THEME := preload("res://themes/main_theme.tres")
 # The HUD keeps the original pixel font (Monocraft) even though the rest of
-# the game moved to Pixelify Sans — everything else stays on the theme default.
+# the game moved to Pixelify Sans, everything else stays on the theme default.
 const HUD_FONT := preload("res://assets/fonts/Monocraft.ttf")
 const GAMEPLAY_SCENES := ["village", "open_world", "house_interior", "shop_interior"]
 
@@ -29,7 +29,7 @@ var _tx_box: VBoxContainer
 var _scaled: Array = []
 var _hud_theme: Theme
 
-# A copy of the shared theme with the HUD's fonts pinned back to Monocraft —
+# A copy of the shared theme with the HUD's fonts pinned back to Monocraft,
 # main_theme.tres itself stays on Pixelify Sans for everything else (menus,
 # dialogue, world-space prompts), this override only ever touches the HUD.
 func _make_hud_theme() -> Theme:

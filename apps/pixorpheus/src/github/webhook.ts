@@ -8,8 +8,8 @@ async function handleGitHubEvent(event: string, payload: any): Promise<void> {
   if (!channel) return;
 
   // Signature verification (below) proves the request came from GitHub, but
-  // commit messages/PR titles/usernames are still attacker-controlled —
-  // anyone who can push a commit or open a PR sets these — so they go
+  // commit messages/PR titles/usernames are still attacker-controlled,
+  // anyone who can push a commit or open a PR sets these, so they go
   // through escapeMrkdwn before landing in a bot-posted Slack message.
   if (event === "push" && payload.ref === "refs/heads/main" && payload.commits?.length) {
     const repo = escapeMrkdwn(String(payload.repository.full_name));

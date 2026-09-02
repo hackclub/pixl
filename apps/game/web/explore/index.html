@@ -623,7 +623,7 @@ async function showProject(id) {
   const entries = data.entries || [];
 
   // Chronological progress strip: creation, submission for review, and any
-  // review verdicts (approved / needs-changes) since — reviewer identity and
+  // review verdicts (approved / needs-changes) since, reviewer identity and
   // notes stay dashboard-internal, only the verdict + timestamp are public.
   const timeline = [{ label: "Started", time: p.created_at, tone: "" }];
   if (p.shipped_at) timeline.push({ label: "Shipped for review", time: p.shipped_at, tone: "teal" });

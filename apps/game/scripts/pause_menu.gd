@@ -24,10 +24,10 @@ var _name_save: Button
 var _name_status: Label
 var _name_saving := false
 
-# Menus are laid out for a 1600x900 desktop canvas — on touch devices, use a
+# Menus are laid out for a 1600x900 desktop canvas, on touch devices, use a
 # theme with bumped-up font sizes/constants/stylebox margins instead of
 # Control.scale (a transform just blurs the already-rasterized pixel font
-# instead of actually growing it — reads as the wrong font entirely).
+# instead of actually growing it, reads as the wrong font entirely).
 func _touch_theme() -> Theme:
 	# touch_menu_theme always hands back a duplicate, so swapping the default
 	# font here is safe and never touches the shared THEME resource.
@@ -132,7 +132,7 @@ func _build_ui() -> void:
 	body.add_child(character_button)
 
 	# Replay the first-run arrival flow (cinematic → Pixo → naming → first Trial)
-	# on demand — runs regardless of the saved onboarding step, so no reset needed.
+	# on demand, runs regardless of the saved onboarding step, so no reset needed.
 	var replay_button := Button.new()
 	replay_button.text = "Replay intro"
 	replay_button.pressed.connect(_replay_onboarding)

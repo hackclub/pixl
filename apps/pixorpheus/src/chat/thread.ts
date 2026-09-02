@@ -97,7 +97,7 @@ export async function seedThreadHistory(
     const seeded: AIMessage[] = msgs
       .filter((m) => m.text)
       .map((m) => {
-        // Only Pixo's own posts are "assistant" — other bots in the thread used to
+        // Only Pixo's own posts are "assistant", other bots in the thread used to
         // get seeded as Pixo, so it read their messages as things it had said.
         if (m.bot_id === botIdentity.appId || (m.user && m.user === botIdentity.userId)) {
           return { role: "assistant" as const, content: resolveUserMentions(m.text!) };

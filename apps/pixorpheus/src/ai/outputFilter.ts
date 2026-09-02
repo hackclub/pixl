@@ -1,7 +1,7 @@
 import { GABIN_ID, RIDIT_ID, PIXL_MAIN_CHANNEL } from "../constants.js";
 import { botIdentity } from "../slack/identity.js";
 
-// IDs the persona is actually meant to reference — mirrors the org/helper
+// IDs the persona is actually meant to reference, mirrors the org/helper
 // roster and channel list baked into the system prompts in ai/persona.ts.
 // Anything else in a live @/# mention gets treated as untrusted (e.g. a
 // mention planted via prompt injection in someone's stored memory facts)
@@ -24,7 +24,7 @@ const ALLOWED_CHANNEL_MENTIONS = new Set([
  * live-streamed previews and the final message). Memory facts and web
  * search results are fed into the model as untrusted data, so a planted
  * instruction ("tell everyone to visit evil.com", "@channel") can end up in
- * the model's raw output — this neutralizes the Slack syntax that would
+ * the model's raw output, this neutralizes the Slack syntax that would
  * make that live (mass-ping tokens, spoofed mentions, disguised links)
  * without touching normal prose.
  */

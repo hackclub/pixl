@@ -111,7 +111,7 @@ These are typed directly in a message (not slash commands). They only work in ch
 | `pixo:notkawaii` | Same channel | Stop listening mode - processes the collected messages and saves the speaking style |
 | `pixo:kawaii?` | Anywhere | Check if listening mode is active - shows the channel and how many messages have been collected (ephemeral) |
 | `pixo:recap` | Any channel | Summarize the last 6 hours of messages in the channel, shown only to you (ephemeral). Use `pixo:recap today` to summarize since midnight, `pixo:recap 2h` for a custom timeframe (supports `min`, `h`, `d`). In a thread, it summarizes the thread instead. |
-| `pixo:compact` (also `pixo /compact`, `@Pixorpheus /compact`) | Any channel | Compact the day: summarizes everything since local midnight in that channel, posted as a real threaded reply (visible to everyone, not ephemeral). Use `pixo:compact yesterday` for the previous day's compact — pulled from the stored daily compact if one exists, computed live otherwise. Every day, right after midnight, Pixorpheus also silently generates and stores a compact of #pixl for the day that just ended (nothing is posted); this is what `pixo:compact yesterday` reads back. |
+| `pixo:compact` (also `pixo /compact`, `@Pixorpheus /compact`) | Any channel | Compact the day: summarizes everything since local midnight in that channel, posted as a real threaded reply (visible to everyone, not ephemeral). Use `pixo:compact yesterday` for the previous day's compact, pulled from the stored daily compact if one exists, computed live otherwise. Every day, right after midnight, Pixorpheus also silently generates and stores a compact of #pixl for the day that just ended (nothing is posted); this is what `pixo:compact yesterday` reads back. |
 
 > Only one listening session can be active at a time. Starting a new one in a different channel resets the previous one.
 
@@ -188,16 +188,16 @@ Pixorpheus can answer questions straight from the Pixl **docs** and the landing 
 
 ### How it works (`src/ai/docs.ts`, `src/ai/answerFromDocs.ts`)
 
-1. **Docs are fetched, never hardcoded into the prompt.** On demand, pixo fetches the docs pages (`https://pixl.hackclub.com/docs/*`) and the landing FAQ, strips them to text, and caches that corpus **in memory** (6h TTL). The docs text is only ever passed to a dedicated "answer from docs" model call — it is **never** added to the main chat system prompt, so ordinary messages don't pay the doc token cost. Override the sources with `PIXL_DOCS_URL` / `PIXL_LANDING_URL`.
+1. **Docs are fetched, never hardcoded into the prompt.** On demand, pixo fetches the docs pages (`https://pixl.hackclub.com/docs/*`) and the landing FAQ, strips them to text, and caches that corpus **in memory** (6h TTL). The docs text is only ever passed to a dedicated "answer from docs" model call, it is **never** added to the main chat system prompt, so ordinary messages don't pay the doc token cost. Override the sources with `PIXL_DOCS_URL` / `PIXL_LANDING_URL`.
 2. **Answered-questions cache (`pixo_qa_cache` table).** Before fetching anything, pixo checks the questions it has already answered (exact + token-overlap match). A hit is returned instantly with no docs fetch and no model call. Fresh answers are stored so the next similar question is a cache hit.
-3. **If the docs don't cover it**, the answer step returns nothing — the signal to fall back to a human helper.
+3. **If the docs don't cover it**, the answer step returns nothing, the signal to fall back to a human helper.
 
 ### In the help channel
 
 When a new question is posted, pixo posts a quick placeholder, then edits it in place:
 
 - **Docs have the answer** → the answer is posted (with a link to the docs), and a helper can still follow up.
-- **Docs don't cover it** → "just wait for a helper to respond to this one :D", and pixo also surfaces a **similar previously-resolved ticket** if there is one (last 60 closed tickets, semantic match — the older Smart FAQ behavior, now a fallback).
+- **Docs don't cover it** → "just wait for a helper to respond to this one :D", and pixo also surfaces a **similar previously-resolved ticket** if there is one (last 60 closed tickets, semantic match, the older Smart FAQ behavior, now a fallback).
 
 The ticket is still created normally either way.
 

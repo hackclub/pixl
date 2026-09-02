@@ -112,15 +112,15 @@
     <div class="out-row" id="c-mine-out" hidden>
       <div class="out">
         <div class="out-k">Pixels</div>
-        <div class="out-v gold" id="c-mine-px">—</div>
+        <div class="out-v gold" id="c-mine-px">-</div>
       </div>
       <div class="out">
         <div class="out-k">RE Earned</div>
-        <div class="out-v teal" id="c-mine-re">—</div>
+        <div class="out-v teal" id="c-mine-re">-</div>
       </div>
       <div class="out">
         <div class="out-k">Avg $/hr</div>
-        <div class="out-v" id="c-mine-avg">—</div>
+        <div class="out-v" id="c-mine-avg">-</div>
       </div>
     </div>
 
@@ -157,15 +157,15 @@
     <div class="out-row">
       <div class="out">
         <div class="out-k">Pixels</div>
-        <div class="out-v gold" id="c-px">—</div>
+        <div class="out-v gold" id="c-px">-</div>
       </div>
       <div class="out">
         <div class="out-k">RE Earned</div>
-        <div class="out-v teal" id="c-re">—</div>
+        <div class="out-v teal" id="c-re">-</div>
       </div>
       <div class="out">
         <div class="out-k">Avg $/hr</div>
-        <div class="out-v" id="c-avg">—</div>
+        <div class="out-v" id="c-avg">-</div>
       </div>
     </div>
 
@@ -186,7 +186,7 @@ const $ = (id) => document.getElementById(id);
 const E = Pixl.config.economy;
 $("c-rate-note").innerHTML =
   `Rate ramps linearly from <b>$${E.basePayoutUsd.toFixed(2)}/hr</b> ` +
-  `to <b>$${E.maxPayoutUsd.toFixed(2)}/hr</b> — ` +
+  `to <b>$${E.maxPayoutUsd.toFixed(2)}/hr</b>, ` +
   `every ${E.payoutSlopeRe.toLocaleString()} RE earned adds $1/hr.`;
 // RE is banked for life now (not reset per project), so predicting one of
 // your own projects has to start from your actual lifetime RE, not 0.
@@ -228,7 +228,7 @@ function writeStats(prefix, hours, tier, reBefore = 0) {
   const re = Pixl.reForHours(hours, tier);
   $(`${prefix}px`).textContent = Math.round(px).toLocaleString();
   $(`${prefix}re`).textContent = `${Math.round(re).toLocaleString()} RE`;
-  $(`${prefix}avg`).textContent = hours > 0 ? `$${(usd / hours).toFixed(2)}` : "—";
+  $(`${prefix}avg`).textContent = hours > 0 ? `$${(usd / hours).toFixed(2)}` : "-";
 }
 
 function recalc() {

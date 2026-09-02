@@ -25,7 +25,7 @@ router.post(
 
     // express.json() runs globally before this router, so a request sent with a
     // JSON content-type reaches here with req.body already parsed into an object
-    // or array — express.raw() only populates a Buffer for IMAGE_TYPES. Narrow
+    // or array, express.raw() only populates a Buffer for IMAGE_TYPES. Narrow
     // rather than asserting `as Buffer`, which is a lie on that path.
     const contentType = String(req.headers["content-type"] ?? "").split(";")[0].trim();
     const buf = Buffer.isBuffer(req.body) ? req.body : null;
@@ -53,7 +53,7 @@ router.post(
     );
 
     // Moderation and the CDN upload don't depend on each other, so run them
-    // concurrently instead of back-to-back — halves the wait for the common case.
+    // concurrently instead of back-to-back, halves the wait for the common case.
     const cdnUpload = fetch("https://cdn.hackclub.com/api/v4/upload", {
       method: "POST",
       headers: { Authorization: `Bearer ${key}` },

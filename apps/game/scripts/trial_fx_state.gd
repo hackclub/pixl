@@ -20,7 +20,7 @@ static func has_changed(trial_name: String, current_state: String) -> bool:
 	data[user_key] = seen
 	_save(data)
 	# previous == "" means this device has never recorded this trial before
-	# (fresh install, or the trial existed before this feature shipped) —
+	# (fresh install, or the trial existed before this feature shipped),
 	# treated as a baseline, not a transition, so we don't fire a flourish
 	# for something that didn't just happen.
 	return previous != "" and previous != current_state

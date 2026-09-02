@@ -122,8 +122,8 @@ export async function extractMemory(userId: string, messages: string[]): Promise
 - Context: inside references, ongoing situations they mention, goals
 RULES:
 - Short phrases only, max 10 words each, one per line
-- Only concrete facts directly stated or strongly implied BY THE AUTHOR about THEMSELVES — never save facts about other people they mention
-- If someone says "alex loves pizza", that's about alex, not the author — SKIP it
+- Only concrete facts directly stated or strongly implied BY THE AUTHOR about THEMSELVES, never save facts about other people they mention
+- If someone says "alex loves pizza", that's about alex, not the author, SKIP it
 - If there is nothing worth saving about the author, output exactly: SKIP
 - No bullets, no numbers, no explanations, no meta-commentary, no questions`,
         },
@@ -149,7 +149,7 @@ RULES:
     const merged = [...existing, ...deduped];
     await saveUserMemory(userId, merged.slice(-100));
   } catch (e) {
-    // best-effort — a failed AI call just means we learned nothing this time
+    // best-effort, a failed AI call just means we learned nothing this time
   }
 }
 

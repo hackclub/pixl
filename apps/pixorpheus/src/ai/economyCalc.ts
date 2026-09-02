@@ -7,7 +7,7 @@ import {
 
 // Pixo is an LLM: ask it "tier 2, 50h, how much do I make" and it will confidently
 // invent a number, because the real answer is the RE-driven rate at this project's
-// own ending RE — not something to eyeball from the persona. So we
+// own ending RE, not something to eyeball from the persona. So we
 // detect pay/rate questions, pull the tier and hours out of the text, and hand Pixo
 // the EXACT figures from the same payout functions the server credits with. Pixo then
 // just relays them in its own voice. If we can't pull concrete numbers, we still give
@@ -34,7 +34,7 @@ const reRate = (n: number) => String(Math.round(n * 100) / 100);
 
 // projectPayoutUsd(hours, tier, 0) is monotonically increasing in hours, so a target
 // dollar amount ("how many hours for $500 at T4") can be inverted by bisection instead
-// of leaving Pixo to guess — this is exactly the gap that let it hallucinate "55 hours"
+// of leaving Pixo to guess, this is exactly the gap that let it hallucinate "55 hours"
 // for a T4/$500 question by pattern-matching onto an unrelated persona example.
 function hoursForTarget(usdTarget: number, tier: number): number {
   let lo = 0;
@@ -61,7 +61,7 @@ export function economyBrief(texts: string[]): string | null {
   const tier = tierM ? parseInt(tierM[1], 10) : undefined;
   const hoursM = lc.match(/(\d+(?:[.,]\d+)?)\s*(?:h\b|hr|hrs|hour|hours|heure|heures|hs)\b/);
   const hours = hoursM ? parseFloat(hoursM[1].replace(",", ".")) : undefined;
-  // A bare "$500" or "500 dollars" — never has an hour unit, so this can't collide
+  // A bare "$500" or "500 dollars", never has an hour unit, so this can't collide
   // with the hours match above.
   const targetM = lc.match(/\$\s*(\d+(?:[.,]\d+)?)|(\d+(?:[.,]\d+)?)\s*(?:usd|dollars?|bucks)\b/);
   const dollarTarget = targetM
@@ -69,9 +69,9 @@ export function economyBrief(texts: string[]): string | null {
     : undefined;
 
   const head =
-    `PIXL PAY CALCULATOR (exact, authoritative — computed from the real payout formula, not a guess). ` +
+    `PIXL PAY CALCULATOR (exact, authoritative, computed from the real payout formula, not a guess). ` +
     `This is a real question: give the ACTUAL numbers, a short sentence is fine, do NOT dodge with a vague reply. ` +
-    `Round in your own voice if you want. Pay comes off LIFETIME RE — it banks forever across every project you've ever shipped, ` +
+    `Round in your own voice if you want. Pay comes off LIFETIME RE, it banks forever across every project you've ever shipped, ` +
     `and your hourly rate ramps linearly from base to max as your lifetime RE grows. The numbers below assume starting from 0 lifetime RE ` +
     `(a brand new player's floor); anyone who's already shipped before starts higher on the ramp, so their real rate is at least this good.`;
 
@@ -85,7 +85,7 @@ export function economyBrief(texts: string[]): string | null {
         `which averages ${money(usd / hours, px / hours)} per hour (it earns ${reForHours(hours, tier)} RE).`,
     );
   } else if (dollarTarget !== undefined) {
-    // They asked "how many hours for $X" — no hours given, so solve the inverse
+    // They asked "how many hours for $X", no hours given, so solve the inverse
     // instead of falling through to a generic table that never touches their number.
     if (tier !== undefined) {
       const h = hoursForTarget(dollarTarget, tier);
@@ -104,13 +104,13 @@ export function economyBrief(texts: string[]): string | null {
     lines.push(`A ${hours}h project pays, by tier (they didn't say the tier, so give the range):`);
     for (let t = 1; t <= 4; t++) {
       const usd = projectPayoutUsd(hours, t, 0);
-      lines.push(`  T${t}: ${money(usd, toPx(usd))} total — ${money(usd / hours, toPx(usd) / hours)}/hr avg`);
+      lines.push(`  T${t}: ${money(usd, toPx(usd))} total - ${money(usd / hours, toPx(usd) / hours)}/hr avg`);
     }
   } else if (tier !== undefined) {
     lines.push(`A Tier ${tier} project pays this much total at a few sizes:`);
     for (const h of [10, 40, 100]) {
       const usd = projectPayoutUsd(h, tier, 0);
-      lines.push(`  ${h}h: ${money(usd, toPx(usd))} — ${money(usd / h, toPx(usd) / h)}/hr avg`);
+      lines.push(`  ${h}h: ${money(usd, toPx(usd))} - ${money(usd / h, toPx(usd) / h)}/hr avg`);
     }
   } else {
     // No tier and no hours: only worth answering if it's unambiguously a pay

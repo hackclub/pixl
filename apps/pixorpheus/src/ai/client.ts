@@ -27,7 +27,7 @@ function headers(openrouterKey: string) {
 /**
  * One POST to OpenRouter on native fetch. fetch keeps the connection to
  * openrouter.ai pooled between calls, so only the very first request of the
- * process pays for DNS + the TLS handshake — axios opened a fresh socket
+ * process pays for DNS + the TLS handshake, axios opened a fresh socket
  * every time, which was a few hundred ms of pure handshake on every single
  * reply. Non-2xx is turned into the same AIError the callers already handle
  * (fetch, unlike axios, doesn't throw on a bad status).
@@ -53,7 +53,7 @@ async function postOpenRouter(
 
   const detail = await res.text().catch(() => "");
   if (res.status === 429) {
-    console.warn("[openrouter] rate limited (429) — staying silent");
+    console.warn("[openrouter] rate limited (429) - staying silent");
     throw new AIError("rate limited", RATE_LIMITED);
   }
   if (res.status === 402) {
@@ -96,7 +96,7 @@ export async function aiCall(
     const res = await postOpenRouter(openrouterKey, orBody, 25000);
     const data = (await res.json().catch(() => ({}))) as AIResponse["data"];
     console.log(
-      "[openrouter] ok — content:",
+      "[openrouter] ok - content:",
       JSON.stringify(data?.choices?.[0]?.message?.content)?.slice(0, 80),
     );
     return { data };
@@ -141,11 +141,11 @@ export async function aiCall(
   } finally {
     reader.cancel().catch(() => {});
   }
-  console.log("[openrouter] ok (stream) — content:", JSON.stringify(full).slice(0, 80));
+  console.log("[openrouter] ok (stream) - content:", JSON.stringify(full).slice(0, 80));
   return { data: { choices: [{ message: { content: full } }] } };
 }
 
-/** Aliases kept from the original code — same function, different call-site intent. */
+/** Aliases kept from the original code, same function, different call-site intent. */
 export const aiPost = aiCall;
 export const aiClassify = aiCall;
 
@@ -176,7 +176,7 @@ export interface StreamedCallHandle {
 
 /**
  * Posts a placeholder message immediately, then live-edits it as the model
- * streams in (throttled to respect Slack's chat.update rate limit — Slack
+ * streams in (throttled to respect Slack's chat.update rate limit, Slack
  * will start 429ing well before "every token" territory). Callers get back
  * the raw completion text to run their own leak-detection/cleanup on
  * exactly as they did before streaming existed, then call finalize(text)
@@ -184,7 +184,7 @@ export interface StreamedCallHandle {
  * nothing worth keeping (empty reply, detected prompt leak, etc).
  *
  * `format` wraps both the live preview and is available for the caller's
- * own final text too — e.g. roast prefixes every update with "<@user> ".
+ * own final text too, e.g. roast prefixes every update with "<@user> ".
  * Ephemeral responses (respond()/chat.postEphemeral) can't use this: Slack
  * has no way to edit an ephemeral message after the fact.
  */
@@ -201,8 +201,8 @@ export async function streamedAICall(
     stripSkip?: boolean;
     /**
      * A placeholder the caller already posted (and is therefore already
-     * on-screen). Callers that do slow prep before getting here — seeding
-     * thread history, a web search — post it up front so the user sees Pixo
+     * on-screen). Callers that do slow prep before getting here - seeding
+     * thread history, a web search - post it up front so the user sees Pixo
      * react immediately instead of staring at nothing until the model is
      * ready. Omit it and this posts its own, exactly as before.
      */
@@ -246,7 +246,7 @@ export async function streamedAICall(
     enqueueEdit(fmt(display));
   };
 
-  // Post the placeholder and start asking the model at the same time — the
+  // Post the placeholder and start asking the model at the same time, the
   // model can already be generating tokens while we're still waiting on
   // Slack to confirm the placeholder, instead of paying for those two
   // network round-trips back to back. Whatever streamed in during that
@@ -261,7 +261,7 @@ export async function streamedAICall(
       if (latestFull) pushUpdate(latestFull, true);
     })
     .catch(() => {
-      // no placeholder — fall back to a single non-streamed post in finalize()
+      // no placeholder, fall back to a single non-streamed post in finalize()
     });
 
   const onDelta = (full: string) => {

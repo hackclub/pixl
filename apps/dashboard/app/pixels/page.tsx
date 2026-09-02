@@ -221,7 +221,7 @@ export default async function PixelsPage({
                       {t.project_name}
                     </Link>
                   ) : (
-                    <span className="text-muted-foreground">—</span>
+                    <span className="text-muted-foreground">-</span>
                   )}
                 </TableCell>
                 <TableCell className="p-3 text-muted-foreground">{actor || ","}</TableCell>

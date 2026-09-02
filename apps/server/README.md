@@ -6,14 +6,14 @@ Backend server for **Pixl**, a multiplayer 2D game (the client is built in Godot
 
 ## Features
 
-- **Authentication** — Hack Club OAuth, plus an optional demo login for local development.
-- **Realtime multiplayer** — movement, chat, proximity voice, emotes, and presence over WebSockets.
-- **Instanced lobbies** — in-memory and persisted lobby management with shared rooms and private password-protected lobbies.
-- **Scene system** — village, openworld, and house scenes with per-scene persisted player and NPC positions.
-- **Friends & DMs** — friend requests, friend pairs, player search, and direct messaging.
-- **Projects** — per-user projects linked to Hackatime coding-time tracking.
-- **Notifications** — a per-user inbox plus admin broadcast messaging.
-- **Moderation** — profanity filtering, a violation log, and bans with a periodic ban-sweep that kicks players banned mid-session.
+- **Authentication** - Hack Club OAuth, plus an optional demo login for local development.
+- **Realtime multiplayer** - movement, chat, proximity voice, emotes, and presence over WebSockets.
+- **Instanced lobbies** - in-memory and persisted lobby management with shared rooms and private password-protected lobbies.
+- **Scene system** - village, openworld, and house scenes with per-scene persisted player and NPC positions.
+- **Friends & DMs** - friend requests, friend pairs, player search, and direct messaging.
+- **Projects** - per-user projects linked to Hackatime coding-time tracking.
+- **Notifications** - a per-user inbox plus admin broadcast messaging.
+- **Moderation** - profanity filtering, a violation log, and bans with a periodic ban-sweep that kicks players banned mid-session.
 
 ## Tech Stack
 
@@ -98,21 +98,21 @@ The server listens on `PORT` (default `3000`).
 
 | Variable | Description | Default |
 | --- | --- | --- |
-| `SUPABASE_URL` | Supabase project URL | — |
-| `SUPABASE_SERVICE_KEY` | Supabase `service_role` key (server-only) | — |
-| `JWT_SECRET` | Signing secret for session tokens | — |
-| `HCA_CLIENT_ID` | Hack Club OAuth client ID | — |
-| `HCA_CLIENT_SECRET` | Hack Club OAuth client secret | — |
+| `SUPABASE_URL` | Supabase project URL | - |
+| `SUPABASE_SERVICE_KEY` | Supabase `service_role` key (server-only) | - |
+| `JWT_SECRET` | Signing secret for session tokens | - |
+| `HCA_CLIENT_ID` | Hack Club OAuth client ID | - |
+| `HCA_CLIENT_SECRET` | Hack Club OAuth client secret | - |
 | `HCA_REDIRECT_URI` | Hack Club OAuth redirect URI | `http://localhost:3000/auth/hackclub/callback` |
-| `HACKATIME_BASE` | Hackatime API base URL | — |
-| `HACKATIME_CLIENT_ID` | Hackatime OAuth client ID | — |
-| `HACKATIME_CLIENT_SECRET` | Hackatime OAuth client secret | — |
+| `HACKATIME_BASE` | Hackatime API base URL | - |
+| `HACKATIME_CLIENT_ID` | Hackatime OAuth client ID | - |
+| `HACKATIME_CLIENT_SECRET` | Hackatime OAuth client secret | - |
 | `HACKATIME_REDIRECT_URI` | Hackatime OAuth redirect URI | `https://server.pixl.rsvp/hackatime/callback` |
-| `HACKATIME_SCOPES` | Hackatime OAuth scopes | — |
-| `ADMIN_API_KEY` | Key for the admin notifications endpoint | — |
-| `DATABASE_URL` | Postgres URL used by the Drizzle tooling | — |
+| `HACKATIME_SCOPES` | Hackatime OAuth scopes | - |
+| `ADMIN_API_KEY` | Key for the admin notifications endpoint | - |
+| `DATABASE_URL` | Postgres URL used by the Drizzle tooling | - |
 | `PORT` | Port the server listens on | `3000` |
-| `ALLOW_DEMO_LOGIN` | Enables the demo login route when `true` | — |
+| `ALLOW_DEMO_LOGIN` | Enables the demo login route when `true` | - |
 
 ## HTTP API
 
@@ -123,9 +123,9 @@ The server listens on `PORT` (default `3000`).
 
 ### Authentication
 
-- `GET /auth/demo?name=` — demo login (only when `ALLOW_DEMO_LOGIN=true`)
-- `GET /auth/hackclub` — begin Hack Club OAuth
-- `GET /auth/hackclub/callback` — Hack Club OAuth callback; blocks banned users and redirects back to the client with `token`/`name` (and `new=1` for new users)
+- `GET /auth/demo?name=` - demo login (only when `ALLOW_DEMO_LOGIN=true`)
+- `GET /auth/hackclub` - begin Hack Club OAuth
+- `GET /auth/hackclub/callback` - Hack Club OAuth callback; blocks banned users and redirects back to the client with `token`/`name` (and `new=1` for new users)
 
 ### Hackatime
 
@@ -142,13 +142,13 @@ The server listens on `PORT` (default `3000`).
 
 ### Notifications
 
-- `POST /api/admin/notifications` — admin send (auth via `x-api-key` header or `?key=`); supports per-user or broadcast
-- `GET /api/notifications` — user inbox
-- `POST /api/notifications/read` — mark as read
+- `POST /api/admin/notifications` - admin send (auth via `x-api-key` header or `?key=`); supports per-user or broadcast
+- `GET /api/notifications` - user inbox
+- `POST /api/notifications/read` - mark as read
 
 ### Profile
 
-- `POST /api/profile/name` — change display name (profanity-guarded)
+- `POST /api/profile/name` - change display name (profanity-guarded)
 
 ### Friends & Players
 
@@ -212,7 +212,7 @@ Tables referenced:
 
 ## Notes / Known Limitations
 
-- The `service_role` key bypasses Supabase Row Level Security and must never be exposed to clients — keep it server-side only.
+- The `service_role` key bypasses Supabase Row Level Security and must never be exposed to clients - keep it server-side only.
 - Drizzle tooling (`drizzle-orm` / `drizzle-kit`, `drizzle.config.ts`, and the `db:*` scripts) is scaffolded and points at `./src/db/schema.ts`, but that schema file does not exist yet. As a result the migration tooling is **not functional as-is**. Authoring `src/db/schema.ts` is a planned follow-up; until then, runtime persistence relies entirely on the Supabase client.
 
 ## License

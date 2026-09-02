@@ -26,7 +26,7 @@ const VERDICT_LABEL: Record<
 };
 
 // Friendly labels for the structured audit-note sections (see buildAuditNote
-// in lib/auditNote.ts) — same mapping as the Audit notes page.
+// in lib/auditNote.ts), same mapping as the Audit notes page.
 const SECTION_LABEL: Record<AuditHeader, string> = {
   "TECHNICAL FEATURES": "Technical features",
   "HACKATIME EVIDENCE": "Hackatime evidence",
@@ -96,7 +96,7 @@ export function ReviewDetailTabs({
   // first time a reviewer actually opens the tab, then keep it mounted.
   const [fraudOpened, setFraudOpened] = useState(false);
   // HURT is a hardware fraud-check tool (it inspects the repo for CAD/BOM/wiring
-  // evidence) — irrelevant noise on a software project's review page.
+  // evidence), irrelevant noise on a software project's review page.
   const fraudRepo = projectKind === "hardware" && isGithubUrl(repoUrl) ? repoUrl : null;
 
   useEffect(() => {

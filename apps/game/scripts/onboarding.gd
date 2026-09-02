@@ -1,5 +1,5 @@
 extends CanvasLayer
-## First-run arrival flow — the Day-0 onboarding (ONBOARDING_REDESIGN.md §2-8).
+## First-run arrival flow, the Day-0 onboarding (ONBOARDING_REDESIGN.md §2-8).
 ## Orchestrates, in order:
 ##   cinematic → Pixo greeting → naming ritual → experience question →
 ##   the loop patter → point the player out to the frontier (Ridit) and start the
@@ -8,8 +8,8 @@ extends CanvasLayer
 ## the extended Dialogue autoload; each beat awaits the player.
 ##
 ## Two flags keep it runnable without a live server / browser:
-##   mock           — skip real network + web hand-off; record what it would do
-##   skip_cinematic — jump straight to the greeting (fast headless tests)
+##   mock           - skip real network + web hand-off; record what it would do
+##   skip_cinematic - jump straight to the greeting (fast headless tests)
 
 signal finished
 
@@ -83,8 +83,8 @@ func _release_block() -> void:
 		_blocked = false
 		global.pop_ui_blocker()
 
-# If the flow is destroyed mid-run — Quit to Main Menu, logout, or a network
-# await that never resolves — release the blocker so the player can still move,
+# If the flow is destroyed mid-run - Quit to Main Menu, logout, or a network
+# await that never resolves - release the blocker so the player can still move,
 # and close any open dialogue so Pixo's lines can't bleed onto the next scene.
 func _exit_tree() -> void:
 	_release_block()
@@ -121,7 +121,7 @@ func _naming() -> void:
 			captured_name = String(result.get("name", name))
 			await _say(["%s. Alright, the Hub knows you now." % captured_name])
 			return
-		# Rejected — Pixo softens it, then we loop back to ask again.
+		# Rejected, Pixo softens it, then we loop back to ask again.
 		await _say([_soften_name_error(String(result.get("reason", "")))])
 
 func _experience() -> void:
@@ -166,7 +166,7 @@ func _direct_to_frontier() -> void:
 	await _say(["Oh, one more thing: that opening you just watched was drawn by noct. Genuinely great artist, go hire them if you ever need art done."])
 	await _say(["I'll pin a checklist to your screen so you never lose the thread. First stop, find Ridit."])
 	# Awaited: start() emits `finished` right after this returns, which frees
-	# this node (see village.gd's flow.finished.connect -> queue_free) — an
+	# this node (see village.gd's flow.finished.connect -> queue_free), an
 	# un-awaited call here let that teardown cancel the in-flight HTTPRequest
 	# before the POST reached the server, so onboarding_step never actually
 	# persisted and the whole flow replayed on every single login.

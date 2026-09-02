@@ -137,7 +137,7 @@ export default async function ReviewDetail({
     canReview
       ? claimReview(projectId, viewer)
       : Promise.resolve({ ok: true as const, by: undefined }),
-    // The RE the player already holds, excluding this project — this is what
+    // The RE the player already holds, excluding this project - this is what
     // sets the rate they'll be paid at, so the reviewer sees it before deciding.
     lifetimeRe(p.user_id, projectId),
     // So the final reviewer starts from what the first reviewer already wrote
@@ -159,7 +159,7 @@ export default async function ReviewDetail({
   const journalHours =
     Math.round(journals.reduce((s, j) => s + (Number(j.hours) || 0), 0) * 10) / 10;
   const rawTrackedHours = Math.round(((p.hackatime_seconds ?? 0) / 3600) * 10) / 10;
-  // For a hardware ship, hackatime_seconds is never pure Hackatime time — the
+  // For a hardware ship, hackatime_seconds is never pure Hackatime time, the
   // ship route (projects.ts: trackedSeconds = htSeconds + journalSeconds)
   // always folds journal hours into that same column, whether or not a
   // Hackatime project is linked, so a journal-only hardware ship can meet the
@@ -187,7 +187,7 @@ export default async function ReviewDetail({
   const payoutHours = Math.round((hackatimeHours + journalHours) * 10) / 10;
 
   // Same "hackatime if tracked, else journal" source-of-truth as
-  // claimedHoursFor() in actions.ts uses for the owner — kept consistent so
+  // claimedHoursFor() in actions.ts uses for the owner, kept consistent so
   // the cap shown here matches what reviewProject actually enforces.
   const acceptedCollaborators = allCollaborators.filter((c) => c.status === "accepted");
   const collaboratorHours = acceptedCollaborators.map((c) => {
@@ -571,7 +571,7 @@ export default async function ReviewDetail({
             )}
           </div>
 
-          {/* Eligibility check — YSWS submission guideline gaps (exclusions,
+          {/* Eligibility check - YSWS submission guideline gaps (exclusions,
               builder unified-DB fields, README). */}
           {(() => {
             const u = p.users as
@@ -595,18 +595,18 @@ export default async function ReviewDetail({
             const dec = (v: string | null | undefined) => decryptPII(v) || "";
             const birthday = dec(u?.birthday);
             const builderAge = ageFrom(birthday);
-            const fullName = [dec(u?.first_name), dec(u?.last_name)].filter(Boolean).join(" ") || u?.real_name || "—";
+            const fullName = [dec(u?.first_name), dec(u?.last_name)].filter(Boolean).join(" ") || u?.real_name || "-";
             const country = dec(u?.address_country);
             const address =
               [dec(u?.address_line1), dec(u?.address_line2), dec(u?.address_city), dec(u?.address_state), dec(u?.address_postal), country]
                 .filter(Boolean)
-                .join(", ") || "—";
+                .join(", ") || "-";
             return (
               <div className="rounded-xl border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 p-4 text-sm space-y-2">
                 <div className="font-semibold text-amber-800 dark:text-amber-300">Eligibility check</div>
                 <ul className="list-disc pl-5 space-y-0.5 text-amber-900/90 dark:text-amber-200/90">
                   <li>
-                    <strong>Not</strong> a school assignment, and <strong>not</strong> built as paid Hack Club work — both
+                    <strong>Not</strong> a school assignment, and <strong>not</strong> built as paid Hack Club work, both
                     are ineligible for the unified database.
                   </li>
                   <li>Repo has a usable README and the live demo actually works.</li>
@@ -620,16 +620,16 @@ export default async function ReviewDetail({
                       <span className="text-muted-foreground">Name:</span> {fullName}
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Email:</span> {dec(u?.email) || "—"}
+                      <span className="text-muted-foreground">Email:</span> {dec(u?.email) || "-"}
                     </div>
                     <div>
                       <span className="text-muted-foreground">Age:</span>{" "}
                       {builderAge != null
                         ? `${builderAge}${isFinalStage && birthday ? ` (born ${birthday})` : ""}`
-                        : "—"}
+                        : "-"}
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Country:</span> {country || "—"}
+                      <span className="text-muted-foreground">Country:</span> {country || "-"}
                     </div>
                     {isFinalStage && (
                       <div className="sm:col-span-2">

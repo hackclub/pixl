@@ -53,7 +53,7 @@ function secondsSinceUnix(spans: Span[], sinceUnix: number): number {
 
 // Same math as apps/server's fetchTrackedSecondsSince, reimplemented here
 // because the dashboard talks to Hackatime directly rather than through
-// apps/server — used by the reviewer "extend hours cutoff" override so a
+// apps/server, used by the reviewer "extend hours cutoff" override so a
 // legitimately-early-started project can count hours from before the global
 // hackatimeCutoff (see extendHoursCutoff in app/actions.ts).
 export async function fetchTrackedSecondsSince(

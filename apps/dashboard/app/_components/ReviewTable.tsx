@@ -100,7 +100,7 @@ export function ReviewTable({
                 {/* The stretched-link overlay needs a `position`d ancestor to
                     size against. That used to be this row (a real <tr>), but
                     position:relative on a table-row box isn't a reliable
-                    containing block across browsers — every row's overlay was
+                    containing block across browsers, every row's overlay was
                     collapsing onto the table's own relative wrapper div, so
                     only the last row (last in paint order) ever caught hover
                     or clicks. Scoping it to this <td> keeps a real, accessible

@@ -113,7 +113,7 @@ func _build_ui() -> void:
 	vbox.add_child(_hint)
 
 ## Show a linear run of lines. `portrait` (optional) shows a character bust.
-## Unchanged call sites — open(speaker, lines) — keep working exactly as before.
+## Unchanged call sites - open(speaker, lines) - keep working exactly as before.
 func open(speaker: String, lines, portrait: Texture2D = null) -> void:
 	var arr := PackedStringArray()
 	for l in lines:
@@ -277,16 +277,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		get_viewport().set_input_as_handled()
 		# A choice prompt (ask()) only ever resolves its `chosen` signal from
-		# _on_choice() — closing here instead would leave any caller awaiting
+		# _on_choice(), closing here instead would leave any caller awaiting
 		# `Dialogue.chosen` (e.g. onboarding.gd's arrival flow) suspended
 		# forever, which also permanently strands global.ui_blockers at 1
 		# since the blocking coroutine never reaches its release. So Esc is a
-		# no-op during an active choice prompt — the player has to pick one.
+		# no-op during an active choice prompt, the player has to pick one.
 		if _choosing:
 			return
 		close()
 		return
-	# While the choice buttons are up, [E] is inert — the player must click one.
+	# While the choice buttons are up, [E] is inert, the player must click one.
 	# Before that (prompt still typing / more prompt lines), [E] advances.
 	if _choosing and _choices.visible:
 		return

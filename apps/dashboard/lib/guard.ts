@@ -165,7 +165,7 @@ export async function requirePagePerm(perms: Permission[]): Promise<AdminAccess>
 
 // First-time gate for the review queue: a reviewer must have acknowledged the
 // current YSWS guidelines version before any /review/* page renders. Call right
-// after requirePagePerm(["review"]) in each review page — but NOT on the
+// after requirePagePerm(["review"]) in each review page - but NOT on the
 // guidelines page itself, or it would redirect to itself forever.
 export async function requireGuidelinesAck(access: AdminAccess): Promise<void> {
   const { getGuidelinesAck } = await import("./db");

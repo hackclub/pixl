@@ -362,7 +362,7 @@ export function ReviewForm({
     note: string;
   };
   /** Current title/description/image, editable by a final (second-pass)
-   * reviewer only — see the "Edit submission" section below. */
+   * reviewer only, see the "Edit submission" section below. */
   currentName?: string;
   currentDescription?: string | null;
   currentImageUrl?: string | null;
