@@ -2214,7 +2214,7 @@
           return false;
         }
         const r = p.id
-          ? await Pixl.send("PUT", `/api/projects/${p.id}`, body)
+          ? await Pixl.send("PUT", `/api/projects/${p.id}`, body, { keepalive: !!opts.keepalive })
           : await Pixl.send("POST", "/api/projects", body);
         $("f-save").disabled = false;
         if (!r.ok) {
@@ -2243,6 +2243,8 @@
       // just from typing). Deliberately not applied to the journal composer:
       // posting a journal entry is a real, deliberate action.
       let autosaveTimer = null;
+      let autosaveFlushProject = null;
+      let _autosaveFlushWired = false;
       let skipDetailsCollapse = false;
       function wireAutosave(p) {
         if (!p.id) return;
@@ -2254,12 +2256,27 @@
         const htBoxes = [...document.querySelectorAll('input[name="ht"]')];
         const schedule = () => {
           clearTimeout(autosaveTimer);
+          autosaveFlushProject = p;
           autosaveTimer = setTimeout(() => saveProject(p, { silent: true }), 5000);
         };
         [...fields, ...htBoxes].forEach((el) => {
           el.addEventListener("input", schedule);
           el.addEventListener("change", schedule);
         });
+        // Flush a still-pending autosave immediately on refresh/close instead of
+        // silently dropping it — picking "Not for a Trial" (or editing any other
+        // autosaved field) and refreshing inside the 5s debounce window used to
+        // lose the change entirely, since nothing had been sent to the server yet.
+        // keepalive lets the fetch survive the page tearing down mid-flight.
+        if (!_autosaveFlushWired) {
+          _autosaveFlushWired = true;
+          window.addEventListener("pagehide", () => {
+            if (!autosaveTimer || !autosaveFlushProject) return;
+            clearTimeout(autosaveTimer);
+            autosaveTimer = null;
+            saveProject(autosaveFlushProject, { silent: true, keepalive: true });
+          });
+        }
       }
 
       /* ---------- project detail ---------- */
