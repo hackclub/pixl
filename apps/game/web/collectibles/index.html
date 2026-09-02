@@ -39,16 +39,20 @@
       .col-cost { font-family: var(--pixel); font-size: 13px; color: var(--gold); display: inline-flex; align-items: center; gap: 4px; }
       .col-card .btn { padding: 7px 14px; font-size: 13px; }
       .owned-tag { font-family: var(--pixel); font-size: 12px; color: var(--teal, #6cc); letter-spacing: .5px; }
+      .col-progress { flex: 1; min-width: 60px; }
+      .col-progress-bar { height: 6px; border-radius: 0; background: var(--panel-2); border: 1px solid var(--stroke); overflow: hidden; }
+      .col-progress-bar > div { height: 100%; background: var(--gold); }
+      .col-progress-label { font-size: 11px; color: var(--faint); margin-top: 3px; }
     </style>
   </head>
   <body>
     <main class="wrap">
       <h1 class="page-title">COLLECTIBLES</h1>
       <div class="page-sub">
-        Spend the upvotes your projects have earned on cosmetics for your Builder. Upvotes are permanent:
-        every one someone gives your work stays in your account.
+        Earn cosmetics for your Builder as your projects get upvoted. The moment you reach a collectible's
+        upvote count it's yours to keep, even if a vote gets taken back later.
       </div>
-      <div class="bal" id="bal" hidden>▲ <span class="up" id="bal-n">0</span> UPVOTES</div>
+      <div class="bal" id="bal" hidden>▲ <span class="up" id="bal-n">0</span> UPVOTES RECEIVED</div>
 
       <div class="spin" id="loading"></div>
       <div class="col-grid" id="grid"></div>
@@ -63,10 +67,13 @@
       let balance = 0;
 
       function card(c) {
-        const affordable = !c.owned && balance >= c.cost;
-        const btn = c.owned
+        const pct = c.owned ? 100 : Math.max(0, Math.min(100, (balance / Math.max(c.cost, 1)) * 100));
+        const foot = c.owned
           ? `<span class="owned-tag">OWNED</span>`
-          : `<button class="btn${affordable ? "" : " dark"}" onclick="buy(${Number(c.id)})"${affordable ? "" : " disabled"}>BUY</button>`;
+          : `<div class="col-progress">
+               <div class="col-progress-bar"><div style="width:${pct}%"></div></div>
+               <div class="col-progress-label">${balance} / ${c.cost} upvotes</div>
+             </div>`;
         return `
           <div class="col-card card panel" id="c-${Pixl.esc(c.id)}">
             <div class="col-thumb">${c.image_url ? `<img src="${Pixl.esc(c.image_url)}" alt="" onerror="this.parentNode.innerHTML='<span class=ph>NO IMAGE</span>'">` : `<span class="ph">NO IMAGE</span>`}</div>
@@ -74,7 +81,7 @@
             <div class="col-desc">${Pixl.esc(c.description || "")}</div>
             <div class="col-foot">
               <span class="col-cost">▲ ${c.cost}</span>
-              ${btn}
+              ${foot}
             </div>
           </div>`;
       }
@@ -86,25 +93,6 @@
         $("grid").innerHTML = items.map(card).join("");
         $("empty").hidden = items.length !== 0;
       }
-
-      window.buy = async function (id) {
-        const c = items.find((x) => x.id === id);
-        if (!c) return;
-        if (!(await Pixl.confirm({ title: "Buy " + c.name + "?", body: "This costs " + c.cost + " upvotes.", confirmText: "Buy" }))) return;
-        const r = await Pixl.send("POST", "/api/collectibles/" + id + "/buy");
-        if (r.ok) {
-          balance = r.balance;
-          c.owned = true;
-          render();
-          Pixl.toast("Got it, " + c.name + " is yours.");
-        } else if (r.error === "insufficient_upvotes") {
-          Pixl.toast("Not enough upvotes yet: earn more by getting your projects upvoted.", true);
-        } else if (r.error === "already_owned") {
-          c.owned = true; render();
-        } else {
-          Pixl.toast("Couldn't buy that right now.", true);
-        }
-      };
 
       async function boot() {
         if (!Pixl.hasToken) return;

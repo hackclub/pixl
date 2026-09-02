@@ -78,14 +78,14 @@
     color: var(--dim); background: var(--panel-2); border: var(--bw) solid var(--stroke); border-radius: 0; padding: 4px 11px; cursor: pointer;
     transition: color .12s ease, border-color .12s ease, background .12s ease, transform .08s ease; }
   .upvote-btn:hover:not(:disabled) { color: var(--gold); border-color: var(--gold); transform: translateY(-1px); }
-  .upvote-btn.on { color: var(--btn-ink); background: var(--gold); border-color: var(--gold); cursor: default; }
+  .upvote-btn.on { color: var(--btn-ink); background: var(--gold); border-color: var(--gold); }
   .upvote-btn:disabled { cursor: default; }
   .vote-group { display: inline-flex; align-items: center; gap: 6px; }
   .downvote-btn { display: inline-flex; align-items: center; gap: 5px; font-family: var(--pixel, inherit); font-size: 13px; font-weight: 600;
     color: var(--dim); background: var(--panel-2); border: var(--bw) solid var(--stroke); border-radius: 0; padding: 4px 11px; cursor: pointer;
     transition: color .12s ease, border-color .12s ease, background .12s ease, transform .08s ease; }
   .downvote-btn:hover:not(:disabled) { color: var(--bad); border-color: var(--bad); transform: translateY(-1px); }
-  .downvote-btn.on { color: var(--btn-ink); background: var(--bad); border-color: var(--bad); cursor: default; }
+  .downvote-btn.on { color: var(--btn-ink); background: var(--bad); border-color: var(--bad); }
   .downvote-btn:disabled { cursor: default; }
   .status-chip { text-transform: uppercase; }
   .board { display: flex; flex-direction: column; gap: 8px; }
@@ -306,34 +306,40 @@ function projCard(p) {
     </a>`;
 }
 
-// Upvote pill. Permanent — once cast it disables and stays lit.
+// Upvote pill. Click again to remove your vote; disabled only while the
+// opposite direction is active (remove that one first to switch).
 function upvoteBtn(p) {
-  return `<button class="upvote-btn${p.has_upvoted ? " on" : ""}" onclick="return castVote(event,${Number(p.id)},'up')"${p.has_upvoted || p.has_downvoted ? " disabled" : ""} aria-label="Upvote this project" title="${p.has_upvoted ? "You upvoted this" : "Upvote this project"}">▲ <span class="uv-count">${p.upvotes || 0}</span></button>`;
+  return `<button class="upvote-btn${p.has_upvoted ? " on" : ""}" onclick="return castVote(event,${Number(p.id)},'up')"${p.has_downvoted ? " disabled" : ""} aria-label="Upvote this project" title="${p.has_upvoted ? "Remove your upvote" : "Upvote this project"}">▲ <span class="uv-count">${p.upvotes || 0}</span></button>`;
 }
 
-// Downvote pill. Same permanent, one-shot behaviour as upvote.
+// Downvote pill. Same removable, click-to-toggle behaviour as upvote.
 function downvoteBtn(p) {
-  return `<button class="downvote-btn${p.has_downvoted ? " on" : ""}" onclick="return castVote(event,${Number(p.id)},'down')"${p.has_upvoted || p.has_downvoted ? " disabled" : ""} aria-label="Downvote this project" title="${p.has_downvoted ? "You downvoted this" : "Downvote this project"}">▼ <span class="dv-count">${p.downvotes || 0}</span></button>`;
+  return `<button class="downvote-btn${p.has_downvoted ? " on" : ""}" onclick="return castVote(event,${Number(p.id)},'down')"${p.has_upvoted ? " disabled" : ""} aria-label="Downvote this project" title="${p.has_downvoted ? "Remove your downvote" : "Downvote this project"}">▼ <span class="dv-count">${p.downvotes || 0}</span></button>`;
 }
 
-// Cast a permanent up/downvote without following the card link. Updates both
-// buttons in place; the server is idempotent, rejects self-votes, and blocks
-// voting the opposite direction if you've already voted the other way.
+// Cast or remove an up/downvote without following the card link (click an
+// already-active vote to take it back). Updates both buttons in place; the
+// server is idempotent, rejects self-votes, and blocks voting the opposite
+// direction until you remove your current vote first.
 window.castVote = async function (e, id, dir) {
   e.preventDefault();
   e.stopPropagation();
   const btn = e.currentTarget;
   if (btn.disabled) return false;
+  const removing = btn.classList.contains("on");
   const group = btn.closest(".vote-group") || btn.parentElement;
   const upBtn = group ? group.querySelector(".upvote-btn") : null;
   const downBtn = group ? group.querySelector(".downvote-btn") : null;
   if (upBtn) upBtn.disabled = true;
   if (downBtn) downBtn.disabled = true;
-  const r = await Pixl.send("POST", "/api/projects/" + id + "/" + (dir === "up" ? "upvote" : "downvote"));
+  const path = "/api/projects/" + id + "/" + (dir === "up" ? "upvote" : "downvote");
+  const r = await Pixl.send(removing ? "DELETE" : "POST", path);
   if (r.ok) {
-    btn.classList.add("on");
+    btn.classList.toggle("on", !removing);
     const c = btn.querySelector(dir === "up" ? ".uv-count" : ".dv-count");
     if (c) c.textContent = dir === "up" ? r.upvotes : r.downvotes;
+    if (upBtn) upBtn.disabled = dir === "down" && !removing;
+    if (downBtn) downBtn.disabled = dir === "up" && !removing;
   } else {
     if (upBtn) upBtn.disabled = false;
     if (downBtn) downBtn.disabled = false;

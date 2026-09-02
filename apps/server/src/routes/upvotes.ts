@@ -1,37 +1,54 @@
 import { Router } from "express";
+import type { TransactionSql } from "postgres";
 import { verifySessionToken } from "../auth/session.js";
 import { supabase } from "../db/client.js";
 import { withLock } from "../db/advisoryLock.js";
 
 const router = Router();
 
-// A user's upvote balance = (upvotes received across their projects) - (upvotes
-// already spent on collectibles). Kept as a derived value so upvotes stay a
-// simple permanent ledger rather than a mutable counter.
-async function upvoteBalance(userId: string): Promise<number> {
+// Upvotes a player's projects have received, summed across every project they
+// own. No longer minus anything spent - collectibles are auto-granted (see
+// grantEligibleCollectibles below), never bought, so there's nothing to spend.
+async function receivedUpvotes(userId: string): Promise<number> {
   const { data: mine } = await supabase
     .from("projects")
     .select("id")
     .eq("user_id", userId);
   const ids = (mine ?? []).map((p) => p.id as number);
-  let received = 0;
-  if (ids.length > 0) {
-    const { count } = await supabase
-      .from("project_upvotes")
-      .select("id", { count: "exact", head: true })
-      .in("project_id", ids);
-    received = count ?? 0;
-  }
-  const { data: spends } = await supabase
-    .from("collectible_purchases")
-    .select("cost")
-    .eq("user_id", userId);
-  const spent = (spends ?? []).reduce((s, r) => s + Number(r.cost), 0);
-  return Math.max(0, received - spent);
+  if (ids.length === 0) return 0;
+  const { count } = await supabase
+    .from("project_upvotes")
+    .select("id", { count: "exact", head: true })
+    .in("project_id", ids);
+  return count ?? 0;
 }
 
-// Permanent upvote on an approved project. One per voter, never taken back, and
-// you can't upvote your own work. Idempotent — re-hitting it is a no-op.
+// Auto-grant every active collectible whose cost the owner's current received
+// total has reached, that they don't already own. Called after an upvote
+// lands - never after a removal, since a collectible earned once is kept for
+// good (see the removal endpoints below), so there's nothing to re-check on
+// the way down. Must run inside the same locked transaction as the vote
+// insert so a burst of upvotes across a player's projects can't grant the
+// same collectible twice.
+async function grantEligibleCollectibles(tx: TransactionSql, ownerId: string): Promise<void> {
+  const ownedProjects = await tx`select id from projects where user_id = ${ownerId}`;
+  const ids = ownedProjects.map((p) => p.id as number);
+  if (ids.length === 0) return;
+  const [{ n }] =
+    await tx`select count(*)::int as n from project_upvotes where project_id = any(${ids})`;
+  const received = n as number;
+  const eligible = await tx`
+    select id, cost from collectibles
+    where active = true and cost <= ${received}
+      and id not in (select collectible_id from collectible_purchases where user_id = ${ownerId})
+  `;
+  for (const c of eligible) {
+    await tx`insert into collectible_purchases (user_id, collectible_id, cost) values (${ownerId}, ${c.id}, ${c.cost}) on conflict do nothing`;
+  }
+}
+
+// Upvote on an approved project. One per voter, can't upvote your own work.
+// Idempotent to re-hits; removable via the DELETE route below.
 router.post("/api/projects/:id/upvote", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";
   const session = token ? verifySessionToken(token) : null;
@@ -68,6 +85,7 @@ router.post("/api/projects/:id/upvote", async (req, res) => {
         await tx`insert into project_upvotes (project_id, voter_id) values (${id}, ${session.userId}) on conflict do nothing`;
         const [{ n }] =
           await tx`select count(*)::int as n from project_upvotes where project_id = ${id}`;
+        await grantEligibleCollectibles(tx, project.user_id as string);
         return { upvotes: n as number };
       },
     );
@@ -79,11 +97,36 @@ router.post("/api/projects/:id/upvote", async (req, res) => {
   }
 });
 
-// Permanent downvote on an approved project. Same rules as upvote (one per
-// voter, never taken back, can't vote your own project), plus: a voter can't
-// downvote a project they've already upvoted, or upvote one they've already
-// downvoted — only one direction per voter per project. Doesn't touch the
-// upvote currency/balance; it's a signal, not a spend.
+// Remove your own upvote. Idempotent (removing a vote that isn't there is a
+// no-op). Never claws back a collectible already granted while the vote was
+// counted - the owner genuinely reached that threshold at least once, that's
+// kept for good (see grantEligibleCollectibles).
+router.delete("/api/projects/:id/upvote", async (req, res) => {
+  const token = typeof req.query.token === "string" ? req.query.token : "";
+  const session = token ? verifySessionToken(token) : null;
+  if (!session) return res.status(401).json({ ok: false });
+
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: "bad_id" });
+
+  try {
+    const result = await withLock(`project_vote:${id}:${session.userId}`, async (tx) => {
+      await tx`delete from project_upvotes where project_id = ${id} and voter_id = ${session.userId}`;
+      const [{ n }] =
+        await tx`select count(*)::int as n from project_upvotes where project_id = ${id}`;
+      return { upvotes: n as number };
+    });
+    res.json({ ok: true, upvotes: result.upvotes, has_upvoted: false });
+  } catch (e) {
+    console.error("[upvotes] delete failed", e);
+    res.status(500).json({ ok: false });
+  }
+});
+
+// Downvote on an approved project. Same rules as upvote: one per voter, can't
+// downvote your own project, and a voter can't hold both directions at once
+// on the same project. Doesn't touch collectibles - it's a signal, not
+// currency. Removable via the DELETE route below.
 router.post("/api/projects/:id/downvote", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";
   const session = token ? verifySessionToken(token) : null;
@@ -127,15 +170,42 @@ router.post("/api/projects/:id/downvote", async (req, res) => {
   }
 });
 
-// The signed-in player's spendable upvote balance ("upvote account").
+// Remove your own downvote. Idempotent, same shape as removing an upvote.
+router.delete("/api/projects/:id/downvote", async (req, res) => {
+  const token = typeof req.query.token === "string" ? req.query.token : "";
+  const session = token ? verifySessionToken(token) : null;
+  if (!session) return res.status(401).json({ ok: false });
+
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: "bad_id" });
+
+  try {
+    const result = await withLock(`project_vote:${id}:${session.userId}`, async (tx) => {
+      await tx`delete from project_downvotes where project_id = ${id} and voter_id = ${session.userId}`;
+      const [{ n }] =
+        await tx`select count(*)::int as n from project_downvotes where project_id = ${id}`;
+      return { downvotes: n as number };
+    });
+    res.json({ ok: true, downvotes: result.downvotes, has_downvoted: false });
+  } catch (e) {
+    console.error("[downvotes] delete failed", e);
+    res.status(500).json({ ok: false });
+  }
+});
+
+// The signed-in player's total received-upvote count. Not currently linked
+// from any client (collectibles/index.html reads its number from
+// GET /api/collectibles instead) - kept for anything external.
 router.get("/api/upvotes/balance", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";
   const session = token ? verifySessionToken(token) : null;
   if (!session) return res.status(401).json({ ok: false });
-  res.json({ ok: true, balance: await upvoteBalance(session.userId) });
+  res.json({ ok: true, balance: await receivedUpvotes(session.userId) });
 });
 
-// Collectibles catalog + what the player already owns + their balance.
+// Collectibles catalog + what the player already owns (auto-granted, never
+// bought - see grantEligibleCollectibles) + their live received-upvote count,
+// so the client can show progress toward the ones they don't have yet.
 router.get("/api/collectibles", async (req, res) => {
   const token = typeof req.query.token === "string" ? req.query.token : "";
   const session = token ? verifySessionToken(token) : null;
@@ -152,7 +222,7 @@ router.get("/api/collectibles", async (req, res) => {
       .from("collectible_purchases")
       .select("collectible_id")
       .eq("user_id", session.userId),
-    upvoteBalance(session.userId),
+    receivedUpvotes(session.userId),
   ]);
   const ownedSet = new Set((owned ?? []).map((r) => r.collectible_id as number));
   res.json({
@@ -160,66 +230,6 @@ router.get("/api/collectibles", async (req, res) => {
     balance,
     collectibles: (items ?? []).map((c) => ({ ...c, owned: ownedSet.has(c.id as number) })),
   });
-});
-
-// Buy a collectible with upvotes. Guards: exists/active, not already owned,
-// enough balance. The unique(user_id, collectible_id) constraint is the final
-// backstop against a double-spend race.
-router.post("/api/collectibles/:id/buy", async (req, res) => {
-  const token = typeof req.query.token === "string" ? req.query.token : "";
-  const session = token ? verifySessionToken(token) : null;
-  if (!session) return res.status(401).json({ ok: false });
-
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: "bad_id" });
-
-  try {
-    // Locked per-user (not per-item): the balance is derived across every
-    // collectible the user owns, so two concurrent buys of *different*
-    // items could otherwise both read the same sufficient balance and both
-    // succeed, overspending it.
-    const result = await withLock(`collectible_buy:${session.userId}`, async (tx) => {
-      const item = (
-        await tx`select id, cost, active from collectibles where id = ${id}`
-      )[0] as { id: number; cost: number; active: boolean } | undefined;
-      if (!item || !item.active) return { error: "not_found" as const };
-
-      const already = (
-        await tx`select id from collectible_purchases where user_id = ${session.userId} and collectible_id = ${id}`
-      )[0];
-      if (already) return { error: "already_owned" as const };
-
-      const ownedProjects =
-        await tx`select id from projects where user_id = ${session.userId}`;
-      const ids = ownedProjects.map((p) => p.id as number);
-      let received = 0;
-      if (ids.length > 0) {
-        const [{ n }] =
-          await tx`select count(*)::int as n from project_upvotes where project_id = any(${ids})`;
-        received = n as number;
-      }
-      const spends =
-        await tx`select cost from collectible_purchases where user_id = ${session.userId}`;
-      const spent = spends.reduce((s, r) => s + Number(r.cost), 0);
-      const balance = Math.max(0, received - spent);
-
-      const cost = Number(item.cost);
-      if (balance < cost)
-        return { error: "insufficient_upvotes" as const, balance, cost };
-
-      await tx`insert into collectible_purchases (user_id, collectible_id, cost) values (${session.userId}, ${id}, ${cost})`;
-      return { balance: balance - cost };
-    });
-
-    if ("error" in result) {
-      const status = result.error === "not_found" ? 404 : 400;
-      return res.status(status).json({ ok: false, ...result });
-    }
-    res.json({ ok: true, balance: result.balance });
-  } catch (e) {
-    console.error("[collectibles] buy failed", e);
-    res.status(500).json({ ok: false });
-  }
 });
 
 export default router;
