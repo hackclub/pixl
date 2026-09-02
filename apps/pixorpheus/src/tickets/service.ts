@@ -366,21 +366,11 @@ export async function handleNewQuestion(event: PendingTicketEvent, client: WebCl
 
   pendingTickets.set(event.ts, { event, timer });
 
-  // Follow-up: a SEPARATE message from pixo, posted after the classic
-  // "someone will help you soon" reply above, telling the asker to wait for a
-  // human helper and surfacing a similar previously-resolved ticket if there
-  // is one. Used to try answering from the docs first (see answerFromDocs.ts)
-  // — removed at the user's request, pixo no longer auto-answers in #pixl-help.
-  try {
-    await client.chat.postMessage({
-      channel: event.channel,
-      thread_ts: event.ts,
-      text: "just wait for a helper to respond to this one :D",
-    });
-    checkFAQAndSimilar(event, client).catch(() => {});
-  } catch (e) {
-    /* the classic reply already went out; nothing more to say on failure */
-  }
+  // Surfaces a similar previously-resolved ticket if there is one, after the
+  // classic "someone will help you soon" reply above. Used to try answering
+  // from the docs first (see answerFromDocs.ts) — removed at the user's
+  // request, pixo no longer auto-answers in #pixl-help.
+  checkFAQAndSimilar(event, client).catch(() => {});
 }
 
 export async function handleMessageInThread(event: PendingTicketEvent & { thread_ts?: string }, client: WebClient): Promise<void> {
