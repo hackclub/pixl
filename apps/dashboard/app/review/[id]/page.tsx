@@ -205,8 +205,12 @@ export default async function ReviewDetail({
     };
   });
 
+  // first_pass_hours is a Postgres numeric column - the driver returns it as a
+  // string, which silently zeroed the RE/level lines above (reForHours does a
+  // strict Number.isFinite check that fails on strings) while the payout math
+  // elsewhere happened to still work via implicit numeric coercion on `*`/`-`.
   const formDefaultHours =
-    isFinalStage && p.first_pass_hours != null ? p.first_pass_hours : payoutHours;
+    isFinalStage && p.first_pass_hours != null ? Number(p.first_pass_hours) : payoutHours;
 
   const firstPassAudit = firstPassAuditNote ? parseAuditNote(firstPassAuditNote) : null;
 
