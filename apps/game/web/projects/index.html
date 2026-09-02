@@ -1350,15 +1350,20 @@
       }
 
       // Shared by the initial checklist render and the live refresh as boxes
-      // are ticked, so the two can't drift apart.
-      function shipHtLine() {
+      // are ticked, so the two can't drift apart. Hardware has no hour floor
+      // at ship time (see apps/server/src/routes/projects.ts) — always show
+      // this line as met there instead of the misleading red "-".
+      function shipHtLine(isHardware) {
         const { counted, total } = checkedHtTotals();
-        const ok = counted >= 3600;
+        const ok = isHardware || counted >= 3600;
         const detail =
           counted === total
             ? Pixl.hours(counted)
             : `${Pixl.hours(counted)} counts, ${Pixl.hours(total)} linked`;
-        return `<span class="${ok ? "ok" : "no"}">${ok ? "+" : "-"}</span> ≥ 1h tracked from ${HT_CUTOFF_LABEL} onward <span class="teal">(${detail})</span>`;
+        const label = isHardware
+          ? "≥ 1h tracked (optional for hardware)"
+          : `≥ 1h tracked from ${HT_CUTOFF_LABEL} onward`;
+        return `<span class="${ok ? "ok" : "no"}">${ok ? "+" : "-"}</span> ${label} <span class="teal">(${detail})</span>`;
       }
 
       // Sum of the currently-ticked Hackatime boxes, shown right next to the
@@ -2334,7 +2339,7 @@
           <div class="ship-item"><span class="${p.repo_url ? "ok" : "no"}">${p.repo_url ? "+" : "-"}</span> GitHub repo linked</div>
           <div class="ship-item"><span class="${p.demo_url ? "ok" : "no"}">${p.demo_url ? "+" : "-"}</span> Demo link added</div>
           <div class="ship-item" id="ship-thumb"><span class="${p.image_url ? "ok" : "no"}">${p.image_url ? "+" : "-"}</span> Thumbnail uploaded</div>
-          <div class="ship-item" id="ship-ht">${shipHtLine()}</div>
+          <div class="ship-item" id="ship-ht">${shipHtLine(p.kind === "hardware")}</div>
           ${
             p.kind === "hardware" && p.needs_funding
               ? `
@@ -2477,7 +2482,7 @@
         const onHtChange = () => {
           const el = $("ship-ht");
           if (!el) return;
-          el.innerHTML = shipHtLine();
+          el.innerHTML = shipHtLine(p.kind === "hardware");
         };
         wireHtPicker(onHtChange);
         if ($("f-ht-refresh"))
