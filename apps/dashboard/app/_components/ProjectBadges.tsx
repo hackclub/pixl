@@ -23,6 +23,7 @@ export function Badge({
 
 const STATUS: Record<string, { label: string; tone: Tone; dot: string }> = {
   draft: { label: "Draft", tone: "gray", dot: "bg-gray-400" },
+  ai_review: { label: "AI pre-screen", tone: "blue", dot: "bg-blue-500" },
   shipped: { label: "In review", tone: "amber", dot: "bg-amber-500" },
   fraud_review: { label: "Fraud review", tone: "blue", dot: "bg-blue-500" },
   second_review: { label: "Final review", tone: "violet", dot: "bg-violet-500" },

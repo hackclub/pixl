@@ -1,5 +1,6 @@
 import { decryptPII } from "./crypto";
 import { reForProject } from "@/app/_generated/config";
+import type { AiReviewFindings, AiReviewStatus } from "@/lib/aiReview";
 
 // Orchard Postgres over DATABASE_URL. pgCompat connects lazily, so this module
 // stays importable while Next prerenders static pages (e.g. /_not-found)
@@ -116,6 +117,17 @@ export interface ProjectRow {
   is_update: boolean;
   update_notes: string;
   ship_note: string;
+  ai_review_status: AiReviewStatus | null;
+  ai_review_score: number | null;
+  ai_review_summary: string;
+  ai_review_findings: AiReviewFindings | null;
+  ai_review_error: string;
+  ai_review_started_at: string | null;
+  ai_reviewed_at: string | null;
+  ai_review_model: string;
+  ai_review_revision: string;
+  ai_review_files_seen: number;
+  ai_review_files_omitted: number;
   other_ysws: boolean;
   other_ysws_notes: string;
   system_note: string;
@@ -609,6 +621,25 @@ export async function listFraudReviewProjects(): Promise<ShippedProject[]> {
     .limit(500);
   if (error) {
     console.error("listFraudReviewProjects", error.message);
+    return [];
+  }
+  return hydrateHours((data ?? []) as ShippedProject[]);
+}
+
+export async function listAiReviewProjects(
+  kind?: "software" | "hardware",
+): Promise<ShippedProject[]> {
+  let q = db
+    .from("projects")
+    .select("*, users(id, display_name, real_name, slack_id)")
+    .eq("status", "ai_review")
+    .is("archived_at", null)
+    .is("rejected_at", null)
+    .is("banned_at", null);
+  if (kind) q = q.eq("kind", kind);
+  const { data, error } = await q.order("shipped_at", { ascending: true }).limit(500);
+  if (error) {
+    console.error("listAiReviewProjects", error.message);
     return [];
   }
   return hydrateHours((data ?? []) as ShippedProject[]);

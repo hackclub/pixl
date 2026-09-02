@@ -6,6 +6,7 @@ import {
   getProject,
   listShippedProjects,
   listSecondReviewProjects,
+  listAiReviewProjects,
   claimReview,
   turnedNineteenSinceShipping,
   listCollaboratorsForProject,
@@ -123,6 +124,7 @@ export default async function ReviewDetail({
   ).sidequests;
 
   const isFinalStage = p.status === "second_review";
+  const isAiReviewStage = p.status === "ai_review";
   const isOwn = !!p.users?.slack_id && p.users.slack_id === viewer && !access.isSuper;
   const isHeld = !!p.hold_at;
   const canReview =
@@ -269,7 +271,11 @@ export default async function ReviewDetail({
     fetchTrustFactor(p.users?.slack_id),
     yswsShipsFor(p.users?.slack_id, p.repo_url, p.demo_url),
     slackHandle(p.users?.slack_id),
-    isFinalStage ? listSecondReviewProjects(viewer) : listShippedProjects(viewer),
+    isAiReviewStage
+      ? listAiReviewProjects()
+      : isFinalStage
+        ? listSecondReviewProjects(viewer)
+        : listShippedProjects(viewer),
     hackatimeReportPromise,
     p.bom_url ? fetchBomRows(p.bom_url) : Promise.resolve(null),
   ]);
@@ -298,6 +304,13 @@ export default async function ReviewDetail({
           <AlertDescription className="text-amber-800 dark:text-amber-300">
             Heads up , {claimHandle ?? claim.by ?? "another reviewer"} is already reviewing this
             submission. Avoid double-grading it.
+          </AlertDescription>
+        </Alert>
+      )}
+      {isAiReviewStage && (
+        <Alert className="mt-4 border-blue-300 dark:border-blue-500/40 bg-blue-50 dark:bg-blue-500/10">
+          <AlertDescription className="text-blue-800 dark:text-blue-300">
+            This project is still in the AI pre-screen. It is not ready for a human verdict yet.
           </AlertDescription>
         </Alert>
       )}
@@ -834,6 +847,55 @@ export default async function ReviewDetail({
                       Skip to final review
                     </button>
                   </form>
+                )}
+              </Card>
+            )}
+
+            {p.ai_review_status && p.ai_review_status !== "disabled" && (
+              <Card className="p-5 gap-0 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm font-semibold">AI pre-screen</div>
+                  {p.ai_review_score != null && (
+                    <Badge variant={p.ai_review_score < 40 ? "warning" : "secondary"}>
+                      {p.ai_review_score}/100 genuine-effort score
+                    </Badge>
+                  )}
+                </div>
+                {p.ai_review_status === "pending" || p.ai_review_status === "running" ? (
+                  <p className="text-sm text-muted-foreground">Scanning the public repository before first pass.</p>
+                ) : p.ai_review_status === "failed" ? (
+                  <p className="text-sm text-amber-700 dark:text-amber-300">
+                    Scan failed and the project was released to the normal human queue. {p.ai_review_error}
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
+                      {p.ai_review_summary || "No summary returned."}
+                    </p>
+                    {p.ai_review_findings?.strengths?.length ? (
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Strengths</div>
+                        <ul className="mt-1 list-disc pl-5 text-sm text-foreground/80">
+                          {p.ai_review_findings.strengths.map((strength) => <li key={strength}>{strength}</li>)}
+                        </ul>
+                      </div>
+                    ) : null}
+                    {p.ai_review_findings?.findings?.length ? (
+                      <div className="space-y-2">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Signals to inspect</div>
+                        {p.ai_review_findings.findings.map((finding) => (
+                          <div key={`${finding.category}-${finding.title}`} className="rounded-md border border-border p-2 text-sm">
+                            <div className="font-medium">{finding.title}</div>
+                            <div className="text-xs text-muted-foreground">{finding.category} · {finding.severity}</div>
+                            <div className="mt-1 text-foreground/80 whitespace-pre-wrap break-words">{finding.evidence}</div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    <p className="text-xs text-muted-foreground">
+                      Based on {p.ai_review_files_seen} files{p.ai_review_files_omitted ? `, ${p.ai_review_files_omitted} omitted by safety limits` : ""} · {p.ai_review_model || "model unavailable"}
+                    </p>
+                  </>
                 )}
               </Card>
             )}
