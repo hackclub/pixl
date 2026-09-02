@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { Bar, BarChart, XAxis, YAxis } from "recharts";
-import type { HackatimeReport, HackatimeBreakdown } from "@/lib/hackatime";
+import type { HackatimeReport, HackatimeBreakdown, LapseTimelapse } from "@/lib/hackatime";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -71,6 +72,47 @@ function Breakdown({ title, items }: { title: string; items: HackatimeBreakdown[
   );
 }
 
+// Toggles a small inline player instead of opening a new tab/window - the
+// reviewer stays on the review page, the video just expands under the chip.
+function LapseChip({ lapse }: { lapse: LapseTimelapse }) {
+  const [open, setOpen] = useState(false);
+
+  if (!lapse.playbackUrl) {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/20 px-2 py-1 text-xs text-muted-foreground"
+        title="Still processing"
+      >
+        {lapse.name} (processing…)
+      </span>
+    );
+  }
+
+  return (
+    <div className="inline-flex flex-col items-start">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs hover:bg-muted"
+        title={lapse.name}
+      >
+        {open ? "▼" : "▶"} {lapse.name}
+        {lapse.duration > 0 && (
+          <span className="text-muted-foreground tabular-nums">{fmtSecs(lapse.duration)}</span>
+        )}
+      </button>
+      {open && (
+        <video
+          src={lapse.playbackUrl}
+          poster={lapse.thumbnailUrl ?? undefined}
+          controls
+          className="mt-1.5 w-48 rounded-md border border-border bg-black"
+        />
+      )}
+    </div>
+  );
+}
+
 export function HackatimePanel({ report }: { report: HackatimeReport }) {
   const linked = report.projects.filter((p) => p.linked);
   const maxSecs = Math.max(1, ...report.projects.map((p) => p.seconds));
@@ -97,31 +139,9 @@ export function HackatimePanel({ report }: { report: HackatimeReport }) {
             Lapses to watch ({p.lapses.length})
           </div>
           <div className="flex flex-wrap gap-2">
-            {p.lapses.map((l) =>
-              l.playbackUrl ? (
-                <a
-                  key={l.id}
-                  href={l.playbackUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs hover:bg-muted"
-                  title={l.name}
-                >
-                  ▶ {l.name}
-                  {l.duration > 0 && (
-                    <span className="text-muted-foreground tabular-nums">{fmtSecs(l.duration)}</span>
-                  )}
-                </a>
-              ) : (
-                <span
-                  key={l.id}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-muted/20 px-2 py-1 text-xs text-muted-foreground"
-                  title="Still processing"
-                >
-                  {l.name} (processing…)
-                </span>
-              ),
-            )}
+            {p.lapses.map((l) => (
+              <LapseChip key={l.id} lapse={l} />
+            ))}
           </div>
         </div>
       )}
