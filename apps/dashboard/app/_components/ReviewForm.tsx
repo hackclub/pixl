@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
-import { reviewProject, applySubmissionEdits } from "@/app/actions";
+import { reviewProject, applySubmissionEdits, setProjectLevel } from "@/app/actions";
 import {
   averageUsdPerHourOver,
   config,
@@ -103,6 +103,8 @@ function TierAndPayout({
   hours,
   tier,
   onTier,
+  savedTier,
+  projectId,
   playerReBefore,
   forTrial,
   trialMinHours,
@@ -112,6 +114,10 @@ function TierAndPayout({
   hours: number;
   tier: number;
   onTier: (t: number) => void;
+  /** The tier actually persisted on the project right now - lets the "Set"
+   * button below know whether there's an unsaved pick to re-grade to. */
+  savedTier: number;
+  projectId: number;
   playerReBefore: number;
   forTrial: boolean;
   /** The Trial's min-hours gate, for the prize/beyond-hours split below. */
@@ -121,6 +127,7 @@ function TierAndPayout({
    * the payout below, mirroring creditBeneficiary's fundingPx exactly. */
   fundingUsd?: number;
 }) {
+  const [regrading, startRegrade] = useTransition();
   const perHour = rePerHour(tier);
   const hoursRe = reForHours(hours, tier);
   const trialBonusRe = forTrial ? config.economy.trialBonusRe : 0;
@@ -157,18 +164,36 @@ function TierAndPayout({
     <div className="rounded-md border border-border bg-muted/30 p-3 space-y-2">
       <Label className="flex items-center justify-between gap-2 font-normal text-muted-foreground">
         Tier
-        <select
-          name="tier"
-          value={tier}
-          onChange={(e) => onTier(Number(e.target.value))}
-          className="rounded-md border border-border bg-background px-2 py-1 text-sm"
-        >
-          {TIERS.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label} · {rePerHour(t.value)} RE/h
-            </option>
-          ))}
-        </select>
+        <span className="flex items-center gap-2">
+          <select
+            value={tier}
+            onChange={(e) => onTier(Number(e.target.value))}
+            className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+          >
+            {TIERS.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label} · {rePerHour(t.value)} RE/h
+              </option>
+            ))}
+          </select>
+          {tier !== savedTier && (
+            <button
+              type="button"
+              disabled={regrading}
+              onClick={() => {
+                const fd = new FormData();
+                fd.set("projectId", String(projectId));
+                fd.set("level", String(tier));
+                startRegrade(() => {
+                  setProjectLevel(fd);
+                });
+              }}
+              className="rounded-md border border-border bg-background px-2 py-1 text-xs font-medium hover:bg-muted disabled:opacity-50"
+            >
+              {regrading ? "Saving…" : "Set"}
+            </button>
+          )}
+        </span>
       </Label>
       <div className="text-xs text-muted-foreground">
         {TIERS[Math.min(Math.max(tier, 1), 4) - 1].blurb}
@@ -256,7 +281,8 @@ function TierAndPayout({
         )}
       </div>
       <p className="text-[11px] text-muted-foreground leading-snug">
-        Changing the tier here saves it with your verdict. Community-goal bonuses and any
+        Changing the tier here re-grades it immediately (click Set), same as the Re-grade tier
+        control above - it doesn&apos;t wait for your verdict. Community-goal bonuses and any
         referral boost apply on top and aren&apos;t shown.
       </p>
     </div>
@@ -639,6 +665,8 @@ export function ReviewForm({
           setTierState(t);
           saveDraft({ tier: t });
         }}
+        savedTier={tier}
+        projectId={projectId}
         playerReBefore={playerReBefore}
         forTrial={!!trial}
         trialMinHours={trial?.minHours}
