@@ -23,7 +23,7 @@ export async function GET(req: Request) {
   const { data, error } = await db
     .from("projects")
     .select("status, shipped_at, first_pass_at")
-    .in("status", ["ai_review", "shipped", "fraud_review", "second_review"])
+    .in("status", ["shipped", "fraud_review", "second_review"])
     .is("archived_at", null)
     .is("rejected_at", null)
     .is("banned_at", null);
@@ -33,9 +33,8 @@ export async function GET(req: Request) {
   if (rows.length === 0) return NextResponse.json({ ok: true, posted: false, pending: 0 });
 
   const firstPass = rows.filter((r) => r.status === "shipped").length;
-  const aiReview = rows.filter((r) => r.status === "ai_review").length;
   const fraud = rows.filter((r) => r.status === "fraud_review").length;
-  const secondPass = rows.length - firstPass - fraud - aiReview;
+  const secondPass = rows.length - firstPass - fraud;
   const oldest = Math.max(
     ...rows.map((r) =>
       daysWaiting(r.status === "shipped" ? r.shipped_at : (r.first_pass_at ?? r.shipped_at)),
@@ -44,8 +43,8 @@ export async function GET(req: Request) {
   const base = process.env.BASE_URL || "https://pixl-dash.ridit.space";
   const lines = [
     `:hourglass_flowing_sand: *Pixl review queue*: ${rows.length} project${rows.length === 1 ? "" : "s"} waiting` +
-      (secondPass > 0 || fraud > 0 || aiReview > 0
-        ? ` (${aiReview > 0 ? `${aiReview} AI pre-screen, ` : ""}${firstPass} first-pass, ${secondPass} second-pass${fraud > 0 ? `, ${fraud} waiting on fraud` : ""})`
+      (secondPass > 0 || fraud > 0
+        ? ` (${firstPass} first-pass, ${secondPass} second-pass${fraud > 0 ? `, ${fraud} waiting on fraud` : ""})`
         : "") +
       `.`,
     oldest >= 1 ? `Oldest has been waiting *${oldest} day${oldest === 1 ? "" : "s"}*.` : "",

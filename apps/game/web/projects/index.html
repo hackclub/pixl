@@ -1273,7 +1273,6 @@
         if (p.banned_at) return ["BANNED", "status-needs"];
         if (p.rejected_at) return ["REJECTED", "status-needs"];
         if (p.status === "approved") return ["APPROVED", "status-approved"];
-        if (p.status === "ai_review") return ["AI PRE-SCREEN", "status-shipped"];
         if (p.status === "shipped" || p.status === "fraud_review" || p.status === "second_review")
           return ["IN REVIEW", "status-shipped"];
         if (p.status === "needs_changes")
@@ -1515,7 +1514,7 @@
         [
           "IN REVIEW",
           "status-shipped",
-          (p) => p.status === "ai_review" || p.status === "shipped" || p.status === "fraud_review" || p.status === "second_review",
+          (p) => p.status === "shipped" || p.status === "fraud_review" || p.status === "second_review",
         ],
         [
           "NEEDS CHANGES",
@@ -2320,7 +2319,7 @@
         // page instead of the owner's full editor.
         if (p.is_owner === false) return renderCollabProjectView(p);
         const [label, cls] = statusInfo(p);
-        const inReview = p.status === "ai_review" || p.status === "shipped" || p.status === "fraud_review" || p.status === "second_review";
+        const inReview = p.status === "shipped" || p.status === "fraud_review" || p.status === "second_review";
         const canShip =
           !inReview &&
           (["draft", "needs_changes", "approved"].includes(p.status) ||
@@ -2887,22 +2886,32 @@
           slot.innerHTML = "";
           return;
         }
-        const importCount = yswsShips.length + macondoProjects.length;
-        slot.innerHTML = `
+        slot.innerHTML = `${yswsShips.length > 0 ? `
     <div class="invite-box">
       <div class="invite-box-head">
         <span class="invite-box-title">SHIPPED SOMETHING ELSEWHERE?</span>
-        <span class="invite-box-sub">${importCount} project${importCount === 1 ? "" : "s"} available to import , keep building it here.</span>
+        <span class="invite-box-sub">${yswsShips.length} project${yswsShips.length === 1 ? "" : "s"} from other YSWS programs , import one to keep building it here.</span>
       </div>
       <div class="invite-box-row">
-        <button class="btn" id="projects-import-btn">IMPORT</button>
+        <button class="btn" id="ysws-import-btn">IMPORT</button>
       </div>
-    </div>`;
-        $("projects-import-btn").addEventListener("click", openImportPicker);
+    </div>` : ""}${macondoProjects.length > 0 ? `
+    <div class="invite-box" style="margin-top:10px">
+      <div class="invite-box-head">
+        <span class="invite-box-title">MIGRATE FROM MACONDO</span>
+        <span class="invite-box-sub">${macondoProjects.length} project${macondoProjects.length === 1 ? "" : "s"} available to bring into Pixl. Journal history is imported when available.</span>
+      </div>
+      <div class="invite-box-row">
+        <button class="btn" id="macondo-import-btn">IMPORT</button>
+      </div>
+    </div>` : ""}`;
+        if (yswsShips.length > 0) $("ysws-import-btn").addEventListener("click", openYswsPicker);
+        if (macondoProjects.length > 0)
+          $("macondo-import-btn").addEventListener("click", openMacondoPicker);
       }
 
-      function openImportPicker() {
-        const yswsRows = yswsShips
+      function openYswsPicker() {
+        const rows = yswsShips
           .map((s) => {
             const when = s.approvedAt
               ? new Date(s.approvedAt * 1000).toISOString().slice(0, 10)
@@ -2912,17 +2921,70 @@
               .map(Pixl.esc)
               .join(" · ");
             return `
-        <button class="ysws-pick" data-import-source="ysws" data-entry="${Pixl.esc(s.id)}">
+        <button class="ysws-pick" data-entry="${Pixl.esc(s.id)}">
           <span class="ysws-pick-name">${Pixl.esc(s.name)}</span>
           <span class="ysws-pick-meta">${meta}</span>
           ${s.description ? `<span class="ysws-pick-desc">${Pixl.esc(s.description.slice(0, 140))}</span>` : ""}
         </button>`;
           })
           .join("");
-        const macondoRows = macondoProjects
+        const root = document.createElement("div");
+        root.className = "ysws-modal";
+        root.tabIndex = -1;
+        root.innerHTML = `
+      <div class="ysws-modal-veil"></div>
+      <div class="ysws-modal-box" role="dialog" aria-modal="true">
+        <div class="ysws-modal-title">IMPORT FROM ANOTHER YSWS</div>
+        <div class="ysws-modal-body">
+          Pick a project to bring in as a draft. Its links, description and thumbnail
+          get filled in for you.
+          <br><br>
+          <strong>The hours it earned elsewhere don't carry over.</strong> Only new time
+          you track from here counts toward what you're paid , your reviewer sees the
+          earlier ship either way.
+        </div>
+        <div class="ysws-pick-list">${rows}</div>
+        <div class="ysws-modal-acts"><button class="btn dark">CANCEL</button></div>
+      </div>`;
+        document.body.appendChild(root);
+        root.focus();
+        const close = () => root.remove();
+        root.querySelector(".ysws-modal-veil").onclick = close;
+        root.querySelector(".ysws-modal-acts .btn").onclick = close;
+        root.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") close();
+        });
+        root.querySelectorAll("[data-entry]").forEach((btn) =>
+          btn.addEventListener("click", async () => {
+            btn.disabled = true;
+            const r = await Pixl.send("POST", "/api/projects/import-ysws", {
+              entryId: btn.dataset.entry,
+            });
+            if (r.ok && r.project) {
+              close();
+              Pixl.toast("Imported , add a thumbnail and start logging hours.");
+              await loadProjects();
+              await renderYswsImportBox();
+              location.hash = `#p=${r.project.id}`;
+              route();
+            } else {
+              btn.disabled = false;
+              Pixl.toast(
+                r.error === "already_imported"
+                  ? "You've already imported that one."
+                  : "Couldn't import that , try again.",
+                true,
+              );
+            }
+          }),
+        );
+      }
+
+      function openMacondoPicker() {
+        const rows = macondoProjects
           .map(
             (p) => `
-        <button class="ysws-pick" data-import-source="macondo" data-macondo-ref="${Pixl.esc(p.ref)}">
+        <button class="ysws-pick" data-macondo-ref="${Pixl.esc(p.ref)}">
           <span class="ysws-pick-name">${Pixl.esc(p.name)}</span>
           <span class="ysws-pick-meta">MACONDO${p.hasShipped ? " · SHIPPED" : ""}</span>
           ${p.description ? `<span class="ysws-pick-desc">${Pixl.esc(p.description.slice(0, 140))}</span>` : ""}
@@ -2934,16 +2996,16 @@
         root.tabIndex = -1;
         root.innerHTML = `
       <div class="ysws-modal-veil"></div>
-      <div class="ysws-modal-box" role="dialog" aria-modal="true" aria-labelledby="import-project-title">
-        <div class="ysws-modal-title" id="import-project-title">IMPORT A PROJECT</div>
+      <div class="ysws-modal-box" role="dialog" aria-modal="true">
+        <div class="ysws-modal-title">MIGRATE FROM MACONDO</div>
         <div class="ysws-modal-body">
-          Pick a project to bring in as a draft. Its links, description, thumbnail and
-          available journal history get filled in for you.
+          Pick a project to bring into Pixl. Its links, description, thumbnail and
+          any available journal history get filled in for you.
           <br><br>
-          <strong>Historical hours don't carry over.</strong> Only new time you track
-          from here counts toward what you're paid.
+          <strong>Historical Macondo hours don't carry over.</strong> Only new time
+          you track here counts toward what you're paid.
         </div>
-        <div class="ysws-pick-list">${yswsRows}${macondoRows}</div>
+        <div class="ysws-pick-list">${rows}</div>
         <div class="ysws-modal-acts"><button class="btn dark">CANCEL</button></div>
       </div>`;
         document.body.appendChild(root);
@@ -2954,22 +3016,18 @@
         root.addEventListener("keydown", (e) => {
           if (e.key === "Escape") close();
         });
-        root.querySelectorAll("[data-import-source]").forEach((btn) =>
+        root.querySelectorAll("[data-macondo-ref]").forEach((btn) =>
           btn.addEventListener("click", async () => {
             btn.disabled = true;
-            const source = btn.dataset.importSource;
-            const isMacondo = source === "macondo";
-            const r = await Pixl.send(
-              "POST",
-              isMacondo ? "/api/projects/import-macondo" : "/api/projects/import-ysws",
-              isMacondo ? { ref: btn.dataset.macondoRef } : { entryId: btn.dataset.entry },
-            );
+            const r = await Pixl.send("POST", "/api/projects/import-macondo", {
+              ref: btn.dataset.macondoRef,
+            });
             if (r.ok && r.project) {
               close();
               Pixl.toast(
-                isMacondo && r.journalsImported > 0
+                r.journalsImported > 0
                   ? `Imported with ${r.journalsImported} journal${r.journalsImported === 1 ? "" : "s"}.`
-                  : "Imported , add a thumbnail and start logging hours.",
+                  : "Imported. No journal entries were available.",
               );
               await loadProjects();
               await renderYswsImportBox();

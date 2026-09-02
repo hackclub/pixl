@@ -151,20 +151,6 @@ export function ReviewTable({
                 <TableCell className="py-3.5">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <StatusBadge status={p.status} />
-                    {p.ai_review_score != null && (
-                      <Badge
-                        variant={p.ai_review_score < 40 ? "warning" : "secondary"}
-                        className="text-[0.65rem] uppercase tracking-wide"
-                        title="Advisory AI pre-screen score; never an automatic verdict"
-                      >
-                        AI {p.ai_review_score}/100
-                      </Badge>
-                    )}
-                    {p.ai_review_status === "failed" && (
-                      <Badge variant="secondary" className="text-[0.65rem] uppercase tracking-wide">
-                        AI unavailable
-                      </Badge>
-                    )}
                     {p.own && (
                       <Badge
                         variant="warning"
