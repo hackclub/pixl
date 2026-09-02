@@ -93,24 +93,6 @@ const DEFAULT_WARNING =
 
 const DASH_URL = "https://pixl-dash.ridit.space";
 
-function firstPassQueuePatch(): Record<string, unknown> {
-  const enabled = process.env.AI_REVIEW_ENABLED === "true";
-  return {
-    status: enabled ? "ai_review" : "shipped",
-    ai_review_status: enabled ? "pending" : "disabled",
-    ai_review_score: null,
-    ai_review_summary: "",
-    ai_review_findings: { strengths: [], findings: [] },
-    ai_review_error: "",
-    ai_review_started_at: null,
-    ai_reviewed_at: null,
-    ai_review_model: "",
-    ai_review_revision: "",
-    ai_review_files_seen: 0,
-    ai_review_files_omitted: 0,
-  };
-}
-
 function actorName(access: AdminAccess): string {
   return `${access.session.name} (${access.session.slackId})`;
 }
@@ -1308,7 +1290,7 @@ export async function reReviewProject(formData: FormData): Promise<void> {
 
   const { data: project, error } = await db
     .from("projects")
-    .update({ ...firstPassQueuePatch(), review_note: "", review_note_by: "", approved_hours: null })
+    .update({ status: "shipped", review_note: "", review_note_by: "", approved_hours: null })
     .eq("id", projectId)
     .in("status", ["approved", "needs_changes"])
     .select("id, name, user_id")
@@ -1467,7 +1449,7 @@ export async function sendBackToFirstPass(formData: FormData): Promise<void> {
   const { data: project, error } = await db
     .from("projects")
     .update({
-      ...firstPassQueuePatch(),
+      status: "shipped",
       review_note: "",
       review_note_by: "",
       approved_hours: null,

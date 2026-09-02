@@ -4,7 +4,6 @@ import {
   listShippedProjects,
   listSecondReviewProjects,
   listFraudReviewProjects,
-  listAiReviewProjects,
   listReviewAudits,
 } from "@/lib/db";
 import { slackHandles } from "@/lib/slack";
@@ -44,10 +43,9 @@ export default async function ReviewListPage({
 
   // None of these four depend on each other's result, so they run together
   // instead of as a chain of sequential round-trips.
-  const [finalRows, fraudRows, aiRows, myRecent, rowsRaw] = await Promise.all([
+  const [finalRows, fraudRows, myRecent, rowsRaw] = await Promise.all([
     access.canSecondPass ? listSecondReviewProjects(viewer, kind) : Promise.resolve([]),
     access.canSecondPass ? listFraudReviewProjects() : Promise.resolve([]),
-    listAiReviewProjects(kind),
     listReviewAudits(5, viewer),
     listShippedProjects(viewer, kind),
   ]);
@@ -90,25 +88,6 @@ export default async function ReviewListPage({
           <Link href="/review?kind=hardware">Hardware queue</Link>
         </Button>
       </div>
-
-      {aiRows.length > 0 && (
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-            <h2 className="text-sm font-semibold text-foreground">
-              AI pre-screen in progress
-              <Badge variant="info" className="ml-2">
-                {aiRows.length}
-              </Badge>
-            </h2>
-          </div>
-          <p className="text-xs text-muted-foreground mb-3">
-            These projects are being scanned before first pass. The AI result is advisory only;
-            projects return to the normal human review queue when the scan finishes.
-          </p>
-          <ReviewTable rows={aiRows} handles={new Map<string, string>()} />
-        </div>
-      )}
 
       {fraudRows.length > 0 && (
         <div className="mb-8">

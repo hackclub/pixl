@@ -763,18 +763,7 @@ router.post("/api/projects/:id/ship", async (req, res) => {
   const { data, error: updateError } = await supabase
     .from("projects")
     .update({
-      status: process.env.AI_REVIEW_ENABLED === "true" ? "ai_review" : "shipped",
-      ai_review_status: process.env.AI_REVIEW_ENABLED === "true" ? "pending" : "disabled",
-      ai_review_score: null,
-      ai_review_summary: "",
-      ai_review_findings: { strengths: [], findings: [] },
-      ai_review_error: "",
-      ai_review_started_at: null,
-      ai_reviewed_at: null,
-      ai_review_model: "",
-      ai_review_revision: "",
-      ai_review_files_seen: 0,
-      ai_review_files_omitted: 0,
+      status: "shipped",
       shipped_at: new Date().toISOString(),
       review_note: "",
       review_note_by: "",
@@ -832,7 +821,7 @@ router.post("/api/projects/:id/unship", async (req, res) => {
     .eq("user_id", session.userId)
     .maybeSingle();
   if (!project) return res.status(404).json({ ok: false });
-  if (project.status !== "shipped" && project.status !== "ai_review")
+  if (project.status !== "shipped")
     return res.status(400).json({ ok: false, error: "not_in_review" });
 
   const { data, error } = await supabase
@@ -844,17 +833,6 @@ router.post("/api/projects/:id/unship", async (req, res) => {
       review_note_by: "",
       reviewing_by: "",
       reviewing_at: null,
-      ai_review_status: "disabled",
-      ai_review_score: null,
-      ai_review_summary: "",
-      ai_review_findings: { strengths: [], findings: [] },
-      ai_review_error: "",
-      ai_review_started_at: null,
-      ai_reviewed_at: null,
-      ai_review_model: "",
-      ai_review_revision: "",
-      ai_review_files_seen: 0,
-      ai_review_files_omitted: 0,
     })
     .eq("id", id)
     .eq("user_id", session.userId)
