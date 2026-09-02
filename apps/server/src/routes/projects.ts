@@ -345,6 +345,7 @@ interface ProjectFields {
   funding_usd: number;
   bom_url: string;
   cart_screenshot_urls: string[];
+  finished_build: boolean;
 }
 
 // Shared field parsing/validation for create + update. Returns an error code
@@ -381,6 +382,10 @@ export function parseProjectBody(
   const cartScreenshotUrls = needsFunding && Array.isArray(body?.cartScreenshotUrls)
     ? body.cartScreenshotUrls.map((u: unknown) => String(u)).slice(0, 10)
     : [];
+  // Whether the physical thing actually exists and can be filmed working -
+  // distinct from needsFunding, which by definition happens before a build
+  // exists. Hardware-only, same reasoning as needsFunding above.
+  const finishedBuild = kind === "hardware" && body?.finishedBuild === true;
   return {
     fields: {
       name,
@@ -402,6 +407,7 @@ export function parseProjectBody(
       funding_usd: fundingUsd,
       bom_url: bomUrl,
       cart_screenshot_urls: cartScreenshotUrls,
+      finished_build: finishedBuild,
     },
   };
 }
@@ -574,21 +580,23 @@ router.post("/api/projects/:id/ship", async (req, res) => {
       return res.status(400).json({ ok: false, error: "funding_amount_required" });
   }
 
-  // A hardware "design" (CAD Models) ship never got physically built, so a
-  // schematic/PCB viewer link stands in for a demo; anything else claiming to
-  // be hardware needs a video proving the physical build actually works ,
-  // neither a screenshot nor a CAD link show that. A kicanvas.org link is
+  // A hardware "design" (CAD Models) ship never gets physically built, so a
+  // schematic/PCB viewer link stands in for a demo. A kicanvas.org link is
   // unambiguous proof of a design ship on its own, so it's accepted
   // regardless of project_type - don't make an unrelated dropdown (easy to
   // leave on its default) block an otherwise-legit design submission.
+  // Everything else claiming to be hardware only needs a video proving the
+  // physical build works once it's actually built (finished_build) - a
+  // funding-only ship can't possibly have that yet, so it's not required
+  // until the maker ticks that they've built the thing.
   if (isHardware) {
     const demoUrl = project.demo_url as string;
-    if (!isKicanvasUrl(demoUrl) && !isVideoUrl(demoUrl)) {
-      const isDesign = project.project_type === "cad";
-      return res.status(400).json({
-        ok: false,
-        error: isDesign ? "design_demo_invalid" : "build_demo_video_required",
-      });
+    const isDesign = project.project_type === "cad";
+    if (isDesign) {
+      if (!isKicanvasUrl(demoUrl) && !isVideoUrl(demoUrl))
+        return res.status(400).json({ ok: false, error: "design_demo_invalid" });
+    } else if (project.finished_build && !isVideoUrl(demoUrl)) {
+      return res.status(400).json({ ok: false, error: "build_demo_video_required" });
     }
   }
 

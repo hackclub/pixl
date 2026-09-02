@@ -1841,6 +1841,16 @@
           </div>
         </div>
       </div>
+      <div class="disclosure" id="f-finished-block" style="${p.kind === "hardware" && p.project_type !== "cad" ? "" : "display:none"}">
+        <label class="disclosure-check">
+          <input type="checkbox" id="f-finished-build" ${p.finished_build ? "checked" : ""}>
+          This is a finished, built hardware project
+        </label>
+        <p class="disclosure-desc">
+          Tick this once you've actually built it and can film it working - that's when a video demo is
+          required. Leave it unticked while you're still fundraising or waiting on parts, no video needed yet.
+        </p>
+      </div>
       <div class="form-row">
         <label>TRIAL (build for a Trial, or your own idea)</label>
         <select class="field" id="f-trial">
@@ -1988,20 +1998,26 @@
           const kindNote = () => {
             const isHardware = $("f-kind").value === "hardware";
             const isDesign = isHardware && $("f-type") && $("f-type").value === "cad";
+            const finishedBuild = isHardware && $("f-finished-build") && $("f-finished-build").checked;
             const demoHint = !isHardware
               ? ""
               : isDesign
                 ? " Demo: a kicanvas.org link to the design, or a video."
-                : " Demo: a video showing the build working - a photo or CAD link won't ship.";
+                : finishedBuild
+                  ? " Demo: a video showing the build working - a photo or CAD link won't ship."
+                  : " Demo: any working link for now - a video's only required once you tick “finished, built hardware.”";
             $("f-kind-note").textContent =
               (isHardware
                 ? "Hardware: Hackatime is optional - journal your hours and they count too. Goes to the hardware review queue."
                 : "Software: needs Hackatime hours to ship.") + demoHint;
             if ($("f-funding-block"))
               $("f-funding-block").style.display = isHardware ? "" : "none";
+            if ($("f-finished-block"))
+              $("f-finished-block").style.display = isHardware && !isDesign ? "" : "none";
           };
           $("f-kind").addEventListener("change", kindNote);
           if ($("f-type")) $("f-type").addEventListener("change", kindNote);
+          if ($("f-finished-build")) $("f-finished-build").addEventListener("change", kindNote);
           kindNote();
         }
         bindFundingForm(p);
@@ -2207,6 +2223,7 @@
           level: $("f-level") ? Number($("f-level").value) : undefined,
           kind: $("f-kind") ? $("f-kind").value : "software",
           needsFunding: $("f-funding") ? $("f-funding").checked : false,
+          finishedBuild: $("f-finished-build") ? $("f-finished-build").checked : false,
           fundingUsd: $("f-funding-usd") ? Number($("f-funding-usd").value) || 0 : 0,
           bomUrl: form.bomUrl || "",
           cartScreenshotUrls: form.cartUrls || [],
@@ -2258,6 +2275,7 @@
         const fieldIds = [
           "f-name", "f-desc", "f-repo", "f-demo", "f-type",
           "f-level", "f-kind", "f-trial", "f-ai", "f-ai-notes",
+          "f-finished-build",
         ];
         const fields = fieldIds.map((id) => $(id)).filter(Boolean);
         const htBoxes = [...document.querySelectorAll('input[name="ht"]')];
@@ -3101,6 +3119,29 @@
         renderProject(p.id);
       }
 
+      // Mirrors isVideoUrl/isKicanvasUrl in apps/server/src/routes/projects.ts
+      // exactly, so the ship checklist doesn't claim "ready" for a demo link
+      // the server will actually reject.
+      function isVideoUrlClient(url) {
+        try {
+          const u = new URL(url);
+          if (u.protocol !== "https:" && u.protocol !== "http:") return false;
+          const host = u.hostname.replace(/^www\./, "").toLowerCase();
+          return ["youtube.com", "youtu.be", "vimeo.com", "loom.com", "streamable.com", "drive.google.com"].includes(host);
+        } catch {
+          return false;
+        }
+      }
+      function isKicanvasUrlClient(url) {
+        try {
+          const u = new URL(url);
+          if (u.protocol !== "https:" && u.protocol !== "http:") return false;
+          return u.hostname.replace(/^www\./, "").toLowerCase() === "kicanvas.org";
+        } catch {
+          return false;
+        }
+      }
+
       function shipBlockers(p, isUpdate) {
         const b = [];
         if (!p.repo_url) b.push("add a GitHub repo");
@@ -3110,6 +3151,18 @@
         // so don't gate it on the Hackatime picker here.
         const isHw = ($("f-kind") ? $("f-kind").value : p.kind) === "hardware";
         if (!isHw && checkedHtSeconds() < 3600) b.push(htBlockerText());
+        if (isHw && p.demo_url) {
+          const demoUrl = $("f-demo") ? $("f-demo").value.trim() : p.demo_url;
+          const projectType = $("f-type") ? $("f-type").value : p.project_type;
+          const isDesign = projectType === "cad";
+          const finishedBuild = $("f-finished-build") ? $("f-finished-build").checked : !!p.finished_build;
+          if (isDesign) {
+            if (!isKicanvasUrlClient(demoUrl) && !isVideoUrlClient(demoUrl))
+              b.push("add a kicanvas.org design link (or a video) as your demo");
+          } else if (finishedBuild && !isVideoUrlClient(demoUrl)) {
+            b.push("add a video demo showing the build working");
+          }
+        }
         const wantsFunding = isHw && ($("f-funding") ? $("f-funding").checked : p.needs_funding);
         if (wantsFunding) {
           const bomUrl = (form && form.bomUrl) || p.bom_url || "";
