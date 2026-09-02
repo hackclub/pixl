@@ -251,10 +251,15 @@ export async function requireSuper(): Promise<AdminAccess> {
 // permission toggle are two routes to the same access rather than a trap
 // where ticking the box does nothing.
 export async function getHelperAccess(): Promise<AdminAccess | null> {
+  const session = await getSession();
+  if (!session) return null;
   const access = await getAccess();
-  if (!access) return null;
-  if (access.isSuper || access.perms.has("tickets")) return access;
-  return (await listHelperIds()).includes(access.session.slackId) ? access : null;
+  if (access && (access.isSuper || access.perms.has("tickets"))) return access;
+  if (!(await listHelperIds()).includes(session.slackId)) return null;
+  // A pure ticket helper doesn't need an admins-table row - getAccess()
+  // returns null for them, so build a permissionless access object straight
+  // from their session instead of falling through to "no access".
+  return access ?? { session, isSuper: false, isOwner: false, perms: new Set<string>(), canSecondPass: false };
 }
 
 export async function isHelper(): Promise<boolean> {
@@ -262,10 +267,13 @@ export async function isHelper(): Promise<boolean> {
 }
 
 export async function requireHelper(): Promise<AdminAccess> {
-  await requireAdmin();
   const access = await getHelperAccess();
-  if (!access) redirect("/");
-  return access;
+  if (access) return access;
+  // Not a helper - if they have some other admin standing, bounce to the
+  // dashboard home same as before; otherwise treat like requireAdmin.
+  if (await getAccess()) redirect("/");
+  const session = await getSession();
+  redirect(session ? "/removed" : "/login");
 }
 
 // Fulfillers work the shop-order queue (claim/credit/ship), the same
@@ -273,10 +281,14 @@ export async function requireHelper(): Promise<AdminAccess> {
 // do NOT unless they're explicitly listed as a fulfiller. The final close
 // (mark done), reassign, and cancel/refund stay owner-only.
 export async function getFulfillerAccess(): Promise<AdminAccess | null> {
+  const session = await getSession();
+  if (!session) return null;
   const access = await getAccess();
-  if (!access) return null;
-  if (access.isSuper || access.perms.has("fulfillment")) return access;
-  return (await listFulfillerIds()).includes(access.session.slackId) ? access : null;
+  if (access && (access.isSuper || access.perms.has("fulfillment"))) return access;
+  if (!(await listFulfillerIds()).includes(session.slackId)) return null;
+  // Same as getHelperAccess above - a pure fulfiller doesn't need an
+  // admins-table row.
+  return access ?? { session, isSuper: false, isOwner: false, perms: new Set<string>(), canSecondPass: false };
 }
 
 export async function isFulfiller(): Promise<boolean> {
@@ -284,8 +296,9 @@ export async function isFulfiller(): Promise<boolean> {
 }
 
 export async function requireFulfiller(): Promise<AdminAccess> {
-  await requireAdmin();
   const access = await getFulfillerAccess();
-  if (!access) redirect("/");
-  return access;
+  if (access) return access;
+  if (await getAccess()) redirect("/");
+  const session = await getSession();
+  redirect(session ? "/removed" : "/login");
 }
