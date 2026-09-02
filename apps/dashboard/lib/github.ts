@@ -30,7 +30,7 @@ export interface CommitResult {
   error: string | null;
 }
 
-function parseRepo(url: string): { owner: string; repo: string } | null {
+export function parseRepo(url: string): { owner: string; repo: string } | null {
   try {
     const u = new URL(url);
     if (u.hostname !== "github.com" && !u.hostname.endsWith(".github.com")) return null;
