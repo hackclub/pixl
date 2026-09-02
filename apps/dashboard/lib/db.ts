@@ -567,36 +567,7 @@ export async function claimReview(
     .from("projects")
     .update({ reviewing_by: viewer, reviewing_at: new Date().toISOString() })
     .eq("id", projectId);
-  if (by !== viewer) void notifyReviewStarted(projectId);
   return { ok: true };
-}
-
-// Tell the owner their project is being looked at right now , at most once
-// every 6 hours per project so queue browsing doesn't spam them.
-async function notifyReviewStarted(projectId: number): Promise<void> {
-  const { data: p } = await db
-    .from("projects")
-    .select("name, user_id, status")
-    .eq("id", projectId)
-    .single();
-  if (!p || !["shipped", "fraud_review", "second_review"].includes(String(p.status))) return;
-  const since = new Date(Date.now() - 6 * 3600_000).toISOString();
-  const { count } = await db
-    .from("mod_actions")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", p.user_id)
-    .eq("action", "review_started")
-    .eq("detail", p.name)
-    .gte("created_at", since);
-  if ((count ?? 0) > 0) return;
-  await db
-    .from("mod_actions")
-    .insert({ user_id: p.user_id, action: "review_started", detail: p.name, actor: "system" });
-  await db.from("notifications").insert({
-    user_id: p.user_id,
-    title: "Your project is being reviewed",
-    body: `A reviewer is looking at "${p.name}" right now. You'll get the verdict here soon. 👀`,
-  });
 }
 
 // Second-pass queue: projects that passed a first review and await a final
