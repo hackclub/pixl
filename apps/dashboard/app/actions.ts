@@ -782,6 +782,20 @@ export async function reviewProject(formData: FormData): Promise<void> {
     }
     await insertReviewAudit(formData, projectId, project.user_id, by, `first_pass_${proposedKey}`, note, claimedHours, approvedHours);
     if (!own) await recordPendingPayout(projectId, access, formData);
+    if (proposedKey === "approved") {
+      await notifyOwner(
+        project.user_id,
+        "First pass complete!",
+        `"${project.name}" passed first-pass review by ${playerFacingReviewer}. It still needs a second reviewer to confirm before your pixels are credited , hang tight!`,
+      );
+      for (const collaboratorId of await acceptedCollaboratorUserIds(projectId)) {
+        await notifyOwner(
+          collaboratorId,
+          "First pass complete!",
+          `A project you collaborate on, "${project.name}", passed first-pass review by ${playerFacingReviewer}. It still needs a second reviewer to confirm before pixels are credited.`,
+        );
+      }
+    }
     await logModAction(project.user_id, "project_first_pass", `${project.name}: proposed ${proposedKey.replace("_", " ")} , ${note}`, by);
     await submitToJoe(projectId);
     const nextPath = await nextReviewPath(access, by, stage, projectId);
