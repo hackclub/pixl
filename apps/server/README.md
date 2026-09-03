@@ -110,6 +110,8 @@ The server listens on `PORT` (default `3000`).
 | `HACKATIME_REDIRECT_URI` | Hackatime OAuth redirect URI | `https://server.pixl.rsvp/hackatime/callback` |
 | `HACKATIME_SCOPES` | Hackatime OAuth scopes | - |
 | `ADMIN_API_KEY` | Key for the admin notifications endpoint | - |
+| `EXTERNAL_API_KEY` | Shared key used to authenticate server-to-Pixorpheus requests | - |
+| `PIXORPHEUS_URL` | Base URL for Pixorpheus; enrolls Slack-linked players in `#pixl` after Hack Club login | - |
 | `DATABASE_URL` | Postgres URL used by the Drizzle tooling | - |
 | `PORT` | Port the server listens on | `3000` |
 | `ALLOW_DEMO_LOGIN` | Enables the demo login route when `true` | - |
@@ -125,7 +127,7 @@ The server listens on `PORT` (default `3000`).
 
 - `GET /auth/demo?name=` - demo login (only when `ALLOW_DEMO_LOGIN=true`)
 - `GET /auth/hackclub` - begin Hack Club OAuth
-- `GET /auth/hackclub/callback` - Hack Club OAuth callback; blocks banned users and redirects back to the client with `token`/`name` (and `new=1` for new users)
+- `GET /auth/hackclub/callback` - Hack Club OAuth callback; blocks banned users, asks Pixorpheus to add the linked Slack user to `#pixl`, and redirects back to the client with `token`/`name` (and `new=1` for new users)
 
 ### Hackatime
 

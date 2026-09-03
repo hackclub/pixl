@@ -4,6 +4,7 @@ import { supabase, type UserRow } from "../db/client.js";
 import { issueSessionToken, verifySessionToken } from "../auth/session.js";
 import { activeBan } from "../moderation.js";
 import { fetchSlackAvatar, fetchSlackDisplayName } from "../slackAvatar.js";
+import { enrollSlackPlayerInPixl } from "../pixlSlack.js";
 import { config } from "../config.generated.js";
 import { encryptPII } from "../crypto.js";
 
@@ -550,6 +551,8 @@ router.get("/auth/hackclub/callback", async (req, res) => {
         `<html><body style="font-family:sans-serif;text-align:center;margin-top:4rem;"><h2>${heading}</h2>${reason}<p>If you believe this is a mistake, reach out to the Pixl team.</p></body></html>`,
       );
   }
+
+  if (identity.slack_id) void enrollSlackPlayerInPixl(identity.slack_id);
 
   const sessionToken = issueSessionToken({ userId, displayName });
 

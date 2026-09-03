@@ -364,7 +364,7 @@ Tables (`tickets`, `helpers`, `user_memory`, `user_personality`, `program_memory
 | `GITHUB_NOTIFY_CHANNEL` | Channel ID to post GitHub push/merge notifications to |
 | `SHOP_WEBHOOK_SECRET` | Shared secret for the `/webhooks/shop` route, sent by Supabase as the `x-shop-webhook-secret` header. **Required** - without it the route returns 503 and processes nothing |
 | `SHOP_NOTIFY_CHANNEL` | Channel ID to post shop item change notifications to (defaults to `#shop-changes`) |
-| `EXTERNAL_API_KEY` | API key `apps/dashboard` uses to call `/api/external/tickets/:ts/resolve` |
+| `EXTERNAL_API_KEY` | Shared key `apps/dashboard` and `apps/server` use for Pixorpheus external APIs |
 | `PORT` | Port for the Bolt HTTP receiver (default 3000) |
 
 ---
@@ -372,6 +372,12 @@ Tables (`tickets`, `helpers`, `user_memory`, `user_personality`, `program_memory
 ## Deployment
 
 Pixorpheus runs as a single **Bun** process (`bun run src/index.ts` / `bun run start`), no build step. It's deployed on **Railway**, sharing its Supabase database with the rest of the monorepo, and auto-deploys from GitHub pushes to `main`.
+
+The Pixl server calls `POST /api/external/pixl-channel/join` with `x-api-key` and `{ "slackId": "U..." }` after a successful Hack Club login. The endpoint uses Pixorpheus's bot token to add the Slack member to `#pixl`; the caller's login remains valid if the bot is unavailable and retries next login.
+
+To enroll game accounts that existed before this feature, run `bun run backfill:pixl-channel` first to inspect the counts, then run `bun run backfill:pixl-channel --apply`. The backfill only invites Slack IDs absent from `#pixl`, sends at most one 100-user batch every 1.25 seconds, and prints its result as JSON.
+
+Pixorpheus must be a member of `#pixl` and its bot token needs `channels:read` and `channels:write.invites` for this feature. Reinstall the Slack app after adding the scopes.
 
 The Slack app must have the following **event subscriptions** enabled:
 - `message.channels`
