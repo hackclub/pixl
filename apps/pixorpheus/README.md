@@ -77,7 +77,6 @@ There is no separate dashboard process anymore - the standalone helper dashboard
 |---|---|
 | `/pixl [@user] [size]` | Pixelate a Slack profile picture - only works in the Pixl channels. Optional pixel size 2–64 (default 8). Reacts with `:pixl-delete:` to remove. |
 | `/pixl-lastship [github_username]` | Show the last approved Hack Club Ship for a GitHub user (defaults to yours if known) |
-| `/pixl-leaderboard` | Show who Pixorpheus knows the most facts about - the most engaged members |
 
 ### Memory & Knowledge
 

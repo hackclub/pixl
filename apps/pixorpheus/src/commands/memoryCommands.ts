@@ -1,5 +1,4 @@
 import { app } from "../slack/app.js";
-import { db } from "../db/client.js";
 import { GABIN_ID } from "../constants.js";
 import { aiPost } from "../ai/client.js";
 import { sanitizeAIOutput } from "../ai/outputFilter.js";
@@ -142,39 +141,4 @@ app.command("/pixl-mymemory", async ({ command, ack, respond }) => {
       : `here's what i know about ${displayName}:\n${cleanFacts.map((f) => `• ${f}`).join("\n")}`,
     response_type: "ephemeral",
   });
-});
-
-// /pixl-leaderboard - show who has the most memory facts stored (most active)
-app.command("/pixl-leaderboard", async ({ command, ack, client }) => {
-  await ack();
-  try {
-    const { data: rows } = await db().from("user_memory").select("slack_user_id, facts");
-    const leaderboard = (rows || [])
-      .map((r) => ({
-        slack_user_id: r.slack_user_id,
-        cnt: Array.isArray(r.facts) ? r.facts.length : r.facts ? JSON.parse(String(r.facts)).length : 0,
-      }))
-      .sort((a, b) => b.cnt - a.cnt)
-      .slice(0, 10);
-    if (!leaderboard.length) {
-      await client.chat.postEphemeral({
-        channel: command.channel_id,
-        user: command.user_id,
-        text: "no data yet",
-      });
-      return;
-    }
-    const medals = ["🥇", "🥈", "🥉"];
-    const lines = leaderboard.map((r, i) => `${medals[i] || `${i + 1}.`} <@${r.slack_user_id}> - ${r.cnt} facts remembered`);
-    await client.chat.postMessage({
-      channel: command.channel_id,
-      text: `*🏆 most known by pixorpheus:*\n${lines.join("\n")}`,
-    });
-  } catch (e) {
-    await client.chat.postEphemeral({
-      channel: command.channel_id,
-      user: command.user_id,
-      text: "failed",
-    });
-  }
 });

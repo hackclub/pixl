@@ -29,7 +29,6 @@ app.command("/pixl-help", async ({ command, ack, respond }) => {
 */pixl-poll Question; Option1, Option2 [, 10min]* - Create a poll, add a timer at the end to auto-post results
 */pixl-ship [description]* - Announce a project you shipped
 */pixl-lastship [github_username]* - Show your last ship on Hackclub Ships (or someone else's)
-*/pixl-leaderboard* - Who does Pixorpheus know the most about
 */pixl-mymemory [@user]* - See what Pixorpheus remembers about you (or someone else)
 */pixl-stats* - Bot activity stats
 */pixl-helpstats* - Ticket stats
