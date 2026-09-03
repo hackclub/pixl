@@ -61,7 +61,7 @@ import { buildAirtableFields, pushProjectRecord } from "@/lib/airtable";
 import { joeEnabled } from "@/lib/joe";
 import { submitToJoe } from "@/lib/joeSync";
 import { slackHandle, dmUser, slackAvatars } from "@/lib/slack";
-import { fetchTrackedSecondsSince } from "@/lib/hackatime";
+import { fetchHackatimeReport, fetchTrackedSecondsSince } from "@/lib/hackatime";
 import { serializeGroups } from "@/lib/shopOptions";
 import { SHOP_REGIONS, type ShopRegion } from "@/lib/shopRegions";
 import { SHOP_CATEGORIES, type ShopCategory } from "@/lib/shopCategories";
@@ -1609,7 +1609,7 @@ async function pushProjectToAirtable(projectId: number): Promise<{ ok: boolean; 
   const { data: project, error: projectError } = await db
     .from("projects")
     .select(
-      "id, status, banned_at, rejected_at, repo_url, demo_url, description, image_url, approved_hours, system_note, user_id, airtable_record_id",
+      "id, status, banned_at, rejected_at, repo_url, demo_url, description, image_url, approved_hours, system_note, user_id, airtable_record_id, hackatime_projects",
     )
     .eq("id", projectId)
     .single();
@@ -1620,7 +1620,7 @@ async function pushProjectToAirtable(projectId: number): Promise<{ ok: boolean; 
   const { data: user, error: userError } = await db
     .from("users")
     .select(
-      "first_name, last_name, real_name, email, birthday, address_line1, address_line2, address_city, address_state, address_country, address_postal",
+      "first_name, last_name, real_name, email, birthday, address_line1, address_line2, address_city, address_state, address_country, address_postal, slack_id, hackatime_token",
     )
     .eq("id", project.user_id)
     .maybeSingle();
@@ -1641,6 +1641,28 @@ async function pushProjectToAirtable(projectId: number): Promise<{ ok: boolean; 
   if (auditError) return { ok: false, error: "Could not look up the approval note - try again." };
   const auditSections = parseAuditNote(audit?.audit_note ?? "");
 
+  const hackatimeReport = await fetchHackatimeReport(
+    user?.slack_id,
+    user?.hackatime_token ?? null,
+    project.hackatime_projects ?? [],
+  );
+  // "hackatime-project 7/20/2026-7/22/2026, hackatime-project-2 7/21/2026-7/23/2026" -
+  // Airtable's own format for this field (see its field description), not the
+  // codebase's usual "Jul 18" Intl.DateTimeFormat style used elsewhere.
+  const fmtDate = (unixSeconds: number) => {
+    const d = new Date(unixSeconds * 1000);
+    return `${d.getUTCMonth() + 1}/${d.getUTCDate()}/${d.getUTCFullYear()}`;
+  };
+  const hackatimeProjectDateRanges = hackatimeReport.projects
+    .filter((p) => p.linked && p.firstActivity != null && p.lastActivity != null)
+    .map((p) => `${p.name} ${fmtDate(p.firstActivity!)}-${fmtDate(p.lastActivity!)}`)
+    .join(", ");
+  const lapseLinks = hackatimeReport.projects
+    .flatMap((p) => p.lapses)
+    .map((l) => l.playbackUrl)
+    .filter((url): url is string => !!url)
+    .join(", ");
+
   const fields = buildAirtableFields({
     repoUrl: project.repo_url ?? "",
     demoUrl: project.demo_url ?? "",
@@ -1659,6 +1681,9 @@ async function pushProjectToAirtable(projectId: number): Promise<{ ok: boolean; 
     country: decryptPII(user?.address_country),
     zip: decryptPII(user?.address_postal),
     auditSections,
+    hackatimeProjectDateRanges,
+    submitterHackatimeId: hackatimeReport.hackatimeUserId,
+    lapseLinks,
   });
 
   const result = await pushProjectRecord(fields, project.airtable_record_id ?? null);

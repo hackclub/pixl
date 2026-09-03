@@ -55,6 +55,15 @@ export interface AirtableProjectInput {
   country: string;
   zip: string;
   auditSections: AuditSections;
+  /** "name1 M/D/YYYY-M/D/YYYY, name2 M/D/YYYY-M/D/YYYY" for linked Hackatime
+   * projects with tracked activity - empty string when there's nothing to
+   * report (no linked projects, or no span data for any of them). */
+  hackatimeProjectDateRanges: string;
+  /** Hackatime's own numeric user id (HackatimeReport.hackatimeUserId), not
+   * the Slack id. Empty string when unavailable. */
+  submitterHackatimeId: string;
+  /** Comma-separated Lapse playback URLs across the linked projects, if any. */
+  lapseLinks: string;
 }
 
 // Every field name buildAirtableFields is allowed to set. Deliberately a
@@ -83,7 +92,10 @@ type AirtableFieldName =
   | "Optional - Override Hours Spent Justification"
   | "Optional - Override Hours Spent"
   | "Screenshot"
-  | "Optional - Override Duplicate Justification";
+  | "Optional - Override Duplicate Justification"
+  | "Justification - Hackatime Project Name(s) + Date Range(s)"
+  | "Justification - Submitter Hackatime ID"
+  | "Justification - Lapse Links, comma-separated";
 
 // Airtable's create/update API takes field NAMES as keys (not the fld...
 // IDs), matching exactly what /v0/meta/bases/{base}/tables returns.
@@ -109,15 +121,16 @@ export function buildAirtableFields(
     "Justification - Deflation Justification": input.auditSections["DEFLATION REASON"],
     "Optional - Override Age Justification": input.auditSections["AGE JUSTIFICATION"],
     "Justification - Additional Justification": input.auditSections.NOTES,
-    // Closest match for Pixl's freeform Hackatime evidence prose - the three
-    // more granular Airtable fields (project names+dates, submitter
-    // Hackatime ID, lapse links) have no distinct home in Pixl's data and
-    // are deliberately left unset below rather than force-split with regex.
+    // Closest match for Pixl's freeform Hackatime evidence prose.
     "Optional - Override Hours Spent Justification": input.auditSections["HACKATIME EVIDENCE"],
   };
   if (input.approvedHours !== null) fields["Optional - Override Hours Spent"] = input.approvedHours;
   if (input.imageUrl) fields["Screenshot"] = [{ url: input.imageUrl }];
   if (input.systemNote) fields["Optional - Override Duplicate Justification"] = input.systemNote;
+  if (input.hackatimeProjectDateRanges)
+    fields["Justification - Hackatime Project Name(s) + Date Range(s)"] = input.hackatimeProjectDateRanges;
+  if (input.submitterHackatimeId) fields["Justification - Submitter Hackatime ID"] = input.submitterHackatimeId;
+  if (input.lapseLinks) fields["Justification - Lapse Links, comma-separated"] = input.lapseLinks;
   return fields;
 }
 

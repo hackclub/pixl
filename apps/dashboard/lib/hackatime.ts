@@ -169,6 +169,10 @@ export async function fetchLapsesForProject(
 
 export interface HackatimeReport {
   ok: boolean;
+  /** Hackatime's own numeric user id (data.user_id on its /stats response) -
+   * NOT the Slack id this file otherwise keys everything off. Empty when
+   * unavailable. */
+  hackatimeUserId: string;
   totalSeconds: number;
   humanReadableTotal: string;
   dailyAverageSeconds: number;
@@ -214,6 +218,7 @@ export async function fetchHackatimeReport(
 ): Promise<HackatimeReport> {
   const empty: HackatimeReport = {
     ok: false,
+    hackatimeUserId: "",
     totalSeconds: 0,
     humanReadableTotal: "",
     dailyAverageSeconds: 0,
@@ -325,6 +330,7 @@ export async function fetchHackatimeReport(
 
     return {
       ok: true,
+      hackatimeUserId,
       totalSeconds: Number(data.total_seconds) || 0,
       humanReadableTotal: String(data.human_readable_total ?? ""),
       dailyAverageSeconds: Number(data.daily_average) || 0,

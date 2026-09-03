@@ -25,6 +25,9 @@ const baseInput = {
     "AGE JUSTIFICATION": "",
     NOTES: "Clean ship, approved as claimed.",
   },
+  hackatimeProjectDateRanges: "",
+  submitterHackatimeId: "",
+  lapseLinks: "",
 };
 
 describe("githubUsernameFromRepoUrl", () => {
@@ -116,6 +119,22 @@ describe("buildAirtableFields", () => {
     expect(fields).not.toHaveProperty("Justification - Submitter Hackatime ID");
     expect(fields).not.toHaveProperty("Justification - Lapse Links, comma-separated");
     expect(fields).not.toHaveProperty("Justification - Alternate Tracking Method");
+  });
+
+  test("sets the Hackatime project/lapse fields when present", () => {
+    const fields = buildAirtableFields({
+      ...baseInput,
+      hackatimeProjectDateRanges: "spoon-knife-game 8/1/2026-8/10/2026",
+      submitterHackatimeId: "25659",
+      lapseLinks: "https://lapse.hackclub.com/a, https://lapse.hackclub.com/b",
+    });
+    expect(fields["Justification - Hackatime Project Name(s) + Date Range(s)"]).toBe(
+      "spoon-knife-game 8/1/2026-8/10/2026",
+    );
+    expect(fields["Justification - Submitter Hackatime ID"]).toBe("25659");
+    expect(fields["Justification - Lapse Links, comma-separated"]).toBe(
+      "https://lapse.hackclub.com/a, https://lapse.hackclub.com/b",
+    );
   });
 });
 
