@@ -66,6 +66,19 @@ export const SPONSOR_BASE_PERMS = ["warn", "tickets", "review"] as const satisfi
 // reviewer, on top of whoever SECOND_PASS_SLACK_IDS grants.
 export const SECOND_PASS = "second_pass";
 
+// Markers restricting a reviewer to one queue. Absent (neither marker) means
+// both , these are opt-in restrictions, not opt-in grants, so an ordinary
+// reviewer keeps seeing both queues unless a super explicitly narrows them.
+export const REVIEW_HARDWARE_ONLY = "review_hardware_only";
+export const REVIEW_SOFTWARE_ONLY = "review_software_only";
+export type ReviewQueueScope = "software" | "hardware" | "both";
+
+export function reviewQueueScopeFor(permissions?: string[]): ReviewQueueScope {
+  if (permissions?.includes(REVIEW_HARDWARE_ONLY)) return "hardware";
+  if (permissions?.includes(REVIEW_SOFTWARE_ONLY)) return "software";
+  return "both";
+}
+
 export interface AdminAccess {
   session: AdminSession;
   isSuper: boolean;
@@ -75,6 +88,8 @@ export interface AdminAccess {
   isOwner: boolean;
   perms: Set<string>;
   canSecondPass: boolean;
+  // Which review queue(s) this reviewer may work, see REVIEW_HARDWARE_ONLY.
+  reviewQueues: ReviewQueueScope;
 }
 
 function envIds(name: string): string[] {
@@ -128,16 +143,24 @@ export async function getAccess(): Promise<AdminAccess | null> {
   const canSecondPass =
     isSecondPassReviewer(session.slackId, row?.permissions, isSuper) && !reviewBlocked;
   const isOwner = isAllowed(session.slackId);
+  const reviewQueues = reviewQueueScopeFor(row?.permissions);
   if (isSuper) {
     const perms = new Set<string>(ALL_PERMISSIONS);
     if (reviewBlocked) perms.delete("review");
-    return { session, isSuper: true, isOwner, perms, canSecondPass };
+    return { session, isSuper: true, isOwner, perms, canSecondPass, reviewQueues };
   }
   if (!row) return null;
   const perms = new Set(
-    row.permissions.filter((p) => p !== NO_REVIEW && p !== SECOND_PASS && p !== SPONSOR),
+    row.permissions.filter(
+      (p) =>
+        p !== NO_REVIEW &&
+        p !== SECOND_PASS &&
+        p !== SPONSOR &&
+        p !== REVIEW_HARDWARE_ONLY &&
+        p !== REVIEW_SOFTWARE_ONLY,
+    ),
   );
-  return { session, isSuper: false, isOwner: false, perms, canSecondPass };
+  return { session, isSuper: false, isOwner: false, perms, canSecondPass, reviewQueues };
 }
 
 // Signed-in users who lost their access land on /removed instead of the
@@ -259,7 +282,7 @@ export async function getHelperAccess(): Promise<AdminAccess | null> {
   // A pure ticket helper doesn't need an admins-table row - getAccess()
   // returns null for them, so build a permissionless access object straight
   // from their session instead of falling through to "no access".
-  return access ?? { session, isSuper: false, isOwner: false, perms: new Set<string>(), canSecondPass: false };
+  return access ?? { session, isSuper: false, isOwner: false, perms: new Set<string>(), canSecondPass: false, reviewQueues: "both" };
 }
 
 export async function isHelper(): Promise<boolean> {
@@ -288,7 +311,7 @@ export async function getFulfillerAccess(): Promise<AdminAccess | null> {
   if (!(await listFulfillerIds()).includes(session.slackId)) return null;
   // Same as getHelperAccess above - a pure fulfiller doesn't need an
   // admins-table row.
-  return access ?? { session, isSuper: false, isOwner: false, perms: new Set<string>(), canSecondPass: false };
+  return access ?? { session, isSuper: false, isOwner: false, perms: new Set<string>(), canSecondPass: false, reviewQueues: "both" };
 }
 
 export async function isFulfiller(): Promise<boolean> {

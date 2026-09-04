@@ -116,6 +116,9 @@ export default async function ReviewDetail({
   ]);
   if (!data) notFound();
   const { project: p, journals, reviewAudits } = data;
+  // A reviewer restricted to one queue can't open a project from the other ,
+  // treat it the same as a missing project rather than exposing that it exists.
+  if (access.reviewQueues !== "both" && p.kind !== access.reviewQueues) notFound();
   // The Trial this project was shipped for, if the player flagged one at ship
   // time (joined in getProject). null = they built their own idea.
   const trial = (

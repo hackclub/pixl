@@ -83,8 +83,11 @@ import {
   SECOND_PASS,
   SPONSOR,
   SPONSOR_BASE_PERMS,
+  REVIEW_HARDWARE_ONLY,
+  REVIEW_SOFTWARE_ONLY,
   type AdminAccess,
   type Permission,
+  type ReviewQueueScope,
 } from "@/lib/guard";
 import { GUIDELINES_VERSION } from "@/lib/guidelines";
 
@@ -2753,6 +2756,33 @@ export async function setSecondPass(formData: FormData): Promise<void> {
       slackId,
       "Your final-reviewer role on Pixl has been removed , you can still review first passes as usual. Contact the team if you think this is a mistake.",
     );
+}
+
+// Restrict a reviewer to one queue (software/hardware), or clear the
+// restriction back to both. Stored the same way as SECOND_PASS: a marker in
+// their admins row, mutually exclusive with its counterpart.
+export async function setReviewQueueAccess(formData: FormData): Promise<void> {
+  const access = await requireSuper();
+  const slackId = String(formData.get("slackId") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+  const scope = String(formData.get("scope") ?? "both") as ReviewQueueScope;
+  if (!slackId || !["software", "hardware", "both"].includes(scope)) return;
+  const existing = await getAdmin(slackId);
+  const kept = (existing?.permissions ?? []).filter(
+    (p) => p !== REVIEW_HARDWARE_ONLY && p !== REVIEW_SOFTWARE_ONLY,
+  );
+  const marker = scope === "hardware" ? REVIEW_HARDWARE_ONLY : scope === "software" ? REVIEW_SOFTWARE_ONLY : null;
+  const permissions = marker ? [...kept, marker] : kept;
+  await setTeamPerms(
+    slackId,
+    name,
+    permissions,
+    `review queue access set to ${scope}`,
+    actorName(access),
+    actorName(access),
+  );
+  const label = scope === "both" ? "both the software and hardware queues" : `the ${scope} queue only`;
+  await dmTeam(slackId, `Your Pixl review queue access was changed , you can now review ${label}.`);
 }
 
 export async function addReviewer(formData: FormData): Promise<void> {

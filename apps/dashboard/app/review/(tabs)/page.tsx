@@ -37,8 +37,12 @@ export default async function ReviewListPage({
   await requireGuidelinesAck(access);
   const viewer = access.session.slackId;
   const { page, sort, kind: rawKind } = await searchParams;
-  // Hardware and software have separate review queues.
-  const kind: "software" | "hardware" = rawKind === "hardware" ? "hardware" : "software";
+  // Hardware and software have separate review queues. A reviewer restricted
+  // to one queue (access.reviewQueues) can't view or query the other , clamp
+  // to their allowed queue regardless of what the URL asks for.
+  const requestedKind: "software" | "hardware" = rawKind === "hardware" ? "hardware" : "software";
+  const kind: "software" | "hardware" =
+    access.reviewQueues === "both" ? requestedKind : access.reviewQueues;
   const kindQ = kind === "hardware" ? "&kind=hardware" : "";
 
   // None of these four depend on each other's result, so they run together
@@ -70,24 +74,26 @@ export default async function ReviewListPage({
 
   return (
     <div>
-      <div className="inline-flex items-center rounded-lg border border-border p-0.5 bg-card mb-4">
-        <Button
-          asChild
-          variant="ghost"
-          size="sm"
-          className={kind === "software" ? "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground" : ""}
-        >
-          <Link href="/review">Software queue</Link>
-        </Button>
-        <Button
-          asChild
-          variant="ghost"
-          size="sm"
-          className={kind === "hardware" ? "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground" : ""}
-        >
-          <Link href="/review?kind=hardware">Hardware queue</Link>
-        </Button>
-      </div>
+      {access.reviewQueues === "both" && (
+        <div className="inline-flex items-center rounded-lg border border-border p-0.5 bg-card mb-4">
+          <Button
+            asChild
+            variant="ghost"
+            size="sm"
+            className={kind === "software" ? "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground" : ""}
+          >
+            <Link href="/review">Software queue</Link>
+          </Button>
+          <Button
+            asChild
+            variant="ghost"
+            size="sm"
+            className={kind === "hardware" ? "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground" : ""}
+          >
+            <Link href="/review?kind=hardware">Hardware queue</Link>
+          </Button>
+        </div>
+      )}
 
       {fraudRows.length > 0 && (
         <div className="mb-8">

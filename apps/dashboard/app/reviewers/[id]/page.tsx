@@ -5,6 +5,7 @@ import {
   isSecondPassReviewer,
   isSuperAdmin,
   secondPassSlackIds,
+  reviewQueueScopeFor,
   NO_REVIEW,
   SECOND_PASS,
 } from "@/lib/guard";
@@ -16,7 +17,7 @@ import {
   auditFlags,
   type ReviewerStats,
 } from "@/lib/db";
-import { removeReviewer, setSecondPass } from "@/app/actions";
+import { removeReviewer, setSecondPass, setReviewQueueAccess } from "@/app/actions";
 import { PendingButton } from "@/app/_components/PendingButton";
 import { slackHandle } from "@/lib/slack";
 import { Badge } from "@/components/ui/badge";
@@ -119,6 +120,7 @@ export default async function ReviewerPage({
   // agree with that or it contradicts the "second pass" badge above it.
   const secondPassIds = secondPassSlackIds();
   const envGrantsSecondPass = secondPassIds.length === 0 ? isSuper : secondPassIds.includes(slackId);
+  const queueScope = reviewQueueScopeFor(admin?.permissions);
   const initials =
     display
       .split(/\s+/)
@@ -217,6 +219,37 @@ export default async function ReviewerPage({
               )}
             </form>
           )}
+        </div>
+      </Card>
+
+      <Card className="p-5 md:p-6 gap-3 flex-row items-center justify-between flex-wrap">
+        <div>
+          <div className="text-sm font-medium">Queue access</div>
+          <div className="text-xs text-muted-foreground mt-0.5">
+            Which review queue{queueScope === "both" ? "s" : ""} {display} can see and claim from.
+          </div>
+        </div>
+        <div className="inline-flex items-center rounded-lg border border-border p-0.5 bg-card">
+          {(["software", "hardware", "both"] as const).map((scope) => (
+            <form key={scope} action={setReviewQueueAccess}>
+              <input type="hidden" name="slackId" value={slackId} />
+              <input type="hidden" name="name" value={display} />
+              <input type="hidden" name="scope" value={scope} />
+              <PendingButton
+                variant="ghost"
+                size="sm"
+                pendingText="Saving…"
+                disabled={queueScope === scope}
+                className={
+                  queueScope === scope
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
+                    : ""
+                }
+              >
+                {scope === "software" ? "Software only" : scope === "hardware" ? "Hardware only" : "Both"}
+              </PendingButton>
+            </form>
+          ))}
         </div>
       </Card>
 
