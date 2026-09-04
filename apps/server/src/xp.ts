@@ -172,3 +172,20 @@ export async function communityEnergy(): Promise<number> {
   const awardRe = (awards ?? []).reduce((s, r) => s + (Number(r.re_awarded) || 0), 0);
   return Math.round(projectRe + awardRe);
 }
+
+// RE sitting in the pipeline: projects that passed a first-pass review and
+// are waiting on a final reviewer to confirm (second_review) or on Joe
+// (fraud_review) before they'd count toward communityEnergy() above. Uses the
+// same approved_hours/level the first-pass reviewer already proposed - not
+// yet real RE, just what's queued to become real RE once confirmed, so the
+// vault page can show it as a separate, distinctly-colored "in review" figure
+// rather than folding it into the confirmed total.
+export async function pendingCommunityEnergy(): Promise<number> {
+  const { data } = await supabase
+    .from("projects")
+    .select("approved_hours, hackatime_seconds, level, sidequest_id")
+    .in("status", ["second_review", "fraud_review"])
+    .is("banned_at", null);
+  const projectRe = (data ?? []).reduce((s, p) => s + reOf(p as ProjectRow), 0);
+  return Math.round(projectRe);
+}

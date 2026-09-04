@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { verifySessionToken } from "../auth/session.js";
 import { supabase } from "../db/client.js";
-import { communityEnergy, topChapterContributors } from "../xp.js";
+import { communityEnergy, pendingCommunityEnergy, topChapterContributors } from "../xp.js";
 import { addNotification } from "./notifications.js";
 
 const router = Router();
@@ -103,8 +103,9 @@ router.get("/api/vault", async (req, res) => {
   const session = token ? verifySessionToken(token) : null;
   if (!session) return res.status(401).json({ ok: false });
 
-  const [energy, { data: rows }] = await Promise.all([
+  const [energy, pendingEnergy, { data: rows }] = await Promise.all([
     communityEnergy(),
+    pendingCommunityEnergy(),
     supabase
       .from("vault_levels")
       .select("id, level, energy_required, title, blurb, rewards, position, unlocked_at, top1_re, top2_re, top3_re")
@@ -198,6 +199,7 @@ router.get("/api/vault", async (req, res) => {
   res.json({
     ok: true,
     energy,
+    pendingEnergy,
     currentLevel,
     nextRequired: next ? next.energyRequired : null,
     levels,
