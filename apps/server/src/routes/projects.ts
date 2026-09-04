@@ -602,11 +602,31 @@ router.post("/api/projects/:id/ship", async (req, res) => {
 
   const { data: userRow } = await supabase
     .from("users")
-    .select("hackatime_token, slack_id")
+    .select("hackatime_token, slack_id, address_line1, address_city, address_country, address_postal")
     .eq("id", session.userId)
     .single();
   const htToken = (userRow as { hackatime_token?: string } | null)?.hackatime_token ?? null;
   const ownerSlackId = (userRow as { slack_id?: string } | null)?.slack_id ?? null;
+  // A mailing address is required before shipping , same fields/shape as
+  // hasAddress() in routes/profile.ts and the shop checkout gate in
+  // routes/shop.ts. It comes from Hack Club Auth at login (see
+  // extractAddress in routes/auth.ts), not a Pixl-side form, so a missing
+  // address means the player needs to fill it in on Hack Club Auth and
+  // re-log-in , not something this endpoint can fix for them.
+  const addr = userRow as {
+    address_line1?: string | null;
+    address_city?: string | null;
+    address_country?: string | null;
+    address_postal?: string | null;
+  } | null;
+  const hasAddress =
+    !!String(addr?.address_line1 ?? "").trim() &&
+    !!String(addr?.address_city ?? "").trim() &&
+    !!String(addr?.address_country ?? "").trim() &&
+    !!String(addr?.address_postal ?? "").trim();
+  if (!hasAddress)
+    return res.status(400).json({ ok: false, error: "address_required" });
+
   const stats = await fetchHackatimeStats(htToken);
   // Software must have a working Hackatime connection; hardware treats Hackatime
   // as optional (journal hours can stand in), so a hardware ship never fails on
