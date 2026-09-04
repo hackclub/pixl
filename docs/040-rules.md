@@ -1,5 +1,5 @@
 ---
-title: Ship requirements
+title: Software ship requirements
 group: Rules
 description: Everything below is enforced by the software, not by vibes.
 ---
