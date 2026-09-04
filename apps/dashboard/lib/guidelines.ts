@@ -11,7 +11,7 @@
 // Source (latest, live): https://hackclub.gitbook.io/ysws-project-submission-guidelines
 export const GUIDELINES_VERSION = 1;
 
-export const MIN_SECONDS_PER_PAGE = 30;
+export const MIN_SECONDS_PER_PAGE = 10;
 
 export const GUIDELINES_LIVE_URL =
   "https://hackclub.gitbook.io/ysws-project-submission-guidelines";
