@@ -552,7 +552,9 @@ router.get("/auth/hackclub/callback", async (req, res) => {
       );
   }
 
-  if (identity.slack_id) void enrollSlackPlayerInPixl(identity.slack_id);
+  // Only a brand-new signup should get auto-invited , an existing player
+  // logging back in is already (or deliberately isn't) in the channel.
+  if (isNewUser && identity.slack_id) void enrollSlackPlayerInPixl(identity.slack_id);
 
   const sessionToken = issueSessionToken({ userId, displayName });
 
