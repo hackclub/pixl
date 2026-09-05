@@ -2232,6 +2232,8 @@
           hackatimeProjects: [
             ...document.querySelectorAll('input[name="ht"]:checked'),
           ].map((c) => c.value),
+          otherYsws: $("s-ysws") ? $("s-ysws").checked : false,
+          otherYswsNotes: $("s-ysws") && $("s-ysws").checked ? $("s-ysws-notes").value.trim() : "",
         };
         if (!body.name) {
           if (!silent) Pixl.toast(err("name_required"), true);
