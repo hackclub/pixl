@@ -1,5 +1,5 @@
 ---
-title: Ship requirements
+title: Software ship requirements
 group: Rules
 description: Everything below is enforced by the software, not by vibes.
 ---
@@ -8,7 +8,7 @@ description: Everything below is enforced by the software, not by vibes.
 
 ^ These rules are checked programmatically and by human reviewers. If a submission gets blocked or kicked back, it's almost always due to one of these.
 
-## What every ship needs
+## What every Software ship needs
 
 - **A live GitHub repo.** It must be public and accessible. Dead links or private repos fail immediately.
 - **A working demo link.** Reviewers need to test what you built: a hosted site, a playable build, a video walkthrough, or a releases page. It **cannot** just be another link to your repo.
