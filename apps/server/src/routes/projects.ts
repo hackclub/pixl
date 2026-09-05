@@ -834,6 +834,12 @@ router.post("/api/projects/:id/ship", async (req, res) => {
       system_note: systemNote,
       sidequest_id: sidequestId,
       eligibility_attested: true,
+      // airtable_record_id points at the row from this project's LAST
+      // approval. Left alone, the dashboard's Airtable push (actions.ts:
+      // pushProjectToAirtable) reuses that id forever and an update ship's
+      // eventual re-approval overwrites the original ship's row instead of
+      // getting its own - clear it here so a genuine update starts fresh.
+      ...(isUpdate ? { airtable_record_id: null } : {}),
     })
     .eq("id", id)
     .eq("user_id", session.userId)

@@ -1690,8 +1690,11 @@ export async function archiveProject(formData: FormData): Promise<void> {
 // Manual, one-project-at-a-time push into the intermediate YSWS Airtable
 // base. Never flips that base's own "Automation - Submit to Unified"
 // checkbox - a teammate does that by hand after reviewing what lands here.
-// Re-running this on an already-pushed project updates the same Airtable
-// row (via the stored airtable_record_id) instead of creating a duplicate.
+// Re-running this (e.g. the "Re-send to Airtable" button) updates the same
+// row via the stored airtable_record_id instead of creating a duplicate -
+// but an update ship clears that id at ship time (see the ship handler in
+// apps/server/src/routes/projects.ts), so its eventual approval pushes a
+// genuinely NEW row instead of overwriting the original ship's row.
 // Shared by the automatic push on final approval (see reviewProject) and the
 // manual "Send to Airtable" / "Re-send to Airtable" button on the project
 // page - one place owns the field-building/push logic so the two callers
