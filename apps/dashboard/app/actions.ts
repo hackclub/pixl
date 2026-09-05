@@ -381,17 +381,23 @@ async function settleFirstPassPayouts(
   }
 }
 
-// A project sent back to first pass never got a real verdict, so the pending
-// first-pass payout is void , no pixels, no dock against the reviewer. Distinct
-// from settleFirstPassPayouts, which always resolves to 'paid' (possibly cut).
-async function voidFirstPassPayouts(projectId: number): Promise<void> {
+// Reviewers are only paid when a project actually gets approved , a project
+// sent back to first pass never got a real verdict, and a needs_changes/ban
+// verdict is explicitly not an approval, so in both cases the pending
+// first-pass payout is void , no pixels, no dock against the reviewer.
+// Distinct from settleFirstPassPayouts, which always resolves to 'paid'
+// (possibly cut) and should only ever be reached from the approved branch.
+async function voidFirstPassPayouts(
+  projectId: number,
+  reason = "sent back for a redo before a final verdict",
+): Promise<void> {
   const { error } = await db
     .from("review_payouts")
     .update({
       status: "voided",
       paid_pixels: 0,
       cut_pct: 100,
-      cut_reason: "sent back for a redo before a final verdict",
+      cut_reason: reason,
       settled_at: new Date().toISOString(),
     })
     .eq("project_id", projectId)
@@ -832,7 +838,10 @@ export async function reviewProject(formData: FormData): Promise<void> {
       return;
     }
     await insertReviewAudit(formData, projectId, project.user_id, by, `first_pass_${proposedKey}`, note, claimedHours, approvedHours);
-    if (!own) await recordPendingPayout(projectId, access, formData);
+    // Only a proposed approval can ever turn into a paid review , a proposed
+    // ban never gets a pending payout row to begin with, instead of creating
+    // one just to void it later if the final reviewer confirms the ban.
+    if (!own && proposedKey === "approved") await recordPendingPayout(projectId, access, formData);
     if (proposedKey === "approved") {
       await notifyOwner(
         project.user_id,
@@ -894,8 +903,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
     }
     await insertReviewAudit(formData, projectId, project.user_id, by, "needs_changes", note, claimedHours, approvedHours);
     if (stage === "second_review")
-      await settleFirstPassPayouts(projectId, project.name, overturned, false);
-    if (!own) await recordSettledPayout(projectId, access, "needs_changes", formData, project.name);
+      await voidFirstPassPayouts(projectId, "final verdict was needs_changes, not an approval");
     await notifyOwner(
       project.user_id,
       "Changes requested",
@@ -936,9 +944,8 @@ export async function reviewProject(formData: FormData): Promise<void> {
     }
     await insertReviewAudit(formData, projectId, project.user_id, by, "banned", note, claimedHours, approvedHours);
     if (stage === "second_review")
-      await settleFirstPassPayouts(projectId, project.name, overturned, false);
-    if (!own) await recordSettledPayout(projectId, access, "needs_changes", formData, project.name);
-    const banBody = `Your project "${project.name}" was permanently banned by ${reviewer} and can no longer be shipped to Pixl.\n\nReason: ${note}\n\nIf you think this is a mistake, contact the Pixl team.`;
+      await voidFirstPassPayouts(projectId, "final verdict was a ban, not an approval");
+    const banBody =`Your project "${project.name}" was permanently banned by ${reviewer} and can no longer be shipped to Pixl.\n\nReason: ${note}\n\nIf you think this is a mistake, contact the Pixl team.`;
     await db.from("notifications").insert({ user_id: project.user_id, title: "Project banned", body: banBody });
     await dmOrEmail(project.user_id, "Project banned", banBody);
     const collabBanBody = `A project you collaborate on, "${project.name}", was permanently banned by ${reviewer} and can no longer be shipped to Pixl.\n\nReason: ${note}\n\nIf you think this is a mistake, contact the Pixl team.`;
