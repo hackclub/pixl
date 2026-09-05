@@ -657,7 +657,12 @@ router.post("/api/projects/:id/ship", async (req, res) => {
       (s, j) => s + (Number(j.hours) || 0),
       0,
     );
-    journalSeconds = jhours * 3600;
+    // Summing decimal hours in floating point (e.g. 0.2 + 2.7 + ...) can land
+    // on something like 20.599999999999998, which * 3600 becomes a
+    // non-integer number of seconds - hackatime_seconds is an integer
+    // column, and Postgres rejects that outright (22P02) instead of
+    // truncating it, which is exactly what broke shipping project 251.
+    journalSeconds = Math.round(jhours * 3600);
   }
   const trackedSeconds = htSeconds + journalSeconds;
   // Software needs at least an hour of tracked time to ship; hardware has no
@@ -1128,11 +1133,12 @@ router.get("/api/projects/:id/hours", async (req, res) => {
     fetchTrackedSecondsSince(hackatimeSlackId, hackatimeToken, linked),
     journalQuery,
   ]);
-  const journalSeconds =
+  const journalSeconds = Math.round(
     ((jrows ?? []) as { hours: number | null }[]).reduce(
       (s, j) => s + (Number(j.hours) || 0),
       0,
-    ) * 3600;
+    ) * 3600,
+  );
 
   res.json({
     ok: true,
