@@ -9,7 +9,7 @@
   ],
   "headers": [
     {
-      "source": "/((?!shop|orders|collectibles|vault|explore|quests|timeline|projects|report|hackatime|fonts|img|pixl).*)",
+      "source": "/((?!shop|orders|collectibles|vault|explore|quests|timeline|projects|report|hackatime|fonts|img|pixl|show-n-tell).*)",
       "headers": [
         { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
         { "key": "Cross-Origin-Embedder-Policy", "value": "require-corp" }

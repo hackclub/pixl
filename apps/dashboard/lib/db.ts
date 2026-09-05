@@ -2912,10 +2912,10 @@ export async function listShowNTellEntries(roundId: number): Promise<ShowNTellEn
   }));
 }
 
-// Shipped-or-later projects only - a Show & Tell entry should point at
-// something real, not an untouched draft. Used by the dashboard's "add
-// entry" search, name match is enough for a CT member picking from a
-// handful of results.
+// A CT member can add any non-banned project, shipped or still in draft -
+// a live Show & Tell often features work in progress, not just approved
+// ships. Used by the dashboard's "add entry" search, name match is enough
+// for picking from a handful of results.
 export async function searchShippableProjects(
   query: string,
 ): Promise<{ id: number; name: string; owner: string }[]> {
@@ -2925,7 +2925,7 @@ export async function searchShippableProjects(
     .from("projects")
     .select("id, name, users(display_name)")
     .ilike("name", `%${q}%`)
-    .in("status", ["shipped", "second_review", "fraud_review", "approved"])
+    .in("status", ["draft", "needs_changes", "shipped", "second_review", "fraud_review", "approved"])
     .is("banned_at", null)
     .limit(15);
   if (error) {
