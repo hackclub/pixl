@@ -56,6 +56,8 @@
       }
       .stt-vote-btn:hover { border-color: var(--accent); }
       .stt-vote-btn.voted { background: var(--accent); color: var(--panel-deep); border-color: var(--accent); }
+      .stt-vote-own { display: inline-flex; align-items: center; justify-content: center; color: var(--faint); cursor: default; }
+      .stt-vote-own:hover { border-color: var(--stroke); }
       .stt-vote-count { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
       .stt-rank { width: 26px; text-align: center; font-family: var(--pixel); font-size: 14px; color: var(--faint); flex-shrink: 0; }
       .stt-rank.top1 { color: var(--gold); }
@@ -67,8 +69,8 @@
     <main class="wrap">
       <h1 class="page-title">SHOW &amp; TELL</h1>
       <div class="page-sub" id="round-sub">
-        Vote for your favorite projects, one vote per project per account, no stuffing the
-        ballot.
+        Vote for your favorite project, one vote per account, no stuffing the ballot. You can't
+        vote for your own project.
       </div>
 
       <div class="spin" id="loading"></div>
@@ -92,6 +94,9 @@
         const thumb = e.imageUrl
           ? `<img src="${Pixl.esc(e.imageUrl)}" alt="">`
           : `<span class="faint" style="font-size:20px">?</span>`;
+        const voteControl = e.isOwn
+          ? `<span class="stt-vote-btn stt-vote-own" title="You can't vote for your own project">—</span>`
+          : `<button class="stt-vote-btn ${e.votedByMe ? "voted" : ""}" data-vote="${e.id}">${e.votedByMe ? "♥" : "♡"}</button>`;
         return `
       <div class="panel stt-card" data-entry="${e.id}">
         <span class="stt-rank ${rankClass(i)}">#${i + 1}</span>
@@ -102,7 +107,7 @@
           ${e.description ? `<div class="stt-desc">${Pixl.esc(e.description)}</div>` : ""}
         </div>
         <div class="stt-vote">
-          <button class="stt-vote-btn ${e.votedByMe ? "voted" : ""}" data-vote="${e.id}">${e.votedByMe ? "♥" : "♡"}</button>
+          ${voteControl}
           <span class="stt-vote-count">${e.voteCount} vote${e.voteCount === 1 ? "" : "s"}</span>
         </div>
       </div>`;
@@ -127,9 +132,27 @@
         try {
           const r = await Pixl.send("POST", `/api/show-n-tell/entries/${id}/vote`);
           if (!r.ok) {
-            Pixl.toast(r.error === "round_closed" ? "This round just closed." : "Couldn't vote, try again.", true);
+            const message =
+              r.error === "round_closed"
+                ? "This round just closed."
+                : r.error === "own_project"
+                  ? "You can't vote for your own project."
+                  : "Couldn't vote, try again.";
+            Pixl.toast(message, true);
             btn.disabled = false;
             return;
+          }
+          // A new vote moves any prior vote in this round rather than
+          // stacking (one live vote per round, per user) - reflect that
+          // locally so the previously-voted entry's count drops too, not
+          // just the one just clicked.
+          if (r.voted) {
+            for (const e of entries) {
+              if (e.id !== id && e.votedByMe) {
+                e.votedByMe = false;
+                e.voteCount -= 1;
+              }
+            }
           }
           const entry = entries.find((e) => e.id === id);
           if (entry) {
