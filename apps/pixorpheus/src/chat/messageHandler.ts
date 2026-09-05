@@ -1,5 +1,6 @@
 import { app } from "../slack/app.js";
 import { SILENCED_CHANNELS, TRAINING_CHANNEL } from "../constants.js";
+import { checkAiRateLimit, AI_RATE_LIMIT_MESSAGE } from "../ai/rateLimit.js";
 import { config, hasLaunched, launchDateLabel } from "../config.generated.js";
 import { botIdentity } from "../slack/identity.js";
 import { aiPost } from "../ai/client.js";
@@ -401,6 +402,10 @@ app.message(async ({ message, client }) => {
   }
 
   if (isDM) {
+    if (!checkAiRateLimit(m.user)) {
+      await client.chat.postMessage({ channel: m.channel, text: AI_RATE_LIMIT_MESSAGE });
+      return;
+    }
     const dmKey = m.channel;
     if (!dmHistory.has(dmKey)) await seedDMHistory(dmKey, client);
     if (!dmHistory.has(dmKey)) dmHistory.set(dmKey, []);
@@ -569,6 +574,20 @@ app.message(async ({ message, client }) => {
       }
 
       if (mutedThreads.has(threadKey)) return;
+
+      // Checked before shouldChimeIn/extractSearchQuery/braveSearch below,
+      // not just the final getAIReply - those are paid calls too, and a
+      // spammy user shouldn't be able to burn through credits on any of them.
+      if (!checkAiRateLimit(entry.userId)) {
+        // Only worth a heads-up when they actually addressed the bot , a muted
+        // "chime in" reply skipping silently is normal behavior already.
+        if (entry.isMention) {
+          const rateLimitParams: { channel: string; thread_ts?: string } = { channel: entry.channel };
+          if (!isDM) rateLimitParams.thread_ts = threadKey;
+          await client.chat.postMessage({ ...rateLimitParams, text: AI_RATE_LIMIT_MESSAGE });
+        }
+        return;
+      }
 
       let chimeMode = false;
       if (!entry.isMention) {
