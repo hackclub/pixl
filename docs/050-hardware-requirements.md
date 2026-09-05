@@ -8,7 +8,7 @@ Adapted from [Fallout](fallout.hackclub.com)
 
 # Submitting your Design
 
-Okay, you’ve designed your project digitally\! Congrats\! Before giving you funding, the project needs to meet our ✨ _Submission Requirements_ ✨
+Okay, you’ve designed your project digitally! Congrats! Before giving you funding, the project needs to meet our ✨ _Submission Requirements_ ✨
 
 Pixl wants you to create [**real, shipped projects**](/docs/what-is-shipping).
 
@@ -21,13 +21,13 @@ There are two key areas of our Design Submission Requirements:
 
 **95% of Rejections come from problems that take 5 Minutes to fix.**
 
-We’re here to help! But we can’t tell you exactly what to do. Before directly reaching out to us, read our documentation, ask in [\#pixl](https://hackclub.enterprise.slack.com/archives/C0B5P4N0WHH), Google it!
+We’re here to help! But we can’t tell you exactly what to do. Before directly reaching out to us, read our documentation, ask in [#pixl](https://hackclub.enterprise.slack.com/archives/C0B5P4N0WHH), Google it!
 
 **Note : missing any of these will get your project returned. You would have to wait some more days to get it reviewed as it goes last in the queue**
 
 ## 1. A Good README
 
-Your README is people’s first impression. Make it awesome\! Someone landing on your repository for the first time should understand:
+Your README is people’s first impression. Make it awesome! Someone landing on your repository for the first time should understand:
 
 - What your project is
 - What it does
@@ -37,9 +37,9 @@ If they have to open even a single file, your README is not doing its job. At mi
 
 1. Explanation of what your project is
 
--  Short description of what your project is\! Highlight what makes it unique
--  How do you use it? Be detailed\! Others can’t read your mind.
--  Why did you make it? Be personal\! Are you solving a problem? Trying to make something smaller than previously thought possible?
+-  Short description of what your project is! Highlight what makes it unique
+-  How do you use it? Be detailed! Others can’t read your mind.
+-  Why did you make it? Be personal! Are you solving a problem? Trying to make something smaller than previously thought possible?
 
 2. Add images! A picture is worth a thousand words. Include:
 
@@ -50,7 +50,7 @@ If they have to open even a single file, your README is not doing its job. At mi
 
 ## 2. A fully finished design:
 
-Whoa… A lot at first glance\! Breathe. You got this. It’s simpler than it seems\!
+Whoa… A lot at first glance! Breathe. You got this. It’s simpler than it seems\!
 
 For a design to be 100% finished, someone else should be able to read your repo, understand, and replicate it… i.e. You need to include all files and instructions\!
 
