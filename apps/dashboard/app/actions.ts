@@ -94,7 +94,12 @@ import { GUIDELINES_VERSION } from "@/lib/guidelines";
 const DEFAULT_WARNING =
   "Please keep chat messages and display names appropriate. Continued violations may result in a ban from Pixl.";
 
-const DASH_URL = "https://pixl-dash.ridit.space";
+// Was hardcoded to a stale personal dev domain (pixl-dash.ridit.space) that
+// no longer resolves to anything real , BASE_URL is already set to the real
+// production dashboard URL in every deployment's env (see lib/session.ts for
+// the other place this app reads it), so use that instead of a second
+// hand-maintained copy of the same fact.
+const DASH_URL = process.env.BASE_URL ?? "https://dash.pixl.hackclub.com";
 
 function actorName(access: AdminAccess): string {
   return `${access.session.name} (${access.session.slackId})`;
