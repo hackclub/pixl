@@ -171,31 +171,32 @@ export default async function ReviewDetail({
     ) / 10;
   const rawTrackedHours = Math.round(((p.hackatime_seconds ?? 0) / 3600) * 10) / 10;
   // For a hardware ship, hackatime_seconds is never pure Hackatime time, the
-  // ship route (projects.ts: trackedSeconds = htSeconds + journalSeconds)
-  // always folds journal hours into that same column, whether or not a
-  // Hackatime project is linked, so a journal-only hardware ship can meet the
-  // 1h floor (see 0130_project_kind.sql). Subtract journalHours back out so
-  // this row shows real Hackatime-tracked time instead of the combined total
-  // (which would double-list the same hours under both rows below).
+  // ship route (projects.ts: trackedSeconds = htSeconds + round(ownerJournalHours
+  // * 3600), owner-only, not collaborators) always folds journal hours into
+  // that same column at the moment of shipping, whether or not a Hackatime
+  // project is linked, so a journal-only hardware ship can meet the 1h floor
+  // (see 0130_project_kind.sql). Subtract the RAW owner-only journal sum (not
+  // the live, possibly-deflated journalHours above) back out, so this stays
+  // the real, never-changing Hackatime-tracked portion - subtracting the live
+  // number here and adding it back below would cancel out any approved_hours
+  // edit, which is exactly why deflating a journal entry previously had no
+  // visible effect on hardware ships.
+  const rawOwnerJournalHours =
+    Math.round(
+      journals
+        .filter((j) => j.user_id === p.user_id)
+        .reduce((s, j) => s + (Number(j.hours) || 0), 0) * 10,
+    ) / 10;
   const hackatimeHours =
     p.kind === "hardware"
-      ? Math.max(0, Math.round((rawTrackedHours - journalHours) * 10) / 10)
+      ? Math.max(0, Math.round((rawTrackedHours - rawOwnerJournalHours) * 10) / 10)
       : rawTrackedHours;
-  // Same "hackatime if tracked, else journal" rule claimedHoursFor() in
-  // actions.ts uses for the actual payout, kept in sync so the cap shown here
-  // matches what reviewProject will credit. Uses the raw combined column (not
-  // the split-out hackatimeHours above) so a hardware ship's journal+Hackatime
-  // total still adds up correctly.
-  const hours = rawTrackedHours > 0 ? rawTrackedHours : journalHours;
+  // Kept in sync with claimedHoursFor() in actions.ts (the actual server-side
+  // payout cap): real Hackatime-tracked hours plus today's journalHours,
+  // which reacts immediately to a reviewer deflating a journal entry.
+  const hours = Math.round((hackatimeHours + journalHours) * 10) / 10;
   const htPct = hours > 0 ? Math.round((hackatimeHours / hours) * 100) : 0;
-  // The payout calculator (ReviewForm/TierAndPayout) should credit Hackatime
-  // and journal hours together, not one-or-the-other like `hours` above. For
-  // hardware this is already what `hours` is (the ship route folds journal
-  // into hackatime_seconds), so add hackatimeHours (the split-out real
-  // portion) + journalHours rather than journalHours twice. Kept in sync with
-  // claimedHoursFor() in actions.ts, which enforces the same cap server-side
-  // when Approve is clicked.
-  const payoutHours = Math.round((hackatimeHours + journalHours) * 10) / 10;
+  const payoutHours = hours;
 
   // Same "hackatime if tracked, else journal" source-of-truth as
   // claimedHoursFor() in actions.ts uses for the owner, kept consistent so

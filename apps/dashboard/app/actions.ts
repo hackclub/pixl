@@ -181,8 +181,8 @@ function readSeconds(value: FormDataEntryValue | null): number {
 
 async function claimedHoursFor(projectId: number): Promise<number> {
   const [{ data: journals }, { data: proj }] = await Promise.all([
-    db.from("project_journals").select("hours, approved_hours").eq("project_id", projectId),
-    db.from("projects").select("hackatime_seconds, kind").eq("id", projectId).single(),
+    db.from("project_journals").select("hours, approved_hours, user_id").eq("project_id", projectId),
+    db.from("projects").select("hackatime_seconds, kind, user_id").eq("id", projectId).single(),
   ]);
   // approved_hours is a reviewer's per-entry deflation (set from the
   // Journals tab) - null means "use the player's own claimed hours for this
@@ -197,12 +197,28 @@ async function claimedHoursFor(projectId: number): Promise<number> {
   const rawTrackedHours =
     Math.round(((Number(proj?.hackatime_seconds) || 0) / 3600) * 10) / 10;
   // Hardware already folds journal hours into hackatime_seconds at ship time
-  // (see apps/server/src/routes/projects.ts), so the raw column is already
-  // the combined total there - adding journalHours again would double count.
-  // Software never folds journal in, so add it here so the review dash's
-  // payout calculator (and this cap on what Approve actually credits) counts
-  // both Hackatime and journal hours, not just Hackatime.
-  if (proj?.kind === "hardware") return rawTrackedHours > 0 ? rawTrackedHours : journalHours;
+  // (see apps/server/src/routes/projects.ts: trackedSeconds = htSeconds +
+  // round(ownerJournalHours * 3600), owner-only, not collaborators). That
+  // fold used the RAW hours at the moment of shipping, so subtract that same
+  // raw (owner-only) sum back out to isolate the real, never-changing
+  // Hackatime-only portion, then add today's journalHours (which reflects
+  // any later reviewer deflation) on top. Returning rawTrackedHours directly
+  // - or adding journalHours back after subtracting itself - cancels out any
+  // approved_hours edit, which is exactly why deflating a journal entry had
+  // no visible effect on what got credited for hardware ships.
+  if (proj?.kind === "hardware") {
+    const rawOwnerJournalHours =
+      Math.round(
+        (journals ?? [])
+          .filter((j) => j.user_id === proj.user_id)
+          .reduce((s, j) => s + (Number(j.hours) || 0), 0) * 10,
+      ) / 10;
+    const hackatimeOnlyHours = Math.max(
+      0,
+      Math.round((rawTrackedHours - rawOwnerJournalHours) * 10) / 10,
+    );
+    return hackatimeOnlyHours + journalHours;
+  }
   return rawTrackedHours + journalHours;
 }
 
