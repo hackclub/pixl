@@ -10,13 +10,23 @@ description: Everything below is enforced by the software, not by vibes.
 
 ## What every Software ship needs
 
-- **A live GitHub repo.** It must be public and accessible. Dead links or private repos fail immediately.
+- **A live GitHub repo.** It must be public and accessible, with a README (see below), and multiple commits showing real development progress. A single commit does not hold up for a project claiming significant hours.
 - **A working demo link.** Reviewers need to test what you built: a hosted site, a playable build, a video walkthrough, or a releases page. It **cannot** just be another link to your repo.
 - **A thumbnail image** showing your project in action.
 - **The eligibility checkbox** confirming this isn't school homework or duplicate YSWS work.
 - **AI disclosure notes** explaining where and how AI was used (details below).
 
 If you're updating an already-approved project, you can ship an update: just write clear changelog notes explaining what new features you built.
+
+## What to put in your README
+
+Reviewers (and anyone else who lands on your repo) should be able to understand and run your project without asking you anything. At minimum, your `README.md` should cover:
+
+- **What it is.** A clear, concise summary of what the project does and why it exists.
+- **What tech was used.** The languages, frameworks, and libraries behind it.
+- **How to set it up and run it.** Install steps, environment variables, build/run commands - enough for someone with minimal technical knowledge to get it working from the README alone.
+
+A repo that's just a dump of files with one or two sentences for a README doesn't meet this bar, even if the demo link works.
 
 ## Journal character rules
 
