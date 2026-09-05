@@ -72,6 +72,21 @@
   .stepper-btn:active { border-bottom-width: var(--bw); transform: translate(0,1px); }
   .stepper-btn svg { width: 10px; height: 10px; image-rendering: pixelated; }
 
+
+.re-cb { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.re-cb input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.re-cb .box { width: 20px; height: 20px; flex-shrink: 0; display: flex;
+  align-items: center; justify-content: center; border: var(--bw) solid var(--stroke);
+  border-right-width: var(--bw-heavy); border-bottom-width: var(--bw-heavy);
+  background: var(--panel-2); color: var(--btn-ink); transition: background .13s ease; }
+.re-cb .box svg { width: 16px; height: 16px; opacity: 0; }
+.re-cb input:checked + .box { background: var(--gold); }
+.re-cb input:checked + .box svg { opacity: 1; }
+.re-cb span.l2 { font-size: 13px; color: var(--ink); }
+.re-cb .bump { margin-left: auto; font-family: var(--pixel); font-size: 12px; color: var(--gold); }
+
+
+
   .out-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
     gap: 14px; margin-top: 22px; }
   /* the [hidden] attribute loses to this class's own display:grid at equal
@@ -154,6 +169,17 @@
       <select class="field" id="c-tier"></select>
     </div>
 
+<div class="form-row" id="c-re-row">
+  <label class="re-cb">
+<input type="checkbox" id="c-base-re" onchange="recalc()">
+        <span class="box"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="8" width="2" height="2"/><rect x="5" y="10" width="2" height="2"/><rect x="7" y="8" width="2" height="2"/><rect x="9" y="6" width="2" height="2"/><rect x="11" y="4" width="2" height="2"/></svg></span>
+        <span class="l2">Include my base RE</span>
+        <span class="bump" id="c-re-count"></span>
+      </label>
+    </div>
+
+
+
     <div class="out-row">
       <div class="out">
         <div class="out-k">Pixels</div>
@@ -169,8 +195,7 @@
       </div>
     </div>
 
-    <div class="note">Computed straight from the same payout formula the server credits with, assuming this is a fresh project starting from 0 RE. The actual amount still depends on the tier and hours a reviewer confirms when your project ships.</div>
-    <img class="card-sticker gold-sm" src="/img/sticker_currency_gold.png" alt="">
+      <div class="note" id="c-note">Computed straight from the same payout formula the server credits with, starting from <span id="c-note-base">0 RE</span>. The actual amount still depends on the tier and hours a reviewer confirms when your project ships.</div>
     <img class="card-sticker gold-lg" src="/img/sticker_currency_gold.png" alt="">
     <img class="card-sticker red" src="/img/sticker_currency_red.png" alt="">
   </div>
@@ -191,6 +216,18 @@ $("c-rate-note").innerHTML =
 // RE is banked for life now (not reset per project), so predicting one of
 // your own projects has to start from your actual lifetime RE, not 0.
 const walletPromise = Pixl.loadWallet();
+let baseRe = 0;
+
+walletPromise.then((wallet) => {
+  baseRe = wallet ? wallet.re || 0 : 0;
+
+  $("c-re-count").textContent = !wallet
+    ? "log in to use your base RE"
+    : `${Math.round(baseRe).toLocaleString()} RE available`;
+
+  recalc();
+});
+
 
 // Just a fun little touch - let the blahaj sticker be picked up and dropped
 // anywhere on the page instead of sitting fixed in the hero corner.
@@ -234,7 +271,13 @@ function writeStats(prefix, hours, tier, reBefore = 0) {
 function recalc() {
   const hours = Math.max(Number($("c-hours").value) || 0, 0);
   const tier = Number($("c-tier").value) || 1;
-  writeStats("c-", hours, tier);
+  const reBefore = $("c-base-re").checked ? baseRe : 0;
+
+  writeStats("c-", hours, tier, reBefore);
+
+  $("c-note-base").textContent = reBefore > 0
+    ? `your ${Math.round(reBefore).toLocaleString()} RE`
+    : "0 RE";
 }
 
 function stepHours(dir) {
