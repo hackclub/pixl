@@ -1340,6 +1340,33 @@ export async function activeDashEvents(types?: string[]): Promise<DashEventRow[]
   return (data ?? []) as DashEventRow[];
 }
 
+export interface ReviewPayoutSettings {
+  approvedPixels: number;
+  needsChangesPixels: number;
+  updatedBy: string;
+  updatedAt: string;
+}
+
+// Single-row settings table (id=1, seeded by migration 0162), replacing what
+// used to be a hardcoded PAYOUT_PIXELS constant - lets a super admin change
+// how many pixels a review earns (separately for an approval vs a "request
+// changes" verdict) without a code change/redeploy for a particular event or
+// review push.
+export async function getReviewPayoutSettings(): Promise<ReviewPayoutSettings> {
+  const { data, error } = await db
+    .from("review_payout_settings")
+    .select("approved_pixels, needs_changes_pixels, updated_by, updated_at")
+    .eq("id", 1)
+    .maybeSingle();
+  if (error) console.error("getReviewPayoutSettings", error.message);
+  return {
+    approvedPixels: Number(data?.approved_pixels) || 0,
+    needsChangesPixels: Number(data?.needs_changes_pixels) || 0,
+    updatedBy: (data?.updated_by as string) ?? "",
+    updatedAt: (data?.updated_at as string) ?? "",
+  };
+}
+
 export async function communityGoalShipCount(ev: DashEventRow): Promise<number> {
   let q = db
     .from("projects")

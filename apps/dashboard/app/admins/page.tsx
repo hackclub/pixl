@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireAdmin, ownerSlackIds, SUBADMIN_PERMISSIONS, SPONSOR } from "@/lib/guard";
-import { listAdmins, listSuperAdmins } from "@/lib/db";
+import { listAdmins, listSuperAdmins, getReviewPayoutSettings } from "@/lib/db";
 import {
   addAdmin,
   addSponsor,
@@ -9,6 +9,7 @@ import {
   removeAdmin,
   removeSuperAdminAction,
   updateAdminPerms,
+  updateReviewPayoutSettings,
 } from "@/app/actions";
 import { slackHandles } from "@/lib/slack";
 import { TeamLog } from "@/app/_components/TeamLog";
@@ -92,7 +93,11 @@ export default async function AdminsPage({
   const access = await requireAdmin();
   if (!access.isSuper) redirect("/");
   const { page, serror } = await searchParams;
-  const [all, supers] = await Promise.all([listAdmins(), listSuperAdmins()]);
+  const [all, supers, payoutSettings] = await Promise.all([
+    listAdmins(),
+    listSuperAdmins(),
+    getReviewPayoutSettings(),
+  ]);
   const allAdmins = all.filter((a) =>
     a.permissions.some((p) => (SUBADMIN_PERMISSIONS as readonly string[]).includes(p)),
   );
@@ -237,6 +242,61 @@ export default async function AdminsPage({
               )}
             </div>
           ))}
+        </Card>
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">Reviewer payouts</h2>
+          <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
+            Pixels a reviewer earns per review, set separately for an approval vs a
+            request-changes verdict. Set either to 0 to turn off payouts for that verdict. Both
+            still stack with an active Review Blitz multiplier and get cut for rushed reviews.
+          </p>
+        </div>
+
+        <Card className="p-5 md:p-6 gap-0">
+          <form action={updateReviewPayoutSettings} className="space-y-4">
+            <div className="grid sm:grid-cols-2 gap-4">
+              <Label className="block font-normal">
+                <span className="block text-sm font-medium mb-1.5">Pixels per approval</span>
+                <Input
+                  name="approvedPixels"
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  defaultValue={payoutSettings.approvedPixels}
+                  className="w-full text-sm"
+                />
+              </Label>
+              <Label className="block font-normal">
+                <span className="block text-sm font-medium mb-1.5">
+                  Pixels per request-changes
+                </span>
+                <Input
+                  name="needsChangesPixels"
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  defaultValue={payoutSettings.needsChangesPixels}
+                  className="w-full text-sm"
+                />
+              </Label>
+            </div>
+            {payoutSettings.updatedBy && (
+              <p className="text-xs text-muted-foreground">
+                Last changed by {payoutSettings.updatedBy}
+              </p>
+            )}
+            <div className="flex justify-end">
+              <PendingButton
+                className="bg-brand text-white border-transparent"
+                pendingText="Saving…"
+              >
+                Save payout rates
+              </PendingButton>
+            </div>
+          </form>
         </Card>
       </div>
 

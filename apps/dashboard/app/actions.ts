@@ -55,6 +55,7 @@ import {
   referralTierFor,
   turnedNineteenSinceShipping,
   type DashEventRow,
+  getReviewPayoutSettings,
 } from "@/lib/db";
 import { buildAuditNote, parseAuditNote, TECHNICAL_FEATURES_MIN } from "@/lib/auditNote";
 import { decryptPII } from "@/lib/crypto";
@@ -250,11 +251,17 @@ async function insertReviewAudit(
   if (error) console.error("review audit insert failed", error.message);
 }
 
-// Every review earns this many pixels, paid into the reviewer's game account.
-// Rushed reviews are cut 30% (50% if doubly rushed); a first pass that the
-// final reviewer overturns is cut 50%, and one whose hours get slashed is cut
-// 30%. First-pass payouts stay pending until the final verdict settles.
-const PAYOUT_PIXELS = 3;
+// Base pixels per review verdict are admin-configurable (review_payout_settings,
+// migration 0162 - edited from the Admins page), replacing what used to be a
+// flat PAYOUT_PIXELS=3-on-approval-only constant. Rushed reviews are cut 30%
+// (50% if doubly rushed); a first pass that the final reviewer overturns is
+// cut 50%, and one whose hours get slashed is cut 30%. First-pass payouts
+// stay pending until the final verdict settles.
+function payoutVerdictKey(verdict: string): "approved" | "needs_changes" | null {
+  if (verdict === "approved" || verdict === "first_pass_approved") return "approved";
+  if (verdict === "needs_changes") return "needs_changes";
+  return null;
+}
 
 function payoutFlagCut(formData: FormData, verdict: string): { pct: number; reason: string } {
   const total = readSeconds(formData.get("totalSeconds"));
@@ -271,10 +278,19 @@ function payoutFlagCut(formData: FormData, verdict: string): { pct: number; reas
 
 // During a Review Blitz event every review's base payout is multiplied, so
 // full_pixels is locked in at review time and settlement math uses the row.
-async function payoutBasePixels(): Promise<number> {
+// Returns both the multiplied amount and whether a multiplier actually
+// applied, so dmPayout can call out the blitz bonus without needing its own
+// copy of the base rate.
+async function payoutBasePixels(
+  verdict: string,
+): Promise<{ full: number; blitzApplied: boolean }> {
+  const key = payoutVerdictKey(verdict);
+  if (!key) return { full: 0, blitzApplied: false };
+  const settings = await getReviewPayoutSettings();
+  const base = key === "approved" ? settings.approvedPixels : settings.needsChangesPixels;
   const [blitz] = await activeDashEvents(["review_blitz"]);
   const mult = blitz ? Math.min(Math.max(Number(blitz.config.mult) || 1, 1), 3) : 1;
-  return Math.round(PAYOUT_PIXELS * mult);
+  return { full: Math.round(base * mult), blitzApplied: mult > 1 };
 }
 
 async function dmPayout(
@@ -285,13 +301,14 @@ async function dmPayout(
   pct: number,
   reason: string,
   credited: CreditReviewerResult,
+  blitzApplied: boolean,
 ): Promise<void> {
   const dollars = `$${(full * config.economy.pixelValueUsd).toFixed(2)}`;
   let text =
     pct === 0
       ? `You earned ${paid} pixels (${dollars}) for reviewing "${projectName}". Thanks for keeping the queue moving!`
       : `You earned ${paid} pixels for reviewing "${projectName}" , the ${dollars} payout was cut ${pct}%: ${reason}.`;
-  if (full > PAYOUT_PIXELS) text += `\n\n⚡ Review Blitz bonus included!`;
+  if (blitzApplied) text += `\n\n⚡ Review Blitz bonus included!`;
   // Only actually true when it's true , a 100%-cut review (or any other
   // reason `paid` rounds to 0) isn't a missing account, it's just nothing to
   // credit this time, and shouldn't tell the reviewer their account is broken.
@@ -300,6 +317,12 @@ async function dmPayout(
   await dmUser(slackId, text);
 }
 
+// Records and pays out immediately (approved, needs_changes, and a proposed-
+// approval's eventual "first pass confirmed" case all settle right away , only
+// a PENDING first-pass proposal goes through recordPendingPayout instead).
+// Skips entirely (no row, no DM) when the configured rate for this verdict is
+// 0, so setting needs_changes_pixels to 0 keeps today's "only approvals pay"
+// behavior with no special-casing at call sites.
 async function recordSettledPayout(
   projectId: number,
   access: AdminAccess,
@@ -307,8 +330,9 @@ async function recordSettledPayout(
   formData: FormData,
   projectName: string,
 ): Promise<void> {
+  const { full, blitzApplied } = await payoutBasePixels(verdict);
+  if (full <= 0) return;
   const { pct, reason } = payoutFlagCut(formData, verdict);
-  const full = await payoutBasePixels();
   const paid = Math.round((full * (100 - pct)) / 100);
   const credited = await creditReviewerPixels(access.session.slackId, paid);
   const { error } = await db.from("review_payouts").insert({
@@ -328,7 +352,7 @@ async function recordSettledPayout(
     console.error("review payout insert failed", error.message);
     return;
   }
-  await dmPayout(access.session.slackId, projectName, paid, full, pct, reason, credited);
+  await dmPayout(access.session.slackId, projectName, paid, full, pct, reason, credited, blitzApplied);
 }
 
 async function recordPendingPayout(
@@ -336,6 +360,8 @@ async function recordPendingPayout(
   access: AdminAccess,
   formData: FormData,
 ): Promise<void> {
+  const { full, blitzApplied } = await payoutBasePixels("first_pass_approved");
+  if (full <= 0) return;
   const { pct, reason } = payoutFlagCut(formData, "first_pass_approved");
   const { error } = await db.from("review_payouts").insert({
     project_id: projectId,
@@ -343,9 +369,10 @@ async function recordPendingPayout(
     reviewer_slack_id: access.session.slackId,
     verdict: "first_pass_approved",
     status: "pending",
-    full_pixels: await payoutBasePixels(),
+    full_pixels: full,
     cut_pct: pct,
     cut_reason: reason,
+    blitz_applied: blitzApplied,
   });
   if (error) console.error("review payout insert failed", error.message);
 }
@@ -361,7 +388,7 @@ async function settleFirstPassPayouts(
 ): Promise<void> {
   const { data: pending } = await db
     .from("review_payouts")
-    .select("id, reviewer_slack_id, cut_pct, cut_reason, full_pixels")
+    .select("id, reviewer_slack_id, cut_pct, cut_reason, full_pixels, blitz_applied")
     .eq("project_id", projectId)
     .eq("status", "pending");
   for (const p of pending ?? []) {
@@ -375,7 +402,7 @@ async function settleFirstPassPayouts(
       reasons.push("credited hours cut sharply by the final reviewer");
     }
     const reason = reasons.join("; ");
-    const full = Number(p.full_pixels) || PAYOUT_PIXELS;
+    const full = Number(p.full_pixels) || 0;
     const paid = Math.round((full * (100 - pct)) / 100);
     const { data: claimed } = await db
       .from("review_payouts")
@@ -393,7 +420,7 @@ async function settleFirstPassPayouts(
     const credited = await creditReviewerPixels(p.reviewer_slack_id, paid);
     if (credited === "credited")
       await db.from("review_payouts").update({ credited: true }).eq("id", p.id);
-    await dmPayout(p.reviewer_slack_id, projectName, paid, full, pct, reason, credited);
+    await dmPayout(p.reviewer_slack_id, projectName, paid, full, pct, reason, credited, !!p.blitz_applied);
   }
 }
 
@@ -419,6 +446,34 @@ async function voidFirstPassPayouts(
     .eq("project_id", projectId)
     .eq("status", "pending");
   if (error) console.error("voidFirstPassPayouts failed", error.message);
+}
+
+// Lets a super admin change the per-verdict reviewer payout rate from the
+// Admins page without a code change/redeploy - e.g. temporarily paying out
+// on needs_changes during a review push, or adjusting the approval rate for
+// a particular occasion. Both fields are clamped to a sane non-negative
+// range; 0 disables payouts for that verdict entirely (recordSettledPayout /
+// recordPendingPayout both skip when the resolved rate is 0).
+export async function updateReviewPayoutSettings(formData: FormData): Promise<void> {
+  const access = await requireSuper();
+  const clamp = (raw: FormDataEntryValue | null): number => {
+    const n = Number(String(raw ?? "0"));
+    if (!Number.isFinite(n) || n < 0) return 0;
+    return Math.round(Math.min(n, 1000) * 10) / 10;
+  };
+  const approvedPixels = clamp(formData.get("approvedPixels"));
+  const needsChangesPixels = clamp(formData.get("needsChangesPixels"));
+  const { error } = await db
+    .from("review_payout_settings")
+    .update({
+      approved_pixels: approvedPixels,
+      needs_changes_pixels: needsChangesPixels,
+      updated_by: actorName(access),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", 1);
+  if (error) console.error("updateReviewPayoutSettings failed", error.message);
+  revalidatePath("/admins");
 }
 
 // How a reviewer is credited in maker-facing notes. Prefers the Slack @handle;
@@ -920,6 +975,10 @@ export async function reviewProject(formData: FormData): Promise<void> {
     await insertReviewAudit(formData, projectId, project.user_id, by, "needs_changes", note, claimedHours, approvedHours);
     if (stage === "second_review")
       await voidFirstPassPayouts(projectId, "final verdict was needs_changes, not an approval");
+    // Pays out only when an admin has set needs_changes_pixels above 0 (see
+    // updateReviewPayoutSettings) - 0 keeps the historical "only approvals
+    // pay" behavior with no special-casing here.
+    if (!own) await recordSettledPayout(projectId, access, "needs_changes", formData, project.name);
     await notifyOwner(
       project.user_id,
       "Changes requested",
