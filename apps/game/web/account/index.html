@@ -66,7 +66,11 @@
     <div class="readout" id="address-readout">-</div>
   </div>
 
-  <div class="note">Something wrong here? Update it on <a href="https://auth.hackclub.com" target="_blank" rel="noopener">Hack Club Auth</a>, then log out and back in to Pixl to re-sync.</div>
+  <div class="note">
+    Something wrong here? Update it on <a href="https://auth.hackclub.com" target="_blank" rel="noopener">Hack Club Auth</a> first, then
+    <button type="button" class="btn ghost" id="verify-address-btn" style="margin-left:4px;padding:2px 10px;font-size:12px">RE-SYNC FROM HACK CLUB AUTH</button>
+    , a plain log out/in does NOT pull a fresh address.
+  </div>
 </main>
 
 <script src="/pixl.js?v=6"></script>
@@ -116,7 +120,14 @@ async function load() {
   }
 }
 
-if (Pixl.hasToken) load();
+if (Pixl.hasToken) {
+  load();
+  $("verify-address-btn").addEventListener("click", () => {
+    location.href = Pixl.apiUrl(
+      "/auth/hackclub/verify-address?web_redirect=" + encodeURIComponent(location.href),
+    );
+  });
+}
 </script>
 </body>
 </html>

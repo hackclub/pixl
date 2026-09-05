@@ -1242,7 +1242,10 @@
         not_in_review: "This project isn't in review.",
         trial_hours_below_minimum: "This Trial needs more tracked hours before you can ship it.",
         eligibility_attestation_required: "Confirm this isn't a school assignment or paid Hack Club work before shipping.",
-        address_required: "Add a mailing address before shipping , it's synced from Hack Club Auth, so update it there (auth.hackclub.com) then log out and back in to Pixl.",
+        // Not shown directly , ship()'s address_required branch below offers a
+        // one-click fix instead. Kept as a fallback for err() callers that
+        // don't special-case it.
+        address_required: "Add a mailing address before shipping , use the button that just appeared to verify it with Hack Club Auth.",
         trial_not_accepted: "Accept that Trial in the game first (talk to its NPC), then you can pick it.",
         bom_required: "Upload a Bill of Materials (.csv) before shipping a funded project.",
         cart_screenshot_required: "Upload at least one cart screenshot (with shipping) before shipping a funded project.",
@@ -1861,6 +1864,14 @@
             const accepted = allTrials.filter((t) => t.unlocked && !t.completed);
             const locked = allTrials.filter((t) => !t.unlocked);
             let html = "";
+            // The linked Trial can be completed (or otherwise missing from
+            // allTrials) by the time this form re-renders , without its own
+            // option here the <select> silently falls back to "None" and the
+            // next save wipes sidequest_id, unlinking a Trial nothing actually
+            // changed about. Keep it selectable/selected regardless.
+            const linkedInList = linkedId != null && allTrials.some((t) => Number(t.id) === linkedId);
+            if (linkedId != null && !linkedInList)
+              html += `<option value="${linkedId}" selected>${Pixl.esc(p.sidequest_name || "Linked Trial")}</option>`;
             if (accepted.length)
               html += `<optgroup label="Accepted - ready to build">${accepted
                 .map((t) => `<option value="${t.id}" ${linkedId === Number(t.id) ? "selected" : ""}>${Pixl.esc(t.name)}</option>`)
@@ -3166,6 +3177,25 @@
               cancelText: "Keep building",
             });
             if (proceed) return ship(p, isUpdate, true);
+            return;
+          }
+          if (r.error === "address_required") {
+            // A plain relogin never re-asks Hack Club Auth for address/phone
+            // (see the comment on /auth/hackclub/verify-address in
+            // routes/auth.ts) - only this dedicated re-auth flow does, same
+            // one the shop's checkout "verify address" step already uses.
+            const go = await Pixl.confirm({
+              title: "Mailing address needed",
+              body: "Pixl needs a mailing address on file before this can ship. Verify it with Hack Club Auth , you'll come right back here after.",
+              confirmText: "Verify address",
+              cancelText: "Not now",
+            });
+            if (go) {
+              const back = new URL(location.href);
+              location.href = Pixl.apiUrl(
+                "/auth/hackclub/verify-address?web_redirect=" + encodeURIComponent(back.toString()),
+              );
+            }
             return;
           }
           return Pixl.toast(err(r.error), true);
