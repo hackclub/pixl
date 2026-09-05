@@ -4,8 +4,8 @@ import { isIP } from "node:net";
 import { verifySessionToken } from "../auth/session.js";
 import { supabase } from "../db/client.js";
 import { addNotification } from "./notifications.js";
-import { findInYswsArchive } from "../ysws/archive.js";
-import { buildDoubleDip } from "../ysws/doubleDip.js";
+import { findAllInYswsArchive } from "../ysws/archive.js";
+import { buildDoubleDip, type TeamMember } from "../ysws/doubleDip.js";
 import { fetchHackatimeStats, fetchTrackedSecondsSince } from "../hackatime/api.js";
 import { postShipToSlack } from "../shipNotify.js";
 
@@ -608,11 +608,12 @@ router.post("/api/projects/:id/ship", async (req, res) => {
 
   const { data: userRow } = await supabase
     .from("users")
-    .select("hackatime_token, slack_id, address_line1, address_city, address_country, address_postal")
+    .select("hackatime_token, slack_id, display_name, address_line1, address_city, address_country, address_postal")
     .eq("id", session.userId)
     .single();
   const htToken = (userRow as { hackatime_token?: string } | null)?.hackatime_token ?? null;
   const ownerSlackId = (userRow as { slack_id?: string } | null)?.slack_id ?? null;
+  const ownerLabel = (userRow as { display_name?: string } | null)?.display_name || "the player";
   // A mailing address is required before shipping , same fields/shape as
   // hasAddress() in routes/profile.ts and the shop checkout gate in
   // routes/shop.ts. It comes from Hack Club Auth at login (see
@@ -674,11 +675,15 @@ router.post("/api/projects/:id/ship", async (req, res) => {
     .select("id, user_id, hackatime_projects")
     .eq("project_id", id)
     .eq("status", "accepted");
+  // Fed into buildDoubleDip below so a matched prior submission's per-person
+  // hours can be checked against each current collaborator's OWN tracked
+  // time, not just the owner's - see TeamMember in ysws/doubleDip.ts.
+  const collaboratorTeam: TeamMember[] = [];
   if (collaborators && collaborators.length > 0) {
     const collaboratorIds = collaborators.map((c) => c.user_id as string);
     const { data: collabUsers } = await supabase
       .from("users")
-      .select("id, hackatime_token, slack_id")
+      .select("id, hackatime_token, slack_id, display_name")
       .in("id", collaboratorIds);
     const tokenFor = new Map(
       (collabUsers ?? []).map((u) => [u.id as string, u.hackatime_token as string | null]),
@@ -686,11 +691,15 @@ router.post("/api/projects/:id/ship", async (req, res) => {
     const slackFor = new Map(
       (collabUsers ?? []).map((u) => [u.id as string, u.slack_id as string | null]),
     );
+    const nameFor = new Map(
+      (collabUsers ?? []).map((u) => [u.id as string, u.display_name as string | null]),
+    );
     await Promise.all(
       collaborators.map(async (c) => {
         const collabLinked = (c.hackatime_projects as string[]) ?? [];
+        const collabSlackId = slackFor.get(c.user_id as string) ?? null;
         const collabSeconds = await fetchTrackedSecondsSince(
-          slackFor.get(c.user_id as string) ?? null,
+          collabSlackId,
           tokenFor.get(c.user_id as string) ?? null,
           collabLinked,
         );
@@ -698,6 +707,11 @@ router.post("/api/projects/:id/ship", async (req, res) => {
           .from("project_collaborators")
           .update({ hackatime_seconds: collabSeconds })
           .eq("id", c.id);
+        collaboratorTeam.push({
+          slackId: collabSlackId ?? "",
+          label: nameFor.get(c.user_id as string) || "a collaborator",
+          claimedHours: Math.round(((collabSeconds ?? 0) / 3600) * 10) / 10,
+        });
       }),
     );
   }
@@ -758,7 +772,7 @@ router.post("/api/projects/:id/ship", async (req, res) => {
     }
   }
 
-  const matched = await findInYswsArchive(
+  const matches = await findAllInYswsArchive(
     project.repo_url as string,
     project.demo_url as string,
   );
@@ -772,9 +786,11 @@ router.post("/api/projects/:id/ship", async (req, res) => {
         : null,
       imported_ysws_approved_at: (project.imported_ysws_approved_at as string | null) ?? null,
     },
-    matched,
+    matches,
     otherYsws,
     trackedSeconds,
+    collaborators: collaboratorTeam,
+    ownerLabel,
   });
   if (flagDetail) {
     const { error: flagError } = await supabase.from("mod_actions").insert({

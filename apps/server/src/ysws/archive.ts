@@ -5,6 +5,11 @@ export interface ArchiveEntry {
   ysws: string;
   hours: number;
   approvedAt: number | null;
+  // Whoever the archive credits this entry to. A team's prior submission can
+  // have one archive row per person (same code_url/demo_url, different
+  // slack_id + hours each) - this is what lets buildDoubleDip attribute each
+  // current collaborator's own prior credit instead of one lumped total.
+  slackId: string;
 }
 
 export interface ArchiveShip extends ArchiveEntry {
@@ -21,7 +26,9 @@ export interface ArchiveMatch extends ArchiveEntry {
 }
 
 interface LoadedArchive {
-  byUrl: Map<string, ArchiveEntry>;
+  // All archive entries sharing that code_url/demo_url, one per credited
+  // person - a team's prior submission has one row per collaborator.
+  byUrl: Map<string, ArchiveEntry[]>;
   ships: ArchiveShip[];
 }
 
@@ -57,6 +64,7 @@ function toEntry(entry: Record<string, unknown>): ArchiveEntry {
     ysws: String(entry.ysws ?? "another YSWS"),
     hours: Number(entry.hours) || 0,
     approvedAt: Number(entry.approved_at) > 0 ? Number(entry.approved_at) : null,
+    slackId: cleanField(entry.slack_id),
   };
 }
 
@@ -74,22 +82,23 @@ async function loadArchive(): Promise<LoadedArchive | null> {
           ? json.data
           : [];
 
-    const byUrl = new Map<string, ArchiveEntry>();
+    const byUrl = new Map<string, ArchiveEntry[]>();
     const ships: ArchiveShip[] = [];
     for (const rawEntry of raw) {
       const entry = rawEntry as Record<string, unknown>;
       const info = toEntry(entry);
       for (const key of ["code_url", "demo_url"]) {
         const u = normalizeProjectUrl(String(entry[key] ?? ""));
-        if (u !== "" && !byUrl.has(u)) byUrl.set(u, info);
+        if (u === "") continue;
+        const list = byUrl.get(u);
+        if (list) list.push(info);
+        else byUrl.set(u, [info]);
       }
       const id = cleanField(entry.id);
-      const slackId = cleanField(entry.slack_id);
-      if (id === "" || slackId === "") continue;
+      if (id === "" || info.slackId === "") continue;
       ships.push({
         ...info,
         id,
-        slackId,
         codeUrl: safeUrl(entry.code_url),
         demoUrl: safeUrl(entry.demo_url),
         description: cleanField(entry.description).slice(0, 2000),
@@ -104,18 +113,35 @@ async function loadArchive(): Promise<LoadedArchive | null> {
   }
 }
 
+// Every archive entry sharing this repo/demo URL - a team's prior submission
+// has one row per collaborator (same URL, different slack_id + hours each),
+// so buildDoubleDip can attribute each current collaborator's own prior
+// credit instead of reporting one lumped total for "the player."
+export async function findAllInYswsArchive(
+  repoUrl: string,
+  demoUrl: string,
+): Promise<ArchiveMatch[]> {
+  const loaded = await loadArchive();
+  if (!loaded) return [];
+  const { byUrl } = loaded;
+  const repo = normalizeProjectUrl(repoUrl);
+  const repoEntries = repo !== "" ? byUrl.get(repo) : undefined;
+  if (repoEntries?.length) return repoEntries.map((e) => ({ url: repoUrl, ...e }));
+  const demo = normalizeProjectUrl(demoUrl);
+  const demoEntries = demo !== "" ? byUrl.get(demo) : undefined;
+  if (demoEntries?.length) return demoEntries.map((e) => ({ url: demoUrl, ...e }));
+  return [];
+}
+
 export async function findInYswsArchive(
   repoUrl: string,
   demoUrl: string,
 ): Promise<ArchiveMatch | null> {
-  const loaded = await loadArchive();
-  if (!loaded) return null;
-  const { byUrl } = loaded;
-  const repo = normalizeProjectUrl(repoUrl);
-  if (repo !== "" && byUrl.has(repo)) return { url: repoUrl, ...byUrl.get(repo)! };
-  const demo = normalizeProjectUrl(demoUrl);
-  if (demo !== "" && byUrl.has(demo)) return { url: demoUrl, ...byUrl.get(demo)! };
-  return null;
+  const all = await findAllInYswsArchive(repoUrl, demoUrl);
+  if (!all.length) return null;
+  // The highest-hours entry is the most representative single figure for
+  // callers that only want one match (kept for backward compat).
+  return all.reduce((best, e) => (e.hours > best.hours ? e : best));
 }
 
 export async function yswsShipsForSlackId(slackId: string): Promise<ArchiveShip[]> {
