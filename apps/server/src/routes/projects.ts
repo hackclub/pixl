@@ -346,6 +346,8 @@ interface ProjectFields {
   bom_url: string;
   cart_screenshot_urls: string[];
   finished_build: boolean;
+  other_ysws: boolean;
+  other_ysws_notes: string;
 }
 
 // Shared field parsing/validation for create + update. Returns an error code
@@ -386,6 +388,8 @@ export function parseProjectBody(
   // distinct from needsFunding, which by definition happens before a build
   // exists. Hardware-only, same reasoning as needsFunding above.
   const finishedBuild = kind === "hardware" && body?.finishedBuild === true;
+  const otherYsws = body?.otherYsws === true;
+  const otherYswsNotes = String(body?.otherYswsNotes ?? "").trim().slice(0, 2000);
   return {
     fields: {
       name,
@@ -408,6 +412,8 @@ export function parseProjectBody(
       bom_url: bomUrl,
       cart_screenshot_urls: cartScreenshotUrls,
       finished_build: finishedBuild,
+      other_ysws: otherYsws,
+      other_ysws_notes: otherYsws ? otherYswsNotes : "",
     },
   };
 }
