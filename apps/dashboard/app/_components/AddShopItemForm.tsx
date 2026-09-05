@@ -35,15 +35,16 @@ export function AddShopItemForm({
   }
 
   // Typing a dollar amount fills the pixel price for you (pixelValueUsd is
-  // the same rate the game/shop use everywhere else) - the pixel field stays
-  // directly editable too, for fine-tuning or pasting a price someone already
-  // worked out in pixels.
+  // the same rate the game/shop use everywhere else), rounded UP to the
+  // nearest multiple of 5 - every shop price is a multiple of 5 by
+  // convention. The pixel field stays directly editable too, for
+  // fine-tuning or pasting a price someone already worked out in pixels.
   function onUsdChange(e: React.ChangeEvent<HTMLInputElement>) {
     const usd = e.target.value;
     setPriceUsd(usd);
     const n = Number(usd);
     if (usd.trim() !== "" && Number.isFinite(n) && n >= 0)
-      setPrice(String(Math.round(n / config.economy.pixelValueUsd)));
+      setPrice(String(Math.ceil(n / config.economy.pixelValueUsd / 5) * 5));
   }
 
   function toggleRegion(r: ShopRegion) {
