@@ -4,15 +4,64 @@ import { supabase } from "../db/client.js";
 import { activeEvents } from "../events.js";
 import { levelFor } from "../xp.js";
 import { addNotification } from "./notifications.js";
+import { decryptPII } from "../crypto.js";
 
 const router = Router();
 
 const SHOP_REGIONS = ["US", "ASIA", "NORTH_AMERICA", "SOUTH_AMERICA", "EUROPE", "INDIA", "AFRICA"];
 
+// ISO 3166-1 alpha-2 -> shop region, from Hack Club Auth's address.country
+// (confirmed live: it sends 2-letter codes, not full names). Only a first
+// guess for a player who's never picked a region themselves (see
+// /api/shop/region below) - anything unmapped falls back to US, same as
+// before this existed.
+const COUNTRY_REGION: Record<string, string> = {
+  IN: "INDIA",
+  US: "US",
+  // North America (non-US) + Central America/Caribbean
+  CA: "NORTH_AMERICA", MX: "NORTH_AMERICA", GT: "NORTH_AMERICA", HN: "NORTH_AMERICA",
+  SV: "NORTH_AMERICA", NI: "NORTH_AMERICA", CR: "NORTH_AMERICA", PA: "NORTH_AMERICA",
+  DO: "NORTH_AMERICA", JM: "NORTH_AMERICA", TT: "NORTH_AMERICA", BS: "NORTH_AMERICA",
+  BZ: "NORTH_AMERICA", CU: "NORTH_AMERICA",
+  // South America
+  BR: "SOUTH_AMERICA", CO: "SOUTH_AMERICA", CL: "SOUTH_AMERICA", PE: "SOUTH_AMERICA",
+  AR: "SOUTH_AMERICA", VE: "SOUTH_AMERICA", EC: "SOUTH_AMERICA", BO: "SOUTH_AMERICA",
+  PY: "SOUTH_AMERICA", UY: "SOUTH_AMERICA", GY: "SOUTH_AMERICA", SR: "SOUTH_AMERICA",
+  // Europe (incl. UK, and Turkey by shipping convention)
+  GB: "EUROPE", DE: "EUROPE", PL: "EUROPE", BE: "EUROPE", NL: "EUROPE", IT: "EUROPE",
+  SK: "EUROPE", HU: "EUROPE", RO: "EUROPE", CZ: "EUROPE", ES: "EUROPE", SE: "EUROPE",
+  MK: "EUROPE", BG: "EUROPE", FI: "EUROPE", NO: "EUROPE", GR: "EUROPE", PT: "EUROPE",
+  LV: "EUROPE", RS: "EUROPE", HR: "EUROPE", AT: "EUROPE", DK: "EUROPE", FR: "EUROPE",
+  IE: "EUROPE", CH: "EUROPE", LT: "EUROPE", EE: "EUROPE", SI: "EUROPE", LU: "EUROPE",
+  MT: "EUROPE", CY: "EUROPE", IS: "EUROPE", UA: "EUROPE", TR: "EUROPE",
+  // Africa
+  EG: "AFRICA", NG: "AFRICA", MA: "AFRICA", TN: "AFRICA", GH: "AFRICA", DZ: "AFRICA",
+  ZA: "AFRICA", MU: "AFRICA", RE: "AFRICA", KE: "AFRICA", ET: "AFRICA", TZ: "AFRICA",
+  UG: "AFRICA", ZM: "AFRICA", ZW: "AFRICA", SN: "AFRICA", CI: "AFRICA", CM: "AFRICA",
+  // Asia + Middle East + Oceania (no dedicated bucket for the latter two)
+  PK: "ASIA", PH: "ASIA", SG: "ASIA", BD: "ASIA", ID: "ASIA", IL: "ASIA", AE: "ASIA",
+  QA: "ASIA", MY: "ASIA", HK: "ASIA", VN: "ASIA", TW: "ASIA", NP: "ASIA", JP: "ASIA",
+  KR: "ASIA", CN: "ASIA", TH: "ASIA", SA: "ASIA", KW: "ASIA", BH: "ASIA", OM: "ASIA",
+  JO: "ASIA", LB: "ASIA", AU: "ASIA", NZ: "ASIA",
+};
+
 async function regionFor(userId: string): Promise<string> {
-  const { data } = await supabase.from("users").select("region").eq("id", userId).maybeSingle();
-  const region = (data as { region?: string } | null)?.region;
-  return region && SHOP_REGIONS.includes(region) ? region : "US";
+  const { data } = await supabase
+    .from("users")
+    .select("region, region_auto, address_country")
+    .eq("id", userId)
+    .maybeSingle();
+  const row = data as
+    | { region?: string; region_auto?: boolean; address_country?: string }
+    | null;
+  // region defaults to 'US' NOT NULL, so a stored 'US' alone can't tell a
+  // real pick apart from nobody ever touching it - region_auto is what
+  // actually says whether it's safe to recompute from the address.
+  if (row?.region_auto === false && row.region && SHOP_REGIONS.includes(row.region)) {
+    return row.region;
+  }
+  const country = decryptPII(row?.address_country).trim().toUpperCase();
+  return COUNTRY_REGION[country] ?? "US";
 }
 
 // Base columns plus unlock_xp (trophies), region and category. unlock_xp/
@@ -226,7 +275,10 @@ router.post("/api/shop/region", async (req, res) => {
   if (!SHOP_REGIONS.includes(region))
     return res.status(400).json({ ok: false, error: "invalid_region" });
 
-  const { error } = await supabase.from("users").update({ region }).eq("id", session.userId);
+  const { error } = await supabase
+    .from("users")
+    .update({ region, region_auto: false })
+    .eq("id", session.userId);
   if (error) {
     console.error("[shop] region update failed", error);
     return res.status(500).json({ ok: false });
