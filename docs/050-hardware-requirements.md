@@ -50,15 +50,15 @@ If they have to open even a single file, your README is not doing its job. At mi
 
 ## 2. A fully finished design:
 
-Whoa… A lot at first glance! Breathe. You got this. It’s simpler than it seems\!
+Whoa… A lot at first glance! Breathe. You got this. It’s simpler than it seems!
 
-For a design to be 100% finished, someone else should be able to read your repo, understand, and replicate it… i.e. You need to include all files and instructions\!
+For a design to be 100% finished, someone else should be able to read your repo, understand, and replicate it… i.e. You need to include all files and instructions!
 
 A project that only you can make is not [**shipped**](/docs/what-is-shipping). It only lives in your head.
 
-The design should also reasonably actually work\! Of course, you can’t be sure until building it, but stuff like floating parts, incomplete firmware, or parts attached with “magic” is a no-go.
+The design should also reasonably actually work! Of course, you can’t be sure until building it, but stuff like floating parts, incomplete firmware, or parts attached with “magic” is a no-go.
 
- ### At minimum, your project should be:
+  **At minimum, your project should be:**
 
 -  Original, custom design by you. **Not by AI, not a direct copy of a tutorial, or someone else.**
 -  Has a complete CAD assembly, with all components (including electronics).
