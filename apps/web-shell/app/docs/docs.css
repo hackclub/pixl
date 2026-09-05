@@ -77,9 +77,14 @@ body { overflow-y: auto; }
   .doc p { color: var(--dim); line-height: 1.75; margin: 16px 0; font-size: 16px; }
   .doc .lead { font-size: 19px; color: var(--ink); line-height: 1.6; }
   .doc ul { margin: 15px 0; padding: 0; list-style: none; }
+  .doc ol { margin: 15px 0; padding: 0; list-style: none; counter-reset: doc-ol; }
   .doc li { color: var(--dim); line-height: 1.65; padding: 6px 0 6px 22px; position: relative; font-size: 15.5px; }
-  .doc li::before { content: ""; position: absolute; left: 3px; top: 13px; width: 7px; height: 7px;
+  .doc ul > li::before { content: ""; position: absolute; left: 3px; top: 13px; width: 7px; height: 7px;
     background: var(--accent); border: 1px solid var(--stroke); border-radius: 0; }
+  .doc ol > li { counter-increment: doc-ol; padding-left: 26px; }
+  .doc ol > li::before { content: counter(doc-ol) "."; position: absolute; left: 0; top: 6px;
+    color: var(--accent); font-family: var(--pixel); font-size: 13px; }
+  .doc hr { border: none; border-top: var(--bw) solid var(--stroke); margin: 32px 0; }
   .doc a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px;
     text-decoration-thickness: 2px; text-decoration-color: var(--accent); }
   .doc a:hover { background: var(--accent); color: var(--panel-deep); }

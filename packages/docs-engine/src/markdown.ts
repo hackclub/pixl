@@ -29,7 +29,15 @@ function inline(raw: string): string {
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
     .replace(/(^|[^*])\*([^*\s][^*]*?)\*/g, "$1<i>$2</i>")
-    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>');
+    // Underscore italics (_text_) - only at a word boundary (space/paren/
+    // start before, space/punctuation/end after) so it doesn't fire inside
+    // snake_case identifiers in prose.
+    .replace(/(^|[\s(])_([^_\s][^_]*?)_(?=[\s.,!?)]|$)/g, "$1<i>$2</i>")
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>')
+    // Markdown escape syntax (\! \- \. etc) - without this, a literal
+    // backslash shows up in the rendered page instead of the punctuation it
+    // was there to protect (e.g. "seems\!" a few docs write for emphasis).
+    .replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\]^_`{|}~])/g, "$1");
 }
 
 function parseFrontmatter(src: string): { meta: Frontmatter; rest: string } {
@@ -104,6 +112,17 @@ export function render(src: string, tokens: Record<string, string>): Doc {
       continue;
     }
 
+    // A bare "---" or "***" line is a section divider, not a heading
+    // underline (this renderer never uses Setext headings) - every doc uses
+    // this to break up sections, so without it every one of them showed a
+    // literal "---" line instead of a rule.
+    if (/^(-{3,}|\*{3,})\s*$/.test(line)) {
+      closeList();
+      html += "<hr>\n";
+      i++;
+      continue;
+    }
+
     if (/^\|/.test(line)) {
       closeList();
       const rows: string[][] = [];
@@ -121,7 +140,10 @@ export function render(src: string, tokens: Record<string, string>): Doc {
       continue;
     }
 
-    const heading = line.match(/^(#{1,3})\s+(.*)$/);
+    // Up to 3 leading spaces still counts as a heading (standard Markdown
+    // behavior) - a stray indent shouldn't silently demote a heading to a
+    // plain paragraph with visible "###" in it.
+    const heading = line.match(/^ {0,3}(#{1,3})\s+(.*)$/);
     if (heading) {
       closeList();
       const level = heading[1]!.length;
@@ -137,6 +159,17 @@ export function render(src: string, tokens: Record<string, string>): Doc {
       } else {
         html += `<h3>${inline(text)}</h3>\n`;
       }
+      i++;
+      continue;
+    }
+
+    if (/^\s*\d+\.\s+/.test(line)) {
+      if (list !== "ol") {
+        closeList();
+        html += "<ol>\n";
+        list = "ol";
+      }
+      html += `<li>${inline(line.replace(/^\s*\d+\.\s+/, ""))}</li>\n`;
       i++;
       continue;
     }
@@ -161,7 +194,7 @@ export function render(src: string, tokens: Record<string, string>): Doc {
     closeList();
     const para = [line];
     i++;
-    while (i < lines.length && !/^\s*$/.test(lines[i]!) && !/^(#{1,3}\s|```|:::|\||\s*[-*]\s)/.test(lines[i]!)) {
+    while (i < lines.length && !/^\s*$/.test(lines[i]!) && !/^( {0,3}#{1,3}\s|```|:::|\||\s*[-*]\s|\s*\d+\.\s|-{3,}\s*$|\*{3,}\s*$)/.test(lines[i]!)) {
       para.push(lines[i++]!);
     }
     const lead = para[0]!.startsWith("^ ") ? ' class="lead"' : "";
