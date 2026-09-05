@@ -3300,21 +3300,41 @@ export async function updateShopItemPrices(formData: FormData): Promise<void> {
   revalidatePath("/shop");
 }
 
+// Hide/show an item. Regular items have one row per region (same name), and
+// the dashboard only shows one region tab at a time - toggling just the row
+// you're looking at left every other region's copy untouched, so "hiding" an
+// item never actually hid it anywhere else. Match updateShopItemPrices's
+// by-name-across-regions pattern instead. Trophies (unlock_xp > 0) aren't
+// region-scoped and only ever have one row, so they keep the simple
+// single-row toggle.
 export async function toggleShopItem(formData: FormData): Promise<void> {
   await requirePerm("shop");
   const id = Number(formData.get("id") ?? 0);
   const active = String(formData.get("active") ?? "") === "1";
   if (!id) return;
-  const { data: before } = await db.from("shop_items").select("*").eq("id", id).maybeSingle();
+  const { data: target } = await db
+    .from("shop_items")
+    .select("name, unlock_xp")
+    .eq("id", id)
+    .maybeSingle();
+  if (!target) return;
+
+  const isTrophy = Number(target.unlock_xp) > 0;
+  const { data: before } = await db
+    .from("shop_items")
+    .select("*")
+    .eq(isTrophy ? "id" : "name", isTrophy ? id : target.name)
+    .eq("unlock_xp", isTrophy ? target.unlock_xp : 0);
+
   const { data: after, error } = await db
     .from("shop_items")
     .update({ active })
-    .eq("id", id)
-    .select("*")
-    .single();
+    .eq(isTrophy ? "id" : "name", isTrophy ? id : target.name)
+    .eq("unlock_xp", isTrophy ? target.unlock_xp : 0)
+    .select("*");
   if (error) throw new Error(error.message);
   if (before && after) {
-    await notifyShopUpdates([before as ShopRowSnapshot], [after as ShopRowSnapshot]);
+    await notifyShopUpdates(before as ShopRowSnapshot[], after as ShopRowSnapshot[]);
   }
   revalidatePath("/shop");
 }
