@@ -29,6 +29,7 @@ import {
   projectPixelTotal,
   lifetimeRe,
   creditReviewerPixels,
+  type CreditReviewerResult,
   activeDashEvents,
   communityGoalShipCount,
   addReportViewer,
@@ -237,8 +238,7 @@ async function insertReviewAudit(
 // Rushed reviews are cut 30% (50% if doubly rushed); a first pass that the
 // final reviewer overturns is cut 50%, and one whose hours get slashed is cut
 // 30%. First-pass payouts stay pending until the final verdict settles.
-// Set to 0 for now, pending a decision on reviewer payouts.
-const PAYOUT_PIXELS = 0;
+const PAYOUT_PIXELS = 3;
 
 function payoutFlagCut(formData: FormData, verdict: string): { pct: number; reason: string } {
   const total = readSeconds(formData.get("totalSeconds"));
@@ -268,7 +268,7 @@ async function dmPayout(
   full: number,
   pct: number,
   reason: string,
-  credited: boolean,
+  credited: CreditReviewerResult,
 ): Promise<void> {
   const dollars = `$${(full * config.economy.pixelValueUsd).toFixed(2)}`;
   let text =
@@ -276,7 +276,10 @@ async function dmPayout(
       ? `You earned ${paid} pixels (${dollars}) for reviewing "${projectName}". Thanks for keeping the queue moving!`
       : `You earned ${paid} pixels for reviewing "${projectName}" , the ${dollars} payout was cut ${pct}%: ${reason}.`;
   if (full > PAYOUT_PIXELS) text += `\n\n⚡ Review Blitz bonus included!`;
-  if (!credited)
+  // Only actually true when it's true , a 100%-cut review (or any other
+  // reason `paid` rounds to 0) isn't a missing account, it's just nothing to
+  // credit this time, and shouldn't tell the reviewer their account is broken.
+  if (credited === "no_account")
     text += `\n\nHeads up: there's no Pixl game account linked to your Slack, so the pixels couldn't be credited yet. Contact the team to get it sorted.`;
   await dmUser(slackId, text);
 }
@@ -302,7 +305,7 @@ async function recordSettledPayout(
     paid_pixels: paid,
     cut_pct: pct,
     cut_reason: reason,
-    credited,
+    credited: credited === "credited",
     settled_at: new Date().toISOString(),
   });
   if (error) {
@@ -372,7 +375,7 @@ async function settleFirstPassPayouts(
       .select("id");
     if (!claimed || claimed.length === 0) continue;
     const credited = await creditReviewerPixels(p.reviewer_slack_id, paid);
-    if (credited)
+    if (credited === "credited")
       await db.from("review_payouts").update({ credited: true }).eq("id", p.id);
     await dmPayout(p.reviewer_slack_id, projectName, paid, full, pct, reason, credited);
   }

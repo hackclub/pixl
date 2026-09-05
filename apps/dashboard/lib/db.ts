@@ -999,20 +999,26 @@ export interface ReviewPayoutRow {
   project_name?: string;
 }
 
-// Pay a reviewer into their linked game account. Returns false when no game
-// account matches the slack id , the payout row still records what's owed.
+// Pay a reviewer into their linked game account. The payout row records what's
+// owed regardless of outcome , this just reports why crediting did or didn't
+// happen, so the DM to the reviewer says the right thing: "no game account
+// linked" is only true when it's actually true, not whenever the amount
+// happens to round to 0 (a flat cut, or the base payout being 0 pre-decision).
+export type CreditReviewerResult = "credited" | "no_account" | "nothing_to_credit";
+
 export async function creditReviewerPixels(
   slackId: string,
   amount: number,
-): Promise<boolean> {
-  if (!slackId || amount <= 0) return false;
+): Promise<CreditReviewerResult> {
+  if (!slackId) return "no_account";
   const { data: user } = await db
     .from("users")
     .select("id")
     .eq("slack_id", slackId)
     .limit(1)
     .maybeSingle();
-  if (!user?.id) return false;
+  if (!user?.id) return "no_account";
+  if (amount <= 0) return "nothing_to_credit";
   const { error } = await db.rpc("adjust_user_pixels", {
     p_user_id: user.id,
     p_amount: amount,
@@ -1021,9 +1027,9 @@ export async function creditReviewerPixels(
   });
   if (error) {
     console.error("creditReviewerPixels", error.message);
-    return false;
+    return "no_account";
   }
-  return true;
+  return "credited";
 }
 
 export async function listReviewPayouts(
