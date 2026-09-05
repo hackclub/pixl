@@ -400,6 +400,41 @@ router.get("/api/shop/orders", async (req, res) => {
   res.json({ ok: true, orders: data ?? [] });
 });
 
+// Let a player cancel their own order and get their pixels back, as long as
+// fulfillment hasn't shipped it yet. Same cancel_shop_order RPC the dashboard's
+// admin cancel button uses (refund + status flip happen together in there, and
+// it's idempotent), just reached from the player's own Orders tab instead of
+// /fulfillment - p_by is tagged "(self-cancel)" so the fulfillment log can
+// tell the two apart.
+router.post("/api/shop/orders/:id/cancel", async (req, res) => {
+  const token = typeof req.query.token === "string" ? req.query.token : "";
+  const session = token ? verifySessionToken(token) : null;
+  if (!session) return res.status(401).json({ ok: false });
+
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ ok: false });
+
+  const { data: order } = await supabase
+    .from("shop_orders")
+    .select("user_id, status")
+    .eq("id", id)
+    .maybeSingle();
+  if (!order || order.user_id !== session.userId)
+    return res.status(404).json({ ok: false });
+  if (["shipped", "done", "cancelled"].includes(order.status as string))
+    return res.status(400).json({ ok: false, error: "not_cancellable" });
+
+  const { data: refunded, error } = await supabase.rpc("cancel_shop_order", {
+    p_order_id: id,
+    p_by: `${session.displayName} (self-cancel)`,
+  });
+  if (error) {
+    console.error("[shop] self-cancel failed", error);
+    return res.status(500).json({ ok: false });
+  }
+  res.json({ ok: true, refunded: Number(refunded ?? 0) });
+});
+
 // Buy a priced item with pixels. All the real checks (item on sale, affordable,
 // pixels deducted) happen inside buy_shop_item under a row lock, so a
 // double-click can't overspend. On success we open a pending order the team

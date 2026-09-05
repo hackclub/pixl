@@ -198,6 +198,13 @@
             ? `<div class="order-meta">Tracking <span class="order-track">${Pixl.esc(o.tracking)}</span><span class="muted">· DM'd to you</span></div>`
             : "";
 
+        // Cancellable up until it ships - once fulfillment marks it shipped
+        // (or it's already done/cancelled) there's nothing left to refund.
+        const cancellable = !["shipped", "done", "cancelled"].includes(o.status);
+        const cancelBtn = cancellable
+          ? `<button class="btn ghost" data-cancel="${o.id}" style="margin-left:auto">CANCEL &amp; REFUND</button>`
+          : "";
+
         return `
       <div class="panel order ${o.status === "cancelled" ? "cancelled" : ""}">
         <div class="order-head">
@@ -207,7 +214,30 @@
         </div>
         ${body}
         ${tracking}
+        ${cancelBtn ? `<div class="order-meta">${cancelBtn}</div>` : ""}
       </div>`;
+      }
+
+      async function cancelOrder(id, btn) {
+        if (!confirm("Cancel this order and get your pixels back?")) return;
+        btn.disabled = true;
+        btn.textContent = "CANCELLING…";
+        try {
+          const r = await Pixl.send("POST", `/api/shop/orders/${id}/cancel`);
+          if (!r.ok) {
+            Pixl.toast("Couldn't cancel that order, try again.", true);
+            btn.disabled = false;
+            btn.textContent = "CANCEL & REFUND";
+            return;
+          }
+          Pixl.toast(`Order cancelled, ${r.refunded} pixels refunded.`);
+          Pixl.loadWallet();
+          boot();
+        } catch (e) {
+          Pixl.toast("Couldn't cancel that order, try again.", true);
+          btn.disabled = false;
+          btn.textContent = "CANCEL & REFUND";
+        }
       }
 
       async function boot() {
@@ -225,7 +255,11 @@
           $("empty").hidden = false;
           return;
         }
+        $("empty").hidden = true;
         $("list").innerHTML = orders.map(orderCard).join("");
+        $("list").querySelectorAll("[data-cancel]").forEach((btn) => {
+          btn.addEventListener("click", () => cancelOrder(Number(btn.dataset.cancel), btn));
+        });
       }
       boot();
     </script>
