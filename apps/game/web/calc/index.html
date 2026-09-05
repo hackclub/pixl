@@ -219,11 +219,11 @@ const walletPromise = Pixl.loadWallet();
 let baseRe = 0;
 
 walletPromise.then((wallet) => {
-baseRe = (wallet && wallet.re) || 0;
+  baseRe = wallet ? wallet.re || 0 : 0;
 
-  $("c-re-count").textContent = baseRe > 0
-    ? `${Math.round(baseRe).toLocaleString()} RE available`
-    : "log in to use your base RE";
+  $("c-re-count").textContent = !wallet
+    ? "log in to use your base RE"
+    : `${Math.round(baseRe).toLocaleString()} RE available`;
 
   recalc();
 });
