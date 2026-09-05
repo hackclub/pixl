@@ -506,16 +506,25 @@ export function ReviewForm({
     };
   }, []);
 
-  // A submission only unmounts this component by actually navigating away,
-  // which only happens once reviewProject finishes and redirects - a request
-  // that never completes (network drop, the server pod getting replaced
-  // mid-deploy) leaves the reviewer stuck on this same page with the draft
-  // still intact, so they can just resubmit once it's back. A validation
-  // error redirects back to this same route too, so this only fires on a
-  // genuine success.
+  // Clearing on unmount was meant to fire "only once the submission actually
+  // succeeded and navigated away" (see the onSubmit handler below), but
+  // submittedRef flips to true the instant Submit is clicked - before we know
+  // whether the request even reached the server. A request that dies mid-flight
+  // (a redeploy killing the pod while the action is in-flight is exactly this)
+  // never redirects, but Next.js still detects the stale build and forces a
+  // reload to fetch the new one - which unmounts this component first, with
+  // submittedRef already true, wiping a draft that was never actually
+  // submitted. Comparing the pathname at mount vs. at unmount tells the two
+  // apart: a real success redirects to a different project (or back to the
+  // queue), changing the pathname; a forced reload after a dead request stays
+  // on this same URL, so the draft survives it.
+  const mountedPathname = useRef<string | null>(null);
   useEffect(() => {
+    mountedPathname.current = window.location.pathname;
     return () => {
-      if (submittedRef.current) clearDraft();
+      if (submittedRef.current && window.location.pathname !== mountedPathname.current) {
+        clearDraft();
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
