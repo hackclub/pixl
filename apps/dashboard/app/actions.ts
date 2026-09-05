@@ -2115,6 +2115,22 @@ export async function releaseReviewHold(formData: FormData): Promise<void> {
   revalidatePath("/review");
 }
 
+// Keeps an active review's claim (reviewing_by/reviewing_at, see claimReview
+// and REVIEW_LOCK_MS in lib/db.ts) alive while the reviewer is actually still
+// on the detail page - called periodically by the ReviewHeartbeat client
+// component. Only ever refreshes a claim the caller already holds (the
+// reviewing_by match), so it can neither steal someone else's claim nor
+// resurrect one that already expired and was picked up by someone else.
+export async function heartbeatReview(projectId: number): Promise<void> {
+  const access = await requirePerm("review");
+  if (!projectId) return;
+  await db
+    .from("projects")
+    .update({ reviewing_at: new Date().toISOString() })
+    .eq("id", projectId)
+    .eq("reviewing_by", access.session.slackId);
+}
+
 export async function banIdea(formData: FormData): Promise<void> {
   const access = await requirePerm("ban");
   const by = actorName(access);

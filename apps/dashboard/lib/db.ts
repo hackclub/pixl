@@ -504,8 +504,16 @@ async function hydrateHours(projects: ShippedProject[]): Promise<ShippedProject[
   return projects;
 }
 
-// A project claimed by another reviewer stays hidden from the queue for this long.
-export const REVIEW_LOCK_MS = 15 * 60 * 1000;
+// A project claimed by another reviewer stays hidden from the queue for this
+// long. A real review (especially hardware, with BOM/photos to go through)
+// can easily run past 15 minutes, and the reviewer's own page load is the
+// only thing that ever refreshed this timestamp - so a genuinely active
+// review would silently drop its lock partway through, letting a second
+// reviewer pick up the same project. Raised to 30 minutes and paired with a
+// heartbeat (ReviewHeartbeat component + heartbeatReview action) that
+// refreshes this while the holder is still on the page, so the lock only
+// ever expires once they've actually left.
+export const REVIEW_LOCK_MS = 30 * 60 * 1000;
 
 function claimedByOther(p: ShippedProject, viewer?: string): boolean {
   if (!p.reviewing_by || p.reviewing_by === viewer) return false;

@@ -34,6 +34,7 @@ import {
 import { hackatimeCutoffUnix, hackatimeCutoffLabel } from "@/app/_generated/config";
 import { PendingButton } from "@/app/_components/PendingButton";
 import { ReviewDetailTabs } from "@/app/_components/ReviewDetailTabs";
+import { ReviewHeartbeat } from "@/app/_components/ReviewHeartbeat";
 import { LevelBadge, TypeBadge, ShipBadges, StatusBadge, BeaconBadge, FundingBadge } from "@/app/_components/ProjectBadges";
 import { slackHandle } from "@/lib/slack";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -296,6 +297,7 @@ export default async function ReviewDetail({
 
   return (
     <div>
+      {claim.ok && canReview && <ReviewHeartbeat projectId={projectId} />}
       <Link href="/review" className="text-sm text-brand font-medium hover:underline">
         ← Needs review
       </Link>
