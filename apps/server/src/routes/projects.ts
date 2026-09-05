@@ -157,6 +157,14 @@ router.get("/api/projects", async (req, res) => {
       trial_prize_name: p.sidequest_id
         ? (trialPrize.get(p.sidequest_id as number) ?? null)
         : null,
+      // Credited (possibly deflated) hours only become real once a project
+      // is actually approved , a raw `select("*")` above would otherwise
+      // leak whatever a first-pass reviewer proposed (or a needs_changes
+      // pass entered) straight into this list response, before the final
+      // pass that's allowed to change it. See the matching redaction on
+      // /api/projects/:id/timeline.
+      approved_hours: p.status === "approved" ? p.approved_hours : null,
+      first_pass_hours: p.status === "approved" ? p.first_pass_hours : null,
     })),
   });
 });
@@ -1185,9 +1193,14 @@ router.get("/api/projects/:id/timeline", async (req, res) => {
       verdict: a.verdict,
       note: a.note ?? "",
       claimedHours: a.claimed_hours ?? null,
-      // First-pass hours are only a proposal until a different second-pass
-      // reviewer confirms them , don't leak that number to the player early.
-      approvedHours: a.verdict?.startsWith("first_pass_") ? null : (a.approved_hours ?? null),
+      // Credited (possibly deflated) hours are only real once a project is
+      // actually approved , first-pass hours are just a proposal until a
+      // different second-pass reviewer confirms them, and a needs_changes
+      // verdict isn't final either (the next review pass can land on a
+      // different number). Showing either early spoils/misleads on what the
+      // player will actually be credited, so redact both until "approved".
+      approvedHours:
+        a.verdict === "approved" ? (a.approved_hours ?? null) : null,
     });
   if (proj?.shipped_at && ["shipped", "fraud_review", "second_review"].includes(proj.status))
     events.push({ kind: "shipped", at: proj.shipped_at });
