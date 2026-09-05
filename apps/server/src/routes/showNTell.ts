@@ -105,15 +105,24 @@ router.post("/api/show-n-tell/entries/:id/vote", async (req, res) => {
   const entryId = Number(req.params.id);
   if (!Number.isFinite(entryId)) return res.status(400).json({ ok: false });
 
+  // pgCompat resolves an embedded relation's FK by singularizing the related
+  // TABLE name ("show_n_tell_rounds" -> "show_n_tell_round_id"), which doesn't
+  // match this table's actual column (round_id) - that embed silently errors
+  // (never checked below) and made every vote fail with round_closed. Two
+  // plain queries instead, same workaround already used in the GET handler
+  // above for the same reason.
   const { data: entry } = await supabase
     .from("show_n_tell_entries")
-    .select("id, round_id, show_n_tell_rounds(is_open)")
+    .select("id, round_id")
     .eq("id", entryId)
     .maybeSingle();
-  const roundOpen = !!(entry as { show_n_tell_rounds?: { is_open?: boolean } } | null)
-    ?.show_n_tell_rounds?.is_open;
-  if (!entry || !roundOpen)
-    return res.status(400).json({ ok: false, error: "round_closed" });
+  if (!entry) return res.status(400).json({ ok: false, error: "round_closed" });
+  const { data: round } = await supabase
+    .from("show_n_tell_rounds")
+    .select("is_open")
+    .eq("id", entry.round_id as number)
+    .maybeSingle();
+  if (!round?.is_open) return res.status(400).json({ ok: false, error: "round_closed" });
 
   const { data: existing } = await supabase
     .from("show_n_tell_votes")
