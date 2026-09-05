@@ -253,27 +253,15 @@ async function insertReviewAudit(
 
 // Base pixels per review verdict are admin-configurable (review_payout_settings,
 // migration 0162 - edited from the Admins page), replacing what used to be a
-// flat PAYOUT_PIXELS=3-on-approval-only constant. Rushed reviews are cut 30%
-// (50% if doubly rushed); a first pass that the final reviewer overturns is
-// cut 50%, and one whose hours get slashed is cut 30%. First-pass payouts
-// stay pending until the final verdict settles.
+// flat PAYOUT_PIXELS=3-on-approval-only constant. Every review pays this rate
+// in full , there is no cut for a rushed review, an unopened repo, an
+// overturned first pass, or a sharp hours correction (removed 2026-09-05: a
+// reviewer's payout should never depend on how the case turned out later).
+// First-pass payouts stay pending until the final verdict settles.
 function payoutVerdictKey(verdict: string): "approved" | "needs_changes" | null {
   if (verdict === "approved" || verdict === "first_pass_approved") return "approved";
   if (verdict === "needs_changes") return "needs_changes";
   return null;
-}
-
-function payoutFlagCut(formData: FormData, verdict: string): { pct: number; reason: string } {
-  const total = readSeconds(formData.get("totalSeconds"));
-  const repoOpened = formData.get("repoOpened") === "1";
-  const reasons: string[] = [];
-  if (total > 0 && total < 60) reasons.push("review took under a minute");
-  if ((verdict === "approved" || verdict === "first_pass_approved") && !repoOpened)
-    reasons.push("repo never opened");
-  return {
-    pct: reasons.length >= 2 ? 50 : reasons.length === 1 ? 30 : 0,
-    reason: reasons.join("; "),
-  };
 }
 
 // During a Review Blitz event every review's base payout is multiplied, so
@@ -298,20 +286,15 @@ async function dmPayout(
   projectName: string,
   paid: number,
   full: number,
-  pct: number,
-  reason: string,
   credited: CreditReviewerResult,
   blitzApplied: boolean,
 ): Promise<void> {
   const dollars = `$${(full * config.economy.pixelValueUsd).toFixed(2)}`;
-  let text =
-    pct === 0
-      ? `You earned ${paid} pixels (${dollars}) for reviewing "${projectName}". Thanks for keeping the queue moving!`
-      : `You earned ${paid} pixels for reviewing "${projectName}" , the ${dollars} payout was cut ${pct}%: ${reason}.`;
+  let text = `You earned ${paid} pixels (${dollars}) for reviewing "${projectName}". Thanks for keeping the queue moving!`;
   if (blitzApplied) text += `\n\n⚡ Review Blitz bonus included!`;
-  // Only actually true when it's true , a 100%-cut review (or any other
-  // reason `paid` rounds to 0) isn't a missing account, it's just nothing to
-  // credit this time, and shouldn't tell the reviewer their account is broken.
+  // Only actually true when it's true , "nothing to credit" (the configured
+  // rate is 0) isn't a missing account, it's just nothing to credit this
+  // time, and shouldn't tell the reviewer their account is broken.
   if (credited === "no_account")
     text += `\n\nHeads up: there's no Pixl game account linked to your Slack, so the pixels couldn't be credited yet. Contact the team to get it sorted.`;
   await dmUser(slackId, text);
@@ -327,14 +310,11 @@ async function recordSettledPayout(
   projectId: number,
   access: AdminAccess,
   verdict: string,
-  formData: FormData,
   projectName: string,
 ): Promise<void> {
   const { full, blitzApplied } = await payoutBasePixels(verdict);
   if (full <= 0) return;
-  const { pct, reason } = payoutFlagCut(formData, verdict);
-  const paid = Math.round((full * (100 - pct)) / 100);
-  const credited = await creditReviewerPixels(access.session.slackId, paid);
+  const credited = await creditReviewerPixels(access.session.slackId, full);
   const { error } = await db.from("review_payouts").insert({
     project_id: projectId,
     reviewer: actorName(access),
@@ -342,9 +322,7 @@ async function recordSettledPayout(
     verdict,
     status: "paid",
     full_pixels: full,
-    paid_pixels: paid,
-    cut_pct: pct,
-    cut_reason: reason,
+    paid_pixels: full,
     credited: credited === "credited",
     settled_at: new Date().toISOString(),
   });
@@ -352,17 +330,12 @@ async function recordSettledPayout(
     console.error("review payout insert failed", error.message);
     return;
   }
-  await dmPayout(access.session.slackId, projectName, paid, full, pct, reason, credited, blitzApplied);
+  await dmPayout(access.session.slackId, projectName, full, full, credited, blitzApplied);
 }
 
-async function recordPendingPayout(
-  projectId: number,
-  access: AdminAccess,
-  formData: FormData,
-): Promise<void> {
+async function recordPendingPayout(projectId: number, access: AdminAccess): Promise<void> {
   const { full, blitzApplied } = await payoutBasePixels("first_pass_approved");
   if (full <= 0) return;
-  const { pct, reason } = payoutFlagCut(formData, "first_pass_approved");
   const { error } = await db.from("review_payouts").insert({
     project_id: projectId,
     reviewer: actorName(access),
@@ -370,57 +343,38 @@ async function recordPendingPayout(
     verdict: "first_pass_approved",
     status: "pending",
     full_pixels: full,
-    cut_pct: pct,
-    cut_reason: reason,
     blitz_applied: blitzApplied,
   });
   if (error) console.error("review payout insert failed", error.message);
 }
 
 // Settle every pending first-pass payout on a project once the final verdict
-// lands. The transition to 'paid' is guarded on the row still being pending so
-// a double-submit can never double-pay.
-async function settleFirstPassPayouts(
-  projectId: number,
-  projectName: string,
-  overturned: boolean,
-  hoursSlashed: boolean,
-): Promise<void> {
+// lands, always at the full locked-in rate , regardless of whether the final
+// reviewer agreed or cut the hours. The transition to 'paid' is guarded on
+// the row still being pending so a double-submit can never double-pay.
+async function settleFirstPassPayouts(projectId: number, projectName: string): Promise<void> {
   const { data: pending } = await db
     .from("review_payouts")
-    .select("id, reviewer_slack_id, cut_pct, cut_reason, full_pixels, blitz_applied")
+    .select("id, reviewer_slack_id, full_pixels, blitz_applied")
     .eq("project_id", projectId)
     .eq("status", "pending");
   for (const p of pending ?? []) {
-    let pct = Number(p.cut_pct) || 0;
-    const reasons: string[] = p.cut_reason ? [p.cut_reason] : [];
-    if (overturned) {
-      pct = Math.max(pct, 50);
-      reasons.push("verdict overturned by the final reviewer");
-    } else if (hoursSlashed) {
-      pct = Math.max(pct, 30);
-      reasons.push("credited hours cut sharply by the final reviewer");
-    }
-    const reason = reasons.join("; ");
     const full = Number(p.full_pixels) || 0;
-    const paid = Math.round((full * (100 - pct)) / 100);
     const { data: claimed } = await db
       .from("review_payouts")
       .update({
         status: "paid",
-        paid_pixels: paid,
-        cut_pct: pct,
-        cut_reason: reason,
+        paid_pixels: full,
         settled_at: new Date().toISOString(),
       })
       .eq("id", p.id)
       .eq("status", "pending")
       .select("id");
     if (!claimed || claimed.length === 0) continue;
-    const credited = await creditReviewerPixels(p.reviewer_slack_id, paid);
+    const credited = await creditReviewerPixels(p.reviewer_slack_id, full);
     if (credited === "credited")
       await db.from("review_payouts").update({ credited: true }).eq("id", p.id);
-    await dmPayout(p.reviewer_slack_id, projectName, paid, full, pct, reason, credited, !!p.blitz_applied);
+    await dmPayout(p.reviewer_slack_id, projectName, full, full, credited, !!p.blitz_applied);
   }
 }
 
@@ -912,7 +866,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
     // Only a proposed approval can ever turn into a paid review , a proposed
     // ban never gets a pending payout row to begin with, instead of creating
     // one just to void it later if the final reviewer confirms the ban.
-    if (!own && proposedKey === "approved") await recordPendingPayout(projectId, access, formData);
+    if (!own && proposedKey === "approved") await recordPendingPayout(projectId, access);
     if (proposedKey === "approved") {
       await notifyOwner(
         project.user_id,
@@ -942,11 +896,6 @@ export async function reviewProject(formData: FormData): Promise<void> {
     redirect(`${back}?error=${encodeURIComponent("Only a final reviewer can decide this stage.")}`);
   if (stage === "second_review" && !access.isSuper && current.first_pass_by && current.first_pass_by === by)
     redirect(`${back}?error=${encodeURIComponent("A different reviewer must do the final pass.")}`);
-
-  const proposed = (current.first_pass_verdict as string | null) ?? null;
-  const finalKey = verdict === "ban" ? "banned" : verdict;
-  // The first pass gets docked if the final reviewer lands on a different call.
-  const overturned = stage === "second_review" && proposed != null && proposed !== finalKey;
 
   // Request changes , bounce back to the maker.
   if (verdict === "needs_changes") {
@@ -978,7 +927,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
     // Pays out only when an admin has set needs_changes_pixels above 0 (see
     // updateReviewPayoutSettings) - 0 keeps the historical "only approvals
     // pay" behavior with no special-casing here.
-    if (!own) await recordSettledPayout(projectId, access, "needs_changes", formData, project.name);
+    if (!own) await recordSettledPayout(projectId, access, "needs_changes", project.name);
     await notifyOwner(
       project.user_id,
       "Changes requested",
@@ -1068,13 +1017,8 @@ export async function reviewProject(formData: FormData): Promise<void> {
   }
   await insertReviewAudit(formData, projectId, project.user_id, by, "approved", note, claimedHours, approvedHours);
 
-  if (stage === "second_review") {
-    const fpHours =
-      current.first_pass_hours != null ? Number(current.first_pass_hours) : claimedHours;
-    const hoursSlashed = fpHours > 0 && (approvedHours ?? claimedHours) < fpHours * 0.7;
-    await settleFirstPassPayouts(projectId, project.name, overturned, hoursSlashed);
-  }
-  if (!own) await recordSettledPayout(projectId, access, "approved", formData, project.name);
+  if (stage === "second_review") await settleFirstPassPayouts(projectId, project.name);
+  if (!own) await recordSettledPayout(projectId, access, "approved", project.name);
 
   // Collected up front so each beneficiary's referral check can see who else
   // is being credited on this same project , see the referrerRidingAlong
@@ -1618,7 +1562,7 @@ export async function sendBackToFirstPass(formData: FormData): Promise<void> {
   }
 
   if (voidPayout) await voidFirstPassPayouts(projectId);
-  else await settleFirstPassPayouts(projectId, project.name, false, false);
+  else await settleFirstPassPayouts(projectId, project.name);
 
   const claimedHours = await claimedHoursFor(projectId);
   const { error: auditError } = await db.from("review_audits").insert({
