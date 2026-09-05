@@ -159,8 +159,16 @@ export default async function ReviewDetail({
   const claimHandle = !claim.ok && claim.by ? await slackHandle(claim.by) : null;
 
   const hackatimeProjects = p.hackatime_projects ?? [];
+  // approved_hours is a reviewer's per-entry deflation set from the Journals
+  // tab (see setJournalHours in app/actions.ts) - null means "use the
+  // player's own claimed hours for this entry", so it's a fallback, not a
+  // separate number. Everything below (hours, payoutHours, the Credited
+  // Hours default in ReviewForm) derives from this, so editing one entry's
+  // approved hours immediately changes the whole page's totals.
   const journalHours =
-    Math.round(journals.reduce((s, j) => s + (Number(j.hours) || 0), 0) * 10) / 10;
+    Math.round(
+      journals.reduce((s, j) => s + (Number(j.approved_hours ?? j.hours) || 0), 0) * 10,
+    ) / 10;
   const rawTrackedHours = Math.round(((p.hackatime_seconds ?? 0) / 3600) * 10) / 10;
   // For a hardware ship, hackatime_seconds is never pure Hackatime time, the
   // ship route (projects.ts: trackedSeconds = htSeconds + journalSeconds)
@@ -198,7 +206,7 @@ export default async function ReviewDetail({
       Math.round(
         journals
           .filter((j) => j.user_id === c.user_id)
-          .reduce((s, j) => s + (Number(j.hours) || 0), 0) * 10,
+          .reduce((s, j) => s + (Number(j.approved_hours ?? j.hours) || 0), 0) * 10,
       ) / 10;
     const cHackatimeHours = Math.round(((c.hackatime_seconds ?? 0) / 3600) * 10) / 10;
     return {
@@ -658,6 +666,7 @@ export default async function ReviewDetail({
           </div>
 
           <ReviewDetailTabs
+            projectId={p.id}
             commits={commits}
             journals={journals}
             reviewAudits={reviewAudits}

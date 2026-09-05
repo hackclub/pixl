@@ -8,6 +8,9 @@ import type { YswsShip } from "@/lib/ysws";
 import { CommitList } from "@/app/_components/CommitList";
 import { renderMarkdown } from "@/lib/markdown";
 import { HackatimePanel } from "@/app/_components/HackatimePanel";
+import { setJournalHours } from "@/app/actions";
+import { PendingButton } from "@/app/_components/PendingButton";
+import { Input } from "@/components/ui/input";
 import { parseAuditNote, type AuditHeader } from "@/lib/auditNote";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -71,6 +74,7 @@ function isGithubUrl(url: string | null): url is string {
 }
 
 export function ReviewDetailTabs({
+  projectId,
   commits,
   journals,
   reviewAudits,
@@ -80,6 +84,7 @@ export function ReviewDetailTabs({
   repoUrl,
   projectKind,
 }: {
+  projectId: number;
   commits: CommitResult;
   journals: JournalRow[];
   reviewAudits: ReviewAuditRow[];
@@ -170,30 +175,57 @@ export function ReviewDetailTabs({
                 No journal entries.
               </div>
             )}
-            {journals.map((j) => (
-              <div key={j.id} className="p-4">
-                <div className="flex items-center gap-3 mb-1">
-                  <Badge variant="secondary">
-                    {Math.round((Number(j.hours) || 0) * 10) / 10}h
-                  </Badge>
-                  {j.edited_at && (
-                    <span className="text-xs text-muted-foreground">
-                      edited {new Date(j.edited_at).toLocaleString()}
+            {journals.map((j) => {
+              const claimed = Math.round((Number(j.hours) || 0) * 10) / 10;
+              const deflated = j.approved_hours != null && Number(j.approved_hours) !== claimed;
+              return (
+                <div key={j.id} className="p-4">
+                  <div className="flex items-center gap-3 mb-1 flex-wrap">
+                    <Badge variant={deflated ? "secondary" : "secondary"} className={deflated ? "line-through opacity-60" : ""}>
+                      {claimed}h claimed
+                    </Badge>
+                    {deflated && (
+                      <Badge variant="warning">
+                        {Math.round(Number(j.approved_hours) * 10) / 10}h credited
+                      </Badge>
+                    )}
+                    {j.edited_at && (
+                      <span className="text-xs text-muted-foreground">
+                        edited {new Date(j.edited_at).toLocaleString()}
+                      </span>
+                    )}
+                    <span className="text-xs text-muted-foreground ml-auto">
+                      {new Date(j.created_at).toLocaleString()}
                     </span>
+                  </div>
+                  {j.title && (
+                    <div className="text-sm font-semibold mb-1">{j.title}</div>
                   )}
-                  <span className="text-xs text-muted-foreground ml-auto">
-                    {new Date(j.created_at).toLocaleString()}
-                  </span>
+                  <div
+                    className="md text-sm break-words text-foreground/80 mb-2"
+                    dangerouslySetInnerHTML={{ __html: renderMarkdown(j.content) }}
+                  />
+                  <form action={setJournalHours} className="flex items-center gap-2">
+                    <input type="hidden" name="journalId" value={j.id} />
+                    <input type="hidden" name="projectId" value={projectId} />
+                    <label className="text-xs text-muted-foreground">Credit</label>
+                    <Input
+                      name="hours"
+                      type="number"
+                      min={0}
+                      max={claimed}
+                      step="0.1"
+                      defaultValue={j.approved_hours ?? claimed}
+                      className="w-20 h-7 text-xs"
+                    />
+                    <span className="text-xs text-muted-foreground">/ {claimed}h</span>
+                    <PendingButton variant="outline" size="sm" pendingText="Saving…">
+                      Set
+                    </PendingButton>
+                  </form>
                 </div>
-                {j.title && (
-                  <div className="text-sm font-semibold mb-1">{j.title}</div>
-                )}
-                <div
-                  className="md text-sm break-words text-foreground/80"
-                  dangerouslySetInnerHTML={{ __html: renderMarkdown(j.content) }}
-                />
-              </div>
-            ))}
+              );
+            })}
           </div>
         </TabsContent>
 

@@ -175,11 +175,19 @@ function readSeconds(value: FormDataEntryValue | null): number {
 
 async function claimedHoursFor(projectId: number): Promise<number> {
   const [{ data: journals }, { data: proj }] = await Promise.all([
-    db.from("project_journals").select("hours").eq("project_id", projectId),
+    db.from("project_journals").select("hours, approved_hours").eq("project_id", projectId),
     db.from("projects").select("hackatime_seconds, kind").eq("id", projectId).single(),
   ]);
+  // approved_hours is a reviewer's per-entry deflation (set from the
+  // Journals tab) - null means "use the player's own claimed hours for this
+  // entry", so it's the fallback, not a second number added on top.
   const journalHours =
-    Math.round((journals ?? []).reduce((s, j) => s + (Number(j.hours) || 0), 0) * 10) / 10;
+    Math.round(
+      (journals ?? []).reduce(
+        (s, j) => s + (Number(j.approved_hours ?? j.hours) || 0),
+        0,
+      ) * 10,
+    ) / 10;
   const rawTrackedHours =
     Math.round(((Number(proj?.hackatime_seconds) || 0) / 3600) * 10) / 10;
   // Hardware already folds journal hours into hackatime_seconds at ship time
@@ -413,13 +421,45 @@ async function claimedHoursForCollaborator(
 ): Promise<number> {
   const { data: journals } = await db
     .from("project_journals")
-    .select("hours")
+    .select("hours, approved_hours")
     .eq("project_id", projectId)
     .eq("user_id", userId);
   const journalHours =
-    Math.round((journals ?? []).reduce((s, j) => s + (Number(j.hours) || 0), 0) * 10) / 10;
+    Math.round(
+      (journals ?? []).reduce((s, j) => s + (Number(j.approved_hours ?? j.hours) || 0), 0) * 10,
+    ) / 10;
   const hackatimeHours = Math.round(((hackatimeSeconds || 0) / 3600) * 10) / 10;
   return hackatimeHours > 0 ? hackatimeHours : journalHours;
+}
+
+// Deflate (never inflate) a single journal entry's credited hours, straight
+// from the Journals tab - claimedHoursFor() and claimedHoursForCollaborator()
+// both fall back to approved_hours ?? hours per entry, so this immediately
+// changes the overall claimed/credited total shown and enforced everywhere
+// else on the review page, no separate "recompute total" step needed.
+export async function setJournalHours(formData: FormData): Promise<void> {
+  await requirePerm("review");
+  const journalId = Number(formData.get("journalId") ?? 0);
+  const projectId = Number(formData.get("projectId") ?? 0);
+  if (!journalId || !projectId) return;
+  const { data: journal } = await db
+    .from("project_journals")
+    .select("hours")
+    .eq("id", journalId)
+    .maybeSingle();
+  if (!journal) return;
+  const rawHours = Number(journal.hours) || 0;
+  const raw = String(formData.get("hours") ?? "").trim();
+  // Empty input clears the override back to the player's own claimed hours.
+  const approvedHours =
+    raw === "" ? null : Math.max(0, Math.min(rawHours, Math.round(Number(raw) * 10) / 10));
+  if (raw !== "" && !Number.isFinite(Number(raw))) return;
+  const { error } = await db
+    .from("project_journals")
+    .update({ approved_hours: approvedHours })
+    .eq("id", journalId);
+  if (error) throw new Error(error.message);
+  revalidatePath(`/review/${projectId}`);
 }
 
 async function acceptedCollaboratorUserIds(projectId: number): Promise<string[]> {

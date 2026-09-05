@@ -2298,6 +2298,9 @@ export interface JournalRow {
   title: string;
   content: string;
   hours: number;
+  // A reviewer's override for this one entry, set from the Journals tab -
+  // null means "use the player's own claimed `hours` above, unchanged".
+  approved_hours: number | null;
   created_at: string;
   edited_at: string | null;
 }
