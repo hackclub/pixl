@@ -42,6 +42,7 @@ export interface NavFlags {
   story: boolean;
   goals: boolean;
   news: boolean;
+  showNTell: boolean;
 }
 
 const GLYPHS = {
@@ -68,6 +69,7 @@ const GLYPHS = {
   story: "compass",
   goals: "bank",
   news: "message",
+  showNTell: "explore",
 } as const;
 
 type IconKey = keyof typeof GLYPHS;
@@ -184,6 +186,7 @@ export function Shell({
           show: nav.goals,
         },
         { href: "/news", label: "News", icon: "news", show: nav.news },
+        { href: "/show-n-tell", label: "Show & Tell", icon: "showNTell", show: nav.showNTell },
       ],
     },
     {

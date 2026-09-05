@@ -45,6 +45,7 @@ const PERM_INFO: Record<string, { label: string; desc: string }> = {
   ideas: { label: "Ideas", desc: "Moderate the ideas board" },
   tickets: { label: "Tickets", desc: "Answer and resolve help tickets" },
   lookup: { label: "Slack lookup", desc: "Look players up by Slack account" },
+  show_n_tell: { label: "Show & Tell", desc: "Open/close voting rounds and add entries" },
 };
 
 function PermToggles({

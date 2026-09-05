@@ -42,6 +42,8 @@
     { "source": "/account/:path*", "destination": "https://play.pixl.rsvp/account/:path*" },
     { "source": "/calc", "destination": "https://play.pixl.rsvp/calc/" },
     { "source": "/calc/:path*", "destination": "https://play.pixl.rsvp/calc/:path*" },
+    { "source": "/show-n-tell", "destination": "https://play.pixl.rsvp/show-n-tell/" },
+    { "source": "/show-n-tell/:path*", "destination": "https://play.pixl.rsvp/show-n-tell/:path*" },
 
     { "source": "/pixl.css", "destination": "https://play.pixl.rsvp/pixl.css" },
     { "source": "/pixl.js", "destination": "https://play.pixl.rsvp/pixl.js" },

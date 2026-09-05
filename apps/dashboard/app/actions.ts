@@ -4346,3 +4346,73 @@ export async function skipGuidelines() {
   );
   redirect("/review");
 }
+
+export async function createShowNTellRound(formData: FormData): Promise<void> {
+  const access = await requirePerm("show_n_tell");
+  const title = String(formData.get("title") ?? "").trim().slice(0, 120);
+  if (!title) return;
+  const { error } = await db.from("show_n_tell_rounds").insert({
+    title,
+    created_by: actorName(access),
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath("/show-n-tell");
+}
+
+// Only one round is open at a time (the DB's partial unique index backstops
+// this) - closing every other round first means the client just calls this
+// on whichever round it wants live, no separate "close the old one" step.
+export async function openShowNTellRound(formData: FormData): Promise<void> {
+  await requirePerm("show_n_tell");
+  const id = Number(formData.get("id") ?? 0);
+  if (!id) return;
+  const { error: closeError } = await db
+    .from("show_n_tell_rounds")
+    .update({ is_open: false, closed_at: new Date().toISOString() })
+    .eq("is_open", true)
+    .neq("id", id);
+  if (closeError) throw new Error(closeError.message);
+  const { error } = await db
+    .from("show_n_tell_rounds")
+    .update({ is_open: true, opened_at: new Date().toISOString(), closed_at: null })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/show-n-tell");
+}
+
+export async function closeShowNTellRound(formData: FormData): Promise<void> {
+  await requirePerm("show_n_tell");
+  const id = Number(formData.get("id") ?? 0);
+  if (!id) return;
+  const { error } = await db
+    .from("show_n_tell_rounds")
+    .update({ is_open: false, closed_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/show-n-tell");
+}
+
+export async function addShowNTellEntry(formData: FormData): Promise<void> {
+  const access = await requirePerm("show_n_tell");
+  const roundId = Number(formData.get("roundId") ?? 0);
+  const projectId = Number(formData.get("projectId") ?? 0);
+  if (!roundId || !projectId) return;
+  const { error } = await db.from("show_n_tell_entries").insert({
+    round_id: roundId,
+    project_id: projectId,
+    added_by: actorName(access),
+  });
+  // A duplicate (round_id, project_id) is a double-click, not a real error -
+  // the entry's already there either way.
+  if (error && !error.message?.includes("duplicate")) throw new Error(error.message);
+  revalidatePath("/show-n-tell");
+}
+
+export async function removeShowNTellEntry(formData: FormData): Promise<void> {
+  await requirePerm("show_n_tell");
+  const id = Number(formData.get("id") ?? 0);
+  if (!id) return;
+  const { error } = await db.from("show_n_tell_entries").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+  revalidatePath("/show-n-tell");
+}

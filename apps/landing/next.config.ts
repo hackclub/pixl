@@ -24,7 +24,7 @@ const WEB_SHELL_ORIGIN = "http://pixl-web-shell.ysws-pixl.svc.cluster.local:3000
 const SHELL_PATHS = [
   "shop", "orders", "collectibles", "vault", "explore", "ideas", "quests",
   "trials", "timeline", "projects", "report", "dashboard", "hackatime",
-  "refers", "account", "calc",
+  "refers", "account", "calc", "show-n-tell",
 ];
 
 // The Godot export and the shell request these by absolute path, so they have to

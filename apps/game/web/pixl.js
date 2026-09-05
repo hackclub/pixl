@@ -331,6 +331,7 @@ const Pixl = (() => {
         ["docs", "DOCS"],
         ["explore", "EXPLORE"],
         ["ideas", "IDEAS"],
+        ["show-n-tell", "SHOW & TELL"],
         ["vault", "GOALS"],
         ["trials", "TRIALS"],
         // QUESTS is hidden from the dash for now — not ready for players.

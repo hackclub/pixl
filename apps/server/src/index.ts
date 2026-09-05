@@ -24,6 +24,7 @@ import referralRouter from "./routes/referral.js";
 import collaboratorsRouter from "./routes/collaborators.js";
 import activityRouter from "./routes/activity.js";
 import newsRouter from "./routes/news.js";
+import showNTellRouter from "./routes/showNTell.js";
 import macondoRouter from "./macondo/routes.js";
 import yswsRouter from "./ysws/routes.js";
 import { rateLimit } from "./rateLimit.js";
@@ -94,6 +95,7 @@ app.use(referralRouter);
 app.use(collaboratorsRouter);
 app.use(activityRouter);
 app.use(newsRouter);
+app.use(showNTellRouter);
 app.use(macondoRouter);
 app.use(yswsRouter);
 

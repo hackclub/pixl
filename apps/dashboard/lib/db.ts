@@ -2826,3 +2826,110 @@ export async function lifetimeRe(userId: string, excludeProjectId?: number): Pro
     ) / 10
   );
 }
+
+export interface ShowNTellRound {
+  id: number;
+  title: string;
+  is_open: boolean;
+  opened_at: string | null;
+  closed_at: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+export interface ShowNTellEntry {
+  id: number;
+  round_id: number;
+  project_id: number;
+  added_by: string;
+  project_name: string;
+  project_owner: string;
+  vote_count: number;
+}
+
+export async function listShowNTellRounds(): Promise<ShowNTellRound[]> {
+  const { data, error } = await db
+    .from("show_n_tell_rounds")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.error("listShowNTellRounds", error.message);
+    return [];
+  }
+  return (data ?? []) as ShowNTellRound[];
+}
+
+export async function listShowNTellEntries(roundId: number): Promise<ShowNTellEntry[]> {
+  // pgCompat only supports one level of embedded relation select - see its
+  // own header comment - so projects(...users(...)) (two levels deep) isn't
+  // valid here; the owner name is fetched separately below instead.
+  const { data, error } = await db
+    .from("show_n_tell_entries")
+    .select("id, round_id, project_id, added_by, projects(name, user_id)")
+    .eq("round_id", roundId);
+  if (error) {
+    console.error("listShowNTellEntries", error.message);
+    return [];
+  }
+  const entries = (data ?? []) as unknown as {
+    id: number;
+    round_id: number;
+    project_id: number;
+    added_by: string;
+    projects: { name?: string; user_id?: string } | null;
+  }[];
+  const entryIds = entries.map((e) => e.id);
+  const counts = new Map<number, number>();
+  if (entryIds.length > 0) {
+    const { data: votes } = await db
+      .from("show_n_tell_votes")
+      .select("entry_id")
+      .in("entry_id", entryIds);
+    for (const v of votes ?? []) {
+      const eid = v.entry_id as number;
+      counts.set(eid, (counts.get(eid) ?? 0) + 1);
+    }
+  }
+  const ownerIds = [
+    ...new Set(entries.map((e) => e.projects?.user_id).filter((id): id is string => !!id)),
+  ];
+  const ownerName = new Map<string, string>();
+  if (ownerIds.length > 0) {
+    const { data: owners } = await db.from("users").select("id, display_name").in("id", ownerIds);
+    for (const u of owners ?? []) ownerName.set(u.id as string, (u.display_name as string) ?? "");
+  }
+  return entries.map((e) => ({
+    id: e.id,
+    round_id: e.round_id,
+    project_id: e.project_id,
+    added_by: e.added_by,
+    project_name: e.projects?.name ?? "",
+    project_owner: (e.projects?.user_id && ownerName.get(e.projects.user_id)) || "",
+    vote_count: counts.get(e.id) ?? 0,
+  }));
+}
+
+// Shipped-or-later projects only - a Show & Tell entry should point at
+// something real, not an untouched draft. Used by the dashboard's "add
+// entry" search, name match is enough for a CT member picking from a
+// handful of results.
+export async function searchShippableProjects(
+  query: string,
+): Promise<{ id: number; name: string; owner: string }[]> {
+  const q = query.trim();
+  if (!q) return [];
+  const { data, error } = await db
+    .from("projects")
+    .select("id, name, users(display_name)")
+    .ilike("name", `%${q}%`)
+    .in("status", ["shipped", "second_review", "fraud_review", "approved"])
+    .is("banned_at", null)
+    .limit(15);
+  if (error) {
+    console.error("searchShippableProjects", error.message);
+    return [];
+  }
+  return ((data ?? []) as unknown as { id: number; name: string; users?: { display_name?: string } | null }[]).map(
+    (p) => ({ id: p.id, name: p.name, owner: p.users?.display_name ?? "" }),
+  );
+}

@@ -34,6 +34,7 @@ export const ALL_PERMISSIONS = [
   "ideas",
   "tickets",
   "lookup",
+  "show_n_tell",
 ] as const;
 export type Permission = (typeof ALL_PERMISSIONS)[number];
 

@@ -73,6 +73,7 @@ export default async function RootLayout({
         story: canView(access, ["story"]),
         goals: canView(access, ["goals"]),
         news: canView(access, ["news"]),
+        showNTell: canView(access, ["show_n_tell"]),
         fulfillment: fulfiller,
       }
     : null;
