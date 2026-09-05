@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SHOP_REGIONS, SHOP_REGION_LABELS, type ShopRegion } from "@/lib/shopRegions";
 import { SHOP_CATEGORIES, SHOP_CATEGORY_LABELS } from "@/lib/shopCategories";
+import { config } from "@/app/_generated/config";
 
 const FILE_INPUT =
   "block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:border-border file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground hover:file:bg-secondary/80";
@@ -20,6 +21,7 @@ export function AddShopItemForm({
 }) {
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
+  const [priceUsd, setPriceUsd] = useState("");
   const [description, setDescription] = useState("");
   const [image, setImage] = useState<string | null>(null);
   const [regions, setRegions] = useState<ShopRegion[]>([region]);
@@ -32,6 +34,18 @@ export function AddShopItemForm({
     setImage(f ? URL.createObjectURL(f) : null);
   }
 
+  // Typing a dollar amount fills the pixel price for you (pixelValueUsd is
+  // the same rate the game/shop use everywhere else) - the pixel field stays
+  // directly editable too, for fine-tuning or pasting a price someone already
+  // worked out in pixels.
+  function onUsdChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const usd = e.target.value;
+    setPriceUsd(usd);
+    const n = Number(usd);
+    if (usd.trim() !== "" && Number.isFinite(n) && n >= 0)
+      setPrice(String(Math.round(n / config.economy.pixelValueUsd)));
+  }
+
   function toggleRegion(r: ShopRegion) {
     setRegions((prev) => (prev.includes(r) ? prev.filter((x) => x !== r) : [...prev, r]));
   }
@@ -42,7 +56,7 @@ export function AddShopItemForm({
     <form action={action} className="grid lg:grid-cols-[1fr_15rem] gap-6">
       <input type="hidden" name="regions" value={regions.join(",")} />
       <div className="space-y-5 min-w-0">
-        <div className="grid sm:grid-cols-[1fr_9rem] gap-4">
+        <div className="grid sm:grid-cols-[1fr_8rem_8rem] gap-4">
           <Label className="block font-normal">
             <span className="block text-sm font-medium mb-1.5">Name</span>
             <Input
@@ -54,6 +68,19 @@ export function AddShopItemForm({
               onChange={(e) => setName(e.target.value)}
               className="w-full text-sm"
             />
+          </Label>
+          <Label className="block font-normal">
+            <span className="block text-sm font-medium mb-1.5">Price ($)</span>
+            <Input
+              type="number"
+              min={0}
+              step="0.01"
+              placeholder="4.20"
+              value={priceUsd}
+              onChange={onUsdChange}
+              className="w-full text-sm"
+            />
+            <span className="block text-xs text-muted-foreground mt-1">Fills the px price →</span>
           </Label>
           <Label className="block font-normal">
             <span className="block text-sm font-medium mb-1.5">Price (px)</span>
