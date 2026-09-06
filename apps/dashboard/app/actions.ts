@@ -3388,6 +3388,74 @@ export async function updateShopItemPrices(formData: FormData): Promise<void> {
   revalidatePath("/shop");
 }
 
+// Powers the /shop-detail page: one save per item that can touch every
+// region's price, its price-source link, and (for configurator items like the
+// Framework laptops/Huawei tablets) the config_options base price + reference
+// URL, all in one submit. Mirrors updateShopItemPrices's match-by-name
+// pattern; a region with no existing row for this item is a no-op.
+export async function updateShopItemRegionDetails(formData: FormData): Promise<void> {
+  await requirePerm("shop");
+  const name = String(formData.get("item_name") ?? "").trim();
+  if (!name) return;
+  const silent = formData.get("silent") === "1";
+
+  const { data: before } = await db
+    .from("shop_items")
+    .select("*")
+    .eq("name", name)
+    .eq("unlock_xp", 0);
+
+  for (const r of SHOP_REGIONS) {
+    const priceRaw = formData.get(`price_${r}`);
+    const sourceRaw = formData.get(`source_${r}`);
+    if (priceRaw === null && sourceRaw === null) continue;
+    const row = (before ?? []).find((b) => (b as { region: string }).region === r) as
+      | { config_options: unknown }
+      | undefined;
+    const patch: Record<string, unknown> = {};
+    if (priceRaw !== null) patch.price = Math.max(0, Math.round(Number(priceRaw) || 0));
+    if (sourceRaw !== null) patch.price_source_url = String(sourceRaw).trim().slice(0, 500);
+    if (row?.config_options && typeof row.config_options === "object") {
+      const basePriceRaw = formData.get(`config_base_price_${r}`);
+      const refUrlRaw = formData.get(`config_reference_url_${r}`);
+      if (basePriceRaw !== null || refUrlRaw !== null) {
+        patch.config_options = {
+          ...(row.config_options as Record<string, unknown>),
+          ...(basePriceRaw !== null
+            ? { base_price: Math.max(0, Math.round(Number(basePriceRaw) || 0)) }
+            : {}),
+          ...(refUrlRaw !== null
+            ? { reference_url: String(refUrlRaw).trim().slice(0, 500) }
+            : {}),
+        };
+      }
+    }
+    if (Object.keys(patch).length === 0) continue;
+    const { error } = await db
+      .from("shop_items")
+      .update(patch)
+      .eq("name", name)
+      .eq("region", r)
+      .eq("unlock_xp", 0);
+    if (error) console.error("updateShopItemRegionDetails", r, error.message);
+  }
+
+  if (!silent) {
+    const { data: after } = await db
+      .from("shop_items")
+      .select("*")
+      .eq("name", name)
+      .eq("unlock_xp", 0);
+    await notifyShopUpdates(
+      (before ?? []) as ShopRowSnapshot[],
+      (after ?? []) as ShopRowSnapshot[],
+    );
+  }
+
+  revalidatePath("/shop-detail");
+  revalidatePath("/shop");
+}
+
 // Hide/show an item. Regular items have one row per region (same name), and
 // the dashboard only shows one region tab at a time - toggling just the row
 // you're looking at left every other region's copy untouched, so "hiding" an

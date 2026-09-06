@@ -63,6 +63,7 @@ const GLYPHS = {
   referrals: "member-add",
   online: "welcome",
   shop: "bag-fill",
+  shopDetail: "search",
   fulfillment: "package",
   events: "explore",
   sidequests: "compass",
@@ -159,6 +160,7 @@ export function Shell({
       items: [
         { href: "/pixels", label: "Pixels", icon: "pixels", show: nav.pixels },
         { href: "/shop", label: "Shop", icon: "shop", show: nav.shop },
+        { href: "/shop-detail", label: "Shop Detail", icon: "shopDetail", show: nav.shop },
         {
           href: "/fulfillment",
           label: "Fulfillment",

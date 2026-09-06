@@ -1946,6 +1946,17 @@ export interface ShopItemRow {
   // of the "ship this Trial" copy when this is what's locking the item.
   manual_locked: boolean;
   lock_note: string;
+  // Where this row's price was sourced from (a retailer product page, a
+  // regional storefront, ...) - see updateShopItemRegionDetails in
+  // app/actions.ts and the /shop-detail page. Empty string = not set.
+  price_source_url: string;
+  // Present only for configurator-style items (Framework laptops, Huawei
+  // tablets, ...) built via a one-off migration - see 0058_shop_item_configurator.sql.
+  config_options: {
+    base_price?: number;
+    reference_url?: string;
+    groups?: { name: string; type: string; choices: { label: string; price: number }[] }[];
+  } | null;
 }
 
 export interface ShopOptionStockRow {
