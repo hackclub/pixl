@@ -25,6 +25,7 @@ Reviewers (and anyone else who lands on your repo) should be able to understand 
 - **What it is.** A clear, concise summary of what the project does and why it exists.
 - **What tech was used.** The languages, frameworks, and libraries behind it.
 - **How to set it up and run it.** Install steps, environment variables, build/run commands - enough for someone with minimal technical knowledge to get it working from the README alone.
+- **Screenshots** of the project working.
 
 A repo that's just a dump of files with one or two sentences for a README doesn't meet this bar, even if the demo link works.
 
