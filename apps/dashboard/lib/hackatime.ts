@@ -247,8 +247,17 @@ export async function fetchHackatimeReport(
     const data = ((await statsRes.json()) as { data?: Record<string, unknown> }).data ?? {};
 
     const rawProjects = mapBreakdown(data.projects);
-    // Per-project sessions/first/last from spans (only for linked projects, in
-    // parallel , a maker links a handful at most).
+    // Every project name the panel will actually display below (line ~313's
+    // filter) - not just the submission's explicitly linked projects. A
+    // Hackatime project with real tracked time but not in `linked` still gets
+    // shown (p.seconds > 0), so fetching spans/lapses only for `linked` left
+    // those rows permanently missing their session count and any lapse
+    // recordings, even when Lapse genuinely had some for that project name.
+    const displayNames = new Set(
+      rawProjects.filter((p) => linked.has(p.name) || p.seconds > 0).map((p) => p.name),
+    );
+    // Per-project sessions/first/last from spans, in parallel , a maker's
+    // Hackatime account rarely has more than a handful of shown projects.
     const spanInfo = new Map<string, { sessions: number; first: number | null; last: number | null }>();
     // Lapse (timelapse videos) needs Hackatime's own numeric user id, not the
     // Slack id this file otherwise uses everywhere - present on the stats
@@ -256,7 +265,7 @@ export async function fetchHackatimeReport(
     const hackatimeUserId = data.user_id != null ? String(data.user_id) : "";
     const lapseInfo = new Map<string, LapseTimelapse[]>();
     await Promise.all(
-      [...linked].map(async (name) => {
+      [...displayNames].map(async (name) => {
         try {
           const r = await fetch(
             `${BASE}/api/v1/users/${encodeURIComponent(id)}/heartbeats/spans` +
@@ -284,7 +293,7 @@ export async function fetchHackatimeReport(
     );
     if (hackatimeUserId) {
       await Promise.all(
-        [...linked].map(async (name) => {
+        [...displayNames].map(async (name) => {
           const lapses = await fetchLapsesForProject(hackatimeUserId, name);
           if (lapses.length > 0) lapseInfo.set(name, lapses);
         }),
