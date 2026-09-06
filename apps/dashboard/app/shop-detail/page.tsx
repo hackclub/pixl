@@ -2,6 +2,7 @@ import { requirePagePerm } from "@/lib/guard";
 import { listShopItems, SHOP_REGIONS, SHOP_REGION_LABELS, SHOP_CATEGORY_LABELS, type ShopItemRow } from "@/lib/db";
 import { updateShopItemRegionDetails } from "@/app/actions";
 import { PendingButton } from "@/app/_components/PendingButton";
+import { PriceUsdInput } from "@/app/_components/PriceUsdInput";
 import { parseOptionGroups } from "@/lib/shopOptions";
 import { config } from "@/app/_generated/config";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +29,7 @@ export default async function ShopDetailPage({
   const byName = new Map<string, ShopItemRow[]>();
   for (const it of everyItem) {
     if (it.unlock_xp > 0) continue; // trophies aren't region-scoped or priced
+    if (it.category === "grants") continue; // grants are the same price everywhere, nothing to audit
     const list = byName.get(it.name) ?? [];
     list.push(it);
     byName.set(it.name, list);
@@ -128,13 +130,11 @@ export default async function ShopDetailPage({
                                 )}
                               </td>
                               <td className="pr-2 align-top">
-                                <Input
+                                <PriceUsdInput
                                   name={`price_${r}`}
-                                  type="number"
-                                  min={0}
-                                  disabled={!row}
                                   defaultValue={row?.price ?? 0}
-                                  className="w-24 text-sm"
+                                  disabled={!row}
+                                  pixelValueUsd={config.economy.pixelValueUsd}
                                 />
                               </td>
                               <td className="pr-2 align-top pt-1.5 text-muted-foreground tabular-nums whitespace-nowrap">
