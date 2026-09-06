@@ -2895,7 +2895,9 @@ export interface ShowNTellRound {
 export interface ShowNTellEntry {
   id: number;
   round_id: number;
-  project_id: number;
+  // null for a freeform custom entry (see custom_name) - not backed by a real
+  // projects row.
+  project_id: number | null;
   added_by: string;
   project_name: string;
   project_owner: string;
@@ -2921,7 +2923,7 @@ export async function listShowNTellEntries(roundId: number): Promise<ShowNTellEn
   // valid here; the owner name is fetched separately below instead.
   const { data, error } = await db
     .from("show_n_tell_entries")
-    .select("id, round_id, project_id, added_by, projects(name, user_id)")
+    .select("id, round_id, project_id, added_by, custom_name, projects(name, user_id)")
     .eq("round_id", roundId);
   if (error) {
     console.error("listShowNTellEntries", error.message);
@@ -2930,8 +2932,9 @@ export async function listShowNTellEntries(roundId: number): Promise<ShowNTellEn
   const entries = (data ?? []) as unknown as {
     id: number;
     round_id: number;
-    project_id: number;
+    project_id: number | null;
     added_by: string;
+    custom_name: string | null;
     projects: { name?: string; user_id?: string } | null;
   }[];
   const entryIds = entries.map((e) => e.id);
@@ -2971,7 +2974,7 @@ export async function listShowNTellEntries(roundId: number): Promise<ShowNTellEn
     round_id: e.round_id,
     project_id: e.project_id,
     added_by: e.added_by,
-    project_name: e.projects?.name ?? "",
+    project_name: e.projects?.name || e.custom_name || "",
     project_owner: (e.projects?.user_id && userName.get(e.projects.user_id)) || "",
     vote_count: (votesByEntry.get(e.id) ?? []).length,
     voters: (votesByEntry.get(e.id) ?? [])

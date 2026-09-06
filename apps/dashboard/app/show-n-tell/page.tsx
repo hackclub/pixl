@@ -5,6 +5,7 @@ import {
   openShowNTellRound,
   closeShowNTellRound,
   addShowNTellEntry,
+  addCustomShowNTellEntry,
   removeShowNTellEntry,
 } from "@/app/actions";
 import { PendingButton } from "@/app/_components/PendingButton";
@@ -114,7 +115,7 @@ export default async function ShowNTellPage({
             <div className="text-sm font-medium mb-3">Add a project</div>
             <form className="flex gap-2 mb-3">
               <input type="hidden" name="round" value={selectedRound.id} />
-              <Input name="q" defaultValue={q ?? ""} placeholder="Search shipped projects by name…" className="text-sm flex-1" />
+              <Input name="q" defaultValue={q ?? ""} placeholder="Search projects by name (shipped or still in progress)…" className="text-sm flex-1" />
               <PendingButton type="submit">Search</PendingButton>
             </form>
             {q && (
@@ -135,10 +136,20 @@ export default async function ShowNTellPage({
                   </div>
                 ))}
                 {searchResults.length === 0 && (
-                  <div className="text-sm text-muted-foreground">No shipped projects match that search.</div>
+                  <div className="text-sm text-muted-foreground">No projects match that search.</div>
                 )}
               </div>
             )}
+            <div className="mt-4 pt-4 border-t border-border">
+              <div className="text-xs font-medium text-muted-foreground mb-2">
+                Not in Pixl? Add it by name instead (no project record needed)
+              </div>
+              <form action={addCustomShowNTellEntry} className="flex gap-2">
+                <input type="hidden" name="roundId" value={selectedRound.id} />
+                <Input name="customName" required maxLength={120} placeholder="e.g. a live demo shown at the event" className="text-sm flex-1" />
+                <PendingButton type="submit" pendingText="Adding…">Add</PendingButton>
+              </form>
+            </div>
           </Card>
 
           <Card className="overflow-hidden py-0 divide-y divide-border">

@@ -4605,6 +4605,23 @@ export async function addShowNTellEntry(formData: FormData): Promise<void> {
   revalidatePath("/show-n-tell");
 }
 
+// A freeform entry not backed by any real projects row - e.g. something shown
+// live at an event that was never entered into Pixl. Stored with project_id
+// null and a custom_name instead (see 0167_show_n_tell_custom_entries.sql).
+export async function addCustomShowNTellEntry(formData: FormData): Promise<void> {
+  const access = await requirePerm("show_n_tell");
+  const roundId = Number(formData.get("roundId") ?? 0);
+  const customName = String(formData.get("customName") ?? "").trim().slice(0, 120);
+  if (!roundId || !customName) return;
+  const { error } = await db.from("show_n_tell_entries").insert({
+    round_id: roundId,
+    custom_name: customName,
+    added_by: actorName(access),
+  });
+  if (error) throw new Error(error.message);
+  revalidatePath("/show-n-tell");
+}
+
 export async function removeShowNTellEntry(formData: FormData): Promise<void> {
   await requirePerm("show_n_tell");
   const id = Number(formData.get("id") ?? 0);

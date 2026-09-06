@@ -28,7 +28,7 @@ router.get("/api/show-n-tell", async (req, res) => {
   // so the owner name is fetched separately below instead of nesting.
   const { data: entries, error } = await supabase
     .from("show_n_tell_entries")
-    .select("id, project_id, projects(name, description, image_url, user_id)")
+    .select("id, project_id, custom_name, projects(name, description, image_url, user_id)")
     .eq("round_id", round.id);
   if (error) {
     console.error("[show-n-tell] entries fetch failed", error);
@@ -69,15 +69,15 @@ router.get("/api/show-n-tell", async (req, res) => {
   // Which of these projects the signed-in viewer collaborates on (accepted
   // only) - combined with the owner check below to flag entries they can't
   // vote for, same rule the vote endpoint enforces server-side.
+  const realProjectIds = (entries ?? [])
+    .map((e) => e.project_id as number | null)
+    .filter((id): id is number => id != null);
   const myCollabProjectIds = new Set<number>();
-  if (session && entryIds.length > 0) {
+  if (session && realProjectIds.length > 0) {
     const { data: collabRows } = await supabase
       .from("project_collaborators")
       .select("project_id")
-      .in(
-        "project_id",
-        (entries ?? []).map((e) => e.project_id as number),
-      )
+      .in("project_id", realProjectIds)
       .eq("user_id", session.userId)
       .eq("status", "accepted");
     for (const c of collabRows ?? []) myCollabProjectIds.add(c.project_id as number);
@@ -91,17 +91,20 @@ router.get("/api/show-n-tell", async (req, res) => {
         image_url?: string;
         user_id?: string;
       } | null;
-      const projectId = e.project_id as number;
+      const projectId = e.project_id as number | null;
       return {
         id: e.id as number,
         projectId,
-        name: p?.name ?? "",
+        name: p?.name || (e.custom_name as string | null) || "",
         description: p?.description ?? "",
         imageUrl: p?.image_url ?? "",
         ownerName: (p?.user_id && ownerName.get(p.user_id)) || "",
         voteCount: counts.get(e.id as number) ?? 0,
         votedByMe: mine.has(e.id as number),
-        isOwn: !!session && (p?.user_id === session.userId || myCollabProjectIds.has(projectId)),
+        isOwn:
+          !!session &&
+          projectId != null &&
+          (p?.user_id === session.userId || myCollabProjectIds.has(projectId)),
       };
     })
     .sort((a, b) => b.voteCount - a.voteCount);
@@ -158,22 +161,25 @@ router.post("/api/show-n-tell/entries/:id/vote", async (req, res) => {
   }
 
   // Can't upvote your own entry - checks both the project owner and any
-  // accepted collaborator on it.
-  const { data: project } = await supabase
-    .from("projects")
-    .select("user_id")
-    .eq("id", entry.project_id as number)
-    .maybeSingle();
-  if (project?.user_id === session.userId)
-    return res.status(400).json({ ok: false, error: "own_project" });
-  const { data: collab } = await supabase
-    .from("project_collaborators")
-    .select("id")
-    .eq("project_id", entry.project_id as number)
-    .eq("user_id", session.userId)
-    .eq("status", "accepted")
-    .maybeSingle();
-  if (collab) return res.status(400).json({ ok: false, error: "own_project" });
+  // accepted collaborator on it. A custom (non-project) entry has no owner,
+  // so this is skipped entirely for those.
+  if (entry.project_id != null) {
+    const { data: project } = await supabase
+      .from("projects")
+      .select("user_id")
+      .eq("id", entry.project_id as number)
+      .maybeSingle();
+    if (project?.user_id === session.userId)
+      return res.status(400).json({ ok: false, error: "own_project" });
+    const { data: collab } = await supabase
+      .from("project_collaborators")
+      .select("id")
+      .eq("project_id", entry.project_id as number)
+      .eq("user_id", session.userId)
+      .eq("status", "accepted")
+      .maybeSingle();
+    if (collab) return res.status(400).json({ ok: false, error: "own_project" });
+  }
 
   // Only one live vote per round, per user - drop any existing vote this
   // user has on another entry in the same round before adding the new one.
