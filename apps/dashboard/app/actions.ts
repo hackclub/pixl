@@ -148,6 +148,42 @@ async function isOwnProject(access: AdminAccess, userId: string): Promise<boolea
   return !!data?.slack_id && data.slack_id === access.session.slackId;
 }
 
+// Time-bounded exception to the "can't first-pass your own project" guard
+// (see self_review_exceptions in 0166_self_review_exceptions.sql). Deliberately
+// only checked at the first-pass proposal gate below - it never touches the
+// ownership-based payout gate or the "different reviewer must do the final
+// pass" check, so a self-first-passed project still needs an independent
+// final reviewer before anything is approved or paid out.
+async function hasSelfReviewException(slackId: string): Promise<boolean> {
+  const { data } = await db
+    .from("self_review_exceptions")
+    .select("expires_at")
+    .eq("slack_id", slackId)
+    .maybeSingle();
+  return !!data && new Date(data.expires_at as string).getTime() > Date.now();
+}
+
+export async function grantSelfReviewException(formData: FormData): Promise<void> {
+  const access = await requireSuper();
+  const slackId = String(formData.get("slackId") ?? "").trim();
+  const days = Math.max(1, Math.min(30, Number(formData.get("days") ?? 7) || 7));
+  if (!slackId) return;
+  const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+  const { error } = await db
+    .from("self_review_exceptions")
+    .upsert({ slack_id: slackId, granted_by: actorName(access), expires_at: expiresAt });
+  if (error) throw new Error(error.message);
+  revalidatePath("/admins");
+}
+
+export async function revokeSelfReviewException(formData: FormData): Promise<void> {
+  await requireSuper();
+  const slackId = String(formData.get("slackId") ?? "").trim();
+  if (!slackId) return;
+  await db.from("self_review_exceptions").delete().eq("slack_id", slackId);
+  revalidatePath("/admins");
+}
+
 export async function warnPlayer(formData: FormData): Promise<void> {
   const by = await requireWarnAccess();
   const userId = String(formData.get("userId") ?? "");
@@ -731,7 +767,12 @@ export async function reviewProject(formData: FormData): Promise<void> {
     linkedTrial = sq as LinkedTrial | null;
   }
   const own = await isOwnProject(access, current.user_id);
-  if (stage === "shipped" && !access.isSuper && own)
+  if (
+    stage === "shipped" &&
+    !access.isSuper &&
+    own &&
+    !(await hasSelfReviewException(access.session.slackId))
+  )
     redirect(`${back}?error=${encodeURIComponent("You can't first-pass your own project , another reviewer has to take it.")}`);
   if (stage !== "shipped" && stage !== "second_review")
     redirect(`${back}?error=${encodeURIComponent("This project isn't awaiting review anymore.")}`);
