@@ -796,8 +796,14 @@ export async function reviewProject(formData: FormData): Promise<void> {
   // justification" guidance) , the form submits each section separately so we
   // can validate the parts that matter, then store them as one string under
   // the existing auditNote field.
+  // Technical features / additional notes are only mandatory for a verdict
+  // that actually needs to hold up as an audit trail (approve, or a proposed/
+  // confirmed ban) - a "request changes" bounce-back has its own player-facing
+  // note field for that, and reviewers kept typing a throwaway line here just
+  // to satisfy the requirement.
+  const auditSectionsRequired = verdict !== "needs_changes";
   const technicalFeatures = String(formData.get("technicalFeatures") ?? "").trim();
-  if (technicalFeatures.length < TECHNICAL_FEATURES_MIN)
+  if (auditSectionsRequired && technicalFeatures.length < TECHNICAL_FEATURES_MIN)
     redirect(
       `${back}?error=${encodeURIComponent(`Describe concrete technical features you checked (min ${TECHNICAL_FEATURES_MIN} characters).`)}`,
     );
@@ -811,7 +817,8 @@ export async function reviewProject(formData: FormData): Promise<void> {
       `${back}?error=${encodeURIComponent("This submitter turns 19 between shipping and review , document that before deciding.")}`,
     );
   const notes = String(formData.get("notes") ?? "").trim();
-  if (!notes) redirect(`${back}?error=${encodeURIComponent("Additional notes are required.")}`);
+  if (auditSectionsRequired && !notes)
+    redirect(`${back}?error=${encodeURIComponent("Additional notes are required.")}`);
   formData.set(
     "auditNote",
     buildAuditNote({

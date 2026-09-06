@@ -20,17 +20,31 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 
-function VerdictButtons({ secondPass }: { secondPass: boolean }) {
+function VerdictButtons({
+  secondPass,
+  onVerdictSelect,
+}: {
+  secondPass: boolean;
+  /** Fires on click, before the browser's native required-field validation
+   * runs - lets the parent relax technicalFeatures/notes for this specific
+   * submission (needs_changes doesn't need them) without disabling the
+   * requirement outright for approve/ban. */
+  onVerdictSelect: (verdict: string) => void;
+}) {
   const { pending } = useFormStatus();
   const [clicked, setClicked] = useState("");
   const approveLabel = secondPass ? "Approve & credit pixels" : "Approve";
+  const select = (verdict: string) => {
+    setClicked(verdict);
+    onVerdictSelect(verdict);
+  };
   return (
     <>
       <Button
         name="verdict"
         value="approved"
         disabled={pending}
-        onClick={() => setClicked("approved")}
+        onClick={() => select("approved")}
         className="bg-emerald-600 text-white hover:bg-emerald-700"
       >
         {pending && clicked === "approved" ? "Approving…" : approveLabel}
@@ -39,7 +53,7 @@ function VerdictButtons({ secondPass }: { secondPass: boolean }) {
         name="verdict"
         value="needs_changes"
         disabled={pending}
-        onClick={() => setClicked("needs_changes")}
+        onClick={() => select("needs_changes")}
         className="bg-red-600 text-white hover:bg-red-700"
       >
         {pending && clicked === "needs_changes" ? "Sending back…" : "Request changes"}
@@ -48,7 +62,7 @@ function VerdictButtons({ secondPass }: { secondPass: boolean }) {
         name="verdict"
         value="ban"
         disabled={pending}
-        onClick={() => setClicked("ban")}
+        onClick={() => select("ban")}
         variant="outline"
         className="border-red-700 text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
       >
@@ -535,6 +549,21 @@ export function ReviewForm({
     away.current = { kind, at: Date.now() };
   };
 
+  // Technical features / additional notes only need to hold up as an audit
+  // trail for approve/ban - a needs_changes bounce-back has its own required
+  // player-facing note instead (see reviewProject's matching server-side
+  // relaxation in app/actions.ts). Toggled on click, before the browser's
+  // native required-field validation runs on submit.
+  const onVerdictSelect = (verdict: string) => {
+    const required = verdict !== "needs_changes";
+    if (technicalFeaturesRef.current) {
+      technicalFeaturesRef.current.required = required;
+      if (required) technicalFeaturesRef.current.minLength = TECHNICAL_FEATURES_MIN;
+      else technicalFeaturesRef.current.removeAttribute("minlength");
+    }
+    if (notesRef.current) notesRef.current.required = required;
+  };
+
   return (
     <>
       {secondPass && (
@@ -830,7 +859,7 @@ export function ReviewForm({
           rows={3}
         />
         <div className="flex flex-wrap gap-2">
-          <VerdictButtons secondPass={secondPass} />
+          <VerdictButtons secondPass={secondPass} onVerdictSelect={onVerdictSelect} />
         </div>
       </div>
     </form>
