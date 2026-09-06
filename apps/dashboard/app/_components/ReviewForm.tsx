@@ -332,6 +332,7 @@ export function ReviewForm({
   demoUrl,
   claimedHours,
   defaultHours,
+  journalDeflatedHours = 0,
   secondPass = false,
   bounties = [],
   trial,
@@ -352,6 +353,10 @@ export function ReviewForm({
   demoUrl: string | null;
   claimedHours: number;
   defaultHours?: number;
+  /** How many hours the overall credited total already lost to per-journal-entry
+   * deflation (Journals tab / setJournalHours), so the breakdown below can show
+   * it separately from whatever this reviewer additionally lowers below. */
+  journalDeflatedHours?: number;
   secondPass?: boolean;
   bounties?: BountyOption[];
   trial?: TrialInfo | null;
@@ -444,7 +449,14 @@ export function ReviewForm({
     // depends on the `hours` state this same draft is about to change - stash
     // it and let the effect below fill it in once that field actually exists.
     pendingDraft.current = draft;
-    if (typeof draft.hours === "number") setHours(draft.hours);
+    // A saved draft's `hours` is only trustworthy if the server-computed
+    // baseline it was measured against hasn't moved since - a reviewer
+    // deflating a journal entry (Journals tab) recomputes baseHours on the
+    // next page load, but a stale draft.hours from before that edit would
+    // otherwise silently overwrite the fresh, lower number back to the old
+    // one. Only restore it when draft.baseHours still matches; otherwise drop
+    // the stale override and let the fresh baseHours stand.
+    if (typeof draft.hours === "number" && draft.baseHours === baseHours) setHours(draft.hours);
     if (typeof draft.tier === "number") setTierState(draft.tier);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -468,6 +480,7 @@ export function ReviewForm({
         draftKey,
         JSON.stringify({
           hours: overrides?.hours ?? hours,
+          baseHours,
           tier: overrides?.tier ?? tierState,
           technicalFeatures: technicalFeaturesRef.current?.value ?? "",
           hackatimeEvidence: hackatimeEvidenceRef.current?.value ?? "",
@@ -693,6 +706,16 @@ export function ReviewForm({
           className="w-28 text-sm"
         />
       </Label>
+      {(journalDeflatedHours > 0 || deflated) && (
+        <div className="text-xs text-muted-foreground -mt-2 flex flex-wrap gap-x-3">
+          {journalDeflatedHours > 0 && <span>{journalDeflatedHours}h deflated in journals</span>}
+          {deflated && (
+            <span>
+              {Math.round((claimedHours - hours) * 10) / 10}h deflated not in journals
+            </span>
+          )}
+        </div>
+      )}
       {collaborators.map((c) => (
         <CollaboratorHoursInput key={c.id} c={c} />
       ))}

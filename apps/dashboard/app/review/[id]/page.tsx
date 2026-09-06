@@ -188,6 +188,15 @@ export default async function ReviewDetail({
         .filter((j) => j.user_id === p.user_id)
         .reduce((s, j) => s + (Number(j.hours) || 0), 0) * 10,
     ) / 10;
+  // Raw (undeflated) journal-hours total across everyone, mirroring
+  // journalHours above but ignoring any approved_hours override - the gap
+  // between the two is exactly how much a reviewer's per-journal-entry
+  // deflation (see Journals tab / setJournalHours) has taken off the overall
+  // credited total, which stays 1:1 whether this is a hardware or software
+  // ship since hackatimeHours never depends on the live/deflated journalHours.
+  const rawJournalHours =
+    Math.round(journals.reduce((s, j) => s + (Number(j.hours) || 0), 0) * 10) / 10;
+  const journalDeflatedHours = Math.max(0, Math.round((rawJournalHours - journalHours) * 10) / 10);
   const hackatimeHours =
     p.kind === "hardware"
       ? Math.max(0, Math.round((rawTrackedHours - rawOwnerJournalHours) * 10) / 10)
@@ -963,6 +972,7 @@ export default async function ReviewDetail({
                     demoUrl={p.demo_url}
                     claimedHours={payoutHours}
                     defaultHours={formDefaultHours}
+                    journalDeflatedHours={journalDeflatedHours}
                     secondPass={isFinalStage}
                     bounties={bounties}
                     trial={
