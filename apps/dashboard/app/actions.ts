@@ -300,12 +300,12 @@ async function dmPayout(
   await dmUser(slackId, text);
 }
 
-// Records and pays out immediately (approved, needs_changes, and a proposed-
-// approval's eventual "first pass confirmed" case all settle right away , only
-// a PENDING first-pass proposal goes through recordPendingPayout instead).
-// Skips entirely (no row, no DM) when the configured rate for this verdict is
-// 0, so setting needs_changes_pixels to 0 keeps today's "only approvals pay"
-// behavior with no special-casing at call sites.
+// Records and pays out immediately - approved, first_pass_approved, and
+// needs_changes all settle right away, each reviewer paid and DMed for their
+// own pass regardless of what a later pass decides (no pending/clawback
+// state for any verdict anymore). Skips entirely (no row, no DM) when the
+// configured rate for this verdict is 0, so setting a rate to 0 keeps
+// payouts off for that verdict with no special-casing at call sites.
 async function recordSettledPayout(
   projectId: number,
   access: AdminAccess,
@@ -333,25 +333,12 @@ async function recordSettledPayout(
   await dmPayout(access.session.slackId, projectName, full, full, credited, blitzApplied);
 }
 
-async function recordPendingPayout(projectId: number, access: AdminAccess): Promise<void> {
-  const { full, blitzApplied } = await payoutBasePixels("first_pass_approved");
-  if (full <= 0) return;
-  const { error } = await db.from("review_payouts").insert({
-    project_id: projectId,
-    reviewer: actorName(access),
-    reviewer_slack_id: access.session.slackId,
-    verdict: "first_pass_approved",
-    status: "pending",
-    full_pixels: full,
-    blitz_applied: blitzApplied,
-  });
-  if (error) console.error("review payout insert failed", error.message);
-}
-
-// Settle every pending first-pass payout on a project once the final verdict
-// lands, always at the full locked-in rate , regardless of whether the final
-// reviewer agreed or cut the hours. The transition to 'paid' is guarded on
-// the row still being pending so a double-submit can never double-pay.
+// A first-pass approval now pays immediately (see reviewProject's first-pass
+// branch), so this only ever finds anything to do for a payout row from
+// before that change, or one explicitly left pending by sendBackToFirstPass's
+// voidPayout=false path - a no-op otherwise. Kept as the one place that
+// transitions 'pending' -> 'paid', guarded on the row still being pending so
+// a double-submit can never double-pay.
 async function settleFirstPassPayouts(projectId: number, projectName: string): Promise<void> {
   const { data: pending } = await db
     .from("review_payouts")
@@ -378,12 +365,10 @@ async function settleFirstPassPayouts(projectId: number, projectName: string): P
   }
 }
 
-// Reviewers are only paid when a project actually gets approved , a project
-// sent back to first pass never got a real verdict, and a needs_changes/ban
-// verdict is explicitly not an approval, so in both cases the pending
-// first-pass payout is void , no pixels, no dock against the reviewer.
-// Distinct from settleFirstPassPayouts, which always resolves to 'paid'
-// (possibly cut) and should only ever be reached from the approved branch.
+// A first-pass approval pays immediately now (see reviewProject), so a later
+// needs_changes/ban verdict never claws it back - this only ever finds a row
+// to void for a legacy pending payout from before that change, or one
+// sendBackToFirstPass explicitly left pending. No-op otherwise.
 async function voidFirstPassPayouts(
   projectId: number,
   reason = "sent back for a redo before a final verdict",
@@ -406,8 +391,8 @@ async function voidFirstPassPayouts(
 // Admins page without a code change/redeploy - e.g. temporarily paying out
 // on needs_changes during a review push, or adjusting the approval rate for
 // a particular occasion. Both fields are clamped to a sane non-negative
-// range; 0 disables payouts for that verdict entirely (recordSettledPayout /
-// recordPendingPayout both skip when the resolved rate is 0).
+// range; 0 disables payouts for that verdict entirely (recordSettledPayout
+// skips entirely when the resolved rate is 0).
 export async function updateReviewPayoutSettings(formData: FormData): Promise<void> {
   const access = await requireSuper();
   const clamp = (raw: FormDataEntryValue | null): number => {
@@ -870,10 +855,13 @@ export async function reviewProject(formData: FormData): Promise<void> {
       return;
     }
     await insertReviewAudit(formData, projectId, project.user_id, by, `first_pass_${proposedKey}`, note, claimedHours, approvedHours);
-    // Only a proposed approval can ever turn into a paid review , a proposed
-    // ban never gets a pending payout row to begin with, instead of creating
-    // one just to void it later if the final reviewer confirms the ban.
-    if (!own && proposedKey === "approved") await recordPendingPayout(projectId, access);
+    // A first-pass approval pays and DMs the reviewer immediately, same as a
+    // final approval does - reviewing is the work being paid for, not the
+    // eventual outcome, so this doesn't wait on (or get clawed back by) a
+    // second reviewer's confirmation. A proposed ban never pays , the
+    // eventual ban confirmation is what settles a real payout, if any.
+    if (!own && proposedKey === "approved")
+      await recordSettledPayout(projectId, access, "first_pass_approved", project.name);
     if (proposedKey === "approved") {
       await notifyOwner(
         project.user_id,
