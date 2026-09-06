@@ -345,6 +345,7 @@ window.castVote = async function (e, id, dir) {
     if (downBtn) downBtn.disabled = false;
     const msg = r.error === "own_project" ? "You can't vote on your own project."
       : r.error === "already_upvoted" || r.error === "already_downvoted" ? "You've already voted on this project."
+      : r.error === "not_found" ? "You can't upvote unshipped projects."
       : `Couldn't ${dir}vote right now.`;
     Pixl.toast(msg, true);
   }

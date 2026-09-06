@@ -3402,7 +3402,7 @@
       // timer regardless of how long the request actually takes, so it's not
       // a real progress signal on a slow connection or a big journal.
       function setImageBtnBusy(busy) {
-        const b = document.querySelector('#j-mdbar [data-md="image"]');
+        const b = document.querySelector('#j-mdbar [data-md="image"], .jedit-mdbar [data-md="image"]');
         if (!b) return;
         if (busy) {
           b.dataset.label = b.dataset.label || b.innerHTML;
@@ -3540,7 +3540,21 @@
         return `
       <div class="journal-entry panel jeditor" data-id="${e.id}">
         <input class="field jedit-title" maxlength="120" placeholder="Title (optional)" value="${Pixl.esc(e.title || "")}" style="margin-bottom:8px">
-        <textarea class="field jedit-content" maxlength="5000">${Pixl.esc(e.content)}</textarea>
+        <div class="md-editor">
+          <div class="md-bar jedit-mdbar">
+            <button type="button" class="md-btn" data-md="bold" title="Bold (Ctrl+B)"><b>B</b></button>
+            <button type="button" class="md-btn" data-md="italic" title="Italic (Ctrl+I)"><i>I</i></button>
+            <span class="md-sep"></span>
+            <button type="button" class="md-btn" data-md="h" title="Heading">H</button>
+            <button type="button" class="md-btn" data-md="ul" title="Bullet list">•</button>
+            <button type="button" class="md-btn" data-md="quote" title="Quote">&ldquo;</button>
+            <button type="button" class="md-btn" data-md="code" title="Code">&lt;/&gt;</button>
+            <button type="button" class="md-btn" data-md="link" title="Link">LINK</button>
+            <button type="button" class="md-btn" data-md="image" title="Add image">IMAGE</button>
+          </div>
+          <textarea class="field jedit-content" maxlength="5000">${Pixl.esc(e.content)}</textarea>
+        </div>
+        <input type="file" class="jedit-img-file" accept="image/png,image/jpeg,image/webp" hidden>
         <div class="composer-foot">
           <span class="faint" style="font-size:12px">hours:</span>
           <input class="field jedit-hours" type="number" min="0" max="100" step="0.5" value="${Number(e.hours) || 0}">
@@ -3634,6 +3648,24 @@
         const ta = editRow.querySelector(".jedit-content");
         const hoursInput = editRow.querySelector(".jedit-hours");
         const hint = editRow.querySelector(".jedit-hint");
+
+        const editImgBar = editRow.querySelector(".jedit-mdbar");
+        if (editImgBar) {
+          editImgBar.addEventListener("click", (ev) => {
+            const b = ev.target.closest(".md-btn");
+            if (!b || b.dataset.md !== "image") return;
+            editRow.querySelector(".jedit-img-file").click();
+          });
+        }
+        const editImgFile = editRow.querySelector(".jedit-img-file");
+        if (editImgFile) {
+          editImgFile.addEventListener("change", () => {
+            const f = editImgFile.files[0];
+            if (!f) return;
+            attachImageToJournal(f, ta);
+          });
+        }
+
         const updateHint = () => {
           const content = ta.value.trim();
           const len = content.length;

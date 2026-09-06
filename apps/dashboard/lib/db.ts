@@ -2900,6 +2900,7 @@ export interface ShowNTellEntry {
   project_name: string;
   project_owner: string;
   vote_count: number;
+  voters: { id: string; name: string; voted_at: string }[];
 }
 
 export async function listShowNTellRounds(): Promise<ShowNTellRound[]> {
@@ -2934,24 +2935,36 @@ export async function listShowNTellEntries(roundId: number): Promise<ShowNTellEn
     projects: { name?: string; user_id?: string } | null;
   }[];
   const entryIds = entries.map((e) => e.id);
-  const counts = new Map<number, number>();
+  const votesByEntry = new Map<number, { user_id: string; created_at: string }[]>();
   if (entryIds.length > 0) {
     const { data: votes } = await db
       .from("show_n_tell_votes")
-      .select("entry_id")
+      .select("entry_id, user_id, created_at")
       .in("entry_id", entryIds);
     for (const v of votes ?? []) {
       const eid = v.entry_id as number;
-      counts.set(eid, (counts.get(eid) ?? 0) + 1);
+      if (!votesByEntry.has(eid)) votesByEntry.set(eid, []);
+      votesByEntry.get(eid)!.push({
+        user_id: v.user_id as string,
+        created_at: v.created_at as string,
+      });
     }
   }
+  const allVoterIds = [
+    ...new Set(
+      [...votesByEntry.values()]
+        .flat()
+        .map((v) => v.user_id),
+    ),
+  ];
   const ownerIds = [
     ...new Set(entries.map((e) => e.projects?.user_id).filter((id): id is string => !!id)),
   ];
-  const ownerName = new Map<string, string>();
-  if (ownerIds.length > 0) {
-    const { data: owners } = await db.from("users").select("id, display_name").in("id", ownerIds);
-    for (const u of owners ?? []) ownerName.set(u.id as string, (u.display_name as string) ?? "");
+  const allUserIds = [...new Set([...ownerIds, ...allVoterIds])];
+  const userName = new Map<string, string>();
+  if (allUserIds.length > 0) {
+    const { data: users } = await db.from("users").select("id, display_name").in("id", allUserIds);
+    for (const u of users ?? []) userName.set(u.id as string, (u.display_name as string) ?? "");
   }
   return entries.map((e) => ({
     id: e.id,
@@ -2959,8 +2972,15 @@ export async function listShowNTellEntries(roundId: number): Promise<ShowNTellEn
     project_id: e.project_id,
     added_by: e.added_by,
     project_name: e.projects?.name ?? "",
-    project_owner: (e.projects?.user_id && ownerName.get(e.projects.user_id)) || "",
-    vote_count: counts.get(e.id) ?? 0,
+    project_owner: (e.projects?.user_id && userName.get(e.projects.user_id)) || "",
+    vote_count: (votesByEntry.get(e.id) ?? []).length,
+    voters: (votesByEntry.get(e.id) ?? [])
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+      .map((v) => ({
+        id: v.user_id,
+        name: userName.get(v.user_id) ?? "",
+        voted_at: v.created_at,
+      })),
   }));
 }
 

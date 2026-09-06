@@ -162,6 +162,23 @@ export default async function ShowNTellPage({
                       Remove
                     </PendingButton>
                   </form>
+                  {e.voters.length > 0 && (
+                    <details className="w-full mt-1">
+                      <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground select-none">
+                        {e.voters.length} voter{e.voters.length === 1 ? "" : "s"}
+                      </summary>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {e.voters.map((v) => (
+                          <Badge key={v.id} variant="outline" className="text-xs font-normal">
+                            {v.name || v.id.slice(0, 8)}
+                            <span className="text-muted-foreground ml-1">
+                              {new Date(v.voted_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                            </span>
+                          </Badge>
+                        ))}
+                      </div>
+                    </details>
+                  )}
                 </div>
               ))}
             {entries.length === 0 && (
