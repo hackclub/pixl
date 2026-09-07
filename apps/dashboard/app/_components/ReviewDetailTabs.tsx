@@ -299,6 +299,37 @@ export function ReviewDetailTabs({
                     <div className="px-4 pt-4 text-xs font-semibold uppercase tracking-wide text-destructive">
                       ⚠ This exact project also shipped to another YSWS
                     </div>
+                    {(() => {
+                      // The archive only gives an approval date for the OTHER
+                      // ship, not a start date - so "overlap" can't be proven
+                      // outright. What we can show: this project's own
+                      // earliest/latest tracked Hackatime activity, so a
+                      // reviewer can eyeball whether it falls before/after
+                      // each other ship's approval date below.
+                      const linked = (hackatime?.projects ?? []).filter(
+                        (p) => p.linked && (p.firstActivity || p.lastActivity),
+                      );
+                      if (linked.length === 0) return null;
+                      const firsts = linked
+                        .map((p) => p.firstActivity)
+                        .filter((n): n is number => n != null);
+                      const lasts = linked
+                        .map((p) => p.lastActivity)
+                        .filter((n): n is number => n != null);
+                      if (firsts.length === 0 || lasts.length === 0) return null;
+                      const first = Math.min(...firsts);
+                      const last = Math.max(...lasts);
+                      return (
+                        <div className="px-4 pt-1.5 text-xs text-muted-foreground">
+                          This project&apos;s own tracked coding time here:{" "}
+                          <span className="font-medium text-foreground/80">
+                            {new Date(first * 1000).toLocaleDateString()} –{" "}
+                            {new Date(last * 1000).toLocaleDateString()}
+                          </span>{" "}
+                          , compare against each ship&apos;s approval date below to judge overlap.
+                        </div>
+                      );
+                    })()}
                     {matches.map(Row)}
                   </>
                 )}
