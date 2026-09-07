@@ -355,59 +355,83 @@ window.castVote = async function (e, id, dir) {
 /* ---------- views ---------- */
 
 async function showPlayers(q = "") {
-  view.innerHTML = `
-    <div class="searchbar"><input class="field" id="pq" type="search" placeholder="Find a player…" value="${Pixl.esc(q)}" autocomplete="off"></div>
-    <div class="spin"></div>`;
-  const input = document.getElementById("pq");
-  let t;
-  input.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => showPlayers(input.value.trim()), 350); });
-  input.focus();
+  // Only build the searchbar/input once per visit to this tab - rebuilding it
+  // on every debounced keystroke (the old behavior) destroyed and recreated
+  // the <input>, which reset the cursor to the end and could scramble/drop
+  // fast-typed characters. A re-call from the input's own listener below just
+  // refreshes the results underneath, leaving the live input element alone.
+  let input = document.getElementById("pq");
+  if (!input) {
+    view.innerHTML = `
+      <div class="searchbar"><input class="field" id="pq" type="search" placeholder="Find a player…" value="${Pixl.esc(q)}" autocomplete="off"></div>
+      <div id="playersResults"></div>`;
+    input = document.getElementById("pq");
+    let t;
+    input.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => showPlayers(input.value.trim()), 350); });
+    input.focus();
+  }
+  const results = document.getElementById("playersResults");
+  results.innerHTML = `<div class="spin"></div>`;
 
   const data = await Pixl.api("/api/explore/players" + (q ? "?q=" + encodeURIComponent(q) : ""));
   if (input.value.trim() !== q) return;
   const players = data.players || [];
-  view.querySelector(".spin").remove();
-  view.insertAdjacentHTML("beforeend", players.length === 0
+  results.innerHTML = players.length === 0
     ? `<div class="empty-note">NOBODY HERE BY THAT NAME.</div>`
     : `<div class="grid">${players.map((p) => `
         <a class="card panel pcard" href="#player=${Pixl.esc(p.id)}">
           ${avatarHtml(p)}
           <div class="pname">${Pixl.esc(p.display_name)}</div>
           <div class="pmeta">${p.project_count} project${p.project_count === 1 ? "" : "s"} · joined ${Pixl.timeAgo(p.created_at)}</div>
-        </a>`).join("")}</div>`);
+        </a>`).join("")}</div>`;
 }
 
 async function showProjects(opts = {}) {
   const q = opts.q || "";
   const tier = opts.tier || "all";
   const shipped = opts.shipped || "all";
-  view.innerHTML = `
-    <div class="searchbar">
-      <input class="field" id="jq" type="search" placeholder="Find a project…" value="${Pixl.esc(q)}" autocomplete="off">
-      <select class="field" id="jtier">
-        <option value="all">ALL TIERS</option>
-        <option value="1"${tier === "1" ? " selected" : ""}>TIER 1</option>
-        <option value="2"${tier === "2" ? " selected" : ""}>TIER 2</option>
-        <option value="3"${tier === "3" ? " selected" : ""}>TIER 3</option>
-        <option value="4"${tier === "4" ? " selected" : ""}>TIER 4</option>
-      </select>
-      <select class="field" id="jshipped">
-        <option value="all">ALL PROJECTS</option>
-        <option value="shipped"${shipped === "shipped" ? " selected" : ""}>SHIPPED</option>
-        <option value="unshipped"${shipped === "unshipped" ? " selected" : ""}>UNSHIPPED</option>
-      </select>
-    </div>
-    <div id="showcase"></div>
-    <div class="spin"></div>`;
-  const input = document.getElementById("jq");
-  const tierSel = document.getElementById("jtier");
-  const shipSel = document.getElementById("jshipped");
-  tierSel.value = tier;
-  shipSel.value = shipped;
-  let t;
-  input.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => showProjects({ q: input.value.trim(), tier, shipped }), 350); });
-  tierSel.addEventListener("change", () => showProjects({ q, tier: tierSel.value, shipped }));
-  shipSel.addEventListener("change", () => showProjects({ q, tier, shipped: shipSel.value }));
+  // Same fix as showPlayers above: only build the searchbar/inputs once per
+  // visit to this tab, not on every debounced keystroke or filter change -
+  // rebuilding the <input> mid-typing reset the cursor and could scramble
+  // fast-typed characters. Listeners read the live input/select values
+  // (not the q/tier/shipped closed over at attach-time) so they stay correct
+  // across repeated re-calls that only refresh the results underneath.
+  let input = document.getElementById("jq");
+  let tierSel = document.getElementById("jtier");
+  let shipSel = document.getElementById("jshipped");
+  if (!input) {
+    view.innerHTML = `
+      <div class="searchbar">
+        <input class="field" id="jq" type="search" placeholder="Find a project…" value="${Pixl.esc(q)}" autocomplete="off">
+        <select class="field" id="jtier">
+          <option value="all">ALL TIERS</option>
+          <option value="1"${tier === "1" ? " selected" : ""}>TIER 1</option>
+          <option value="2"${tier === "2" ? " selected" : ""}>TIER 2</option>
+          <option value="3"${tier === "3" ? " selected" : ""}>TIER 3</option>
+          <option value="4"${tier === "4" ? " selected" : ""}>TIER 4</option>
+        </select>
+        <select class="field" id="jshipped">
+          <option value="all">ALL PROJECTS</option>
+          <option value="shipped"${shipped === "shipped" ? " selected" : ""}>SHIPPED</option>
+          <option value="unshipped"${shipped === "unshipped" ? " selected" : ""}>UNSHIPPED</option>
+        </select>
+      </div>
+      <div id="projectsResults"></div>`;
+    input = document.getElementById("jq");
+    tierSel = document.getElementById("jtier");
+    shipSel = document.getElementById("jshipped");
+    tierSel.value = tier;
+    shipSel.value = shipped;
+    let t;
+    input.addEventListener("input", () => { clearTimeout(t); t = setTimeout(() => showProjects({ q: input.value.trim(), tier: tierSel.value, shipped: shipSel.value }), 350); });
+    tierSel.addEventListener("change", () => showProjects({ q: input.value.trim(), tier: tierSel.value, shipped: shipSel.value }));
+    shipSel.addEventListener("change", () => showProjects({ q: input.value.trim(), tier: tierSel.value, shipped: shipSel.value }));
+  } else {
+    tierSel.value = tier;
+    shipSel.value = shipped;
+  }
+  const results = document.getElementById("projectsResults");
+  results.innerHTML = `<div class="spin"></div>`;
 
   const params = new URLSearchParams();
   if (q) params.set("q", q);
@@ -417,10 +441,9 @@ async function showProjects(opts = {}) {
   const data = await Pixl.api("/api/explore/projects" + (qs ? "?" + qs : ""));
   if (input.value.trim() !== q) return;
   const projects = data.projects || [];
-  view.querySelector(".spin").remove();
-  view.insertAdjacentHTML("beforeend", projects.length === 0
+  results.innerHTML = projects.length === 0
     ? `<div class="empty-note">${q || tier !== "all" || shipped !== "all" ? "NO PROJECTS MATCH THOSE FILTERS." : "NO PROJECTS YET, GO MAKE THE FIRST ONE!"}</div>`
-    : `<div class="grid">${projects.map(projCard).join("")}</div>`);
+    : `<div class="grid">${projects.map(projCard).join("")}</div>`;
 }
 
 const LB_TABS = [
