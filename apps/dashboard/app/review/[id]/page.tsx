@@ -978,6 +978,7 @@ export default async function ReviewDetail({
                     claimedHours={payoutHours}
                     defaultHours={formDefaultHours}
                     journalDeflatedHours={journalDeflatedHours}
+                    isSuper={access.isSuper}
                     secondPass={isFinalStage}
                     bounties={bounties}
                     trial={

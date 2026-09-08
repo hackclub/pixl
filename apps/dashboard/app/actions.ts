@@ -56,6 +56,7 @@ import {
   turnedNineteenSinceShipping,
   type DashEventRow,
   getReviewPayoutSettings,
+  type JournalRow,
 } from "@/lib/db";
 import { buildAuditNote, parseAuditNote, TECHNICAL_FEATURES_MIN } from "@/lib/auditNote";
 import { decryptPII } from "@/lib/crypto";
@@ -63,7 +64,10 @@ import { buildAirtableFields, pushProjectRecord } from "@/lib/airtable";
 import { joeEnabled } from "@/lib/joe";
 import { submitToJoe } from "@/lib/joeSync";
 import { slackHandle, dmUser, slackAvatars } from "@/lib/slack";
-import { fetchHackatimeReport, fetchTrackedSecondsSince } from "@/lib/hackatime";
+import { fetchHackatimeReport, fetchTrackedSecondsSince, fetchTrustFactor } from "@/lib/hackatime";
+import { fetchCommits, attachCommitStats } from "@/lib/github";
+import { yswsShipsFor } from "@/lib/ysws";
+import { generateAiReviewDraft, type AiReviewDraft } from "@/lib/aiReview";
 import { serializeGroups } from "@/lib/shopOptions";
 import { SHOP_REGIONS, type ShopRegion } from "@/lib/shopRegions";
 import { SHOP_CATEGORIES, type ShopCategory } from "@/lib/shopCategories";
@@ -725,6 +729,71 @@ async function creditBeneficiary(
   }
 
   return { totalPx, deltaPx, pxRate, xpBefore, goalNote, referralNote, alreadyPx, projectRe, goalMult, fundingPx };
+}
+
+// Admin-only: drafts review notes with AI (Claude Sonnet via OpenRouter, see
+// lib/aiReview.ts) from the same objective facts a reviewer already has open
+// on the page - commits, journals, Hackatime numbers, trust factor, cross-YSWS
+// duplicate check. The button is visible to every reviewer (so they know the
+// feature exists and can ask an admin to run it), but only requireSuper()
+// passes actually generate a draft - this never proposes a verdict or
+// credited hours, and nothing it returns is saved/submitted on its own, the
+// reviewer copies whatever they want into the real form fields themselves.
+export async function generateAiReviewDraftAction(projectId: number): Promise<AiReviewDraft> {
+  await requireSuper();
+  if (!projectId) throw new Error("Missing project id");
+
+  const { data: p, error } = await db
+    .from("projects")
+    .select("name, description, repo_url, demo_url, kind, ai_notes, user_id, hackatime_projects")
+    .eq("id", projectId)
+    .single();
+  if (error || !p) throw new Error("Project not found");
+
+  const { data: users } = await db
+    .from("users")
+    .select("slack_id, hackatime_token")
+    .eq("id", p.user_id)
+    .maybeSingle();
+  const slackId = (users?.slack_id as string | undefined) ?? null;
+  const hackatimeToken = (users?.hackatime_token as string | undefined) ?? null;
+  const hackatimeProjects = (p.hackatime_projects as string[] | null) ?? [];
+
+  const { data: journalRows } = await db
+    .from("project_journals")
+    .select("id, project_id, user_id, title, content, hours, approved_hours, created_at, edited_at")
+    .eq("project_id", projectId);
+
+  const [commits, hackatime, trust, claimedHours, yswsMatches] = await Promise.all([
+    (async () => {
+      const c = await fetchCommits(p.repo_url as string | null);
+      await attachCommitStats(c);
+      return c;
+    })(),
+    hackatimeProjects.length
+      ? fetchHackatimeReport(slackId, hackatimeToken, hackatimeProjects)
+      : Promise.resolve(null),
+    fetchTrustFactor(slackId),
+    claimedHoursFor(projectId),
+    yswsShipsFor(slackId, p.repo_url as string | null, p.demo_url as string | null).then((rows) =>
+      rows.filter((s) => s.urlMatch),
+    ),
+  ]);
+
+  return generateAiReviewDraft({
+    projectName: p.name as string,
+    description: (p.description as string | null) ?? "",
+    repoUrl: p.repo_url as string | null,
+    demoUrl: p.demo_url as string | null,
+    kind: p.kind as string,
+    aiNotes: (p.ai_notes as string | null) ?? "",
+    claimedHours,
+    commits,
+    journals: (journalRows ?? []) as unknown as JournalRow[],
+    hackatime,
+    trust,
+    yswsMatches,
+  });
 }
 
 // Two-pass review. A shipped project always gets a first pass from *some*

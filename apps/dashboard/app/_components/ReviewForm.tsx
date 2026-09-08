@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
-import { reviewProject, applySubmissionEdits, setProjectLevel } from "@/app/actions";
+import { reviewProject, applySubmissionEdits, setProjectLevel, generateAiReviewDraftAction } from "@/app/actions";
+import type { AiReviewDraft } from "@/lib/aiReview";
 import {
   averageUsdPerHourOver,
   config,
@@ -19,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 
 function VerdictButtons({
   secondPass,
@@ -347,6 +349,7 @@ export function ReviewForm({
   currentName,
   currentDescription,
   currentImageUrl,
+  isSuper = false,
 }: {
   projectId: number;
   repoUrl: string | null;
@@ -385,6 +388,9 @@ export function ReviewForm({
   currentName?: string;
   currentDescription?: string | null;
   currentImageUrl?: string | null;
+  /** Whether the viewing reviewer is a super admin - gates the "Generate AI
+   * draft" button below (visible to every reviewer, only clickable for admins). */
+  isSuper?: boolean;
 }) {
   const repoOpened = useRef<HTMLInputElement>(null);
   const demoOpened = useRef<HTMLInputElement>(null);
@@ -502,6 +508,40 @@ export function ReviewForm({
     } catch {
       // ignore
     }
+  };
+
+  // AI-drafted review notes (admin-only, see generateAiReviewDraftAction in
+  // app/actions.ts) - a starting point the reviewer reads and edits, never
+  // submitted on its own. The button itself is visible to every reviewer so
+  // they know the feature exists, but only an admin's click actually calls
+  // the action (it re-checks requireSuper() server-side regardless).
+  const [aiPending, startAiTransition] = useTransition();
+  const [aiDraft, setAiDraft] = useState<AiReviewDraft | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const runAiDraft = () => {
+    setAiError(null);
+    startAiTransition(async () => {
+      try {
+        const draft = await generateAiReviewDraftAction(projectId);
+        setAiDraft(draft);
+      } catch (e) {
+        setAiError(e instanceof Error ? e.message : "Failed to generate a draft.");
+      }
+    });
+  };
+
+  const insertAiText = (field: "technicalFeatures" | "hackatimeEvidence" | "notes", text: string) => {
+    const ref =
+      field === "technicalFeatures"
+        ? technicalFeaturesRef
+        : field === "hackatimeEvidence"
+          ? hackatimeEvidenceRef
+          : notesRef;
+    if (!ref.current || !text) return;
+    ref.current.value = text;
+    if (field === "technicalFeatures") setFeaturesLen(text.trim().length);
+    saveDraft();
   };
 
   const hackatimeDefault = useMemo(() => {
@@ -762,6 +802,64 @@ export function ReviewForm({
           ))}
         </div>
       )}
+      <div className="rounded-lg border p-4 flex flex-col gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+            AI draft (beta)
+          </span>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={!isSuper || aiPending}
+            onClick={runAiDraft}
+            title={isSuper ? undefined : "Only admins can generate this , ask one to run it for you"}
+          >
+            {aiPending ? "Generating…" : "Generate AI draft"}
+          </Button>
+          {!isSuper && (
+            <span className="text-xs text-muted-foreground">Only admins can click this</span>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground -mt-1">
+          Reads the repo, commits, journals and Hackatime data and drafts the fields below for
+          you to check and edit. It never picks a verdict or hours , that&apos;s still on you.
+        </p>
+        {aiError && (
+          <div className="text-xs text-rose-600 dark:text-rose-400">{aiError}</div>
+        )}
+        {aiDraft && (
+          <div className="rounded-md border border-border bg-muted/30 p-3 space-y-2 text-sm">
+            <div className="text-muted-foreground">{aiDraft.summary}</div>
+            {aiDraft.redFlags.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {aiDraft.redFlags.map((f, i) => (
+                  <Badge key={i} variant="destructive">{f}</Badge>
+                ))}
+              </div>
+            )}
+            {aiDraft.strengths.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {aiDraft.strengths.map((s, i) => (
+                  <Badge key={i} variant="success">{s}</Badge>
+                ))}
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button type="button" size="sm" variant="outline" onClick={() => insertAiText("technicalFeatures", aiDraft.technicalFeatures)}>
+                Insert into Technical features
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => insertAiText("hackatimeEvidence", aiDraft.hackatimeEvidence)}>
+                Insert into Hackatime evidence
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => insertAiText("notes", aiDraft.notes)}>
+                Insert into Notes
+              </Button>
+            </div>
+            <div className="text-[10px] text-muted-foreground pt-1">Drafted by {aiDraft.model}</div>
+          </div>
+        )}
+      </div>
       <div className="rounded-lg border p-4 flex flex-col gap-4">
         <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground leading-relaxed">
           Internal audit note , never shown to the player. Should let someone who
