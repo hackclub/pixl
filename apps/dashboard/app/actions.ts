@@ -1574,7 +1574,7 @@ export async function applySubmissionEdits(formData: FormData): Promise<void> {
 
   const { data: current } = await db
     .from("projects")
-    .select("name, description, image_url, user_id")
+    .select("name, description, image_url, repo_url, demo_url, user_id")
     .eq("id", projectId)
     .single();
   if (!current) return;
@@ -1582,6 +1582,8 @@ export async function applySubmissionEdits(formData: FormData): Promise<void> {
   const editedName = String(formData.get("editedName") ?? "").trim().slice(0, 200);
   const editedDescription = String(formData.get("editedDescription") ?? "").trim().slice(0, 5000);
   const editedImageUrl = String(formData.get("editedImageUrl") ?? "").trim();
+  const editedRepoUrl = String(formData.get("editedRepoUrl") ?? "").trim();
+  const editedDemoUrl = String(formData.get("editedDemoUrl") ?? "").trim();
   const edits: Record<string, string> = {};
   if (editedName && editedName !== current.name) edits.name = editedName;
   if (editedDescription && editedDescription !== current.description) edits.description = editedDescription;
@@ -1592,6 +1594,22 @@ export async function applySubmissionEdits(formData: FormData): Promise<void> {
       redirect(`${back}?error=${encodeURIComponent(`Image URL: ${(e as Error).message}`)}`);
     }
     edits.image_url = editedImageUrl;
+  }
+  if (editedRepoUrl && editedRepoUrl !== current.repo_url) {
+    try {
+      await assertSafeExternalUrl(editedRepoUrl);
+    } catch (e) {
+      redirect(`${back}?error=${encodeURIComponent(`Repo URL: ${(e as Error).message}`)}`);
+    }
+    edits.repo_url = editedRepoUrl;
+  }
+  if (editedDemoUrl && editedDemoUrl !== current.demo_url) {
+    try {
+      await assertSafeExternalUrl(editedDemoUrl);
+    } catch (e) {
+      redirect(`${back}?error=${encodeURIComponent(`Demo URL: ${(e as Error).message}`)}`);
+    }
+    edits.demo_url = editedDemoUrl;
   }
   if (Object.keys(edits).length === 0)
     redirect(`${back}?error=${encodeURIComponent("No changes to apply.")}`);

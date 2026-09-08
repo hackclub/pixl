@@ -639,7 +639,7 @@ export function ReviewForm({
       {secondPass && (
         <details className="rounded-lg border p-4 mt-4">
           <summary className="cursor-pointer text-xs font-bold uppercase tracking-wide text-muted-foreground select-none">
-            Edit submission , title, image, description
+            Edit submission , title, image, repo/demo links, description
           </summary>
           <form action={applySubmissionEdits} className="mt-3 flex flex-col gap-3">
             <p className="text-[11px] text-muted-foreground leading-relaxed">
@@ -662,6 +662,24 @@ export function ReviewForm({
               <Input
                 name="editedImageUrl"
                 defaultValue={currentImageUrl ?? ""}
+                placeholder="https://…"
+                className="text-sm"
+              />
+            </Label>
+            <Label className="flex flex-col gap-1.5 font-normal">
+              <span className="text-xs text-muted-foreground">Repo URL</span>
+              <Input
+                name="editedRepoUrl"
+                defaultValue={repoUrl ?? ""}
+                placeholder="https://github.com/…"
+                className="text-sm"
+              />
+            </Label>
+            <Label className="flex flex-col gap-1.5 font-normal">
+              <span className="text-xs text-muted-foreground">Demo URL</span>
+              <Input
+                name="editedDemoUrl"
+                defaultValue={demoUrl ?? ""}
                 placeholder="https://…"
                 className="text-sm"
               />
