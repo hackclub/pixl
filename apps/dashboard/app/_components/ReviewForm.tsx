@@ -406,6 +406,20 @@ export function ReviewForm({
   const [tierState, setTierState] = useState(tier);
   const deflated = hours < claimedHours;
 
+  // Deflating a journal entry (Journals tab, setJournalHours) revalidates
+  // this same page without a full reload/remount - React keeps this
+  // component's state, so `hours` (a useState only seeded from baseHours at
+  // MOUNT) went stale, still holding the pre-deflation total. That left
+  // `deflated` computed against the wrong number, so the required "Why lower
+  // the hours?" box could silently fail to appear even though the credited
+  // total had genuinely dropped. Re-sync whenever baseHours changes, unless
+  // the reviewer has already typed their own value into the field below.
+  const hoursEditedRef = useRef(false);
+  useEffect(() => {
+    if (!hoursEditedRef.current) setHours(baseHours);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseHours]);
+
   // A rushed reviewer who closes the dashboard mid-review (or accidentally
   // navigates away) loses everything they typed, deflation reason included -
   // this is the one hard-to-redo part of a review. Draft autosaves to
@@ -462,7 +476,10 @@ export function ReviewForm({
     // otherwise silently overwrite the fresh, lower number back to the old
     // one. Only restore it when draft.baseHours still matches; otherwise drop
     // the stale override and let the fresh baseHours stand.
-    if (typeof draft.hours === "number" && draft.baseHours === baseHours) setHours(draft.hours);
+    if (typeof draft.hours === "number" && draft.baseHours === baseHours) {
+      hoursEditedRef.current = true;
+      setHours(draft.hours);
+    }
     if (typeof draft.tier === "number") setTierState(draft.tier);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -740,6 +757,7 @@ export function ReviewForm({
           value={hours}
           onChange={(e) => {
             const v = Math.min(claimedHours, Math.max(0, Number(e.target.value) || 0));
+            hoursEditedRef.current = true;
             setHours(v);
             saveDraft({ hours: v });
           }}
