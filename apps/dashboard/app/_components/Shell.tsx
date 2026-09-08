@@ -43,6 +43,7 @@ export interface NavFlags {
   goals: boolean;
   news: boolean;
   showNTell: boolean;
+  forms: boolean;
 }
 
 const GLYPHS = {
@@ -71,6 +72,7 @@ const GLYPHS = {
   goals: "bank",
   news: "message",
   showNTell: "explore",
+  forms: "message",
 } as const;
 
 type IconKey = keyof typeof GLYPHS;
@@ -240,6 +242,7 @@ export function Shell({
           icon: "slackLookup",
           show: nav.slackLookup,
         },
+        { href: "/forms", label: "Forms", icon: "forms", show: nav.forms },
       ],
     },
   ];

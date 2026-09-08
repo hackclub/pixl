@@ -2244,6 +2244,48 @@ export async function releaseReviewHold(formData: FormData): Promise<void> {
   revalidatePath("/review");
 }
 
+// Accept/reject a public form submission (pixl.hackclub.com/form/*, see
+// apps/server/src/routes/forms.ts). DMs the submitter directly by Slack id -
+// they never got a Pixl account, so there's no notifications row or
+// notifyOwner() to reuse here.
+export async function decideFormSubmission(formData: FormData): Promise<void> {
+  const access = await requirePerm("forms");
+  const id = Number(formData.get("id") ?? 0);
+  const decision = String(formData.get("decision") ?? "");
+  const note = String(formData.get("note") ?? "").trim().slice(0, 1000);
+  if (!id || (decision !== "accepted" && decision !== "rejected")) return;
+
+  const { data: submission, error } = await db
+    .from("form_submissions")
+    .update({
+      status: decision,
+      decided_by: actorName(access),
+      decided_at: new Date().toISOString(),
+      decision_note: note,
+    })
+    .eq("id", id)
+    .eq("status", "pending")
+    .select("id, form_key, slack_id")
+    .single();
+  if (error || !submission) {
+    console.error("decideFormSubmission failed", error?.message);
+    return;
+  }
+
+  const verb = decision === "accepted" ? "accepted" : "not accepted";
+  const dmText =
+    decision === "accepted"
+      ? `Good news , your "${submission.form_key}" submission was accepted!${note ? `\n\n${note}` : ""}`
+      : `Your "${submission.form_key}" submission was ${verb} this time.${note ? `\n\n${note}` : ""}`;
+  try {
+    await dmUser(submission.slack_id as string, dmText);
+  } catch (e) {
+    console.error("decideFormSubmission DM failed", e);
+  }
+
+  revalidatePath("/forms");
+}
+
 // Keeps an active review's claim (reviewing_by/reviewing_at, see claimReview
 // and REVIEW_LOCK_MS in lib/db.ts) alive while the reviewer is actually still
 // on the detail page - called periodically by the ReviewHeartbeat client

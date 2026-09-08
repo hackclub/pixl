@@ -13,6 +13,13 @@ const GAME_ORIGIN = "https://play.pixl.hackclub.com";
 // through the public internet for a same-cluster hop. No DNS record needed.
 const WEB_SHELL_ORIGIN = "http://pixl-web-shell.ysws-pixl.svc.cluster.local:3000";
 
+// apps/server, same same-cluster-DNS reasoning as WEB_SHELL_ORIGIN above -
+// used for the public /form/* pages' API calls (apps/server/src/routes/forms.ts),
+// so they hit the apex from the browser's point of view (needed for the
+// SameSite=Lax identity cookie those routes set) without a public server.*
+// hostname round-trip.
+const SERVER_ORIGIN = "http://pixl-server.ysws-pixl.svc.cluster.local:3000";
+
 // Shell pages, mounted at the same path on the apex as on the game host.
 // "docs" moved to WEB_SHELL_ORIGIN as the React migration's first slice.
 // "dashboard" was cut over too (2026-08-24) and reverted the same day -
@@ -53,6 +60,9 @@ const nextConfig: NextConfig = {
       { source: "/play/:path*", destination: `${GAME_ORIGIN}/:path*` },
       { source: "/docs", destination: `${WEB_SHELL_ORIGIN}/docs` },
       { source: "/docs/:path*", destination: `${WEB_SHELL_ORIGIN}/docs/:path*` },
+      { source: "/form", destination: `${WEB_SHELL_ORIGIN}/form` },
+      { source: "/form/:path*", destination: `${WEB_SHELL_ORIGIN}/form/:path*` },
+      { source: "/api/forms/:path*", destination: `${SERVER_ORIGIN}/api/forms/:path*` },
       // apps/web-shell's own JS/CSS chunks (Next "Multi Zone" assetPrefix -
       // see that app's next.config.ts). Without this, both apps generate
       // chunk URLs at the same bare /_next/static/... path and this app's

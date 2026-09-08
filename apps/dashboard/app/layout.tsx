@@ -75,6 +75,7 @@ export default async function RootLayout({
         news: canView(access, ["news"]),
         showNTell: canView(access, ["show_n_tell"]),
         fulfillment: fulfiller,
+        forms: canView(access, ["forms"]),
       }
     : null;
   const reviewCount =

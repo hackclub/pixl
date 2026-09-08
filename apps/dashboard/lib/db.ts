@@ -3011,3 +3011,39 @@ export async function searchShippableProjects(
     (p) => ({ id: p.id, name: p.name, owner: p.users?.display_name ?? "" }),
   );
 }
+
+// Submissions from the public, no-account forms at pixl.hackclub.com/form/*
+// (see apps/server/src/routes/forms.ts) - form_key keeps this generic for
+// future forms beyond the reviewer-recruitment one it started as.
+export interface FormSubmissionRow {
+  id: number;
+  form_key: string;
+  slack_id: string;
+  name: string;
+  answers: Record<string, string>;
+  status: "pending" | "accepted" | "rejected";
+  decided_by: string;
+  decided_at: string | null;
+  decision_note: string;
+  created_at: string;
+}
+
+export async function listFormSubmissions(formKey?: string): Promise<FormSubmissionRow[]> {
+  let query = db.from("form_submissions").select("*");
+  if (formKey) query = query.eq("form_key", formKey);
+  const { data, error } = await query.order("created_at", { ascending: false });
+  if (error) {
+    console.error("listFormSubmissions", error.message);
+    return [];
+  }
+  return (data ?? []) as FormSubmissionRow[];
+}
+
+export async function countPendingFormSubmissions(): Promise<number> {
+  const { count, error } = await db
+    .from("form_submissions")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "pending");
+  if (error) return 0;
+  return count ?? 0;
+}
