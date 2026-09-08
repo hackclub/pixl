@@ -129,6 +129,10 @@ export default async function ReviewDetail({
   const isFinalStage = p.status === "second_review";
   const isOwn = !!p.users?.slack_id && p.users.slack_id === viewer && !access.isSuper;
   const isHeld = !!p.hold_at;
+  // hold_by is stored as "Name (SlackID)" (see holdReview in app/actions.ts) -
+  // parse the id back out to tell whether this viewer is the one who set it,
+  // since only they (or a super admin) may release it.
+  const heldByMe = isHeld && p.hold_by?.match(/\(([^)]+)\)\s*$/)?.[1] === viewer;
   const canReview =
     !isHeld && ((p.status === "shipped" && !isOwn) || (isFinalStage && canSecondPass));
   const shippedAt = (p as { shipped_at?: string | null }).shipped_at ?? null;
@@ -895,9 +899,10 @@ export default async function ReviewDetail({
                   Held by {p.hold_by || "a super admin"}
                   {p.hold_at ? ` on ${new Date(p.hold_at).toLocaleString()}` : ""}.
                 </p>
-                {access.isSuper && (
+                {(access.isSuper || heldByMe) && (
                   <form action={releaseReviewHold} className="pt-2">
                     <input type="hidden" name="projectId" value={p.id} />
+                    <input type="hidden" name="returnTo" value={`/review/${p.id}`} />
                     <PendingButton
                       variant="outline"
                       size="sm"
@@ -911,14 +916,14 @@ export default async function ReviewDetail({
               </Card>
             )}
 
-            {!isHeld && access.isSuper && (
+            {!isHeld && (
               <details className="rounded-xl bg-card ring-1 ring-border p-4 text-card-foreground">
                 <summary className="flex items-center gap-2 cursor-pointer text-sm font-semibold text-foreground select-none list-none">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                   Put this review on hold
                 </summary>
                 <p className="text-xs text-muted-foreground mt-2">
-                  Blocks any verdict on this project until a super admin releases it. Stays
+                  Blocks any verdict on this project until you or an admin releases it. Stays
                   visible in the queue , this just stops it from being reviewed while it&apos;s on
                   hold, e.g. mid-investigation.
                 </p>

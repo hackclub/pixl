@@ -2099,13 +2099,16 @@ export async function unbanProject(formData: FormData): Promise<void> {
   revalidatePath("/", "layout");
 }
 
-// Super-admin-only hold on a project's review: blocks submitting any verdict
-// (first pass, final pass, extend cutoff, send back, ban) while set, but the
-// project stays visible in the queue as normal. No expiry - stays held until
-// a super admin explicitly releases it, requireSuper() gates both directions
-// so any super admin can, not just whoever set it.
+// Any reviewer can put a project's review on hold: blocks submitting any
+// verdict (first pass, final pass, extend cutoff, send back, ban) while set,
+// but the project stays visible in the queue as normal. No expiry - stays
+// held until the reviewer who set it, or a super admin, releases it (see
+// canReleaseHold below). hold_by stores the same "Name (SlackID)" format as
+// first_pass_by/ban_by (not the player-facing reviewerLabel - a hold is
+// never shown to the player), so the setter's id can be recovered reliably
+// for that release check instead of matching on a display name.
 export async function holdReview(formData: FormData): Promise<void> {
-  const access = await requireSuper();
+  const access = await requirePerm("review");
   const by = actorName(access);
   const projectId = Number(formData.get("projectId") ?? 0);
   const reason = String(formData.get("reason") ?? "").trim().slice(0, 500);
@@ -2114,12 +2117,11 @@ export async function holdReview(formData: FormData): Promise<void> {
   if (!reason)
     redirect(`${returnTo}${returnTo.includes("?") ? "&" : "?"}error=${encodeURIComponent("A reason is required to hold a review.")}`);
 
-  const reviewer = await reviewerLabel(access.session.slackId, access.session.name);
   const { data: project, error } = await db
     .from("projects")
     .update({
       hold_at: new Date().toISOString(),
-      hold_by: reviewer,
+      hold_by: by,
       hold_reason: reason,
     })
     .eq("id", projectId)
@@ -2134,11 +2136,30 @@ export async function holdReview(formData: FormData): Promise<void> {
   revalidatePath("/review");
 }
 
+// Extracts the Slack id from an actorName()-formatted string ("Name (SlackID)"),
+// used to tell whether the caller is the same reviewer who set a hold.
+function slackIdFromActorName(label: string): string {
+  return label.match(/\(([^)]+)\)\s*$/)?.[1] ?? "";
+}
+
 export async function releaseReviewHold(formData: FormData): Promise<void> {
-  const access = await requireSuper();
+  const access = await requirePerm("review");
   const by = actorName(access);
   const projectId = Number(formData.get("projectId") ?? 0);
+  const returnTo = String(formData.get("returnTo") ?? "") || `/review/${projectId}`;
   if (!projectId) return;
+
+  const { data: current } = await db
+    .from("projects")
+    .select("hold_by")
+    .eq("id", projectId)
+    .maybeSingle();
+  if (!current?.hold_by) return; // nothing held, nothing to do
+
+  const setById = slackIdFromActorName(current.hold_by as string);
+  if (!access.isSuper && setById !== access.session.slackId)
+    redirect(`${returnTo}${returnTo.includes("?") ? "&" : "?"}error=${encodeURIComponent("Only the reviewer who held this, or an admin, can release it.")}`);
+
   const { data: project, error } = await db
     .from("projects")
     .update({ hold_at: null, hold_by: "", hold_reason: "" })
