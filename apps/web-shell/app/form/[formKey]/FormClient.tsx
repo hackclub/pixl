@@ -9,7 +9,10 @@ const FIELDS: { key: string; label: string }[] = [
   { key: "message", label: "Why do you want to help review projects?" },
 ];
 
-export function FormClient({ formKey, name }: { formKey: string; name: string }) {
+const SLACK_ID_RE = /^[UW][A-Z0-9]{6,}$/;
+
+export function FormClient({ formKey }: { formKey: string }) {
+  const [slackId, setSlackId] = useState("");
   const [values, setValues] = useState<Record<string, string>>({});
   const [website, setWebsite] = useState(""); // honeypot - real users never see/fill this
   const [status, setStatus] = useState<"idle" | "submitting" | "done" | "error">("idle");
@@ -17,6 +20,11 @@ export function FormClient({ formKey, name }: { formKey: string; name: string })
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!SLACK_ID_RE.test(slackId.trim())) {
+      setError("That doesn't look like a valid Slack member ID (starts with U or W).");
+      setStatus("error");
+      return;
+    }
     setStatus("submitting");
     setError(null);
     try {
@@ -24,14 +32,16 @@ export function FormClient({ formKey, name }: { formKey: string; name: string })
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ answers: values, website }),
+        body: JSON.stringify({ slackId: slackId.trim(), answers: values, website }),
       });
       const json = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
       if (!res.ok || !json.ok) {
         setError(
           json.error === "already_pending"
             ? "You've already got a submission pending review - hang tight, we'll DM you."
-            : "Something went wrong submitting that. Try again in a bit.",
+            : json.error === "slack_id_not_found"
+              ? "We couldn't find that Slack member ID in the workspace - double check it."
+              : "Something went wrong submitting that. Try again in a bit.",
         );
         setStatus("error");
         return;
@@ -46,15 +56,30 @@ export function FormClient({ formKey, name }: { formKey: string; name: string })
   if (status === "done") {
     return (
       <div style={{ background: "#efe", border: "1px solid #9c9", borderRadius: 8, padding: 16 }}>
-        Thanks{name ? `, ${name}` : ""} - your submission was received. We&apos;ll DM you on Slack
-        once it&apos;s been looked at.
+        Thanks - your submission was received. We&apos;ll DM you on Slack once it&apos;s been
+        looked at.
       </div>
     );
   }
 
   return (
     <form onSubmit={submit}>
-      {name && <p style={{ color: "#666", marginBottom: 16 }}>Signed in as {name}.</p>}
+      <label style={{ display: "block", marginBottom: 16 }}>
+        <span style={{ display: "block", fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
+          Your Slack member ID
+        </span>
+        <span style={{ display: "block", fontSize: 12, color: "#666", marginBottom: 6 }}>
+          In Slack: click your profile photo → More → Copy member ID. It starts with U or W.
+        </span>
+        <input
+          required
+          type="text"
+          value={slackId}
+          onChange={(e) => setSlackId(e.target.value)}
+          placeholder="U0XXXXXXX"
+          style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #ccc", fontFamily: "inherit" }}
+        />
+      </label>
       {FIELDS.map((f) => (
         <label key={f.key} style={{ display: "block", marginBottom: 16 }}>
           <span style={{ display: "block", fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
