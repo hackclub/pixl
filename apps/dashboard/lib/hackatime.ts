@@ -248,13 +248,22 @@ export async function fetchHackatimeReport(
 
     const rawProjects = mapBreakdown(data.projects);
     // Every project name the panel will actually display below (line ~313's
-    // filter) - not just the submission's explicitly linked projects. A
-    // Hackatime project with real tracked time but not in `linked` still gets
-    // shown (p.seconds > 0), so fetching spans/lapses only for `linked` left
-    // those rows permanently missing their session count and any lapse
-    // recordings, even when Lapse genuinely had some for that project name.
+    // filter) that's worth spending 2 extra network calls on. Not just the
+    // submission's explicitly linked projects - a Hackatime project with real
+    // tracked time but not in `linked` still gets shown (p.seconds > 0), so
+    // fetching spans/lapses only for `linked` left those rows permanently
+    // missing their session count and any lapse recordings. But an active
+    // coder's account can have dozens of unrelated projects with a handful of
+    // stray seconds each, and fetching spans+lapses for every single one of
+    // those fanned out to 50-100+ concurrent external requests per review
+    // page load, which is what actually made the page slow - so the eager
+    // fetch here is capped to `linked` plus unlinked projects with a
+    // meaningful amount of time, not literally any nonzero seconds.
+    const MEANINGFUL_UNLINKED_SECONDS = 180;
     const displayNames = new Set(
-      rawProjects.filter((p) => linked.has(p.name) || p.seconds > 0).map((p) => p.name),
+      rawProjects
+        .filter((p) => linked.has(p.name) || p.seconds >= MEANINGFUL_UNLINKED_SECONDS)
+        .map((p) => p.name),
     );
     // Per-project sessions/first/last from spans, in parallel , a maker's
     // Hackatime account rarely has more than a handful of shown projects.
