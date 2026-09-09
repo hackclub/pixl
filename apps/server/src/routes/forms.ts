@@ -22,6 +22,45 @@ const MAX_ANSWER_LEN = 4000;
 const MAX_ANSWERS = 30;
 const SLACK_ID_RE = /^[UW][A-Z0-9]{6,}$/;
 
+interface FormQuestion {
+  key: string;
+  label: string;
+}
+
+interface FormConfig {
+  form_key: string;
+  title: string;
+  description: string;
+  questions: FormQuestion[];
+  close_at: string | null;
+}
+
+async function loadFormConfig(formKey: string): Promise<FormConfig | null> {
+  const { data, error } = await supabase
+    .from("form_configs")
+    .select("form_key, title, description, questions, close_at")
+    .eq("form_key", formKey)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data as unknown as FormConfig;
+}
+
+// Public - apps/web-shell's form page fetches this to render the current
+// title/description/questions and know whether submissions are closed.
+router.get("/api/forms/:formKey/config", async (req, res) => {
+  const config = await loadFormConfig(String(req.params.formKey));
+  if (!config) return res.status(404).json({ ok: false });
+  const closed = !!config.close_at && new Date(config.close_at).getTime() <= Date.now();
+  res.json({
+    ok: true,
+    title: config.title,
+    description: config.description,
+    questions: config.questions,
+    closeAt: config.close_at,
+    closed,
+  });
+});
+
 async function lookupSlackUser(slackId: string): Promise<{ name: string } | null> {
   const token = process.env.SLACK_BOT_TOKEN;
   if (!token) return null;
@@ -64,7 +103,7 @@ function isTrustedOrigin(req: import("express").Request): boolean {
 const submitLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, name: "form_submit" });
 
 router.post("/api/forms/:formKey/submit", submitLimiter, async (req, res) => {
-  const formKey = req.params.formKey;
+  const formKey = String(req.params.formKey);
   if (!isTrustedOrigin(req)) return res.status(403).json({ ok: false, error: "bad_origin" });
 
   const body = req.body as { answers?: unknown; website?: unknown; slackId?: unknown };
@@ -74,6 +113,11 @@ router.post("/api/forms/:formKey/submit", submitLimiter, async (req, res) => {
   if (typeof body.website === "string" && body.website.trim() !== "") {
     return res.json({ ok: true });
   }
+
+  const config = await loadFormConfig(formKey);
+  if (!config) return res.status(404).json({ ok: false, error: "form_not_found" });
+  if (config.close_at && new Date(config.close_at).getTime() <= Date.now())
+    return res.status(403).json({ ok: false, error: "form_closed" });
 
   const slackId = String(body.slackId ?? "").trim();
   if (!SLACK_ID_RE.test(slackId))
@@ -87,11 +131,17 @@ router.post("/api/forms/:formKey/submit", submitLimiter, async (req, res) => {
   const entries = Object.entries(rawAnswers as Record<string, unknown>);
   if (entries.length === 0 || entries.length > MAX_ANSWERS)
     return res.status(400).json({ ok: false, error: "invalid_answers" });
+  // Only keep answers for questions the form currently has configured -
+  // guards against a stale client submitting a question that's since been
+  // removed/renamed on the dashboard.
+  const validKeys = new Set(config.questions.map((q) => q.key));
   const answers: Record<string, string> = {};
   for (const [key, value] of entries) {
-    if (typeof key !== "string" || key.length > 100) continue;
+    if (typeof key !== "string" || key.length > 100 || !validKeys.has(key)) continue;
     answers[key] = String(value ?? "").slice(0, MAX_ANSWER_LEN);
   }
+  if (Object.keys(answers).length === 0)
+    return res.status(400).json({ ok: false, error: "invalid_answers" });
 
   // One pending submission per person per form at a time - resubmitting
   // while still pending would just spam the reviewer queue and the "received"

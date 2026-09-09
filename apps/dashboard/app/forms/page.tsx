@@ -1,10 +1,12 @@
 import { requirePagePerm } from "@/lib/guard";
-import { listFormSubmissions } from "@/lib/db";
-import { decideFormSubmission } from "@/app/actions";
+import { listFormSubmissions, listFormConfigs } from "@/lib/db";
+import { decideFormSubmission, saveFormConfig } from "@/app/actions";
 import { PendingButton } from "@/app/_components/PendingButton";
+import { FormEditor } from "./FormEditor";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +27,7 @@ function dateLabel(iso: string | null): string {
 // Slack id they verified via Hack Club Auth at submit time.
 export default async function FormsPage() {
   await requirePagePerm(["forms"]);
-  const submissions = await listFormSubmissions();
+  const [submissions, configs] = await Promise.all([listFormSubmissions(), listFormConfigs()]);
   const pending = submissions.filter((s) => s.status === "pending");
   const decided = submissions.filter((s) => s.status !== "pending");
 
@@ -37,6 +39,33 @@ export default async function FormsPage() {
           Submissions from the public forms at pixl.hackclub.com/form/* - submitters verify their
           real Slack identity but never get a Pixl account, so accept/reject DMs them directly.
         </p>
+      </div>
+
+      <div>
+        <div className="text-sm font-medium text-muted-foreground mb-3">Form settings</div>
+        <div className="grid gap-4">
+          {configs.map((c) => (
+            <FormEditor key={c.form_key} config={c} />
+          ))}
+          <Card className="p-4 md:p-5 gap-3">
+            <div className="text-sm font-medium">New form</div>
+            <form action={saveFormConfig} className="flex gap-2 items-end flex-wrap">
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground block">
+                  Form key (used in the URL, e.g. "review" for /form/review)
+                </label>
+                <Input name="formKey" placeholder="my-form" className="w-56" required pattern="[a-z0-9_-]{1,50}" />
+              </div>
+              <input type="hidden" name="title" value="" />
+              <input type="hidden" name="description" value="" />
+              <input type="hidden" name="closeAt" value="" />
+              <input type="hidden" name="questionsJson" value="[]" />
+              <PendingButton size="sm" variant="outline" pendingText="Creating…">
+                Create
+              </PendingButton>
+            </form>
+          </Card>
+        </div>
       </div>
 
       <div>

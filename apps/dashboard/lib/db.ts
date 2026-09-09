@@ -3047,3 +3047,30 @@ export async function countPendingFormSubmissions(): Promise<number> {
   if (error) return 0;
   return count ?? 0;
 }
+
+// Per-form settings (title/description/questions/close date) - see
+// apps/server/drizzle/0170_form_configs.sql and the public
+// GET /api/forms/:formKey/config endpoint apps/web-shell's form page reads.
+export interface FormQuestion {
+  key: string;
+  label: string;
+}
+
+export interface FormConfigRow {
+  form_key: string;
+  title: string;
+  description: string;
+  questions: FormQuestion[];
+  close_at: string | null;
+  updated_by: string;
+  updated_at: string;
+}
+
+export async function listFormConfigs(): Promise<FormConfigRow[]> {
+  const { data, error } = await db.from("form_configs").select("*").order("form_key");
+  if (error) {
+    console.error("listFormConfigs", error.message);
+    return [];
+  }
+  return (data ?? []) as FormConfigRow[];
+}

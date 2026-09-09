@@ -2,16 +2,15 @@
 
 import { useState } from "react";
 
-// Placeholder field list - swap this for the real questions once decided.
-// Each entry becomes one <textarea>; the key is what shows up in the
-// dashboard's Forms tab and in form_submissions.answers.
-const FIELDS: { key: string; label: string }[] = [
-  { key: "message", label: "Why do you want to help review projects?" },
-];
-
 const SLACK_ID_RE = /^[UW][A-Z0-9]{6,}$/;
 
-export function FormClient({ formKey }: { formKey: string }) {
+export function FormClient({
+  formKey,
+  questions,
+}: {
+  formKey: string;
+  questions: { key: string; label: string }[];
+}) {
   const [slackId, setSlackId] = useState("");
   const [values, setValues] = useState<Record<string, string>>({});
   const [website, setWebsite] = useState(""); // honeypot - real users never see/fill this
@@ -80,7 +79,7 @@ export function FormClient({ formKey }: { formKey: string }) {
           style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #ccc", fontFamily: "inherit" }}
         />
       </label>
-      {FIELDS.map((f) => (
+      {questions.map((f) => (
         <label key={f.key} style={{ display: "block", marginBottom: 16 }}>
           <span style={{ display: "block", fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
             {f.label}

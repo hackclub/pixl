@@ -2321,6 +2321,59 @@ export async function decideFormSubmission(formData: FormData): Promise<void> {
   revalidatePath("/forms");
 }
 
+// Lets an admin add/edit/remove questions and set a close date on a public
+// form (pixl.hackclub.com/form/*) from the Forms tab, without a deploy -
+// apps/server/src/routes/forms.ts reads this table live. questionsJson is a
+// JSON-encoded array of {key, label} built client-side by FormEditor.
+export async function saveFormConfig(formData: FormData): Promise<void> {
+  const access = await requirePerm("forms");
+  const formKey = String(formData.get("formKey") ?? "").trim();
+  const title = String(formData.get("title") ?? "").trim().slice(0, 200);
+  const description = String(formData.get("description") ?? "").trim().slice(0, 2000);
+  const closeAtRaw = String(formData.get("closeAt") ?? "").trim();
+  const questionsRaw = String(formData.get("questionsJson") ?? "[]");
+  if (!/^[a-z0-9_-]{1,50}$/.test(formKey)) return;
+
+  let questions: { key: string; label: string }[] = [];
+  try {
+    const parsed = JSON.parse(questionsRaw) as unknown;
+    if (Array.isArray(parsed)) {
+      questions = parsed
+        .filter(
+          (q): q is { key: string; label: string } =>
+            !!q &&
+            typeof q === "object" &&
+            typeof (q as { key?: unknown }).key === "string" &&
+            typeof (q as { label?: unknown }).label === "string" &&
+            (q as { key: string }).key.trim() !== "" &&
+            (q as { label: string }).label.trim() !== "",
+        )
+        .slice(0, 30)
+        .map((q) => ({ key: q.key.trim().slice(0, 100), label: q.label.trim().slice(0, 300) }));
+    }
+  } catch {
+    return;
+  }
+
+  const closeAt = closeAtRaw ? new Date(closeAtRaw).toISOString() : null;
+
+  const { error } = await db.from("form_configs").upsert(
+    {
+      form_key: formKey,
+      title,
+      description,
+      questions,
+      close_at: closeAt,
+      updated_by: actorName(access),
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "form_key" },
+  );
+  if (error) console.error("saveFormConfig failed", error.message);
+
+  revalidatePath("/forms");
+}
+
 // Keeps an active review's claim (reviewing_by/reviewing_at, see claimReview
 // and REVIEW_LOCK_MS in lib/db.ts) alive while the reviewer is actually still
 // on the detail page - called periodically by the ReviewHeartbeat client
