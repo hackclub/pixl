@@ -804,6 +804,7 @@ router.post("/api/projects/:id/ship", async (req, res) => {
     trackedSeconds,
     collaborators: collaboratorTeam,
     ownerLabel,
+    ownerSlackId,
   });
   if (flagDetail) {
     const { error: flagError } = await supabase.from("mod_actions").insert({

@@ -29,6 +29,7 @@ export interface DoubleDipInput {
   // Accepted collaborators only (not the owner - see trackedSeconds above).
   collaborators: TeamMember[];
   ownerLabel: string;
+  ownerSlackId: string | null;
 }
 
 export interface DoubleDipResult {
@@ -76,9 +77,13 @@ function teamBreakdown(matches: ArchiveMatch[], team: TeamMember[]): string {
 }
 
 export function buildDoubleDip(input: DoubleDipInput): DoubleDipResult {
-  const { project, matches, otherYsws, trackedSeconds, collaborators, ownerLabel } = input;
+  const { project, matches, otherYsws, trackedSeconds, collaborators, ownerLabel, ownerSlackId } =
+    input;
   const claimedHours = hoursOf(trackedSeconds);
-  const team: TeamMember[] = [{ slackId: "", label: ownerLabel, claimedHours }, ...collaborators];
+  const team: TeamMember[] = [
+    { slackId: ownerSlackId ?? "", label: ownerLabel, claimedHours },
+    ...collaborators,
+  ];
 
   if (matches.length > 0) {
     const first = matches[0];
