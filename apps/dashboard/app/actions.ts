@@ -1337,13 +1337,30 @@ export async function reviewProject(formData: FormData): Promise<void> {
     `${project.name}: ${deltaPx >= 0 ? "+" : ""}${deltaPx} pixels (total ${totalPx})`,
     by,
   );
-  if (fundingPx > 0)
+  if (fundingPx > 0) {
     await logModAction(
       project.user_id,
       "funding_deducted",
       `${project.name}: $${fundingUsd.toFixed(2)} hardware grant , ${fundingPx} px withheld from payout, needs fulfillment`,
       by,
     );
+    // Puts the grant into the same pipeline as a shop purchase (claim -> order
+    // -> credited -> shipped -> done) so a fulfiller actually sees it - a
+    // plain insert, not buy_shop_item(), since the pixels were already
+    // withheld from the payout above rather than deducted from a balance.
+    // item_id null + a price-only row is exactly what a non-catalog order
+    // looks like elsewhere in this table.
+    const { error: fundingOrderError } = await db.from("shop_orders").insert({
+      user_id: project.user_id,
+      item_id: null,
+      item_name: `Hardware funding grant , ${project.name}`,
+      price: fundingPx,
+      status: "pending",
+      note: `$${fundingUsd.toFixed(2)} hardware funding grant approved with this ship, withheld from payout.`,
+    });
+    if (fundingOrderError)
+      console.error("reviewProject (funding order)", fundingOrderError.message);
+  }
   // Fire-and-log: a failed Airtable push (bad address data, Airtable being
   // down, etc.) must never block the approval itself - the "Re-send to
   // Airtable" button on the project page is the fallback for that case.
