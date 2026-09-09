@@ -389,8 +389,6 @@ router.get("/api/explore/projects", async (req, res) => {
     .is("archived_at", null)
     .is("rejected_at", null)
     .is("banned_at", null)
-    // #no-fraud-review-leak
-    .neq("status", "fraud_review")
     .order("created_at", { ascending: false })
     .limit(limit);
   if (q) query = query.ilike("name", `%${q}%`);
@@ -470,7 +468,6 @@ router.get("/api/explore/projects/:id", async (req, res) => {
     .is("archived_at", null)
     .is("rejected_at", null)
     .is("banned_at", null)
-    .neq("status", "fraud_review")
     .maybeSingle();
   if (error || !project) return res.status(404).json({ ok: false });
 
