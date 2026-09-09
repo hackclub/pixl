@@ -571,6 +571,13 @@
           list = [...list].sort((a, b) =>
             String(a.name).localeCompare(String(b.name)),
           );
+        // Featured is otherwise the server's raw catalog order - just sink
+        // grants to the bottom of it (sort is stable, so this doesn't touch
+        // ordering within either group).
+        else if (sort === "featured")
+          list = [...list].sort(
+            (a, b) => (a.category === "grants" ? 1 : 0) - (b.category === "grants" ? 1 : 0),
+          );
         // Saved items float to the top regardless of sort mode - sort() is
         // stable, so this just bubbles saved items up without disturbing the
         // price/name/featured order within each group.
