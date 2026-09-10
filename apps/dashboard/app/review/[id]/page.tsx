@@ -46,6 +46,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export const dynamic = "force-dynamic";
 
@@ -708,192 +709,8 @@ export default async function ReviewDetail({
         {/* sidebar */}
         <aside className="lg:w-[30rem] shrink-0">
           <div className="lg:sticky lg:top-24 space-y-4">
-            <Card className="p-5 gap-0">
-              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                Logged hours
-              </div>
-              <div className="mt-1 mb-3">
-                <span className="text-3xl font-bold">{fmtHM(hours)}</span>{" "}
-                <span className="text-muted-foreground text-sm">logged</span>
-              </div>
-              <div className="h-2 rounded-full bg-muted overflow-hidden flex">
-                <div className="h-full bg-[color:var(--color-hc-blue)]" style={{ width: `${htPct}%` }} />
-                <div className="h-full bg-[color:var(--color-hc-purple)]" style={{ width: `${100 - htPct}%` }} />
-              </div>
-              <div className="mt-4 space-y-2 text-sm">
-                <a href="#hackatime" className="flex items-center gap-2 hover:text-brand" title="See the full Hackatime breakdown">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[color:var(--color-hc-blue)]" />
-                  <span className="text-foreground/70">Hackatime →</span>
-                  <span className="ml-auto tabular-nums font-medium">{fmtHM(hackatimeHours)}</span>
-                </a>
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[color:var(--color-hc-purple)]" />
-                  <span className="text-foreground/70">Journals</span>
-                  <span className="ml-auto tabular-nums font-medium">{fmtHM(journalHours)}</span>
-                </div>
-              </div>
-              {p.hours_extended_since && (
-                <div className="mt-3 pt-3 border-t border-border text-xs text-muted-foreground">
-                  Counting hours from{" "}
-                  <span className="font-medium text-foreground">
-                    {new Date(p.hours_extended_since).toLocaleDateString()}
-                  </span>{" "}
-                  (before the {hackatimeCutoffLabel} cutoff) , set by{" "}
-                  <span className="font-medium text-foreground">{p.hours_extended_by}</span>:{" "}
-                  {p.hours_extended_note}
-                </div>
-              )}
-            </Card>
-
-            <Card className="p-4 gap-0 flex-row items-center justify-between">
-              <div>
-                <div className="text-sm font-semibold">Beacon</div>
-                <p className="text-xs text-muted-foreground">
-                  Nominate a standout project , cosmetic only, never affects payout.
-                </p>
-              </div>
-              <form action={toggleProjectPeak}>
-                <input type="hidden" name="projectId" value={p.id} />
-                {!p.is_peak && <input type="hidden" name="isPeak" value="1" />}
-                <PendingButton
-                  size="sm"
-                  variant={p.is_peak ? "outline" : undefined}
-                  className={p.is_peak ? "" : "bg-amber-500 text-black hover:bg-amber-600 border-transparent"}
-                  pendingText={p.is_peak ? "Removing…" : "Marking…"}
-                >
-                  {p.is_peak ? "Remove" : "★ Mark"}
-                </PendingButton>
-              </form>
-            </Card>
-
-            {trust && (
-              <Card className="p-4 flex-row items-center gap-3">
-                <Badge variant={TRUST_VARIANT(trust.level)}>{TRUST_LABEL(trust.level)}</Badge>
-                <span className="text-xs text-muted-foreground">
-                  Hackatime trust factor , {trust.level === "green"
-                    ? "no fraud flags on this account."
-                    : trust.level === "red" || trust.level === "convicted"
-                      ? "Hackatime has convicted this account of fraud. Do not credit without digging."
-                      : trust.level === "yellow" || trust.level === "suspected"
-                        ? "Hackatime suspects this account , verify carefully."
-                        : "not scored yet."}
-                </span>
-              </Card>
-            )}
-
-            {isFinalStage && (
-              <Card className="p-5 gap-0 ring-violet-300 dark:ring-violet-500/30">
-                <div className="text-xs font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wide mb-2">
-                  First pass
-                </div>
-                {p.first_pass_verdict && p.first_pass_verdict !== "approved" && (
-                  <div className="mb-2 rounded-md bg-rose-50 dark:bg-rose-950/30 px-2 py-1 text-sm font-semibold text-rose-700 dark:text-rose-300">
-                    ⚠ First reviewer proposed{" "}
-                    {p.first_pass_verdict === "banned" ? "a BAN" : "changes"} , confirm it, or approve to overturn.
-                  </div>
-                )}
-                <div className="text-sm text-foreground/70">
-                  {p.first_pass_verdict === "banned"
-                    ? "Ban proposed by "
-                    : p.first_pass_verdict === "needs_changes"
-                      ? "Changes proposed by "
-                      : "Passed by "}
-                  <span className="font-medium text-foreground">{p.first_pass_by || "a reviewer"}</span>
-                  {p.first_pass_hours != null && (
-                    <>
-                      {" "}
-                      · credited <span className="font-medium text-foreground">{p.first_pass_hours}h</span> of{" "}
-                      {hours}h claimed
-                    </>
-                  )}
-                </div>
-                {firstPassDeflated > 0 && (
-                  <div className="mt-1 text-sm font-medium text-rose-600 dark:text-rose-400">
-                    Deflated {firstPassDeflated}h {firstPassCutPct > 0 ? `(−${firstPassCutPct}%)` : ""}
-                  </div>
-                )}
-                {p.first_pass_note && (
-                  <p className="mt-2 text-sm whitespace-pre-wrap break-words text-foreground/80">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Their note:{" "}
-                    </span>
-                    {p.first_pass_note}
-                  </p>
-                )}
-              </Card>
-            )}
-
-            <Card className="p-5 gap-3">
-              <ReviewPipelineSteps
-                shippedAt={p.shipped_at}
-                firstPassAt={p.first_pass_at}
-                status={p.status}
-                airtableRecordId={p.airtable_record_id}
-              />
-              {isFinalStage && canSecondPass && (
-                <SecondPassChecklist
-                  projectId={p.id}
-                  values={{
-                    second_pass_telescreen_checked: Boolean(p.second_pass_telescreen_checked),
-                    second_pass_hours_deflated: Boolean(p.second_pass_hours_deflated),
-                    second_pass_heartbeats_added: Boolean(p.second_pass_heartbeats_added),
-                  }}
-                />
-              )}
-            </Card>
-
-            {(p.joe_project_id || p.joe_error) && (
-              <Card className="p-5 gap-0 space-y-2">
-                <div className="text-sm font-semibold">Fraud review history (Joe)</div>
-                {p.joe_error ? (
-                  <p className="text-sm text-rose-600">
-                    Not submitted to Joe: {p.joe_error}
-                  </p>
-                ) : p.joe_outcome ? (
-                  <dl className="text-sm grid grid-cols-2 gap-1">
-                    <dt>Outcome</dt>
-                    <dd>{p.joe_outcome}</dd>
-                    <dt>Trust score</dt>
-                    <dd>{p.joe_trust_score ?? "not given"}</dd>
-                    <dt>Note</dt>
-                    <dd className="whitespace-pre-wrap break-words">
-                      {p.joe_reason || "no note given"}
-                    </dd>
-                    <dt>Reviewer</dt>
-                    <dd>{p.joe_reviewer || "unknown"}</dd>
-                    <dt>Reviewed</dt>
-                    <dd>{p.joe_reviewed_at ? new Date(p.joe_reviewed_at).toLocaleString() : "not yet"}</dd>
-                  </dl>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    Submitted to Joe, waiting on a score , fraud review is retired, this one's
-                    stuck mid-flight from before the cutover.
-                  </p>
-                )}
-              </Card>
-            )}
-
-            {isFinalStage && p.joe_outcome === "rejected" && (
-              <Card className="p-5 text-sm gap-0 ring-rose-300 dark:ring-rose-500/30 text-rose-700 dark:text-rose-300">
-                <strong>Joe rejected this on fraud review.</strong>{" "}
-                {p.joe_reason || "No reason given."} You can still approve it, but document
-                why in your notes.
-              </Card>
-            )}
-
-            {ageFlag && (
-              <Card className="p-4 text-sm gap-1 ring-amber-300 dark:ring-amber-500/30">
-                <div className="font-semibold text-amber-700 dark:text-amber-300">
-                  Age eligibility
-                </div>
-                <div className="text-xs text-muted-foreground">
-                  This submitter turns 19 between shipping this project and now , Hack
-                  Club's YSWS guidelines want an Override Age Justification documented
-                  before deciding. See the audit note below.
-                </div>
-              </Card>
-            )}
-
+            {/* Pinned above the tabs, never hidden behind a click , these are
+                the "stop and look at this before you decide" states. */}
             {isHeld && (
               <Card className="p-5 gap-1 ring-amber-400 dark:ring-amber-500/40 bg-amber-50 dark:bg-amber-500/10">
                 <div className="font-semibold text-amber-800 dark:text-amber-300">
@@ -923,36 +740,25 @@ export default async function ReviewDetail({
               </Card>
             )}
 
-            {!isHeld && (
-              <details className="rounded-xl bg-card ring-1 ring-border p-4 text-card-foreground">
-                <summary className="flex items-center gap-2 cursor-pointer text-sm font-semibold text-foreground select-none list-none">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                  Put this review on hold
-                </summary>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Blocks any verdict on this project until you or an admin releases it. Stays
-                  visible in the queue , this just stops it from being reviewed while it&apos;s on
-                  hold, e.g. mid-investigation.
-                </p>
-                <form action={holdReview} className="mt-3 flex flex-col gap-2">
-                  <input type="hidden" name="projectId" value={p.id} />
-                  <input type="hidden" name="returnTo" value={`/review/${p.id}`} />
-                  <Textarea
-                    name="reason"
-                    required
-                    rows={2}
-                    placeholder="Why hold this (internal, not shown to the player)…"
-                    className="text-sm resize-y"
-                  />
-                  <PendingButton
-                    variant="secondary"
-                    pendingText="Holding…"
-                    confirm="Hold this review? Nobody can submit a verdict on it until you or another super admin releases it."
-                  >
-                    Hold this review
-                  </PendingButton>
-                </form>
-              </details>
+            {ageFlag && (
+              <Card className="p-4 text-sm gap-1 ring-amber-300 dark:ring-amber-500/30">
+                <div className="font-semibold text-amber-700 dark:text-amber-300">
+                  Age eligibility
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  This submitter turns 19 between shipping this project and now , Hack
+                  Club's YSWS guidelines want an Override Age Justification documented
+                  before deciding. See the audit note below.
+                </div>
+              </Card>
+            )}
+
+            {isFinalStage && p.joe_outcome === "rejected" && (
+              <Card className="p-5 text-sm gap-0 ring-rose-300 dark:ring-rose-500/30 text-rose-700 dark:text-rose-300">
+                <strong>Joe rejected this on fraud review.</strong>{" "}
+                {p.joe_reason || "No reason given."} You can still approve it, but document
+                why in your notes.
+              </Card>
             )}
 
             {isOwn && p.status === "shipped" && (
@@ -967,181 +773,358 @@ export default async function ReviewDetail({
               </Card>
             )}
 
-            {canReview ? (
-              <>
+            <Tabs defaultValue="review" className="gap-3">
+              <TabsList className="w-full">
+                <TabsTrigger value="review" className="flex-1">Review</TabsTrigger>
+                <TabsTrigger value="overview" className="flex-1">Overview</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="overview" className="space-y-4">
                 <Card className="p-5 gap-0">
-                  <div className="text-sm font-semibold mb-1">
-                    {isFinalStage ? "Final pass" : "First pass"}
+                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Logged hours
                   </div>
-                  <p className="text-xs text-muted-foreground mb-3">
-                    {isFinalStage
-                      ? "Approving credits pixels at the player's level rate ($4–6/hr in px) and ships it. Every verdict needs a note. You can only lower the credited hours."
-                      : "Every verdict needs a note. Approving sends this to a final reviewer before pixels are credited , even you have final-reviewer rights, your own first look is still just a proposal. You can only lower the credited hours."}
-                  </p>
-                  <ReviewForm
-                    projectId={p.id}
-                    repoUrl={p.repo_url}
-                    demoUrl={p.demo_url}
-                    claimedHours={payoutHours}
-                    defaultHours={formDefaultHours}
-                    journalDeflatedHours={journalDeflatedHours}
-                    isSuper={access.isSuper}
-                    secondPass={isFinalStage}
-                    bounties={bounties}
-                    trial={
-                      trial?.name ? { name: trial.name, minHours: trial.min_hours ?? null } : null
-                    }
-                    hackatimeProjects={hackatimeProjects}
-                    hackatimeSeconds={p.hackatime_seconds ?? 0}
-                    ageFlag={ageFlag}
-                    collaborators={collaboratorHours}
-                    tier={Number(p.level) || 1}
-                    playerReBefore={playerReBefore}
-                    fundingUsd={p.needs_funding ? Number(p.funding_usd ?? 0) : 0}
-                    currentName={p.name}
-                    currentDescription={p.description}
-                    currentImageUrl={p.image_url}
-                    firstPass={
-                      firstPassAudit
-                        ? {
-                            technicalFeatures: firstPassAudit["TECHNICAL FEATURES"],
-                            hackatimeEvidence: firstPassAudit["HACKATIME EVIDENCE"],
-                            deflationReason: firstPassAudit["DEFLATION REASON"],
-                            ageJustification: firstPassAudit["AGE JUSTIFICATION"],
-                            notes: firstPassAudit["NOTES"],
-                            note: p.first_pass_note,
-                          }
-                        : undefined
-                    }
-                  />
+                  <div className="mt-1 mb-3">
+                    <span className="text-3xl font-bold">{fmtHM(hours)}</span>{" "}
+                    <span className="text-muted-foreground text-sm">logged</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-muted overflow-hidden flex">
+                    <div className="h-full bg-[color:var(--color-hc-blue)]" style={{ width: `${htPct}%` }} />
+                    <div className="h-full bg-[color:var(--color-hc-purple)]" style={{ width: `${100 - htPct}%` }} />
+                  </div>
+                  <div className="mt-4 space-y-2 text-sm">
+                    <a href="#hackatime" className="flex items-center gap-2 hover:text-brand" title="See the full Hackatime breakdown">
+                      <span className="w-2.5 h-2.5 rounded-full bg-[color:var(--color-hc-blue)]" />
+                      <span className="text-foreground/70">Hackatime →</span>
+                      <span className="ml-auto tabular-nums font-medium">{fmtHM(hackatimeHours)}</span>
+                    </a>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-[color:var(--color-hc-purple)]" />
+                      <span className="text-foreground/70">Journals</span>
+                      <span className="ml-auto tabular-nums font-medium">{fmtHM(journalHours)}</span>
+                    </div>
+                  </div>
+                  {p.hours_extended_since && (
+                    <div className="mt-3 pt-3 border-t border-border text-xs text-muted-foreground">
+                      Counting hours from{" "}
+                      <span className="font-medium text-foreground">
+                        {new Date(p.hours_extended_since).toLocaleDateString()}
+                      </span>{" "}
+                      (before the {hackatimeCutoffLabel} cutoff) , set by{" "}
+                      <span className="font-medium text-foreground">{p.hours_extended_by}</span>:{" "}
+                      {p.hours_extended_note}
+                    </div>
+                  )}
                 </Card>
 
-                <details className="rounded-xl bg-card ring-1 ring-border p-4 text-card-foreground">
-                  <summary className="flex items-center gap-2 cursor-pointer text-sm font-semibold text-foreground select-none list-none">
-                    <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground" />
-                    Extend hours cutoff
-                  </summary>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Normally only hours from {hackatimeCutoffLabel} onward count. If this project
-                    genuinely started earlier and paused (verify against Hackatime&apos;s first-activity
-                    date above), pick how far back to count from , this re-pulls their Hackatime
-                    spans and raises the credited total, it never lowers it.
-                  </p>
-                  <form action={extendHoursCutoff} className="mt-3 flex flex-col gap-2">
+                <Card className="p-4 gap-0 flex-row items-center justify-between">
+                  <div>
+                    <div className="text-sm font-semibold">Beacon</div>
+                    <p className="text-xs text-muted-foreground">
+                      Nominate a standout project , cosmetic only, never affects payout.
+                    </p>
+                  </div>
+                  <form action={toggleProjectPeak}>
                     <input type="hidden" name="projectId" value={p.id} />
-                    <Input
-                      type="date"
-                      name="since"
-                      required
-                      max={maxExtendDateStr}
-                      defaultValue={
-                        p.hours_extended_since
-                          ? new Date(p.hours_extended_since).toISOString().slice(0, 10)
-                          : undefined
-                      }
-                    />
-                    <Textarea
-                      name="note"
-                      required
-                      rows={2}
-                      placeholder="Why count from this date (internal, not shown to the player)…"
-                      className="text-sm resize-y"
-                    />
+                    {!p.is_peak && <input type="hidden" name="isPeak" value="1" />}
                     <PendingButton
-                      variant="secondary"
-                      pendingText="Extending…"
-                      confirm="Recount this project's hours from that date? This only ever raises the credited total."
+                      size="sm"
+                      variant={p.is_peak ? "outline" : undefined}
+                      className={p.is_peak ? "" : "bg-amber-500 text-black hover:bg-amber-600 border-transparent"}
+                      pendingText={p.is_peak ? "Removing…" : "Marking…"}
                     >
-                      Extend cutoff
+                      {p.is_peak ? "Remove" : "★ Mark"}
                     </PendingButton>
                   </form>
-                </details>
+                </Card>
+
+                {trust && (
+                  <Card className="p-4 flex-row items-center gap-3">
+                    <Badge variant={TRUST_VARIANT(trust.level)}>{TRUST_LABEL(trust.level)}</Badge>
+                    <span className="text-xs text-muted-foreground">
+                      Hackatime trust factor , {trust.level === "green"
+                        ? "no fraud flags on this account."
+                        : trust.level === "red" || trust.level === "convicted"
+                          ? "Hackatime has convicted this account of fraud. Do not credit without digging."
+                          : trust.level === "yellow" || trust.level === "suspected"
+                            ? "Hackatime suspects this account , verify carefully."
+                            : "not scored yet."}
+                    </span>
+                  </Card>
+                )}
 
                 {isFinalStage && (
-                <details className="rounded-xl bg-card ring-1 ring-violet-300 dark:ring-violet-500/30 p-4 text-card-foreground">
-                  <summary className="flex items-center gap-2 cursor-pointer text-sm font-semibold text-violet-700 dark:text-violet-400 select-none list-none">
-                    <span className="w-1.5 h-1.5 rounded-full bg-violet-600" />
-                    Send back to first pass
-                  </summary>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Not confident enough to confirm or overturn the first pass yourself? Send it back
-                    to the front of the queue for a fresh first-pass look instead , no verdict, no
-                    pixels credited yet. The first-pass reviewer is still paid in full unless you
-                    flag it as their mistake below.
-                  </p>
-                  <form action={sendBackToFirstPass} className="mt-3 flex flex-col gap-2">
-                    <input type="hidden" name="projectId" value={p.id} />
-                    <Textarea
-                      name="reason"
-                      required
-                      rows={2}
-                      placeholder="Why send this back (internal, not shown to the player)…"
-                      className="text-sm resize-y"
-                    />
-                    <Label className="flex items-start gap-2 text-sm py-0.5 font-normal">
-                      <Checkbox name="voidPayout" value="1" className="mt-0.5" />
-                      <span>
-                        This was the first-pass reviewer&apos;s mistake , void their pending payout
-                        instead of paying it in full
-                      </span>
-                    </Label>
-                    <PendingButton
-                      className="bg-violet-700 text-white border-transparent hover:bg-violet-800"
-                      pendingText="Sending back…"
-                      confirm="Send this back to first pass?"
-                    >
-                      Send back to first pass
-                    </PendingButton>
-                  </form>
-                </details>
+                  <Card className="p-5 gap-0 ring-violet-300 dark:ring-violet-500/30">
+                    <div className="text-xs font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wide mb-2">
+                      First pass
+                    </div>
+                    {p.first_pass_verdict && p.first_pass_verdict !== "approved" && (
+                      <div className="mb-2 rounded-md bg-rose-50 dark:bg-rose-950/30 px-2 py-1 text-sm font-semibold text-rose-700 dark:text-rose-300">
+                        ⚠ First reviewer proposed{" "}
+                        {p.first_pass_verdict === "banned" ? "a BAN" : "changes"} , confirm it, or approve to overturn.
+                      </div>
+                    )}
+                    <div className="text-sm text-foreground/70">
+                      {p.first_pass_verdict === "banned"
+                        ? "Ban proposed by "
+                        : p.first_pass_verdict === "needs_changes"
+                          ? "Changes proposed by "
+                          : "Passed by "}
+                      <span className="font-medium text-foreground">{p.first_pass_by || "a reviewer"}</span>
+                      {p.first_pass_hours != null && (
+                        <>
+                          {" "}
+                          · credited <span className="font-medium text-foreground">{p.first_pass_hours}h</span> of{" "}
+                          {hours}h claimed
+                        </>
+                      )}
+                    </div>
+                    {firstPassDeflated > 0 && (
+                      <div className="mt-1 text-sm font-medium text-rose-600 dark:text-rose-400">
+                        Deflated {firstPassDeflated}h {firstPassCutPct > 0 ? `(−${firstPassCutPct}%)` : ""}
+                      </div>
+                    )}
+                    {p.first_pass_note && (
+                      <p className="mt-2 text-sm whitespace-pre-wrap break-words text-foreground/80">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Their note:{" "}
+                        </span>
+                        {p.first_pass_note}
+                      </p>
+                    )}
+                  </Card>
                 )}
 
-                {canModerate && (
-                <details className="rounded-xl bg-card ring-1 ring-rose-300 dark:ring-rose-500/30 p-4 text-card-foreground">
-                  <summary className="flex items-center gap-2 cursor-pointer text-sm font-semibold text-rose-700 dark:text-rose-400 select-none list-none">
-                    <span className="w-1.5 h-1.5 rounded-full bg-rose-600" />
-                    Ban project , permanent
-                  </summary>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Permanently bans this project , it can never be shipped again and is hidden
-                    everywhere. Different from requesting changes. Reversible by staff only.
-                  </p>
-                  <form action={banProject} className="mt-3 flex flex-col gap-2">
-                    <input type="hidden" name="projectId" value={p.id} />
-                    <input type="hidden" name="returnTo" value={`/review/${p.id}`} />
-                    <Textarea
-                      name="reason"
-                      required
-                      rows={2}
-                      placeholder="Reason for the ban (shown to the owner)…"
-                      className="text-sm resize-y"
+                <Card className="p-5 gap-3">
+                  <ReviewPipelineSteps
+                    shippedAt={p.shipped_at}
+                    firstPassAt={p.first_pass_at}
+                    status={p.status}
+                    airtableRecordId={p.airtable_record_id}
+                  />
+                  {isFinalStage && canSecondPass && (
+                    <SecondPassChecklist
+                      projectId={p.id}
+                      values={{
+                        second_pass_telescreen_checked: Boolean(p.second_pass_telescreen_checked),
+                        second_pass_hours_deflated: Boolean(p.second_pass_hours_deflated),
+                        second_pass_heartbeats_added: Boolean(p.second_pass_heartbeats_added),
+                      }}
                     />
-                    <PendingButton
-                      className="bg-rose-800 text-white border-transparent hover:bg-rose-900"
-                      pendingText="Banning…"
-                      confirm="Permanently ban this project? It can never be shipped again."
-                    >
-                      Ban project
-                    </PendingButton>
-                  </form>
-                </details>
+                  )}
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="review" className="space-y-4">
+                {!isHeld && (
+                  <details className="rounded-xl bg-card ring-1 ring-border p-4 text-card-foreground">
+                    <summary className="flex items-center gap-2 cursor-pointer text-sm font-semibold text-foreground select-none list-none">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                      Put this review on hold
+                    </summary>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Blocks any verdict on this project until you or an admin releases it. Stays
+                      visible in the queue , this just stops it from being reviewed while it&apos;s on
+                      hold, e.g. mid-investigation.
+                    </p>
+                    <form action={holdReview} className="mt-3 flex flex-col gap-2">
+                      <input type="hidden" name="projectId" value={p.id} />
+                      <input type="hidden" name="returnTo" value={`/review/${p.id}`} />
+                      <Textarea
+                        name="reason"
+                        required
+                        rows={2}
+                        placeholder="Why hold this (internal, not shown to the player)…"
+                        className="text-sm resize-y"
+                      />
+                      <PendingButton
+                        variant="secondary"
+                        pendingText="Holding…"
+                        confirm="Hold this review? Nobody can submit a verdict on it until you or another super admin releases it."
+                      >
+                        Hold this review
+                      </PendingButton>
+                    </form>
+                  </details>
                 )}
-              </>
-            ) : isOwn ? null : isFinalStage ? (
-              <Card className="p-5 text-sm text-muted-foreground">
-                Passed the first review , waiting on a final reviewer to sign off before pixels are
-                credited.
-              </Card>
-            ) : (
-              <Card className="p-5 text-sm text-muted-foreground">
-                Already reviewed ,{" "}
-                <StatusBadge status={p.status} />. See the{" "}
-                <Link href={`/projects/${p.id}`} className="text-brand hover:underline">
-                  project page
-                </Link>{" "}
-                to revert or take further action.
-              </Card>
-            )}
+
+                {canReview ? (
+                  <>
+                    <Card className="p-5 gap-0">
+                      <div className="text-sm font-semibold mb-1">
+                        {isFinalStage ? "Final pass" : "First pass"}
+                      </div>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        {isFinalStage
+                          ? "Approving credits pixels at the player's level rate ($4–6/hr in px) and ships it. Every verdict needs a note. You can only lower the credited hours."
+                          : "Every verdict needs a note. Approving sends this to a final reviewer before pixels are credited , even you have final-reviewer rights, your own first look is still just a proposal. You can only lower the credited hours."}
+                      </p>
+                      <ReviewForm
+                        projectId={p.id}
+                        repoUrl={p.repo_url}
+                        demoUrl={p.demo_url}
+                        claimedHours={payoutHours}
+                        defaultHours={formDefaultHours}
+                        journalDeflatedHours={journalDeflatedHours}
+                        isSuper={access.isSuper}
+                        secondPass={isFinalStage}
+                        bounties={bounties}
+                        trial={
+                          trial?.name ? { name: trial.name, minHours: trial.min_hours ?? null } : null
+                        }
+                        hackatimeProjects={hackatimeProjects}
+                        hackatimeSeconds={p.hackatime_seconds ?? 0}
+                        ageFlag={ageFlag}
+                        collaborators={collaboratorHours}
+                        tier={Number(p.level) || 1}
+                        playerReBefore={playerReBefore}
+                        fundingUsd={p.needs_funding ? Number(p.funding_usd ?? 0) : 0}
+                        currentName={p.name}
+                        currentDescription={p.description}
+                        currentImageUrl={p.image_url}
+                        firstPass={
+                          firstPassAudit
+                            ? {
+                                technicalFeatures: firstPassAudit["TECHNICAL FEATURES"],
+                                hackatimeEvidence: firstPassAudit["HACKATIME EVIDENCE"],
+                                deflationReason: firstPassAudit["DEFLATION REASON"],
+                                ageJustification: firstPassAudit["AGE JUSTIFICATION"],
+                                notes: firstPassAudit["NOTES"],
+                                note: p.first_pass_note,
+                              }
+                            : undefined
+                        }
+                      />
+                    </Card>
+
+                    <details className="rounded-xl bg-card ring-1 ring-border p-4 text-card-foreground">
+                      <summary className="flex items-center gap-2 cursor-pointer text-sm font-semibold text-foreground select-none list-none">
+                        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground" />
+                        Extend hours cutoff
+                      </summary>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Normally only hours from {hackatimeCutoffLabel} onward count. If this project
+                        genuinely started earlier and paused (verify against Hackatime&apos;s first-activity
+                        date above), pick how far back to count from , this re-pulls their Hackatime
+                        spans and raises the credited total, it never lowers it.
+                      </p>
+                      <form action={extendHoursCutoff} className="mt-3 flex flex-col gap-2">
+                        <input type="hidden" name="projectId" value={p.id} />
+                        <Input
+                          type="date"
+                          name="since"
+                          required
+                          max={maxExtendDateStr}
+                          defaultValue={
+                            p.hours_extended_since
+                              ? new Date(p.hours_extended_since).toISOString().slice(0, 10)
+                              : undefined
+                          }
+                        />
+                        <Textarea
+                          name="note"
+                          required
+                          rows={2}
+                          placeholder="Why count from this date (internal, not shown to the player)…"
+                          className="text-sm resize-y"
+                        />
+                        <PendingButton
+                          variant="secondary"
+                          pendingText="Extending…"
+                          confirm="Recount this project's hours from that date? This only ever raises the credited total."
+                        >
+                          Extend cutoff
+                        </PendingButton>
+                      </form>
+                    </details>
+
+                    {isFinalStage && (
+                    <details className="rounded-xl bg-card ring-1 ring-violet-300 dark:ring-violet-500/30 p-4 text-card-foreground">
+                      <summary className="flex items-center gap-2 cursor-pointer text-sm font-semibold text-violet-700 dark:text-violet-400 select-none list-none">
+                        <span className="w-1.5 h-1.5 rounded-full bg-violet-600" />
+                        Send back to first pass
+                      </summary>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Not confident enough to confirm or overturn the first pass yourself? Send it back
+                        to the front of the queue for a fresh first-pass look instead , no verdict, no
+                        pixels credited yet. The first-pass reviewer is still paid in full unless you
+                        flag it as their mistake below.
+                      </p>
+                      <form action={sendBackToFirstPass} className="mt-3 flex flex-col gap-2">
+                        <input type="hidden" name="projectId" value={p.id} />
+                        <Textarea
+                          name="reason"
+                          required
+                          rows={2}
+                          placeholder="Why send this back (internal, not shown to the player)…"
+                          className="text-sm resize-y"
+                        />
+                        <Label className="flex items-start gap-2 text-sm py-0.5 font-normal">
+                          <Checkbox name="voidPayout" value="1" className="mt-0.5" />
+                          <span>
+                            This was the first-pass reviewer&apos;s mistake , void their pending payout
+                            instead of paying it in full
+                          </span>
+                        </Label>
+                        <PendingButton
+                          className="bg-violet-700 text-white border-transparent hover:bg-violet-800"
+                          pendingText="Sending back…"
+                          confirm="Send this back to first pass?"
+                        >
+                          Send back to first pass
+                        </PendingButton>
+                      </form>
+                    </details>
+                    )}
+
+                    {canModerate && (
+                    <details className="rounded-xl bg-card ring-1 ring-rose-300 dark:ring-rose-500/30 p-4 text-card-foreground">
+                      <summary className="flex items-center gap-2 cursor-pointer text-sm font-semibold text-rose-700 dark:text-rose-400 select-none list-none">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-600" />
+                        Ban project , permanent
+                      </summary>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Permanently bans this project , it can never be shipped again and is hidden
+                        everywhere. Different from requesting changes. Reversible by staff only.
+                      </p>
+                      <form action={banProject} className="mt-3 flex flex-col gap-2">
+                        <input type="hidden" name="projectId" value={p.id} />
+                        <input type="hidden" name="returnTo" value={`/review/${p.id}`} />
+                        <Textarea
+                          name="reason"
+                          required
+                          rows={2}
+                          placeholder="Reason for the ban (shown to the owner)…"
+                          className="text-sm resize-y"
+                        />
+                        <PendingButton
+                          className="bg-rose-800 text-white border-transparent hover:bg-rose-900"
+                          pendingText="Banning…"
+                          confirm="Permanently ban this project? It can never be shipped again."
+                        >
+                          Ban project
+                        </PendingButton>
+                      </form>
+                    </details>
+                    )}
+                  </>
+                ) : isOwn ? null : isFinalStage ? (
+                  <Card className="p-5 text-sm text-muted-foreground">
+                    Passed the first review , waiting on a final reviewer to sign off before pixels are
+                    credited.
+                  </Card>
+                ) : (
+                  <Card className="p-5 text-sm text-muted-foreground">
+                    Already reviewed ,{" "}
+                    <StatusBadge status={p.status} />. See the{" "}
+                    <Link href={`/projects/${p.id}`} className="text-brand hover:underline">
+                      project page
+                    </Link>{" "}
+                    to revert or take further action.
+                  </Card>
+                )}
+              </TabsContent>
+            </Tabs>
           </div>
         </aside>
       </div>
