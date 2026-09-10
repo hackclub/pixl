@@ -107,11 +107,16 @@ export default async function ReviewListPage({
           <p className="text-xs text-muted-foreground mb-3">
             These passed a first review. Your approval credits pixels and ships them.
           </p>
-          <ReviewTable
-            rows={finalRows}
-            handles={finalHandles}
-            emptyLabel="Nothing waiting on a final pass."
-          />
+          <details>
+            <summary className="text-sm text-brand font-medium cursor-pointer select-none mb-3">
+              Show {finalRows.length} project{finalRows.length === 1 ? "" : "s"} awaiting final pass
+            </summary>
+            <ReviewTable
+              rows={finalRows}
+              handles={finalHandles}
+              emptyLabel="Nothing waiting on a final pass."
+            />
+          </details>
         </div>
       )}
 
