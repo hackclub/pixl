@@ -159,6 +159,11 @@ export interface ProjectRow {
   // Airtable record id once this project has been pushed, so a re-send
   // updates the existing row instead of creating a duplicate.
   airtable_record_id: string | null;
+  // Second-pass checklist (see updateSecondPassChecklist in app/actions.ts) -
+  // replaces Joe's automated fraud pass with the final reviewer's own checks.
+  second_pass_telescreen_checked: boolean;
+  second_pass_hours_deflated: boolean;
+  second_pass_heartbeats_added: boolean;
   // Reviewer override that counts Hackatime hours from before the global
   // hackatimeCutoff for this one project, see extendHoursCutoff in
   // app/actions.ts. hours_extended_since is the "since" date used the last
@@ -601,25 +606,6 @@ export async function listSecondReviewProjects(
   }
   const visible = (data ?? []).filter((p) => !claimedByOther(p as ShippedProject, viewer));
   return hydrateHours(visible as ShippedProject[]);
-}
-
-// Waiting on Joe: not actionable by anyone, shown read-only so a backlog or a
-// failed submission is visible instead of silent. Oldest first.
-export async function listFraudReviewProjects(): Promise<ShippedProject[]> {
-  const { data, error } = await db
-    .from("projects")
-    .select("*, users(id, display_name, real_name, slack_id)")
-    .eq("status", "fraud_review")
-    .is("archived_at", null)
-    .is("rejected_at", null)
-    .is("banned_at", null)
-    .order("first_pass_at", { ascending: true })
-    .limit(500);
-  if (error) {
-    console.error("listFraudReviewProjects", error.message);
-    return [];
-  }
-  return hydrateHours((data ?? []) as ShippedProject[]);
 }
 
 // The next project a reviewer should look at after finishing one, so the review

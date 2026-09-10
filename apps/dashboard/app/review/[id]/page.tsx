@@ -24,13 +24,14 @@ import {
   banProject,
   setProjectLevel,
   sendBackToFirstPass,
-  forceAdvanceFraud,
   toggleProjectPeak,
   extendHoursCutoff,
   holdReview,
   releaseReviewHold,
   updateFundingAmount,
 } from "@/app/actions";
+import { ReviewPipelineSteps } from "@/app/_components/ReviewPipelineSteps";
+import { SecondPassChecklist } from "@/app/_components/SecondPassChecklist";
 import { hackatimeCutoffUnix, hackatimeCutoffLabel } from "@/app/_generated/config";
 import { PendingButton } from "@/app/_components/PendingButton";
 import { ReviewDetailTabs } from "@/app/_components/ReviewDetailTabs";
@@ -822,9 +823,28 @@ export default async function ReviewDetail({
               </Card>
             )}
 
+            <Card className="p-5 gap-3">
+              <ReviewPipelineSteps
+                shippedAt={p.shipped_at}
+                firstPassAt={p.first_pass_at}
+                status={p.status}
+                airtableRecordId={p.airtable_record_id}
+              />
+              {isFinalStage && canSecondPass && (
+                <SecondPassChecklist
+                  projectId={p.id}
+                  values={{
+                    second_pass_telescreen_checked: Boolean(p.second_pass_telescreen_checked),
+                    second_pass_hours_deflated: Boolean(p.second_pass_hours_deflated),
+                    second_pass_heartbeats_added: Boolean(p.second_pass_heartbeats_added),
+                  }}
+                />
+              )}
+            </Card>
+
             {(p.joe_project_id || p.joe_error) && (
               <Card className="p-5 gap-0 space-y-2">
-                <div className="text-sm font-semibold">Fraud review (Joe)</div>
+                <div className="text-sm font-semibold">Fraud review history (Joe)</div>
                 {p.joe_error ? (
                   <p className="text-sm text-rose-600">
                     Not submitted to Joe: {p.joe_error}
@@ -846,22 +866,9 @@ export default async function ReviewDetail({
                   </dl>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    Submitted to Joe, waiting on a score.
+                    Submitted to Joe, waiting on a score , fraud review is retired, this one's
+                    stuck mid-flight from before the cutover.
                   </p>
-                )}
-                {p.status === "fraud_review" && canSecondPass && (
-                  <form action={forceAdvanceFraud} className="flex gap-2 pt-2">
-                    <input type="hidden" name="projectId" value={p.id} />
-                    <input
-                      name="reason"
-                      required
-                      placeholder="Why skip the fraud pass?"
-                      className="flex-1 rounded border px-2 py-1 text-sm"
-                    />
-                    <button type="submit" className="rounded border px-3 py-1 text-sm">
-                      Skip to final review
-                    </button>
-                  </form>
                 )}
               </Card>
             )}

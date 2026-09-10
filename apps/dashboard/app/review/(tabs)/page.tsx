@@ -3,7 +3,6 @@ import { requirePagePerm, requireGuidelinesAck } from "@/lib/guard";
 import {
   listShippedProjects,
   listSecondReviewProjects,
-  listFraudReviewProjects,
   listReviewAudits,
 } from "@/lib/db";
 import { slackHandles } from "@/lib/slack";
@@ -45,11 +44,10 @@ export default async function ReviewListPage({
     access.reviewQueues === "both" ? requestedKind : access.reviewQueues;
   const kindQ = kind === "hardware" ? "&kind=hardware" : "";
 
-  // None of these four depend on each other's result, so they run together
+  // None of these three depend on each other's result, so they run together
   // instead of as a chain of sequential round-trips.
-  const [finalRows, fraudRows, myRecent, rowsRaw] = await Promise.all([
+  const [finalRows, myRecent, rowsRaw] = await Promise.all([
     access.canSecondPass ? listSecondReviewProjects(viewer, kind) : Promise.resolve([]),
-    access.canSecondPass ? listFraudReviewProjects() : Promise.resolve([]),
     listReviewAudits(5, viewer),
     listShippedProjects(viewer, kind),
   ]);
@@ -92,57 +90,6 @@ export default async function ReviewListPage({
           >
             <Link href="/review?kind=hardware">Hardware queue</Link>
           </Button>
-        </div>
-      )}
-
-      {fraudRows.length > 0 && (
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-            <h2 className="text-sm font-semibold text-foreground">
-              Waiting on fraud review
-              <Badge variant="info" className="ml-2">
-                {fraudRows.length}
-              </Badge>
-            </h2>
-          </div>
-          <p className="text-xs text-muted-foreground mb-3">
-            Joe is scoring these. They move to your final pass on their own.{" "}
-            {/* first_pass_hours is what the first-pass reviewer proposed crediting
-                (post-deduction), not the raw hours the player claimed. */}
-            <span className="font-medium text-foreground">
-              {fraudRows
-                .reduce((sum, p) => sum + (Number(p.first_pass_hours) || 0), 0)
-                .toLocaleString(undefined, { maximumFractionDigits: 1 })}
-              h
-            </span>{" "}
-            approved by first pass sitting in this queue.
-          </p>
-          <details>
-            <summary className="text-sm text-brand font-medium cursor-pointer select-none">
-              See all {fraudRows.length} project{fraudRows.length === 1 ? "" : "s"}
-            </summary>
-            <ul className="text-sm space-y-1 mt-2">
-              {fraudRows.map((p) => (
-                <li key={p.id} className="flex items-center gap-2">
-                  <a href={`/review/${p.id}`} className="hover:underline">
-                    {p.name}
-                  </a>
-                  {p.first_pass_hours != null && (
-                    <span className="text-xs text-muted-foreground">{p.first_pass_hours}h</span>
-                  )}
-                  <span className="text-xs text-muted-foreground">
-                    {p.first_pass_at
-                      ? `waiting ${Math.floor((Date.now() - new Date(p.first_pass_at).getTime()) / 86_400_000)}d`
-                      : "waiting"}
-                  </span>
-                  {p.joe_error && (
-                    <span className="text-xs text-rose-600">not submitted: {p.joe_error}</span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </details>
         </div>
       )}
 

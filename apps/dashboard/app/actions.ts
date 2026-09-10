@@ -1726,37 +1726,28 @@ export async function sendBackToFirstPass(formData: FormData): Promise<void> {
   redirect("/review");
 }
 
-// Escape hatch for a project Joe never scores, or one that could not be
-// submitted at all. Only a final reviewer, always logged, always with a reason.
-export async function forceAdvanceFraud(formData: FormData): Promise<void> {
+// Second pass now runs its own fraud checks (Telescreen) via the checklist
+// below, so there's no separate fraud stage left to skip.
+export async function updateSecondPassChecklist(formData: FormData): Promise<void> {
   const access = await requirePerm("review");
-  if (!access.canSecondPass)
-    redirect(`/review?error=${encodeURIComponent("Only a final reviewer can skip the fraud pass.")}`);
+  if (!access.canSecondPass) redirect(`/review?error=${encodeURIComponent("Only a final reviewer can update this.")}`);
   const projectId = Number(formData.get("projectId") ?? 0);
-  const reason = String(formData.get("reason") ?? "").trim().slice(0, 500);
+  const field = String(formData.get("field") ?? "");
   const back = `/review/${projectId}`;
-  if (!projectId) redirect("/review");
-  if (!reason)
-    redirect(`${back}?error=${encodeURIComponent("Give a reason for skipping the fraud pass.")}`);
+  const allowed = new Set([
+    "second_pass_telescreen_checked",
+    "second_pass_hours_deflated",
+    "second_pass_heartbeats_added",
+  ]);
+  if (!projectId || !allowed.has(field)) redirect("/review");
+  const checked = formData.get("checked") === "true";
 
-  const { data: project, error } = await db
+  const { error } = await db
     .from("projects")
-    .update({ status: "second_review" })
-    .eq("id", projectId)
-    .eq("status", "fraud_review")
-    .select("id, name, user_id")
-    .single();
-  if (error || !project) {
-    redirect(`${back}?error=${encodeURIComponent("This project isn't waiting on fraud review.")}`);
-  }
-
-  await logModAction(
-    project.user_id as string,
-    "project_fraud_override",
-    `${project.name}: skipped the fraud pass , ${reason}`,
-    actorName(access),
-  );
-  revalidatePath("/review");
+    .update({ [field]: checked })
+    .eq("id", projectId);
+  if (error) console.error("updateSecondPassChecklist failed", error.message);
+  revalidatePath(back);
   redirect(back);
 }
 
