@@ -29,16 +29,20 @@ function VerdictButtons({
   secondPass: boolean;
   /** Fires on click, before the browser's native required-field validation
    * runs - lets the parent relax technicalFeatures/notes for this specific
-   * submission (needs_changes doesn't need them) without disabling the
-   * requirement outright for approve/ban. */
-  onVerdictSelect: (verdict: string) => void;
+   * submission (needs_changes doesn't need them), validate the (now hidden,
+   * since they live in an earlier step) audit-note fields itself, and block
+   * the submit by returning false if something's missing. */
+  onVerdictSelect: (verdict: string) => boolean;
 }) {
   const { pending } = useFormStatus();
   const [clicked, setClicked] = useState("");
   const approveLabel = secondPass ? "Approve & credit pixels" : "Approve";
-  const select = (verdict: string) => {
+  const select = (verdict: string, e: React.MouseEvent) => {
+    if (!onVerdictSelect(verdict)) {
+      e.preventDefault();
+      return;
+    }
     setClicked(verdict);
-    onVerdictSelect(verdict);
   };
   return (
     <>
@@ -46,7 +50,7 @@ function VerdictButtons({
         name="verdict"
         value="approved"
         disabled={pending}
-        onClick={() => select("approved")}
+        onClick={(e) => select("approved", e)}
         className="bg-emerald-600 text-white hover:bg-emerald-700"
       >
         {pending && clicked === "approved" ? "Approving…" : approveLabel}
@@ -55,7 +59,7 @@ function VerdictButtons({
         name="verdict"
         value="needs_changes"
         disabled={pending}
-        onClick={() => select("needs_changes")}
+        onClick={(e) => select("needs_changes", e)}
         className="bg-red-600 text-white hover:bg-red-700"
       >
         {pending && clicked === "needs_changes" ? "Sending back…" : "Request changes"}
@@ -64,7 +68,7 @@ function VerdictButtons({
         name="verdict"
         value="ban"
         disabled={pending}
-        onClick={() => select("ban")}
+        onClick={(e) => select("ban", e)}
         variant="outline"
         className="border-red-700 text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
       >
@@ -306,6 +310,35 @@ function TierAndPayout({
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
+
+const STEPS = [
+  { n: 1 as const, label: "Submission" },
+  { n: 2 as const, label: "Audit notes" },
+  { n: 3 as const, label: "Verdict" },
+];
+
+function StepHeader({ step, onStep }: { step: 1 | 2 | 3; onStep: (n: 1 | 2 | 3) => void }) {
+  return (
+    <div className="flex items-center gap-1 text-xs font-medium">
+      {STEPS.map((s, i) => (
+        <div key={s.n} className="flex items-center gap-1">
+          {i > 0 && <span className="text-muted-foreground/40">→</span>}
+          <button
+            type="button"
+            onClick={() => onStep(s.n)}
+            className={`rounded-full px-2.5 py-1 transition-colors ${
+              step === s.n
+                ? "bg-brand text-white"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted"
+            }`}
+          >
+            {s.n}. {s.label}
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function CollaboratorHoursInput({ c }: { c: CollaboratorHours }) {
   const [value, setValue] = useState(c.claimedHours);
@@ -570,6 +603,17 @@ export function ReviewForm({
 
   const [featuresLen, setFeaturesLen] = useState(0);
 
+  // 3-step wizard over this one form: Submission -> Audit notes -> Verdict.
+  // Steps are hidden with CSS (never unmounted), so refs/localStorage-draft
+  // restore above keep working regardless of which step is visible, and
+  // hopping back a step to fix something doesn't lose anything typed ahead.
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [stepError, setStepError] = useState("");
+  const goToStep = (n: 1 | 2 | 3) => {
+    setStep(n);
+    setStepError("");
+  };
+
   useEffect(() => {
     openedAt.current = Date.now();
     const settle = () => {
@@ -622,9 +666,13 @@ export function ReviewForm({
   // Technical features / additional notes only need to hold up as an audit
   // trail for approve/ban - a needs_changes bounce-back has its own required
   // player-facing note instead (see reviewProject's matching server-side
-  // relaxation in app/actions.ts). Toggled on click, before the browser's
-  // native required-field validation runs on submit.
-  const onVerdictSelect = (verdict: string) => {
+  // relaxation in app/actions.ts). These fields live in Step 2, which is
+  // hidden (not unmounted) once the reviewer reaches Step 3's verdict
+  // buttons - a hidden required field is skipped by the browser's native
+  // validation instead of blocking submit, so this checks them itself and
+  // returns false (bouncing back to Step 2 with an error) rather than
+  // trusting a native validation that would silently pass over them.
+  const onVerdictSelect = (verdict: string): boolean => {
     const required = verdict !== "needs_changes";
     if (technicalFeaturesRef.current) {
       technicalFeaturesRef.current.required = required;
@@ -632,6 +680,31 @@ export function ReviewForm({
       else technicalFeaturesRef.current.removeAttribute("minlength");
     }
     if (notesRef.current) notesRef.current.required = required;
+
+    if (deflated && !deflationReasonRef.current?.value.trim()) {
+      setStep(2);
+      setStepError("Say why you're lowering the hours before deciding.");
+      return false;
+    }
+    if (ageFlag && !ageJustificationRef.current?.value.trim()) {
+      setStep(2);
+      setStepError("Age justification is required before deciding.");
+      return false;
+    }
+    if (required) {
+      if ((technicalFeaturesRef.current?.value.trim().length ?? 0) < TECHNICAL_FEATURES_MIN) {
+        setStep(2);
+        setStepError(`Technical features needs at least ${TECHNICAL_FEATURES_MIN} characters.`);
+        return false;
+      }
+      if (!notesRef.current?.value.trim()) {
+        setStep(2);
+        setStepError("Additional notes is required before approving or banning.");
+        return false;
+      }
+    }
+    setStepError("");
+    return true;
   };
 
   return (
@@ -738,6 +811,15 @@ export function ReviewForm({
       <input type="hidden" name="repoSeconds" defaultValue="0" ref={repoSeconds} />
       <input type="hidden" name="demoSeconds" defaultValue="0" ref={demoSeconds} />
       <input type="hidden" name="totalSeconds" defaultValue="0" ref={totalSeconds} />
+
+      <StepHeader step={step} onStep={goToStep} />
+      {stepError && (
+        <div className="text-xs font-medium text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/[0.06] border border-rose-200 dark:border-rose-500/30 rounded-md px-3 py-1.5">
+          {stepError}
+        </div>
+      )}
+
+      <div className={step === 1 ? "flex flex-col gap-4" : "hidden"}>
       <div className="flex flex-wrap gap-2 items-center text-sm font-bold">
         {repoUrl && (
           <Button asChild variant="secondary">
@@ -838,6 +920,14 @@ export function ReviewForm({
           ))}
         </div>
       )}
+      <div className="flex justify-end">
+        <Button type="button" onClick={() => goToStep(2)}>
+          Next: Audit notes →
+        </Button>
+      </div>
+      </div>
+
+      <div className={step === 2 ? "flex flex-col gap-4" : "hidden"}>
       <div className="rounded-lg border p-4 flex flex-col gap-3">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
@@ -1005,19 +1095,32 @@ export function ReviewForm({
           </span>
         </label>
       </div>
-      <div className="flex flex-col gap-2">
-        <Textarea
-          name="note"
-          required
-          ref={noteRef}
-          onChange={() => saveDraft()}
-          placeholder="Feedback for the player (required)"
-          className="w-full text-sm"
-          rows={3}
-        />
-        <div className="flex flex-wrap gap-2">
-          <VerdictButtons secondPass={secondPass} onVerdictSelect={onVerdictSelect} />
-        </div>
+      <div className="flex justify-between">
+        <Button type="button" variant="outline" onClick={() => goToStep(1)}>
+          ← Back
+        </Button>
+        <Button type="button" onClick={() => goToStep(3)}>
+          Next: Verdict →
+        </Button>
+      </div>
+      </div>
+
+      <div className={step === 3 ? "flex flex-col gap-2" : "hidden"}>
+      <Textarea
+        name="note"
+        required
+        ref={noteRef}
+        onChange={() => saveDraft()}
+        placeholder="Feedback for the player (required)"
+        className="w-full text-sm"
+        rows={3}
+      />
+      <div className="flex flex-wrap gap-2 items-center">
+        <Button type="button" variant="outline" onClick={() => goToStep(2)}>
+          ← Back
+        </Button>
+        <VerdictButtons secondPass={secondPass} onVerdictSelect={onVerdictSelect} />
+      </div>
       </div>
     </form>
     </>

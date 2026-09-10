@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { Geist, Geist_Mono, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { getAccess, canView, isReportViewer, isHelper, isFulfiller } from "@/lib/guard";
@@ -47,6 +48,10 @@ export default async function RootLayout({
 }) {
   const access = await getAccess();
   const session = access?.session ?? null;
+  // SidebarProvider writes this cookie on every toggle but never reads it
+  // back itself (components/ui/sidebar.tsx) - without passing it in as
+  // defaultOpen, the sidebar silently reopened on every fresh page load.
+  const sidebarOpen = (await cookies()).get("sidebar_state")?.value !== "false";
   const reportViewer = await isReportViewer();
   const helper = await isHelper();
   const fulfiller = await isFulfiller();
@@ -158,7 +163,7 @@ export default async function RootLayout({
           // >
           //   {children}
           // </Shell>
-          <SidebarProvider>
+          <SidebarProvider defaultOpen={sidebarOpen}>
             <Shell
               session={{ name: session.name, slackId: session.slackId }}
               nav={nav}
