@@ -3240,18 +3240,26 @@
       }
 
       // After a first pass proposes approve/ban, the project still has to
-      // clear the fraud pass (only if it was actually submitted there) and a
-      // different final reviewer's second pass before anything is credited.
-      // Rendered only while that's still in flight, once a final verdict
-      // lands it becomes its own event in the list above.
+      // clear a different final reviewer's second pass before anything is
+      // credited (fraud review is retired, merged into second pass - see
+      // "Second pass" tab on the dashboard's review page). Rendered only
+      // while that's still in flight, once a final verdict lands it becomes
+      // its own event in the list above.
       function tlPipelineRows(d) {
         const rows = [];
-        if (d.joeUsed) {
-          if (!d.fraudReviewDoneAt) {
-            rows.push(tlStageItem("", "Waiting on fraud review", "in progress"));
-            rows.push(tlStageItem("", "Second review", "not started yet"));
-            return rows.join("");
-          }
+        // Only ever true for projects still mid-migration, right after fraud
+        // review's retirement - live status is the source of truth, not the
+        // historical joeUsed flag, which stays true forever for any project
+        // that was ever submitted to Joe even after that stage is gone.
+        if (d.status === "fraud_review") {
+          rows.push(tlStageItem("", "Waiting on fraud review", "in progress"));
+          rows.push(tlStageItem("", "Second review", "not started yet"));
+          return rows.join("");
+        }
+        // A project actually scored by Joe before the cutover still shows
+        // that real history, one that was submitted but never got a score
+        // back (stuck mid-flight) just skips straight to second review.
+        if (d.joeUsed && d.fraudReviewDoneAt) {
           rows.push(
             tlStageItem("rev", "Passed fraud review", Pixl.timeAgo(d.fraudReviewDoneAt)),
           );
