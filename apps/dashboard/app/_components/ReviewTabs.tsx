@@ -9,10 +9,12 @@ export function ReviewTabs({
   isSuper,
   pending,
   secondPassCount,
+  spotCheckCount,
 }: {
   isSuper: boolean;
   pending?: number;
   secondPassCount?: number;
+  spotCheckCount?: number;
 }) {
   const pathname = usePathname();
   const tabs: { href: string; label: string; count?: number }[] = [
@@ -26,6 +28,11 @@ export function ReviewTabs({
     // pass", but that's easy to miss buried in the main queue , this is a
     // dedicated view of just that stage.
     tabs.push({ href: "/review/second-pass", label: "Second pass", count: secondPassCount });
+    // An optional QA pass over the same second_review stage - not an action
+    // queue, just "has a super glanced at how this was first-pass reviewed".
+    // Separate from Second pass above since it never blocks or resolves a
+    // project, only dismisses itself once spot-checked.
+    tabs.push({ href: "/review/spot-check", label: "Spot check", count: spotCheckCount });
     tabs.push({ href: "/review/log", label: "Reviewer log" });
     tabs.push({ href: "/review/audit", label: "Audit notes" });
   }

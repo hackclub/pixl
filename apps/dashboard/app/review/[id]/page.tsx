@@ -29,6 +29,7 @@ import {
   holdReview,
   releaseReviewHold,
   updateFundingAmount,
+  markSpotChecked,
 } from "@/app/actions";
 import { ReviewPipelineSteps } from "@/app/_components/ReviewPipelineSteps";
 import { SecondPassChecklist } from "@/app/_components/SecondPassChecklist";
@@ -736,6 +737,31 @@ export default async function ReviewDetail({
                       Release hold
                     </PendingButton>
                   </form>
+                )}
+              </Card>
+            )}
+
+            {access.isSuper && isFinalStage && (
+              <Card className="p-4 text-sm gap-1">
+                <div className="font-semibold text-foreground">Spot check</div>
+                {p.spot_checked_at ? (
+                  <p className="text-xs text-muted-foreground">
+                    Checked by {p.spot_checked_by || "a super admin"} on{" "}
+                    {new Date(p.spot_checked_at).toLocaleString()}.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Optional QA pass , mark this once you&apos;ve looked at how the first-pass
+                      reviewer handled it. Doesn&apos;t affect the project.
+                    </p>
+                    <form action={markSpotChecked}>
+                      <input type="hidden" name="projectId" value={p.id} />
+                      <PendingButton variant="outline" size="sm" pendingText="Marking…">
+                        Mark spot-checked
+                      </PendingButton>
+                    </form>
+                  </>
                 )}
               </Card>
             )}

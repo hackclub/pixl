@@ -955,6 +955,10 @@ export async function reviewProject(formData: FormData): Promise<void> {
         first_pass_note: note,
         first_pass_hours: approvedHours,
         first_pass_verdict: proposedKey,
+        // Fresh entry into the second-review pipeline - clear any spot-check
+        // mark left over from a previous cycle (see markSpotChecked below).
+        spot_checked_at: null,
+        spot_checked_by: "",
       })
       .eq("id", projectId)
       .eq("status", "shipped")
@@ -2268,6 +2272,29 @@ export async function releaseReviewHold(formData: FormData): Promise<void> {
   await logModAction(project.user_id, "review_hold_released", project.name, by);
   revalidatePath(`/review/${projectId}`);
   revalidatePath("/review");
+}
+
+// Marks a second_review project as spot-checked (the super-admin-only
+// optional QA pass over how first-pass reviewers are handling projects - see
+// listSpotCheckProjects in lib/db.ts). Purely a dismissal from that audit
+// list - doesn't touch status, doesn't count as a real second-pass verdict.
+// Global once set: any super checking it clears it for every super, not just
+// the one who clicked.
+export async function markSpotChecked(formData: FormData): Promise<void> {
+  const access = await requireSuper();
+  const by = actorName(access);
+  const projectId = Number(formData.get("projectId") ?? 0);
+  if (!projectId) return;
+
+  const { error } = await db
+    .from("projects")
+    .update({ spot_checked_at: new Date().toISOString(), spot_checked_by: by })
+    .eq("id", projectId)
+    .eq("status", "second_review");
+  if (error) console.error("markSpotChecked failed", error.message);
+
+  revalidatePath("/review/spot-check");
+  revalidatePath(`/review/${projectId}`);
 }
 
 // Accept/reject a public form submission (pixl.hackclub.com/form/*, see

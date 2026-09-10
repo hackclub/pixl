@@ -177,6 +177,13 @@ export interface ProjectRow {
   hold_at: string | null;
   hold_by: string;
   hold_reason: string;
+  // Optional super-admin QA pass over second_review projects (the Spot check
+  // tab, markSpotChecked in app/actions.ts). Doesn't gate the project - purely
+  // a "has a super looked at how this was reviewed" marker. Global once set
+  // (not per-admin), and reset back to null whenever a project re-enters
+  // second_review from a fresh first-pass approval.
+  spot_checked_at: string | null;
+  spot_checked_by: string;
 }
 
 export interface PlayerStateRow {
@@ -767,6 +774,45 @@ export async function countSecondPassReviews(): Promise<number> {
     .is("banned_at", null);
   if (error) {
     console.error("countSecondPassReviews", error.message);
+    return 0;
+  }
+  return count ?? 0;
+}
+
+// Super-admin-only optional QA pass - every second_review project nobody has
+// spot-checked yet (see spot_checked_at on ProjectRow above). Unlike
+// listSecondReviewProjects this doesn't filter out projects another reviewer
+// is actively holding/claimed - it's a read-only audit list, not an action
+// queue, so an in-progress claim elsewhere doesn't matter here.
+export async function listSpotCheckProjects(kind?: "software" | "hardware"): Promise<ShippedProject[]> {
+  let q = db
+    .from("projects")
+    .select("*, users(id, display_name, real_name, slack_id)")
+    .eq("status", "second_review")
+    .is("spot_checked_at", null)
+    .is("archived_at", null)
+    .is("rejected_at", null)
+    .is("banned_at", null);
+  if (kind) q = q.eq("kind", kind);
+  const { data, error } = await q.order("first_pass_at", { ascending: true }).limit(500);
+  if (error) {
+    console.error("listSpotCheckProjects", error.message);
+    return [];
+  }
+  return hydrateHours((data ?? []) as ShippedProject[]);
+}
+
+export async function countSpotCheckProjects(): Promise<number> {
+  const { count, error } = await db
+    .from("projects")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "second_review")
+    .is("spot_checked_at", null)
+    .is("archived_at", null)
+    .is("rejected_at", null)
+    .is("banned_at", null);
+  if (error) {
+    console.error("countSpotCheckProjects", error.message);
     return 0;
   }
   return count ?? 0;

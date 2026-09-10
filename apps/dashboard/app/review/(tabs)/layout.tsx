@@ -1,5 +1,5 @@
 import { requirePagePerm } from "@/lib/guard";
-import { countPendingReviews, countSecondPassReviews } from "@/lib/db";
+import { countPendingReviews, countSecondPassReviews, countSpotCheckProjects } from "@/lib/db";
 import { ReviewTabs } from "@/app/_components/ReviewTabs";
 
 export const dynamic = "force-dynamic";
@@ -16,13 +16,19 @@ export default async function ReviewLayout({
   children: React.ReactNode;
 }) {
   const access = await requirePagePerm(["review"]);
-  const [pending, secondPassCount] = await Promise.all([
+  const [pending, secondPassCount, spotCheckCount] = await Promise.all([
     countPendingReviews(),
     access.isSuper ? countSecondPassReviews() : Promise.resolve(undefined),
+    access.isSuper ? countSpotCheckProjects() : Promise.resolve(undefined),
   ]);
   return (
     <div>
-      <ReviewTabs isSuper={access.isSuper} pending={pending} secondPassCount={secondPassCount} />
+      <ReviewTabs
+        isSuper={access.isSuper}
+        pending={pending}
+        secondPassCount={secondPassCount}
+        spotCheckCount={spotCheckCount}
+      />
       {children}
     </div>
   );
