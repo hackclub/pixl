@@ -38,6 +38,15 @@ export function CommitList({ result }: { result: CommitResult }) {
         GITHUB_TOKEN on the dashboard to raise the limit.
       </div>
     );
+  if (result.error === "forbidden")
+    return (
+      <div className="p-4 text-amber-600 dark:text-amber-400 text-sm font-medium">
+        GitHub refused this request , not a rate limit, and not &ldquo;no commits&rdquo;.
+        {result.detail ? (
+          <span className="block mt-1 font-normal text-muted-foreground">{result.detail}</span>
+        ) : null}
+      </div>
+    );
   if (result.error)
     return (
       <div className="p-4 text-muted-foreground text-sm">
