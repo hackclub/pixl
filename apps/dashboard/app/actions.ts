@@ -959,6 +959,10 @@ export async function reviewProject(formData: FormData): Promise<void> {
         // mark left over from a previous cycle (see markSpotChecked below).
         spot_checked_at: null,
         spot_checked_by: "",
+        // A submitted verdict supersedes any in-progress shared draft.
+        review_draft: null,
+        review_draft_by: "",
+        review_draft_at: null,
       })
       .eq("id", projectId)
       .eq("status", "shipped")
@@ -1021,6 +1025,9 @@ export async function reviewProject(formData: FormData): Promise<void> {
         first_pass_note: "",
         first_pass_hours: null,
         first_pass_verdict: null,
+        review_draft: null,
+        review_draft_by: "",
+        review_draft_at: null,
       })
       .eq("id", projectId)
       .in("status", ["shipped", "second_review"])
@@ -1066,6 +1073,9 @@ export async function reviewProject(formData: FormData): Promise<void> {
         reviewing_by: "",
         reviewing_at: null,
         first_pass_verdict: null,
+        review_draft: null,
+        review_draft_by: "",
+        review_draft_at: null,
       })
       .eq("id", projectId)
       .in("status", ["shipped", "second_review"])
@@ -1115,6 +1125,9 @@ export async function reviewProject(formData: FormData): Promise<void> {
       approved_hours: approvedHours,
       reviewing_by: "",
       reviewing_at: null,
+      review_draft: null,
+      review_draft_by: "",
+      review_draft_at: null,
     })
     .eq("id", projectId)
     .in("status", ["shipped", "second_review"])
@@ -2272,6 +2285,34 @@ export async function releaseReviewHold(formData: FormData): Promise<void> {
   await logModAction(project.user_id, "review_hold_released", project.name, by);
   revalidatePath(`/review/${projectId}`);
   revalidatePath("/review");
+}
+
+// Shared review-form draft (technical features, hackatime evidence, notes,
+// deflation reason, note-to-player, hours/tier) - see review_draft on
+// ProjectRow in lib/db.ts. Called directly from ReviewForm.tsx (debounced),
+// same calling convention as generateAiReviewDraftAction above, not a
+// <form action> - so there's no formData, just the already-serializable
+// draft object the client already builds for its own localStorage copy.
+// Any signed-in reviewer can write here, not just supers - the whole point
+// is a first-pass reviewer's own second visit, or another first-pass
+// reviewer picking up someone else's queue, sees the same in-progress notes
+// too, not just a spot-checking super.
+export async function saveReviewDraft(
+  projectId: number,
+  draft: Record<string, string | number>,
+): Promise<void> {
+  const access = await requirePerm("review");
+  if (!projectId) return;
+  const { error } = await db
+    .from("projects")
+    .update({
+      review_draft: draft,
+      review_draft_by: actorName(access),
+      review_draft_at: new Date().toISOString(),
+    })
+    .eq("id", projectId)
+    .in("status", ["shipped", "second_review"]);
+  if (error) console.error("saveReviewDraft failed", error.message);
 }
 
 // Marks a second_review project as spot-checked (the super-admin-only

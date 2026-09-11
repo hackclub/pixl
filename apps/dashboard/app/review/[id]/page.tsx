@@ -1020,6 +1020,11 @@ export default async function ReviewDetail({
                               }
                             : undefined
                         }
+                        serverDraft={
+                          p.review_draft
+                            ? { draft: p.review_draft, by: p.review_draft_by, at: p.review_draft_at }
+                            : undefined
+                        }
                       />
                     </Card>
 

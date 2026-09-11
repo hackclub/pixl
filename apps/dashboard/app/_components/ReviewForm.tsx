@@ -2,7 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
-import { reviewProject, applySubmissionEdits, setProjectLevel, generateAiReviewDraftAction } from "@/app/actions";
+import {
+  reviewProject,
+  applySubmissionEdits,
+  setProjectLevel,
+  generateAiReviewDraftAction,
+  saveReviewDraft,
+} from "@/app/actions";
 import type { AiReviewDraft } from "@/lib/aiReview";
 import {
   averageUsdPerHourOver,
@@ -383,6 +389,7 @@ export function ReviewForm({
   currentDescription,
   currentImageUrl,
   isSuper = false,
+  serverDraft,
 }: {
   projectId: number;
   repoUrl: string | null;
@@ -424,6 +431,15 @@ export function ReviewForm({
   /** Whether the viewing reviewer is a super admin - gates the "Generate AI
    * draft" button below (visible to every reviewer, only clickable for admins). */
   isSuper?: boolean;
+  /** The shared, server-side draft saved by saveReviewDraft (see review_draft
+   * on ProjectRow) - whoever last typed into this form, on any device, not
+   * just this browser's own localStorage copy. Used only when this browser
+   * has no local draft of its own to restore. */
+  serverDraft?: {
+    draft: Record<string, string | number> | null;
+    by: string;
+    at: string | null;
+  };
 }) {
   const repoOpened = useRef<HTMLInputElement>(null);
   const demoOpened = useRef<HTMLInputElement>(null);
@@ -469,6 +485,7 @@ export function ReviewForm({
   const noteRef = useRef<HTMLTextAreaElement>(null);
   const pendingDraft = useRef<Record<string, string | number> | null>(null);
   const [draftRestored, setDraftRestored] = useState(false);
+  const [prefilledFromServerDraft, setPrefilledFromServerDraft] = useState(false);
   const [prefilledFromFirstPass, setPrefilledFromFirstPass] = useState(false);
 
   useEffect(() => {
@@ -481,6 +498,13 @@ export function ReviewForm({
     }
     if (draft) {
       setDraftRestored(true);
+    } else if (serverDraft?.draft) {
+      // Nobody's typed anything in THIS browser yet, but someone else did
+      // (e.g. a super spot-checking this project) and it's saved on the
+      // project itself - start from that instead of a blank form or the
+      // original first-pass audit note.
+      draft = { ...serverDraft.draft };
+      setPrefilledFromServerDraft(true);
     } else if (firstPass) {
       // Nothing typed yet this session - start from what the first reviewer
       // already wrote instead of a blank form. Still fully editable.
@@ -530,29 +554,38 @@ export function ReviewForm({
   // handler that just called setHours/setTierState (state updates apply on the
   // next render) - callers changing one of those pass the new value directly
   // rather than relying on the stale closure.
+  const serverDraftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const saveDraft = (overrides?: { hours?: number; tier?: number }) => {
+    const snapshot = {
+      hours: overrides?.hours ?? hours,
+      baseHours,
+      tier: overrides?.tier ?? tierState,
+      technicalFeatures: technicalFeaturesRef.current?.value ?? "",
+      hackatimeEvidence: hackatimeEvidenceRef.current?.value ?? "",
+      deflationReason: deflationReasonRef.current?.value ?? "",
+      ageJustification: ageJustificationRef.current?.value ?? "",
+      notes: notesRef.current?.value ?? "",
+      note: noteRef.current?.value ?? "",
+    };
     try {
-      localStorage.setItem(
-        draftKey,
-        JSON.stringify({
-          hours: overrides?.hours ?? hours,
-          baseHours,
-          tier: overrides?.tier ?? tierState,
-          technicalFeatures: technicalFeaturesRef.current?.value ?? "",
-          hackatimeEvidence: hackatimeEvidenceRef.current?.value ?? "",
-          deflationReason: deflationReasonRef.current?.value ?? "",
-          ageJustification: ageJustificationRef.current?.value ?? "",
-          notes: notesRef.current?.value ?? "",
-          note: noteRef.current?.value ?? "",
-        }),
-      );
+      localStorage.setItem(draftKey, JSON.stringify(snapshot));
     } catch {
       // Storage full or unavailable (private browsing) - the review still
       // works, it just can't be recovered if the tab closes.
     }
+    // Debounced so a fast typist doesn't fire a server write per keystroke -
+    // localStorage above is instant either way, this is just the shared copy
+    // other reviewers (or the same reviewer on another device) can see.
+    if (serverDraftTimer.current) clearTimeout(serverDraftTimer.current);
+    serverDraftTimer.current = setTimeout(() => {
+      saveReviewDraft(projectId, snapshot).catch(() => {
+        // Best-effort - the localStorage copy above is still there either way.
+      });
+    }, 1000);
   };
 
   const clearDraft = () => {
+    if (serverDraftTimer.current) clearTimeout(serverDraftTimer.current);
     try {
       localStorage.removeItem(draftKey);
     } catch {
@@ -798,6 +831,13 @@ export function ReviewForm({
       {draftRestored && (
         <div className="text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/[0.06] border border-amber-200 dark:border-amber-500/30 rounded-md px-3 py-1.5">
           Restored your unsaved notes from last time you had this open.
+        </div>
+      )}
+      {prefilledFromServerDraft && (
+        <div className="text-xs font-medium text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-500/[0.06] border border-blue-200 dark:border-blue-500/30 rounded-md px-3 py-1.5">
+          Started from {serverDraft?.by || "another reviewer"}&apos;s in-progress notes
+          {serverDraft?.at ? ` (${new Date(serverDraft.at).toLocaleString()})` : ""} , edit anything
+          before you decide. Whatever you type here saves for anyone else who opens this project too.
         </div>
       )}
       {prefilledFromFirstPass && (

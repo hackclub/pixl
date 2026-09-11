@@ -184,6 +184,14 @@ export interface ProjectRow {
   // second_review from a fresh first-pass approval.
   spot_checked_at: string | null;
   spot_checked_by: string;
+  // Shared review-form draft (ReviewForm.tsx's saveDraft, one per project -
+  // last writer wins), so a super leaving notes while spot-checking is
+  // visible to whoever opens the project next, not stuck in their own
+  // browser's localStorage. Cleared the moment a real verdict is submitted
+  // (see reviewProject in app/actions.ts).
+  review_draft: Record<string, string | number> | null;
+  review_draft_by: string;
+  review_draft_at: string | null;
 }
 
 export interface PlayerStateRow {
