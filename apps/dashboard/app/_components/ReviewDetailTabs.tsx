@@ -77,6 +77,7 @@ export function ReviewDetailTabs({
   projectId,
   commits,
   journals,
+  contributorNames,
   reviewAudits,
   yswsShips,
   yswsImport,
@@ -87,6 +88,9 @@ export function ReviewDetailTabs({
   projectId: number;
   commits: CommitResult;
   journals: JournalRow[];
+  /** user_id -> display name, owner plus accepted collaborators. Entries are
+   * only labelled when there's more than one contributor to tell apart. */
+  contributorNames: Record<string, string>;
   reviewAudits: ReviewAuditRow[];
   yswsShips: YswsShip[];
   yswsImport: YswsImport | null;
@@ -181,6 +185,11 @@ export function ReviewDetailTabs({
               return (
                 <div key={j.id} className="p-4">
                   <div className="flex items-center gap-3 mb-1 flex-wrap">
+                    {Object.keys(contributorNames).length > 1 && (
+                      <Badge variant="outline">
+                        {contributorNames[j.user_id] ?? "unknown"}
+                      </Badge>
+                    )}
                     <Badge variant={deflated ? "secondary" : "secondary"} className={deflated ? "line-through opacity-60" : ""}>
                       {claimed}h claimed
                     </Badge>

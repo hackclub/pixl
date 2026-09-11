@@ -229,10 +229,22 @@ export default async function ReviewDetail({
     const cHackatimeHours = Math.round(((c.hackatime_seconds ?? 0) / 3600) * 10) / 10;
     return {
       id: c.id,
+      userId: c.user_id,
       name: c.users?.real_name || c.users?.display_name || c.users?.slack_id || c.user_id,
+      hackatimeHours: cHackatimeHours,
+      journalHours: cJournalHours,
       claimedHours: cHackatimeHours > 0 ? cHackatimeHours : cJournalHours,
     };
   });
+  // The owner's own journal hours only. `journalHours` above pools every
+  // contributor's entries into one number, which is exactly what made a
+  // collaborator's own time invisible on a multi-person ship.
+  const ownerJournalHoursOnly =
+    Math.round(
+      journals
+        .filter((j) => j.user_id === p.user_id)
+        .reduce((s, j) => s + (Number(j.approved_hours ?? j.hours) || 0), 0) * 10,
+    ) / 10;
 
   // first_pass_hours is a Postgres numeric column - the driver returns it as a
   // string, which silently zeroed the RE/level lines above (reForHours does a
@@ -304,6 +316,19 @@ export default async function ReviewDetail({
   ]);
   const ownerName =
     p.users?.real_name || ownerHandle || p.users?.display_name || p.users?.slack_id || p.user_id;
+  // Per-person time, only meaningful once there's more than one contributor.
+  // The "Logged hours" card pools everyone together, so on a collaborative
+  // ship it can't answer "who actually did what" on its own.
+  const contributors = [
+    { userId: p.user_id, name: ownerName, hackatimeHours, journalHours: ownerJournalHoursOnly },
+    ...collaboratorHours.map((c) => ({
+      userId: c.userId,
+      name: c.name,
+      hackatimeHours: c.hackatimeHours,
+      journalHours: c.journalHours,
+    })),
+  ];
+  const contributorNames = Object.fromEntries(contributors.map((c) => [c.userId, c.name]));
   // projects.id is a Postgres bigint; compare numerically rather than with
   // strict equality so a bigint serialized as a string by the DB client
   // doesn't silently miss the match and strand prev/next at "not in queue".
@@ -578,6 +603,31 @@ export default async function ReviewDetail({
                   .join(", ")}
               </div>
             )}
+          </div>
+
+          {acceptedCollaborators.length > 0 && (
+            <div className="rounded-xl border border-border bg-muted/20 p-4">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+                Time by contributor
+              </div>
+              <div className="space-y-1.5">
+                {contributors.map((c) => (
+                  <div key={c.userId} className="flex items-center gap-3 text-sm">
+                    <span className="font-medium min-w-0 truncate">{c.name}</span>
+                    <span className="text-xs text-muted-foreground ml-auto shrink-0 tabular-nums">
+                      {fmtHM(c.hackatimeHours)} hackatime · {fmtHM(c.journalHours)} journals
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed">
+                Journal entries below are labelled by who wrote them, and each commit in the
+                Commits tab already shows its own author.
+              </p>
+            </div>
+          )}
+
+          <div className="flex items-center gap-3 flex-wrap">
             {p.repo_url && (
               <Button asChild variant="secondary" size="sm">
                 <a href={p.repo_url} target="_blank" rel="noreferrer">
@@ -688,6 +738,7 @@ export default async function ReviewDetail({
             projectId={p.id}
             commits={commits}
             journals={journals}
+            contributorNames={contributorNames}
             reviewAudits={reviewAudits}
             yswsShips={yswsShips}
             yswsImport={
