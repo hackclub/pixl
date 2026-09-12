@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getAllSlugs, cachedGetDoc } from "@/lib/docs";
 import { config } from "@/app/_generated/config";
 import { CodeBlocks } from "./code-blocks";
+import { DocToc } from "./doc-toc";
 
 export async function generateStaticParams() {
   const slugs = await getAllSlugs();
@@ -54,27 +56,32 @@ export default async function DocPage({
   const { doc, prev, next } = entry;
 
   return (
-    <article className="doc">
-      <div className="eyebrow">{doc.meta.group}</div>
-      <div dangerouslySetInnerHTML={{ __html: doc.body }} />
-      <div className="doc-foot">
-        {prev && (
-          <a className="prev" href={`/docs/${prev.slug}/`}>
-            <span className="dir">Previous</span>
-            <span className="ttl">{prev.title}</span>
-          </a>
-        )}
-        {next && (
-          <a className="next" href={`/docs/${next.slug}/`}>
-            <span className="dir">Next</span>
-            <span className="ttl">{next.title}</span>
-          </a>
-        )}
-      </div>
-      <div className="doc-sign">
-        {SIGN_GROUPS.includes(doc.meta.group) ? "Built by alexx" : "Built by the Pixl team"}
-      </div>
-      <CodeBlocks slug={slug} />
-    </article>
+    <>
+      <main className="docs-main">
+        <article className="doc">
+          <div className="eyebrow">{doc.meta.group}</div>
+          <div dangerouslySetInnerHTML={{ __html: doc.body }} />
+          <div className="doc-foot">
+            {prev && (
+              <Link className="prev" href={`/docs/${prev.slug}`}>
+                <span className="dir">Previous</span>
+                <span className="ttl">{prev.title}</span>
+              </Link>
+            )}
+            {next && (
+              <Link className="next" href={`/docs/${next.slug}`}>
+                <span className="dir">Next</span>
+                <span className="ttl">{next.title}</span>
+              </Link>
+            )}
+          </div>
+          <div className="doc-sign">
+            {SIGN_GROUPS.includes(doc.meta.group) ? "Built by alexx" : "Built by the Pixl team"}
+          </div>
+          <CodeBlocks slug={slug} />
+        </article>
+      </main>
+      <DocToc headings={doc.headings} />
+    </>
   );
 }

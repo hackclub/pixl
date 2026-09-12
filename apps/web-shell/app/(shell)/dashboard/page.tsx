@@ -226,15 +226,15 @@ export default async function DashboardPage() {
       </div>
 
       <div className="links">
-        <Link href="/docs/first-project/">
+        <Link href="/docs/first-project">
           <span className="lk">FIRST PROJECT</span>
           <span className="ls">The whole loop, start to finish</span>
         </Link>
-        <Link href="/docs/rules/">
+        <Link href="/docs/rules">
           <span className="lk">SHIP RULES</span>
           <span className="ls">What the submit button checks</span>
         </Link>
-        <Link href="/docs/energy/">
+        <Link href="/docs/energy">
           <span className="lk">RE &amp; LEVELS</span>
           <span className="ls">How your rate actually works</span>
         </Link>
