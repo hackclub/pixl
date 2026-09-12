@@ -105,6 +105,34 @@ export async function slackHandles(
   return out;
 }
 
+// Per-id avatar lookup (one users.info call per id, cached) - for small lists
+// like the Forms tab where crawling the whole workspace via slackAvatars()
+// above would be overkill.
+const idAvatarCache = new Map<string, { at: number; url: string | null }>();
+
+export async function slackAvatarsFor(
+  ids: (string | null | undefined)[],
+): Promise<Map<string, string>> {
+  const uniq = [...new Set(ids.filter((x): x is string => !!x))];
+  const out = new Map<string, string>();
+  if (!process.env.SLACK_BOT_TOKEN) return out;
+  await Promise.all(
+    uniq.map(async (id) => {
+      const hit = idAvatarCache.get(id);
+      let url: string | null;
+      if (hit && Date.now() - hit.at < HANDLE_TTL) {
+        url = hit.url;
+      } else {
+        const profile = await getSlackUserProfile(id).catch(() => null);
+        url = profile?.image192 || profile?.image512 || null;
+        idAvatarCache.set(id, { at: Date.now(), url });
+      }
+      if (url) out.set(id, url);
+    }),
+  );
+  return out;
+}
+
 export interface SlackUserProfile {
   id: string;
   teamId?: string;

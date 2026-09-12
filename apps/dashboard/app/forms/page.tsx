@@ -1,6 +1,12 @@
 import { requirePagePerm } from "@/lib/guard";
-import { listFormSubmissions, listFormConfigs } from "@/lib/db";
-import { decideFormSubmission, saveFormConfig } from "@/app/actions";
+import { listFormSubmissions, listFormConfigs, type FormSubmissionRow } from "@/lib/db";
+import { slackAvatarsFor } from "@/lib/slack";
+import {
+  decideFormSubmission,
+  saveFormConfig,
+  markFormSubmissionInteresting,
+  unmarkFormSubmissionInteresting,
+} from "@/app/actions";
 import { PendingButton } from "@/app/_components/PendingButton";
 import { FormEditor } from "./FormEditor";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +27,127 @@ function dateLabel(iso: string | null): string {
   });
 }
 
+function initials(name: string): string {
+  return (
+    name
+      .replace(/^@/, "")
+      .split(/[\s_]+/)
+      .map((w) => w[0])
+      .slice(0, 2)
+      .join("")
+      .toUpperCase() || "?"
+  );
+}
+
+function Avatar({ url, name }: { url?: string; name: string }) {
+  return url ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={url} alt="" className="w-9 h-9 rounded-full object-cover shrink-0" />
+  ) : (
+    <span className="grid place-items-center w-9 h-9 rounded-full bg-primary/15 text-primary text-xs font-semibold shrink-0">
+      {initials(name)}
+    </span>
+  );
+}
+
+function SubmissionCard({
+  s,
+  avatarUrl,
+  showUnmark,
+}: {
+  s: FormSubmissionRow;
+  avatarUrl?: string;
+  showUnmark: boolean;
+}) {
+  return (
+    <Card className="p-4 md:p-5 gap-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        <Avatar url={avatarUrl} name={s.name || s.slack_id} />
+        <span className="font-semibold">{s.name || s.slack_id}</span>
+        <Badge variant="secondary">{s.form_key}</Badge>
+        {s.interesting_at && (
+          <Badge variant="warning" title={`Kept by ${s.interesting_by} on ${dateLabel(s.interesting_at)}`}>
+            ⭐ interesting
+          </Badge>
+        )}
+        <span className="text-xs text-muted-foreground ml-auto">{dateLabel(s.created_at)}</span>
+      </div>
+      <div className="space-y-2 text-sm">
+        {Object.entries(s.answers).map(([key, value]) => (
+          <div key={key}>
+            <div className="text-xs font-medium text-muted-foreground">{key}</div>
+            <div className="whitespace-pre-wrap break-words">{value}</div>
+          </div>
+        ))}
+      </div>
+      <form action={decideFormSubmission} className="flex flex-col gap-2 pt-2 border-t border-border">
+        <input type="hidden" name="id" value={s.id} />
+        <Textarea
+          name="note"
+          placeholder="Optional note, included in the DM…"
+          rows={2}
+          className="text-sm resize-y"
+        />
+        <div className="flex gap-2 flex-wrap">
+          <PendingButton
+            name="decision"
+            value="accepted"
+            size="sm"
+            className="bg-mint text-ink border-transparent hover:bg-mint/90"
+            pendingText="Accepting…"
+          >
+            Accept
+          </PendingButton>
+          <PendingButton
+            name="decision"
+            value="rejected"
+            size="sm"
+            variant="outline"
+            pendingText="Rejecting…"
+            className="text-rose-600 border-rose-200 dark:border-rose-500/30 hover:bg-rose-50 dark:hover:bg-rose-500/10"
+          >
+            Reject
+          </PendingButton>
+        </div>
+      </form>
+      {showUnmark ? (
+        <form action={unmarkFormSubmissionInteresting} className="pt-1">
+          <input type="hidden" name="id" value={s.id} />
+          <PendingButton variant="outline" size="sm" pendingText="Moving back…">
+            Not interesting anymore
+          </PendingButton>
+        </form>
+      ) : (
+        <details className="pt-1">
+          <summary className="text-xs text-muted-foreground cursor-pointer select-none">
+            Not ready to decide? Keep it for later
+          </summary>
+          <form
+            action={markFormSubmissionInteresting}
+            className="flex flex-col gap-2 mt-2"
+          >
+            <input type="hidden" name="id" value={s.id} />
+            <Textarea
+              name="note"
+              placeholder="Optional extra note, included in the DM…"
+              rows={2}
+              className="text-sm resize-y"
+            />
+            <PendingButton
+              variant="secondary"
+              size="sm"
+              pendingText="Marking…"
+              className="w-fit"
+            >
+              ⭐ Mark as interesting
+            </PendingButton>
+          </form>
+        </details>
+      )}
+    </Card>
+  );
+}
+
 // Every public, no-account form submission (pixl.hackclub.com/form/*, see
 // apps/server/src/routes/forms.ts) lands here for accept/reject. Submitters
 // never got a Pixl account - decideFormSubmission DMs them directly by the
@@ -28,8 +155,10 @@ function dateLabel(iso: string | null): string {
 export default async function FormsPage() {
   await requirePagePerm(["forms"]);
   const [submissions, configs] = await Promise.all([listFormSubmissions(), listFormConfigs()]);
-  const pending = submissions.filter((s) => s.status === "pending");
+  const pending = submissions.filter((s) => s.status === "pending" && !s.interesting_at);
+  const interesting = submissions.filter((s) => s.status === "pending" && s.interesting_at);
   const decided = submissions.filter((s) => s.status !== "pending");
+  const avatars = await slackAvatarsFor(submissions.map((s) => s.slack_id));
 
   return (
     <div className="space-y-8">
@@ -68,6 +197,19 @@ export default async function FormsPage() {
         </div>
       </div>
 
+      {interesting.length > 0 && (
+        <div>
+          <div className="text-sm font-medium text-muted-foreground mb-3">
+            ⭐ {interesting.length} kept for later
+          </div>
+          <div className="grid gap-4">
+            {interesting.map((s) => (
+              <SubmissionCard key={s.id} s={s} avatarUrl={avatars.get(s.slack_id)} showUnmark />
+            ))}
+          </div>
+        </div>
+      )}
+
       <div>
         <div className="text-sm font-medium text-muted-foreground mb-3">
           {pending.length} pending
@@ -77,53 +219,7 @@ export default async function FormsPage() {
         ) : (
           <div className="grid gap-4">
             {pending.map((s) => (
-              <Card key={s.id} className="p-4 md:p-5 gap-3">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold">{s.name || s.slack_id}</span>
-                  <Badge variant="secondary">{s.form_key}</Badge>
-                  <span className="text-xs text-muted-foreground ml-auto">
-                    {dateLabel(s.created_at)}
-                  </span>
-                </div>
-                <div className="space-y-2 text-sm">
-                  {Object.entries(s.answers).map(([key, value]) => (
-                    <div key={key}>
-                      <div className="text-xs font-medium text-muted-foreground">{key}</div>
-                      <div className="whitespace-pre-wrap break-words">{value}</div>
-                    </div>
-                  ))}
-                </div>
-                <form action={decideFormSubmission} className="flex flex-col gap-2 pt-2 border-t border-border">
-                  <input type="hidden" name="id" value={s.id} />
-                  <Textarea
-                    name="note"
-                    placeholder="Optional note, included in the DM…"
-                    rows={2}
-                    className="text-sm resize-y"
-                  />
-                  <div className="flex gap-2">
-                    <PendingButton
-                      name="decision"
-                      value="accepted"
-                      size="sm"
-                      className="bg-mint text-ink border-transparent hover:bg-mint/90"
-                      pendingText="Accepting…"
-                    >
-                      Accept
-                    </PendingButton>
-                    <PendingButton
-                      name="decision"
-                      value="rejected"
-                      size="sm"
-                      variant="outline"
-                      pendingText="Rejecting…"
-                      className="text-rose-600 border-rose-200 dark:border-rose-500/30 hover:bg-rose-50 dark:hover:bg-rose-500/10"
-                    >
-                      Reject
-                    </PendingButton>
-                  </div>
-                </form>
-              </Card>
+              <SubmissionCard key={s.id} s={s} avatarUrl={avatars.get(s.slack_id)} showUnmark={false} />
             ))}
           </div>
         )}
@@ -135,6 +231,7 @@ export default async function FormsPage() {
           <Card className="overflow-hidden py-0 divide-y divide-border">
             {decided.map((s) => (
               <div key={s.id} className="p-3.5 flex items-center gap-3 flex-wrap">
+                <Avatar url={avatars.get(s.slack_id)} name={s.name || s.slack_id} />
                 <span className="font-medium">{s.name || s.slack_id}</span>
                 <Badge variant="secondary">{s.form_key}</Badge>
                 <Badge variant={s.status === "accepted" ? "success" : "destructive"}>

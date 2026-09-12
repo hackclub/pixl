@@ -3131,6 +3131,12 @@ export interface FormSubmissionRow {
   decided_at: string | null;
   decision_note: string;
   created_at: string;
+  // "Kept for later" - see markFormSubmissionInteresting in app/actions.ts.
+  // Doesn't touch status (still 'pending' until a real accept/reject), just
+  // moves the submission into its own section on the Forms tab and DMs the
+  // applicant that they cleared a first pass.
+  interesting_at: string | null;
+  interesting_by: string;
 }
 
 export async function listFormSubmissions(formKey?: string): Promise<FormSubmissionRow[]> {

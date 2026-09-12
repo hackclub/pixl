@@ -2400,6 +2400,57 @@ export async function decideFormSubmission(formData: FormData): Promise<void> {
   revalidatePath("/forms");
 }
 
+// "Keep for later" - moves a pending submission into its own section on the
+// Forms tab without deciding on it (status stays 'pending'), and DMs the
+// applicant that they cleared a first pass with a second round to come. Not
+// a real decision - accept/reject is still a separate, later action.
+export async function markFormSubmissionInteresting(formData: FormData): Promise<void> {
+  const access = await requirePerm("forms");
+  const id = Number(formData.get("id") ?? 0);
+  const note = String(formData.get("note") ?? "").trim().slice(0, 1000);
+  if (!id) return;
+
+  const { data: submission, error } = await db
+    .from("form_submissions")
+    .update({
+      interesting_at: new Date().toISOString(),
+      interesting_by: actorName(access),
+    })
+    .eq("id", id)
+    .eq("status", "pending")
+    .is("interesting_at", null)
+    .select("id, form_key, slack_id")
+    .single();
+  if (error || !submission) {
+    console.error("markFormSubmissionInteresting failed", error?.message);
+    return;
+  }
+
+  const dmText = `Good news , your "${submission.form_key}" application made it through our first review! There's a second round before a final decision, we'll follow up soon.${note ? `\n\n${note}` : ""}`;
+  try {
+    await dmUser(submission.slack_id as string, dmText);
+  } catch (e) {
+    console.error("markFormSubmissionInteresting DM failed", e);
+  }
+
+  revalidatePath("/forms");
+}
+
+// Reverts a "kept for later" mark back to plain pending, no DM - for an
+// accidental click or a change of mind before any real decision was made.
+export async function unmarkFormSubmissionInteresting(formData: FormData): Promise<void> {
+  await requirePerm("forms");
+  const id = Number(formData.get("id") ?? 0);
+  if (!id) return;
+  const { error } = await db
+    .from("form_submissions")
+    .update({ interesting_at: null, interesting_by: "" })
+    .eq("id", id)
+    .eq("status", "pending");
+  if (error) console.error("unmarkFormSubmissionInteresting failed", error.message);
+  revalidatePath("/forms");
+}
+
 // Lets an admin add/edit/remove questions and set a close date on a public
 // form (pixl.hackclub.com/form/*) from the Forms tab, without a deploy -
 // apps/server/src/routes/forms.ts reads this table live. questionsJson is a
