@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Pixelify_Sans, Poppins } from "next/font/google";
+import { JetBrains_Mono, Pixelify_Sans, Poppins } from "next/font/google";
 import "./globals.css";
 
 // next/font self-hosts the font files at build time (served from this app's
@@ -20,6 +20,14 @@ const pixelifySans = Pixelify_Sans({
   variable: "--font-pixelify-sans",
   display: "swap",
 });
+// No weight list: JetBrains Mono ships as a variable font, so one file covers
+// the regular body of a code block and the 600/700 hljs picks out for
+// sections and strong text.
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-jetbrains-mono",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Pixl",
@@ -27,7 +35,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${poppins.variable} ${pixelifySans.variable}`}>
+    <html lang="en" className={`${poppins.variable} ${pixelifySans.variable} ${jetbrainsMono.variable}`}>
       <body>{children}</body>
     </html>
   );
