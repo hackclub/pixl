@@ -34,6 +34,10 @@
   .compose-foot .count { font-size: 12.5px; color: var(--faint); }
   .tabs { display: flex; gap: 6px; margin: 0 0 18px; flex-wrap: wrap; }
   .tab {
+    /* Cross-page links now rather than in-page buttons, so they need the two
+       things a <button> got for free. */
+    display: inline-block;
+    text-decoration: none;
     border: var(--bw) solid var(--stroke); border-radius: 0;
     background: var(--panel);
     color: var(--dim);
@@ -163,8 +167,8 @@
   </div>
 
   <div class="tabs" id="tabs">
-    <button class="tab active" data-sort="new">NEW</button>
-    <button class="tab" data-sort="top">TOP</button>
+    <a class="tab" id="tab-new" href="/ideas/">NEW</a>
+    <a class="tab" id="tab-top" href="/ideas/top">TOP</a>
   </div>
   <div class="searchbar"><input class="field" id="iq" type="search" placeholder="Find an idea…" autocomplete="off"></div>
 
@@ -177,7 +181,10 @@ Pixl.mountTopbar("ideas");
 Pixl.loadWallet();
 
 const view = document.getElementById("view");
-let sort = "new";
+// /ideas is newest-first, /ideas/top is most-upvoted. This was in-page state
+// before, so there was no way to send anyone the board you were looking at.
+let sort = /^\/ideas\/top\/?$/.test(location.pathname) ? "top" : "new";
+document.getElementById(sort === "top" ? "tab-top" : "tab-new").classList.add("active");
 let q = "";
 
 function voteGroup(i) {
@@ -326,12 +333,6 @@ async function load() {
     ? `<div class="empty-note">NO IDEAS YET, POST THE FIRST ONE!</div>`
     : `<div class="idea-list">${ideas.map((i) => (i.is_collab ? posterCard(i) : ideaCard(i))).join("")}</div>`;
 }
-
-document.querySelectorAll("#tabs .tab").forEach((t) => t.addEventListener("click", () => {
-  sort = t.dataset.sort;
-  document.querySelectorAll("#tabs .tab").forEach((x) => x.classList.toggle("active", x === t));
-  load();
-}));
 
 const searchInput = document.getElementById("iq");
 let searchT;

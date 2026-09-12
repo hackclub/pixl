@@ -8,6 +8,8 @@ import shopItemMeta from "./web/api/shop-item-meta.ts";
 import shopOg from "./web/api/shop-og.ts";
 import projectMeta from "./web/api/project-meta.ts";
 import projectOg from "./web/api/project-og.ts";
+import playerMeta from "./web/api/player-meta.ts";
+import playerOg from "./web/api/player-og.ts";
 
 const ROOT = resolve(process.env.SITE_ROOT ?? "/srv/site");
 const PORT = Number(process.env.PORT ?? 3000);
@@ -16,7 +18,7 @@ const PORT = Number(process.env.PORT ?? 3000);
 // isolation, but the shell pages embed third-party images that require-corp
 // would block. Same split as the negative lookahead in vercel.json.
 const NO_ISOLATION =
-  /^\/(shop|orders|collectibles|vault|explore|project|quests|trials|timeline|projects|report|hackatime|fonts|img|pixl|show-n-tell)/;
+  /^\/(shop|orders|collectibles|vault|explore|project|players|quests|trials|timeline|projects|report|hackatime|fonts|img|pixl|show-n-tell)/;
 
 function withIsolation(headers: Headers, pathname: string): Headers {
   if (!NO_ISOLATION.test(pathname)) {
@@ -124,6 +126,7 @@ Bun.serve({
 
     if (pathname === "/api/shop-og") return runHandler(shopOg, url);
     if (pathname === "/api/project-og") return runHandler(projectOg, url);
+    if (pathname === "/api/player-og") return runHandler(playerOg, url);
 
     // vercel.json rewrite: /shop/item -> /api/shop-item-meta
     if (pathname === "/shop/item" || pathname === "/shop/item/") {
@@ -137,7 +140,45 @@ Bun.serve({
       return runHandler(projectMeta, url);
     }
 
+    // vercel.json rewrite: /players/:id -> /api/player-meta. Player ids are
+    // uuids, not the numeric ids projects use.
+    if (/^\/players\/[0-9a-f-]{36}\/?$/i.test(pathname)) {
+      return runHandler(playerMeta, url);
+    }
+
+    // /explore is the section, not a page - its three boards are the pages.
+    if (pathname === "/explore" || pathname === "/explore/") {
+      return Response.redirect("/explore/projects/", 302);
+    }
+    // The directory briefly lived here before the boards moved under /explore.
+    // One profile still does (/players/<id>, handled above).
+    if (pathname === "/players" || pathname === "/players/") {
+      return Response.redirect("/explore/players/", 302);
+    }
+
     const ifNoneMatch = request.headers.get("if-none-match");
+
+    // The leaderboard's boards are real paths (/explore/leaderboard/referrals,
+    // /explore/leaderboard/upvotes) served by the one page, which reads which
+    // board to show off the path. Matches vercel.json's rewrite. The bare
+    // /explore/leaderboard/ falls through to the static file below like any
+    // other page.
+    if (/^\/explore\/leaderboard\/[a-z]+\/?$/i.test(pathname)) {
+      const board = await serveStatic("/explore/leaderboard/index.html", ifNoneMatch);
+      if (board) return board;
+    }
+
+    // Same idea for the two other views that used to hide behind a fragment:
+    // the new-project form and the ideas board's TOP sort. Each is served by
+    // its own page, which reads which view to show off the path.
+    if (/^\/projects\/new\/?$/.test(pathname)) {
+      const form = await serveStatic("/projects/index.html", ifNoneMatch);
+      if (form) return form;
+    }
+    if (/^\/ideas\/top\/?$/.test(pathname)) {
+      const top = await serveStatic("/ideas/index.html", ifNoneMatch);
+      if (top) return top;
+    }
 
     const direct = await serveStatic(pathname, ifNoneMatch);
     if (direct) return direct;
