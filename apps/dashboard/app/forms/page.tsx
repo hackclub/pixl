@@ -54,10 +54,12 @@ function SubmissionCard({
   s,
   avatarUrl,
   showUnmark,
+  questionLabels,
 }: {
   s: FormSubmissionRow;
   avatarUrl?: string;
   showUnmark: boolean;
+  questionLabels: Map<string, string>;
 }) {
   return (
     <Card className="p-4 md:p-5 gap-3">
@@ -75,7 +77,9 @@ function SubmissionCard({
       <div className="space-y-2 text-sm">
         {Object.entries(s.answers).map(([key, value]) => (
           <div key={key}>
-            <div className="text-xs font-medium text-muted-foreground">{key}</div>
+            <div className="text-xs font-medium text-muted-foreground">
+              {questionLabels.get(key) ?? key}
+            </div>
             <div className="whitespace-pre-wrap break-words">{value}</div>
           </div>
         ))}
@@ -159,6 +163,14 @@ export default async function FormsPage() {
   const interesting = submissions.filter((s) => s.status === "pending" && s.interesting_at);
   const decided = submissions.filter((s) => s.status !== "pending");
   const avatars = await slackAvatarsFor(submissions.map((s) => s.slack_id));
+  // form_key -> {question key -> label}, so an answer's heading shows the
+  // actual question asked instead of its internal storage key (e.g.
+  // "message") - falls back to the raw key if a question was since
+  // renamed/removed in FormEditor.
+  const questionLabelsByForm = new Map(
+    configs.map((c) => [c.form_key, new Map(c.questions.map((q) => [q.key, q.label]))]),
+  );
+  const emptyLabels = new Map<string, string>();
 
   return (
     <div className="space-y-8">
@@ -204,7 +216,13 @@ export default async function FormsPage() {
           </div>
           <div className="grid gap-4">
             {interesting.map((s) => (
-              <SubmissionCard key={s.id} s={s} avatarUrl={avatars.get(s.slack_id)} showUnmark />
+              <SubmissionCard
+                key={s.id}
+                s={s}
+                avatarUrl={avatars.get(s.slack_id)}
+                showUnmark
+                questionLabels={questionLabelsByForm.get(s.form_key) ?? emptyLabels}
+              />
             ))}
           </div>
         </div>
@@ -219,7 +237,13 @@ export default async function FormsPage() {
         ) : (
           <div className="grid gap-4">
             {pending.map((s) => (
-              <SubmissionCard key={s.id} s={s} avatarUrl={avatars.get(s.slack_id)} showUnmark={false} />
+              <SubmissionCard
+                key={s.id}
+                s={s}
+                avatarUrl={avatars.get(s.slack_id)}
+                showUnmark={false}
+                questionLabels={questionLabelsByForm.get(s.form_key) ?? emptyLabels}
+              />
             ))}
           </div>
         )}
