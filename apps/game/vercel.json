@@ -8,7 +8,9 @@
     { "source": "/shop/item", "destination": "/api/shop-item-meta" },
     { "source": "/project/:id", "destination": "/api/project-meta?id=:id" },
     { "source": "/players/:id", "destination": "/api/player-meta?id=:id" },
-    { "source": "/explore/leaderboard/:board", "destination": "/explore/leaderboard/" }
+    { "source": "/explore/leaderboard/:board", "destination": "/explore/leaderboard/" },
+    { "source": "/projects/new", "destination": "/projects/" },
+    { "source": "/ideas/top", "destination": "/ideas/" }
   ],
   "headers": [
     {

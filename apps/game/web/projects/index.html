@@ -1183,7 +1183,7 @@
         </div>
         <div class="hero-actions">
           <div class="legend" id="legend"></div>
-          <a class="btn" href="#new" id="new-btn">+ NEW PROJECT</a>
+          <a class="btn" href="/projects/new" id="new-btn">+ NEW PROJECT</a>
         </div>
       </section>
 
@@ -1205,6 +1205,9 @@
       // session token lives in localStorage, so the decision happens below once
       // we know whose project it is.
       const PERMALINK_ID = location.pathname.match(/^\/project\/(\d+)\/?$/)?.[1] ?? null;
+      // The new-project form is its own URL, so it can be linked to (the game
+      // sends players straight here when they take on a Trial).
+      const NEW_PROJECT = /^\/projects\/new\/?$/.test(location.pathname);
       const GUEST_PERMALINK = !!PERMALINK_ID && !Pixl.hasToken;
 
       // Chrome-free for a signed-out visitor, the same treatment /shop and
@@ -1602,7 +1605,7 @@
         <div style="font-size:48px;margin-bottom:12px"></div>
         <h2>NO PROJECTS YET</h2>
         <p>Log what you're building, link it to Hackatime, journal as you go, then ship it for review: approved hours pay out in pixels.</p>
-        <a class="btn" href="#new">+ START YOUR FIRST PROJECT</a>
+        <a class="btn" href="/projects/new">+ START YOUR FIRST PROJECT</a>
       </div>
       <div class="panel-grid" id="feeds"></div>`;
           renderFeeds();
@@ -1636,7 +1639,7 @@
         .join("")}
     </div>
     <div class="list-actions">
-      <a class="btn" href="#new">+ NEW PROJECT</a>
+      <a class="btn" href="/projects/new">+ NEW PROJECT</a>
       <a class="btn dark" href="/docs/shipping/">SHIPPING GUIDE</a>
     </div>
     <div class="panel-grid" id="feeds"></div>`;
@@ -2009,7 +2012,7 @@
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn" id="f-save">${p.id ? "SAVE" : "CREATE PROJECT"}</button>
-        <a class="btn dark" href="#">CANCEL</a>
+        <a class="btn dark" href="/projects/">CANCEL</a>
       </div>
     </div>`;
       }
@@ -3903,7 +3906,7 @@
         if (!r.ok) return Pixl.toast(err(r.error), true);
         Pixl.toast("Project deleted.");
         await loadProjects();
-        location.hash = "#";
+        location.href = "/projects/";
       }
 
       /* ---------- paste-to-upload (thumbnail while editing) ---------- */
@@ -3944,24 +3947,25 @@
 
         if (!Pixl.hasToken) return;
         const h = location.hash.replace(/^#/, "");
-        // #p=<id> was the old in-page URL for a single project. It still
-        // arrives from bookmarks and anything shared before permalinks, so it
-        // forwards to the real one rather than rendering a second time here.
+        // #p=<id> and #new were this page's own URLs before the views got real
+        // paths. Both still arrive from bookmarks, so they forward rather than
+        // rendering a second time here.
         if (h.startsWith("p=")) {
           const legacyId = Number(h.slice(2));
           if (legacyId) return void location.replace("/project/" + legacyId);
         }
+        if (h === "new") return void location.replace("/projects/new");
         $("new-btn").style.display = "";
         // The legend describes the list, so it comes off once you're inside
         // the editor or a single project.
-        const onList = h !== "new";
+        const onList = !NEW_PROJECT;
         $("legend").style.display = onList ? "" : "none";
         $("ht-slot").style.display = onList ? "" : "none";
         $("invites-slot").style.display = onList ? "" : "none";
         $("join-code-slot").style.display = onList ? "" : "none";
         $("ysws-import-slot").style.display = onList ? "" : "none";
         if (onList) renderLegend();
-        if (h === "new") {
+        if (NEW_PROJECT) {
           // allTrials/trials were loaded once at page boot and never since,
           // a Trial accepted in-game after that (very likely, since this page
           // is opened as a reused popup window rather than freshly navigated
@@ -3971,7 +3975,7 @@
           await loadTrials();
           $("new-btn").style.display = "none";
           $("view").innerHTML =
-            `<a class="btn dark back-btn" href="#">← ALL PROJECTS</a><div class="editor">${trialBriefHtml(activeTrial)}${formHtml({})}</div>`;
+            `<a class="btn dark back-btn" href="/projects/">← ALL PROJECTS</a><div class="editor">${trialBriefHtml(activeTrial)}${formHtml({})}</div>`;
           bindForm({});
           wireHtPicker();
           return;

@@ -168,6 +168,18 @@ Bun.serve({
       if (board) return board;
     }
 
+    // Same idea for the two other views that used to hide behind a fragment:
+    // the new-project form and the ideas board's TOP sort. Each is served by
+    // its own page, which reads which view to show off the path.
+    if (/^\/projects\/new\/?$/.test(pathname)) {
+      const form = await serveStatic("/projects/index.html", ifNoneMatch);
+      if (form) return form;
+    }
+    if (/^\/ideas\/top\/?$/.test(pathname)) {
+      const top = await serveStatic("/ideas/index.html", ifNoneMatch);
+      if (top) return top;
+    }
+
     const direct = await serveStatic(pathname, ifNoneMatch);
     if (direct) return direct;
 
