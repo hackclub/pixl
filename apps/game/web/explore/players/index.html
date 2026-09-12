@@ -6,19 +6,19 @@
 <title>Pixl · Players</title>
     <!-- <pixl-preview> -->
     <meta name="description" content="Every builder on Pixl, searchable by name.">
-    <link rel="canonical" href="https://pixl.hackclub.com/players/">
+    <link rel="canonical" href="https://pixl.hackclub.com/explore/players/">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Pixl">
     <meta property="og:title" content="Pixl · Players">
     <meta property="og:description" content="Every builder on Pixl, searchable by name.">
-    <meta property="og:url" content="https://pixl.hackclub.com/players/">
-    <meta property="og:image" content="https://pixl.hackclub.com/players/og.png">
+    <meta property="og:url" content="https://pixl.hackclub.com/explore/players/">
+    <meta property="og:image" content="https://pixl.hackclub.com/explore/players/og.png">
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Pixl · Players">
     <meta name="twitter:description" content="Every builder on Pixl, searchable by name.">
-    <meta name="twitter:image" content="https://pixl.hackclub.com/players/og.png">
+    <meta name="twitter:image" content="https://pixl.hackclub.com/explore/players/og.png">
     <!-- <pixl-preview:end> -->
 <link rel="icon" href="/index.icon.png">
 <link rel="stylesheet" href="/pixl.css?v=4">
@@ -32,9 +32,9 @@
   </section>
 
   <div class="tabs" id="tabs">
-    <a class="tab active" href="/players/">PLAYERS</a>
-    <a class="tab" href="/explore/">PROJECTS</a>
-    <a class="tab" href="/leaderboard/">LEADERBOARD</a>
+    <a class="tab active" href="/explore/players/">PLAYERS</a>
+    <a class="tab" href="/explore/projects/">PROJECTS</a>
+    <a class="tab" href="/explore/leaderboard/">LEADERBOARD</a>
   </div>
 
   <div id="view"></div>
@@ -43,14 +43,15 @@
 <script src="/pixl.js?v=6"></script>
 <script src="/explore.js?v=1"></script>
 <script>
-// One profile lives at /players/<id> (served by web/api/player-meta.ts, which
-// hands back this page with that player's preview meta patched in). It's the
-// one view in this family that works signed out, so a link pasted outside Pixl
-// opens the profile rather than the sign-in rail.
+// This page answers two URLs. /explore/players is the directory. /players/<id>
+// is one profile, served from this same HTML by web/api/player-meta.ts with
+// that player's preview meta patched in, and it's the one view in this family
+// that works signed out, so a link pasted outside Pixl opens the profile
+// rather than the sign-in rail.
 const PLAYER_ID = location.pathname.match(/^\/players\/([0-9a-f-]{36})\/?$/i)?.[1] ?? null;
 const GUEST_PROFILE = !!PLAYER_ID && !Pixl.hasToken;
 
-Pixl.mountTopbar("players", PLAYER_ID ? { guestNoShell: true } : undefined);
+Pixl.mountTopbar("explore", PLAYER_ID ? { guestNoShell: true } : undefined);
 Pixl.loadWallet();
 
 if (GUEST_PROFILE) {

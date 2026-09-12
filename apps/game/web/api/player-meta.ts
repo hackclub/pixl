@@ -67,7 +67,7 @@ export default async function handler(req: MinimalReq, res: MinimalRes): Promise
 
   const proto = (req.headers?.["x-forwarded-proto"] as string) || "https";
   const host = (req.headers?.host as string) || SITE_HOST;
-  let html = await fetch(`${proto}://${host}/players/index.html`).then((r) => r.text());
+  let html = await fetch(`${proto}://${host}/explore/players/index.html`).then((r) => r.text());
 
   if (id) {
     try {

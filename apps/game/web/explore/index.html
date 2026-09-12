@@ -2,66 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pixl · Explore</title>
-    <!-- <pixl-preview> -->
-    <meta name="description" content="Browse what everyone on Pixl is building and shipping.">
-    <link rel="canonical" href="https://pixl.hackclub.com/explore/">
-    <meta property="og:type" content="website">
-    <meta property="og:site_name" content="Pixl">
-    <meta property="og:title" content="Pixl · Explore">
-    <meta property="og:description" content="Browse what everyone on Pixl is building and shipping.">
-    <meta property="og:url" content="https://pixl.hackclub.com/explore/">
-    <meta property="og:image" content="https://pixl.hackclub.com/explore/og.png">
-    <meta property="og:image:width" content="1200">
-    <meta property="og:image:height" content="630">
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Pixl · Explore">
-    <meta name="twitter:description" content="Browse what everyone on Pixl is building and shipping.">
-    <meta name="twitter:image" content="https://pixl.hackclub.com/explore/og.png">
-    <!-- <pixl-preview:end> -->
-<link rel="icon" href="/index.icon.png">
-<link rel="stylesheet" href="/pixl.css?v=4">
-<link rel="stylesheet" href="/explore.css?v=1">
+<link rel="canonical" href="https://pixl.hackclub.com/explore/projects/">
+<meta name="robots" content="noindex">
+<!-- /explore is the section, not a page. The three boards under it are the
+     real pages; this sends anyone landing here to the default one. serve.ts
+     and vercel.json redirect before this file is ever served, so this is the
+     fallback for any host that doesn't. -->
+<meta http-equiv="refresh" content="0; url=/explore/projects/">
+<script>location.replace("/explore/projects/" + location.hash);</script>
 </head>
-<body>
-<main class="wrap">
-  <section class="hero hud deep">
-    <h1 class="page-title">EXPLORE</h1>
-    <div class="page-sub">EVERY BUILD SHIPPED ON PIXL.</div>
-  </section>
-
-  <div class="tabs" id="tabs">
-    <a class="tab" href="/players/">PLAYERS</a>
-    <a class="tab active" href="/explore/">PROJECTS</a>
-    <a class="tab" href="/leaderboard/">LEADERBOARD</a>
-  </div>
-
-  <div id="view"></div>
-</main>
-
-<script src="/pixl.js?v=6"></script>
-<script src="/explore.js?v=1"></script>
-<script>
-// This page was one tabbed view switching on location.hash before the tabs
-// became real pages. Links shared or bookmarked back then still arrive here,
-// so they get forwarded rather than silently landing on the wrong board.
-const LEGACY = {
-  players: "/players/",
-  projects: "/explore/",
-  leaderboard: "/leaderboard/",
-};
-const [key, val] = location.hash.replace(/^#/, "").split("=");
-if (key === "player" && val) location.replace("/players/" + encodeURIComponent(val));
-else if (key === "project" && val) location.replace("/project/" + encodeURIComponent(val));
-else if (key === "leaderboard" && val && val !== "pixels") location.replace("/leaderboard/" + encodeURIComponent(val));
-else if (key === "players") location.replace(LEGACY.players);
-else if (key === "leaderboard") location.replace(LEGACY.leaderboard);
-else {
-  Pixl.mountTopbar("explore");
-  Pixl.loadWallet();
-  Explore.projects();
-}
-</script>
-</body>
+<body></body>
 </html>

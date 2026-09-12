@@ -146,14 +146,25 @@ Bun.serve({
       return runHandler(playerMeta, url);
     }
 
+    // /explore is the section, not a page - its three boards are the pages.
+    if (pathname === "/explore" || pathname === "/explore/") {
+      return Response.redirect("/explore/projects/", 302);
+    }
+    // The directory briefly lived here before the boards moved under /explore.
+    // One profile still does (/players/<id>, handled above).
+    if (pathname === "/players" || pathname === "/players/") {
+      return Response.redirect("/explore/players/", 302);
+    }
+
     const ifNoneMatch = request.headers.get("if-none-match");
 
-    // The leaderboard's three boards are real paths (/leaderboard/referrals,
-    // /leaderboard/upvotes) served by the one page, which reads which board to
-    // show off the path. Matches vercel.json's rewrite. The bare
-    // /leaderboard/ falls through to the static file below like any other page.
-    if (/^\/leaderboard\/[a-z]+\/?$/i.test(pathname)) {
-      const board = await serveStatic("/leaderboard/index.html", ifNoneMatch);
+    // The leaderboard's boards are real paths (/explore/leaderboard/referrals,
+    // /explore/leaderboard/upvotes) served by the one page, which reads which
+    // board to show off the path. Matches vercel.json's rewrite. The bare
+    // /explore/leaderboard/ falls through to the static file below like any
+    // other page.
+    if (/^\/explore\/leaderboard\/[a-z]+\/?$/i.test(pathname)) {
+      const board = await serveStatic("/explore/leaderboard/index.html", ifNoneMatch);
       if (board) return board;
     }
 

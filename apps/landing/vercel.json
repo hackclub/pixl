@@ -31,8 +31,6 @@
     { "source": "/project/:id", "destination": "https://play.pixl.rsvp/project/:id" },
     { "source": "/players", "destination": "https://play.pixl.rsvp/players/" },
     { "source": "/players/:path*", "destination": "https://play.pixl.rsvp/players/:path*" },
-    { "source": "/leaderboard", "destination": "https://play.pixl.rsvp/leaderboard/" },
-    { "source": "/leaderboard/:path*", "destination": "https://play.pixl.rsvp/leaderboard/:path*" },
     { "source": "/api/shop-og", "destination": "https://play.pixl.rsvp/api/shop-og" },
     { "source": "/api/project-og", "destination": "https://play.pixl.rsvp/api/project-og" },
     { "source": "/api/player-og", "destination": "https://play.pixl.rsvp/api/player-og" },

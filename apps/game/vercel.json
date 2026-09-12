@@ -8,11 +8,11 @@
     { "source": "/shop/item", "destination": "/api/shop-item-meta" },
     { "source": "/project/:id", "destination": "/api/project-meta?id=:id" },
     { "source": "/players/:id", "destination": "/api/player-meta?id=:id" },
-    { "source": "/leaderboard/:board", "destination": "/leaderboard/" }
+    { "source": "/explore/leaderboard/:board", "destination": "/explore/leaderboard/" }
   ],
   "headers": [
     {
-      "source": "/((?!shop|orders|collectibles|vault|explore|project|players|leaderboard|quests|timeline|projects|report|hackatime|fonts|img|pixl|show-n-tell).*)",
+      "source": "/((?!shop|orders|collectibles|vault|explore|project|players|quests|timeline|projects|report|hackatime|fonts|img|pixl|show-n-tell).*)",
       "headers": [
         { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
         { "key": "Cross-Origin-Embedder-Policy", "value": "require-corp" }

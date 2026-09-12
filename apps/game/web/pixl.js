@@ -330,8 +330,6 @@ const Pixl = (() => {
         ["dashboard", "OVERVIEW"],
         ["docs", "DOCS"],
         ["explore", "EXPLORE"],
-        ["players", "PLAYERS"],
-        ["leaderboard", "LEADERBOARD"],
         ["ideas", "IDEAS"],
         ["show-n-tell", "SHOW & TELL"],
         ["vault", "GOALS"],

@@ -1,7 +1,7 @@
-/* Shared styles for the explore family: /explore, /players (and one
- * profile), /leaderboard. These were inline in explore/index.html when it
- * was a single tabbed page; splitting the tabs into real pages would have
- * meant three copies of all of it. */
+/* Shared styles for the three pages under /explore (projects, players and
+ * leaderboard), plus one profile at /players/<id>. These were inline in
+ * explore/index.html when it was a single tabbed page; splitting the tabs
+ * into real pages would have meant three copies of all of it. */
 .hero {
     padding: 26px 30px; margin-top: 8px; display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap;
   }
