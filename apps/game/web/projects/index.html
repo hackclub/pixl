@@ -1197,7 +1197,20 @@
 
     <script src="/pixl.js?v=6"></script>
     <script>
-      Pixl.mountTopbar("projects");
+      // /project/<id> is the canonical URL for a single project, and it's this
+      // same page (web/api/project-meta.ts serves this HTML for it, with the
+      // project's preview meta patched in). Everyone gets the same page: a
+      // stranger or a signed-out visitor sees the public view, the owner sees
+      // their editor on it. Nothing server-side can tell those apart, since the
+      // session token lives in localStorage, so the decision happens below once
+      // we know whose project it is.
+      const PERMALINK_ID = location.pathname.match(/^\/project\/(\d+)\/?$/)?.[1] ?? null;
+      const GUEST_PERMALINK = !!PERMALINK_ID && !Pixl.hasToken;
+
+      // Chrome-free for a signed-out visitor, the same treatment /shop and
+      // /shop/item give their public pages - the trimmed "LOG IN" rail is just
+      // noise around a project someone linked them to.
+      Pixl.mountTopbar("projects", PERMALINK_ID ? { guestNoShell: true } : undefined);
       Pixl.loadWallet();
 
       const $ = (id) => document.getElementById(id);
@@ -1602,11 +1615,11 @@
         .map((p) => {
           const [label, cls] = statusInfo(p);
           return `
-        <div class="card panel proj-row" data-href="#p=${p.id}">
+        <div class="card panel proj-row" data-href="/project/${p.id}">
           <div class="proj-row-thumb">${p.image_url ? `<img src="${Pixl.esc(p.image_url)}" alt="" loading="lazy" onerror="this.remove()">` : `<span class="thumb-none">NO IMAGE</span>`}</div>
           <div class="proj-row-body">
             <div class="proj-row-head">
-              <a class="proj-name" href="#p=${p.id}">${Pixl.esc(p.name)}</a>
+              <a class="proj-name" href="/project/${p.id}">${Pixl.esc(p.name)}</a>
               <span class="chip ${cls}">${label}</span>
               <span class="chip">${LEVELS[(p.level || 1) - 1][0]}</span>
               ${trackedChipHtml(p)}
@@ -1644,7 +1657,7 @@
         }
         if (e.target.closest("a")) return;
         const card = e.target.closest(".proj-row[data-href]");
-        if (card) location.hash = card.dataset.href;
+        if (card) location.href = card.dataset.href;
       });
 
       /* ---------- action log + news ---------- */
@@ -2293,7 +2306,7 @@
         Pixl.toast(p.id ? "Saved!" : "Project created!");
         await loadProjects();
         skipDetailsCollapse = true;
-        location.hash = "#p=" + r.project.id;
+        location.href = "/project/" + r.project.id;
         return true;
       }
 
@@ -2343,13 +2356,91 @@
 
       /* ---------- project detail ---------- */
 
-      async function renderProject(id) {
-        const p = projects.find((x) => x.id === id);
+      // Somebody else's project, seen through /project/<id>. Reads the public
+      // endpoint (token optional, it only fills in has_upvoted) so this works
+      // signed out, which is the whole point of a link you can paste anywhere.
+      async function renderPublicProjectView(id) {
         const view = $("view");
-        if (!p) {
+        view.innerHTML = `<div class="spin"></div>`;
+        const path = "/api/explore/projects/" + encodeURIComponent(id);
+        let data;
+        try {
+          data = Pixl.hasToken
+            ? await Pixl.api(path)
+            : await fetch(Pixl.API + path).then((r) => {
+                if (!r.ok) throw new Error("http_" + r.status);
+                return r.json();
+              });
+        } catch {
           view.innerHTML = `<div class="empty-note">PROJECT NOT FOUND.</div>`;
           return;
         }
+        const p = data.project;
+        const owner = data.owner;
+        const entries = data.entries || [];
+        const [label, cls] = statusInfo(p);
+
+        // Creation, submission, then whatever verdicts have landed since.
+        // Reviewer identity and notes stay internal; only the verdict and its
+        // timestamp are public.
+        const timeline = [{ label: "Started", time: p.created_at, tone: "" }];
+        if (p.shipped_at) timeline.push({ label: "Shipped for review", time: p.shipped_at, tone: "teal" });
+        for (const r of data.reviews || []) {
+          if (r.verdict === "approved") timeline.push({ label: "Approved", time: r.created_at, tone: "green" });
+          else if (r.verdict === "needs_changes") timeline.push({ label: "Changes requested", time: r.created_at, tone: "red" });
+        }
+        timeline.sort((a, b) => new Date(a.time) - new Date(b.time));
+
+        view.innerHTML = `
+    ${Pixl.hasToken ? `<a class="btn dark back-btn" href="/projects/">← ALL PROJECTS</a>` : ""}
+    <div class="editor">
+      <div class="section-h" style="margin-top:0;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        ${Pixl.esc(p.name)}
+        <span class="chip ${cls}">${label}</span>
+        ${p.hackatime_seconds ? `<span class="chip teal">${Pixl.hours(p.hackatime_seconds)} TRACKED</span>` : ""}
+        ${p.level ? `<span class="chip">${Pixl.esc(LEVELS[(p.level || 1) - 1][0])}</span>` : ""}
+        ${p.is_peak ? `<span class="chip gold" title="Nominated as a standout project by a reviewer">★ BEACON</span>` : ""}
+        <button class="btn ghost" style="margin-left:auto" data-copy="${Number(p.id)}">COPY LINK</button>
+      </div>
+      <div class="proj-hero">${p.image_url ? `<img src="${Pixl.esc(p.image_url)}" alt="" onerror="this.remove()">` : `<span class="faint" style="font-size:13px">No thumbnail</span>`}</div>
+      <div class="proj-meta" style="margin-bottom:18px">
+        <span>by ${owner ? Pixl.esc(owner.display_name) : "?"}</span>
+        <span>started ${Pixl.timeAgo(p.created_at)}</span>
+        ${p.shipped_at ? `<span>shipped ${Pixl.timeAgo(p.shipped_at)}</span>` : ""}
+      </div>
+      ${p.description ? `<div class="jbody md" style="margin-bottom:16px">${Pixl.markdown(p.description)}</div>` : ""}
+      <div class="proj-meta" style="margin-bottom:18px">
+        ${p.repo_url ? `<a class="btn ghost" href="${Pixl.esc(p.repo_url)}" target="_blank" rel="noopener noreferrer">REPO</a>` : ""}
+        ${p.demo_url ? `<a class="btn ghost" href="${Pixl.esc(p.demo_url)}" target="_blank" rel="noopener noreferrer">DEMO</a>` : ""}
+      </div>
+      <div class="proj-meta" style="margin-bottom:18px">
+        <span>${data.upvotes || 0} upvote${data.upvotes === 1 ? "" : "s"}</span>
+        ${Pixl.hasToken ? "" : `<a href="${Pixl.esc(Pixl.loginUrl())}">Sign in to vote</a>`}
+      </div>
+
+      <div class="section-h">TIMELINE</div>
+      <div class="timeline panel">${timeline.map((t) => `
+        <div class="tl-item"><span class="tl-dot ${t.tone}"></span><span class="tl-label">${Pixl.esc(t.label)}</span><span class="tl-time">${Pixl.timeAgo(t.time)}</span></div>`).join("")}</div>
+
+      <div class="section-h">JOURNAL · ${entries.length} ENTR${entries.length === 1 ? "Y" : "IES"}</div>
+      ${entries.length === 0
+        ? `<div class="empty-note">NO JOURNAL ENTRIES YET.</div>`
+        : `<div class="journal">${entries.map((e) => `
+            <div class="journal-entry panel">
+              <div class="jmeta"><span>${Pixl.timeAgo(e.created_at)}</span>${e.hours ? `<span class="teal">${Number(e.hours).toFixed(1)}h logged</span>` : ""}</div>
+              <div class="jbody md">${Pixl.markdown(e.content)}</div>
+            </div>`).join("")}</div>`}
+    </div>
+    ${GUEST_PERMALINK ? `<div class="list-actions"><a class="btn" href="/">BUILD SOMETHING ON PIXL</a></div>` : ""}`;
+      }
+
+      async function renderProject(id) {
+        const p = projects.find((x) => x.id === id);
+        const view = $("view");
+        // Not in your own list means it isn't yours and you're not a
+        // collaborator on it (or you're signed out, where the list is empty),
+        // so this is somebody else's project seen through its permalink.
+        if (!p) return renderPublicProjectView(id);
         await loadTrials();
         $("new-btn").style.display = "none";
         // Collaborators are view/log-hours only, they get a trimmed read-only
@@ -2365,7 +2456,7 @@
         const collapseDetails = !!p.id && !skipDetailsCollapse;
         skipDetailsCollapse = false;
         view.innerHTML = `
-    <a class="btn dark back-btn" href="#">← ALL PROJECTS</a>
+    <a class="btn dark back-btn" href="/projects/">← ALL PROJECTS</a>
     <div class="editor">
       <div class="section-h" style="margin-top:0;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
         ${Pixl.esc(p.name)}
@@ -2680,7 +2771,7 @@
         const view = $("view");
         const [label, cls] = statusInfo(p);
         view.innerHTML = `
-    <a class="btn dark back-btn" href="#">← ALL PROJECTS</a>
+    <a class="btn dark back-btn" href="/projects/">← ALL PROJECTS</a>
     <div class="editor">
       <div class="section-h" style="margin-top:0;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
         ${Pixl.esc(p.name)}
@@ -3001,8 +3092,7 @@
               );
               await loadProjects();
               await renderYswsImportBox();
-              location.hash = `#p=${r.project.id}`;
-              route();
+              location.href = `/project/${r.project.id}`;
             } else {
               btn.disabled = false;
               Pixl.toast(
@@ -3836,17 +3926,35 @@
       /* ---------- router ---------- */
 
       async function route() {
-        if (!Pixl.hasToken) return;
         // A pending autosave targets this render's #f-name/#f-desc/etc DOM
         // nodes by id, those ids get reused by whatever renders next, so an
         // in-flight timer left running would silently write the new view's
         // fields onto the old project.
         clearTimeout(autosaveTimer);
+
+        // On /project/<id> there's no list to come back to and no hash to
+        // read, so the permalink short-circuits the hash router entirely.
+        // This runs before the signed-in guard below because the whole point
+        // of the permalink is that it works signed out.
+        if (PERMALINK_ID) {
+          for (const id of ["new-btn", "legend", "ht-slot", "invites-slot", "join-code-slot", "ysws-import-slot"])
+            if ($(id)) $(id).style.display = "none";
+          return renderProject(Number(PERMALINK_ID));
+        }
+
+        if (!Pixl.hasToken) return;
         const h = location.hash.replace(/^#/, "");
+        // #p=<id> was the old in-page URL for a single project. It still
+        // arrives from bookmarks and anything shared before permalinks, so it
+        // forwards to the real one rather than rendering a second time here.
+        if (h.startsWith("p=")) {
+          const legacyId = Number(h.slice(2));
+          if (legacyId) return void location.replace("/project/" + legacyId);
+        }
         $("new-btn").style.display = "";
         // The legend describes the list, so it comes off once you're inside
         // the editor or a single project.
-        const onList = h !== "new" && !h.startsWith("p=");
+        const onList = h !== "new";
         $("legend").style.display = onList ? "" : "none";
         $("ht-slot").style.display = onList ? "" : "none";
         $("invites-slot").style.display = onList ? "" : "none";
@@ -3868,7 +3976,6 @@
           wireHtPicker();
           return;
         }
-        if (h.startsWith("p=")) return renderProject(Number(h.slice(2)));
         renderList();
       }
 
@@ -3977,7 +4084,15 @@
       }
 
       async function boot() {
-        if (!Pixl.hasToken) return;
+        // Signed out there's nothing to load, every endpoint below needs a
+        // session. The permalink is the exception: it renders from the public
+        // endpoint, so it still has to get its turn at the router instead of
+        // leaving a visitor staring at the boot spinner.
+        if (!Pixl.hasToken) {
+          $("loading").remove();
+          if (PERMALINK_ID) route();
+          return;
+        }
         try {
           const [s, elig, wallet] = await Promise.all([
             Pixl.api("/api/hackatime/stats"),

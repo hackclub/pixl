@@ -6,12 +6,20 @@
 // unfurled as the same generic "Pixl · Explore" card. Fixing that needs a
 // real path, which is what this handler answers.
 //
-// Same trick as ./shop-item-meta.ts: fetch the static explore/index.html the
+// Same trick as ./shop-item-meta.ts: fetch the static projects/index.html the
 // site already serves and patch only the <!-- <pixl-preview> --> meta block
-// build-previews.ts writes. The page itself is untouched - explore's router
-// recognises this pathname and opens the project detail view directly (see
-// route() in web/explore/index.html), so real visitors get the full
-// interactive page and crawlers get the project's own card.
+// build-previews.ts writes. The page itself is untouched - its router
+// recognises this pathname (see route() in web/projects/index.html) and
+// renders the project, so crawlers get the project's own card and visitors
+// get the real page.
+//
+// It's the projects page rather than the explore page because this one URL
+// serves everybody: a stranger gets the public view, the owner gets their
+// editor inline on the same page. The editor is the big irreducible part, so
+// the public view moved to it rather than the other way round. The host can't
+// tell the two apart server-side anyway (the session token lives in
+// localStorage, not a cookie), which is exactly why the page decides on the
+// client and the HTML stays identical for everyone.
 import pixl from "../../pixl.json" with { type: "json" };
 
 const SERVER = pixl.urls.server;
@@ -72,7 +80,7 @@ export default async function handler(req: MinimalReq, res: MinimalRes): Promise
 
   const proto = (req.headers?.["x-forwarded-proto"] as string) || "https";
   const host = (req.headers?.host as string) || SITE_HOST;
-  let html = await fetch(`${proto}://${host}/explore/index.html`).then((r) => r.text());
+  let html = await fetch(`${proto}://${host}/projects/index.html`).then((r) => r.text());
 
   if (id) {
     try {
