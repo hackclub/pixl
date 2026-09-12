@@ -498,6 +498,13 @@ export function ReviewForm({
     }
     if (draft) {
       setDraftRestored(true);
+      // Push it to the server right away, not just on the next edit - a
+      // reviewer who restores an old local draft and never touches it again
+      // (e.g. they just wanted to confirm it was still there) still needs it
+      // to reach whoever does the real pass, not stay stuck in this browser.
+      saveReviewDraft(projectId, draft as Record<string, string | number>).catch(() => {
+        // Best-effort - the localStorage copy is unaffected either way.
+      });
     } else if (serverDraft?.draft) {
       // Nobody's typed anything in THIS browser yet, but someone else did
       // (e.g. a super spot-checking this project) and it's saved on the
