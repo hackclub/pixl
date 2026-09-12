@@ -44,6 +44,7 @@ export interface NavFlags {
   news: boolean;
   showNTell: boolean;
   forms: boolean;
+  audit: boolean;
 }
 
 const GLYPHS = {
@@ -73,6 +74,7 @@ const GLYPHS = {
   news: "message",
   showNTell: "explore",
   forms: "message",
+  audit: "clock-fill",
 } as const;
 
 type IconKey = keyof typeof GLYPHS;
@@ -243,6 +245,7 @@ export function Shell({
           show: nav.slackLookup,
         },
         { href: "/forms", label: "Forms", icon: "forms", show: nav.forms },
+        { href: "/audit", label: "Audit log", icon: "audit", show: nav.audit },
       ],
     },
   ];

@@ -81,6 +81,10 @@ export default async function RootLayout({
         showNTell: canView(access, ["show_n_tell"]),
         fulfillment: fulfiller,
         forms: canView(access, ["forms"]),
+        // Spans every permission boundary at once (bans next to review verdicts
+        // next to permission grants), so it is owner-only - matching the gate
+        // on app/audit/page.tsx itself.
+        audit: access.isSuper,
       }
     : null;
   const reviewCount =

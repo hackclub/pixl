@@ -2186,8 +2186,15 @@ export interface FeedItem {
   when: string;
 }
 
-// One merged "what happened lately" stream for the overview, drawn from the
-// sources the viewer is allowed to see.
+// One merged "what happened lately" stream, drawn from the sources the viewer
+// is allowed to see. Feeds both the small overview widget and the full /audit
+// page, which passes a much larger limit plus the filters below.
+//
+// `limit` bounds each source *before* the merge, so it doubles as the depth
+// this can see back through. Filtering happens after, which means a narrow
+// filter over a busy period can only match within the most recent `limit`
+// rows of each source - /audit says so rather than implying it searched
+// everything.
 export async function listActivityFeed(opts: {
   mod: boolean;
   review: boolean;
@@ -2195,6 +2202,12 @@ export async function listActivityFeed(opts: {
   pixels: boolean;
   payouts?: boolean;
   limit?: number;
+  /** Restrict to these kinds. Omit for all of them. */
+  kinds?: FeedItem["kind"][];
+  /** Case-insensitive substring match over the item's text and detail. */
+  q?: string;
+  /** ISO timestamp; drops anything older. */
+  since?: string;
 }): Promise<FeedItem[]> {
   const limit = opts.limit ?? 25;
   const [mods, team, audits, txs, payouts] = await Promise.all([
@@ -2282,7 +2295,33 @@ export async function listActivityFeed(opts: {
     });
 
   items.sort((a, b) => (a.when < b.when ? 1 : -1));
-  return items.slice(0, limit);
+  return filterFeed(items, opts).slice(0, limit);
+}
+
+/**
+ * Kind / text / age filter for a merged feed. Pure and exported so /audit's
+ * filters have test coverage without standing up the database.
+ */
+export function filterFeed(
+  items: FeedItem[],
+  opts: { kinds?: FeedItem["kind"][]; q?: string; since?: string },
+): FeedItem[] {
+  const kinds = opts.kinds?.length ? new Set(opts.kinds) : null;
+  const needle = opts.q?.trim().toLowerCase();
+  // Parsed rather than string-compared: `when` is whatever each source's
+  // timestamp column serialises to, and those aren't guaranteed to share a
+  // format (a "+00:00" offset sorts differently against a "Z" string even
+  // when the two instants are identical).
+  const sinceMs = opts.since ? Date.parse(opts.since) : NaN;
+  return items.filter((i) => {
+    if (kinds && !kinds.has(i.kind)) return false;
+    if (!Number.isNaN(sinceMs)) {
+      const whenMs = Date.parse(i.when);
+      if (Number.isNaN(whenMs) || whenMs < sinceMs) return false;
+    }
+    if (needle && !`${i.text} ${i.detail}`.toLowerCase().includes(needle)) return false;
+    return true;
+  });
 }
 
 export interface BanLogRow extends ModActionRow {

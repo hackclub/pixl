@@ -502,13 +502,13 @@ async function claimedHoursForCollaborator(
 // changes the overall claimed/credited total shown and enforced everywhere
 // else on the review page, no separate "recompute total" step needed.
 export async function setJournalHours(formData: FormData): Promise<void> {
-  await requirePerm("review");
+  const access = await requirePerm("review");
   const journalId = Number(formData.get("journalId") ?? 0);
   const projectId = Number(formData.get("projectId") ?? 0);
   if (!journalId || !projectId) return;
   const { data: journal } = await db
     .from("project_journals")
-    .select("hours")
+    .select("hours, approved_hours")
     .eq("id", journalId)
     .maybeSingle();
   if (!journal) return;
@@ -523,6 +523,26 @@ export async function setJournalHours(formData: FormData): Promise<void> {
     .update({ approved_hours: approvedHours })
     .eq("id", journalId);
   if (error) throw new Error(error.message);
+
+  // Deflating a journal entry moves real money, and until now it was the one
+  // reviewer action that left no trace anywhere - it didn't go through
+  // reviewProject, so no review_audits row, and nothing wrote mod_actions.
+  const { data: project } = await db
+    .from("projects")
+    .select("user_id, name")
+    .eq("id", projectId)
+    .maybeSingle();
+  if (project) {
+    const before = journal.approved_hours == null ? `${rawHours}h claimed` : `${journal.approved_hours}h`;
+    const after = approvedHours == null ? `${rawHours}h claimed` : `${approvedHours}h`;
+    await logModAction(
+      project.user_id as string,
+      "journal_hours_set",
+      `${project.name}: entry #${journalId} ${before} → ${after}`,
+      actorName(access),
+    );
+  }
+
   revalidatePath(`/review/${projectId}`);
 }
 
@@ -3957,6 +3977,7 @@ export async function claimOrder(formData: FormData): Promise<void> {
     body: placedBody,
   });
   await dmOrEmail(order.user_id, "Order placed! 📦", placedBody);
+  await logOrderAction(id, "order_claimed", "claimed and placed", actorName(access), order);
   revalidatePath("/fulfillment");
 }
 
@@ -3978,12 +3999,13 @@ export async function flagOrderOverBudget(formData: FormData): Promise<void> {
     .eq("id", id)
     .in("status", ["pending", "ordered", "credited"]);
   if (error) throw new Error(error.message);
+  await logOrderAction(id, "order_flagged", `over budget: ${note}`, actorName(access));
   revalidatePath("/fulfillment");
 }
 
 // Owner has dealt with it, put the order back in the normal flow.
 export async function clearOrderFlag(formData: FormData): Promise<void> {
-  await requirePerm("fulfillment");
+  const access = await requirePerm("fulfillment");
   const id = Number(formData.get("id") ?? 0);
   if (!id) return;
   const { error } = await db
@@ -3991,6 +4013,7 @@ export async function clearOrderFlag(formData: FormData): Promise<void> {
     .update({ flagged_at: null, flagged_by: "", flag_note: "" })
     .eq("id", id);
   if (error) throw new Error(error.message);
+  await logOrderAction(id, "order_flag_cleared", "over-budget flag cleared", actorName(access));
   revalidatePath("/fulfillment");
 }
 
@@ -3999,6 +4022,37 @@ export async function clearOrderFlag(formData: FormData): Promise<void> {
 // stage where someone else owns it would step on their queue.
 function ownsOrder(access: AdminAccess, claimedSlack: string): boolean {
   return claimedSlack === access.session.slackId;
+}
+
+// Fulfillment moves real money and real hardware, but none of it used to be
+// written anywhere durable - the order row just showed its current state, so
+// "who cancelled this and when" was unanswerable after the fact. Every stage
+// change now lands in mod_actions against the buyer, which is what /audit and
+// the player's own history read from.
+//
+// Best-effort by design: a failed log line must never roll back an order that
+// already moved, so logModAction swallows its own errors.
+async function logOrderAction(
+  orderId: number,
+  action: string,
+  detail: string,
+  by: string,
+  known?: { user_id?: string; item_name?: string },
+): Promise<void> {
+  let userId = known?.user_id;
+  let itemName = known?.item_name;
+  if (!userId || itemName === undefined) {
+    const { data } = await db
+      .from("shop_orders")
+      .select("user_id, item_name")
+      .eq("id", orderId)
+      .maybeSingle();
+    if (!data) return;
+    userId = data.user_id as string;
+    itemName = data.item_name as string;
+  }
+  if (!userId) return;
+  await logModAction(userId, action, `order #${orderId} "${itemName}": ${detail}`, by);
 }
 
 // HCB credited the card and the fulfiller uploaded the receipt: ordered ->
@@ -4022,6 +4076,7 @@ export async function markOrderCredited(formData: FormData): Promise<void> {
     .eq("id", id)
     .eq("status", "ordered");
   if (error) throw new Error(error.message);
+  await logOrderAction(id, "order_credited", "HCB credited the card", actorName(access));
   revalidatePath("/fulfillment");
 }
 
@@ -4081,6 +4136,7 @@ export async function shipOrder(formData: FormData): Promise<void> {
       console.error("shipOrder DM", err instanceof Error ? err.message : err);
     }
   }
+  await logOrderAction(id, "order_shipped", `tracking ${tracking}`, actorName(access), order);
   revalidatePath("/fulfillment");
 }
 
@@ -4088,7 +4144,7 @@ export async function shipOrder(formData: FormData): Promise<void> {
 // Any super can mark it done (it's the final administrative close, not a queue
 // advance), and it's a no-op on anything that isn't shipped.
 export async function markOrderDone(formData: FormData): Promise<void> {
-  await requirePerm("fulfillment");
+  const access = await requirePerm("fulfillment");
   const id = Number(formData.get("id") ?? 0);
   if (!id) return;
   const { error } = await db
@@ -4097,6 +4153,7 @@ export async function markOrderDone(formData: FormData): Promise<void> {
     .eq("id", id)
     .eq("status", "shipped");
   if (error) throw new Error(error.message);
+  await logOrderAction(id, "order_done", "closed out as delivered", actorName(access));
   revalidatePath("/fulfillment");
 }
 
@@ -4113,6 +4170,7 @@ export async function reassignOrder(formData: FormData): Promise<void> {
     .eq("id", id)
     .in("status", ["ordered", "credited"]);
   if (error) throw new Error(error.message);
+  await logOrderAction(id, "order_reassigned", `taken over by ${actorName(access)}`, actorName(access));
   revalidatePath("/fulfillment");
 }
 
@@ -4153,6 +4211,13 @@ export async function cancelOrder(formData: FormData): Promise<void> {
     body: cancelBody,
   });
   await dmOrEmail(order.user_id, "Order cancelled", cancelBody);
+  await logOrderAction(
+    id,
+    "order_cancelled",
+    `refunded ${amount} px${note ? ` , ${note}` : ""}`,
+    actorName(access),
+    order,
+  );
   revalidatePath("/fulfillment");
   revalidatePath("/pixels");
 }
