@@ -148,6 +148,15 @@ Bun.serve({
 
     const ifNoneMatch = request.headers.get("if-none-match");
 
+    // The leaderboard's three boards are real paths (/leaderboard/referrals,
+    // /leaderboard/upvotes) served by the one page, which reads which board to
+    // show off the path. Matches vercel.json's rewrite. The bare
+    // /leaderboard/ falls through to the static file below like any other page.
+    if (/^\/leaderboard\/[a-z]+\/?$/i.test(pathname)) {
+      const board = await serveStatic("/leaderboard/index.html", ifNoneMatch);
+      if (board) return board;
+    }
+
     const direct = await serveStatic(pathname, ifNoneMatch);
     if (direct) return direct;
 

@@ -33,14 +33,17 @@ const SERVER_ORIGIN = "http://pixl-server.ysws-pixl.svc.cluster.local:3000";
 // the player's own list.
 const SHELL_PATHS = [
   "shop", "orders", "collectibles", "vault", "explore", "project", "players",
-  "ideas", "quests", "trials", "timeline", "projects", "report", "dashboard",
-  "hackatime", "refers", "account", "calc", "show-n-tell",
+  "leaderboard", "ideas", "quests", "trials", "timeline", "projects", "report",
+  "dashboard", "hackatime", "refers", "account", "calc", "show-n-tell",
 ];
 
 // The Godot export and the shell request these by absolute path, so they have to
 // resolve at the apex too or /play loads its HTML and nothing else.
 const ASSET_PATHS = [
-  "pixl.css", "pixl.js", "index.js", "index.wasm", "index.pck",
+  // explore.css/js are shared by /explore, /players and /leaderboard, which
+  // used to be one page - without these the three pages render unstyled and
+  // inert behind the apex proxy.
+  "pixl.css", "pixl.js", "explore.css", "explore.js", "index.js", "index.wasm", "index.pck",
   "index.side.wasm", "index.audio.worklet.js", "index.audio.position.worklet.js",
   "index.icon.png", "index.apple-touch-icon.png", "index.png",
 ];

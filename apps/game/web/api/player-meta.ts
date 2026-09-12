@@ -6,10 +6,10 @@
 // link pointed at and every share unfurled as the generic "Pixl · Explore"
 // card.
 //
-// This hands back the explore page with only its <!-- <pixl-preview> --> meta
+// This hands back the players page with only its <!-- <pixl-preview> --> meta
 // block patched. Unlike a project, a profile is the same page for everybody
-// (there's nothing to edit here, that lives on /account), so it stays on the
-// explore page rather than moving to a second one.
+// (there's nothing to edit here, that lives on /account), so the directory and
+// one profile share a page rather than needing two.
 import pixl from "../../pixl.json" with { type: "json" };
 
 const SERVER = pixl.urls.server;
@@ -67,7 +67,7 @@ export default async function handler(req: MinimalReq, res: MinimalRes): Promise
 
   const proto = (req.headers?.["x-forwarded-proto"] as string) || "https";
   const host = (req.headers?.host as string) || SITE_HOST;
-  let html = await fetch(`${proto}://${host}/explore/index.html`).then((r) => r.text());
+  let html = await fetch(`${proto}://${host}/players/index.html`).then((r) => r.text());
 
   if (id) {
     try {

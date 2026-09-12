@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pixl · Leaderboard</title>
+    <!-- <pixl-preview> -->
+    <meta name="description" content="Who has shipped the most on Pixl: pixels, referrals and upvotes.">
+    <link rel="canonical" href="https://pixl.hackclub.com/leaderboard/">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Pixl">
+    <meta property="og:title" content="Pixl · Leaderboard">
+    <meta property="og:description" content="Who has shipped the most on Pixl: pixels, referrals and upvotes.">
+    <meta property="og:url" content="https://pixl.hackclub.com/leaderboard/">
+    <meta property="og:image" content="https://pixl.hackclub.com/leaderboard/og.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Pixl · Leaderboard">
+    <meta name="twitter:description" content="Who has shipped the most on Pixl: pixels, referrals and upvotes.">
+    <meta name="twitter:image" content="https://pixl.hackclub.com/leaderboard/og.png">
+    <!-- <pixl-preview:end> -->
+<link rel="icon" href="/index.icon.png">
+<link rel="stylesheet" href="/pixl.css?v=4">
+<link rel="stylesheet" href="/explore.css?v=1">
+</head>
+<body>
+<main class="wrap">
+  <section class="hero hud deep">
+    <h1 class="page-title">LEADERBOARD</h1>
+    <div class="page-sub">WHO IS SHIPPING THE MOST.</div>
+  </section>
+
+  <div class="tabs" id="tabs">
+    <a class="tab" href="/players/">PLAYERS</a>
+    <a class="tab" href="/explore/">PROJECTS</a>
+    <a class="tab active" href="/leaderboard/">LEADERBOARD</a>
+  </div>
+
+  <div id="view"></div>
+</main>
+
+<script src="/pixl.js?v=6"></script>
+<script src="/explore.js?v=1"></script>
+<script>
+// /leaderboard is pixels; /leaderboard/referrals and /leaderboard/upvotes are
+// the other two boards, so each one is linkable on its own.
+const SUB = location.pathname.match(/^\/leaderboard\/([a-z]+)\/?$/i)?.[1] ?? "pixels";
+Pixl.mountTopbar("leaderboard");
+Pixl.loadWallet();
+Explore.leaderboard(SUB);
+</script>
+</body>
+</html>

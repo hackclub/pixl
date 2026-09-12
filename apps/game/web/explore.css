@@ -1,0 +1,205 @@
+/* Shared styles for the explore family: /explore, /players (and one
+ * profile), /leaderboard. These were inline in explore/index.html when it
+ * was a single tabbed page; splitting the tabs into real pages would have
+ * meant three copies of all of it. */
+.hero {
+    padding: 26px 30px; margin-top: 8px; display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap;
+  }
+  .hero .page-sub { margin-bottom: 4px; color: var(--dim); }
+  .tabs { display: flex; gap: 6px; margin: 22px 0 18px; flex-wrap: wrap; }
+  .lb-subtabs { margin: 0 0 18px; }
+  .lb-subtabs .tab { font-size: 13px; padding: 8px 14px 6px; }
+  .tab {
+    /* These are cross-page links now rather than in-page buttons, so they
+       need the two things a <button> got for free. */
+    display: inline-block;
+    text-decoration: none;
+    border: var(--bw) solid var(--stroke); border-radius: 0;
+    background: var(--panel);
+    color: var(--dim);
+    font-size: 15px;
+    letter-spacing: 1px;
+    padding: 10px 18px 8px;
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+  }
+  .tab:hover { color: var(--gold); border-color: var(--gold) }
+  .tab.active {
+    background: var(--gold);
+    color: var(--btn-ink);
+    border-color: var(--gold);
+  }
+  .searchbar { display: flex; gap: 10px; margin-bottom: 18px; }
+  .searchbar input { flex: 1; }
+  .pcard { display: flex; flex-direction: column; align-items: center; gap: 9px; text-align: center; padding: 20px 14px 16px; }
+  .avatar {
+    width: 96px; height: 96px;
+    border: var(--bw) solid var(--stroke); border-radius: 0;
+    background: var(--panel-deep);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 40px; color: var(--gold);
+    overflow: hidden;
+  }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .pcard .pname { font-size: 18px; color: var(--ink); word-break: break-word; }
+  .pcard .pmeta { font-size: 13.5px; color: var(--faint); }
+  .proj-card { display: flex; flex-direction: column; gap: 10px; padding: 14px 14px 16px; }
+  .proj-thumb {
+    height: 140px;
+    border: var(--bw) solid var(--stroke); border-radius: 0;
+    background:
+      repeating-conic-gradient(rgba(22, 22, 30, 0.05) 0% 25%, transparent 0% 50%) 0 0 / 22px 22px,
+      var(--panel-deep);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 40px;
+    overflow: hidden;
+  }
+  .proj-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .proj-name { font-size: 18px; color: var(--ink); }
+  .proj-meta { font-size: 13.5px; color: var(--faint); display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .proj-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; }
+  .upvote-btn { display: inline-flex; align-items: center; gap: 5px; font-family: var(--pixel, inherit); font-size: 13px; font-weight: 600;
+    color: var(--dim); background: var(--panel-2); border: var(--bw) solid var(--stroke); border-radius: 0; padding: 4px 11px; cursor: pointer;
+    transition: color .12s ease, border-color .12s ease, background .12s ease, transform .08s ease; }
+  .upvote-btn:hover:not(:disabled) { color: var(--gold); border-color: var(--gold); transform: translateY(-1px); }
+  .upvote-btn.on { color: var(--btn-ink); background: var(--gold); border-color: var(--gold); }
+  .upvote-btn:disabled { cursor: default; }
+  .vote-group { display: inline-flex; align-items: center; gap: 6px; }
+  .downvote-btn { display: inline-flex; align-items: center; gap: 5px; font-family: var(--pixel, inherit); font-size: 13px; font-weight: 600;
+    color: var(--dim); background: var(--panel-2); border: var(--bw) solid var(--stroke); border-radius: 0; padding: 4px 11px; cursor: pointer;
+    transition: color .12s ease, border-color .12s ease, background .12s ease, transform .08s ease; }
+  .downvote-btn:hover:not(:disabled) { color: var(--bad); border-color: var(--bad); transform: translateY(-1px); }
+  .downvote-btn.on { color: var(--btn-ink); background: var(--bad); border-color: var(--bad); }
+  .downvote-btn:disabled { cursor: default; }
+  .status-chip { text-transform: uppercase; }
+  .board { display: flex; flex-direction: column; gap: 8px; }
+  .board-row {
+    display: flex; align-items: center; gap: 16px;
+    padding: 12px 18px 10px;
+    background: var(--panel);
+    border: var(--bw) solid var(--stroke); border-radius: 0;
+    font-size: 16px;
+  }
+  .board-row .rank { width: 52px; color: var(--faint); font-size: 18px; }
+  .board-row.top1 .rank { color: var(--gold); }
+  .board-row.top2 .rank { color: #8a8f96; }
+  .board-row.top3 .rank { color: #b5763a; }
+  .board-row.you { border-color: var(--gold); }
+  .board-row .bname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .board-row .bpx { color: var(--ink); display: flex; align-items: center; gap: 6px; }
+  .board-row .bpx.px { color: var(--gold); }
+  .board-row .bpx img { width: 15px; height: 15px; }
+  .you-card { margin-top: 16px; padding: 14px 18px; display: flex; gap: 20px; align-items: center; flex-wrap: wrap; font-size: 15px; }
+  .sprint-panel { margin-top: 26px; padding: 18px 20px; border-color: var(--stroke); }
+  .sprint-panel h3 { color: var(--teal); font-size: 19px; margin-bottom: 4px; }
+  .back-btn { margin-bottom: 18px; }
+  .profile-head { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; padding: 24px; }
+  .profile-head .avatar { width: 140px; height: 140px; font-size: 60px; }
+  .profile-info { flex: 1; min-width: 240px; display: flex; flex-direction: column; gap: 10px; }
+  .profile-info h2 { color: var(--gold); font-size: 30px; }
+  .stat-row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .stat {
+    background: var(--panel-deep);
+    border: var(--bw) solid var(--stroke); border-radius: 0;
+    padding: 10px 16px 8px;
+    text-align: center;
+  }
+  .stat .v { color: var(--gold); font-size: 21px; }
+  .stat .k { color: var(--faint); font-size: 12.5px; letter-spacing: 1px; }
+  .section-h { font-size: 20px; color: var(--gold); margin: 28px 0 14px; letter-spacing: 1px; }
+  .col-row { display: flex; flex-wrap: wrap; gap: 12px; }
+  .coll { display: flex; align-items: center; gap: 10px; padding: 10px 14px; }
+  .coll-thumb { width: 34px; height: 34px; border-radius: 0; background: var(--panel-2); border: var(--bw) solid var(--stroke);
+    display: grid; place-items: center; color: var(--gold); overflow: hidden; flex-shrink: 0; }
+  .coll-thumb img { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+  .coll-name { font-family: var(--pixel); font-size: 13px; color: var(--ink); }
+  .journal { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+  .journal-entry { padding: 16px 18px; }
+  .journal-entry .jmeta { font-size: 13px; color: var(--faint); margin-bottom: 8px; display: flex; gap: 12px; }
+  .journal-entry .jbody { font-size: 15.5px; color: var(--ink); word-break: break-word; }
+  .jbody img { max-width: 100%; max-height: 260px; display: block; margin: 0.35rem 0; }
+  .proj-links { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+  .timeline { display: flex; flex-direction: column; width: 100%; padding: 6px 18px; }
+  .profile-head.proj-view { flex-direction: column; }
+  .proj-hero-thumb { width: 100%; height: 320px; flex-shrink: 0; }
+  .tl-item { display: flex; gap: 12px; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--panel-2); }
+  .tl-item:last-child { border-bottom: none; }
+  .tl-dot { width: 10px; height: 10px; flex-shrink: 0; border: var(--bw) solid var(--stroke); background: var(--panel-deep); }
+  .tl-dot.green { background: var(--good); }
+  .tl-dot.teal { background: var(--teal); }
+  .tl-dot.red { background: var(--bad); }
+  .tl-label { font-size: 15px; color: var(--ink); flex: 1; }
+  .tl-time { font-size: 12.5px; color: var(--faint); }
+
+  /* ---- player ticket card + dashboard ---- */
+  .ticket-layout { display: grid; grid-template-columns: 460px 1fr; gap: 26px; align-items: start; }
+  @media (max-width: 980px) { .ticket-layout { grid-template-columns: 1fr; } }
+
+  /* Raffle-ticket frame: real reference art (hand-drawn zigzag torn edges,
+     ornate avatar frame, stat boxes, XP track, sparkles), blank/placeholder
+     source, no baked-in labels except EXPERIENCE + LET'S GO!. Everything
+     else (name, stat labels, RE/class/join line) is overlaid here. Source
+     PNG is stored at 2x (920x1199) for crisp 460px display. Coordinates are
+     the native image regions scaled by 460/1277 - never rescale an already-
+     scaled pass, always derive straight from the native crop. */
+  .ticket-frame { position: relative; width: 460px; height: 599px;
+    background: url(../img/ticket_frame.png) no-repeat; background-size: 460px 599px; margin: 13px 0; }
+
+  .ticket-head { position: absolute; left: 28px; top: 57.6px; width: 278px; height: 77.4px;
+    display: flex; align-items: center; overflow: hidden; }
+  .ticket-head .tname { font-family: var(--pixel); font-size: 25px; color: #fff; letter-spacing: .5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    text-shadow: 1.5px 0 var(--stroke), -1.5px 0 var(--stroke), 0 1.5px var(--stroke), 0 -1.5px var(--stroke); }
+
+  .ticket-avatar { position: absolute; left: 49.5px; top: 177px; width: 148.5px; height: 150px; overflow: hidden; }
+  .ticket-avatar .avatar { width: 100%; height: 100%; border: none; border-radius: 0; }
+
+  .tstat-v { position: absolute; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; text-align: center; gap: 3px; overflow: hidden; }
+  .tstat-v .tlabel { font-size: 9px; color: var(--dim); letter-spacing: .5px; }
+  .tstat-v .tval { font-family: var(--pixel); font-size: 19px; color: var(--ink); }
+  .ts-level  { left: 232.3px; top: 177.2px; width: 83.9px; height: 69.2px; }
+  .ts-hours  { left: 334.6px; top: 178px;   width: 84.6px; height: 68.4px; }
+  .ts-proj   { left: 232.3px; top: 263.3px; width: 83.9px; height: 69.2px; }
+  .ts-joined { left: 334.6px; top: 263.3px; width: 84.6px; height: 69.2px; }
+
+  .ticket-xp-track { position: absolute; left: 39.3px; top: 408.1px; width: 381.5px; height: 15.5px; }
+  .ticket-xp-fill { height: 100%; background: var(--good); }
+
+  .ticket-currency { position: absolute; left: 39.3px; top: 434px; width: 381.5px;
+    display: flex; flex-direction: column; gap: 6px; }
+  .ticket-currency .tc-row { display: flex; align-items: center; gap: 7px;
+    font-family: var(--pixel); font-size: 16px; color: var(--ink); }
+  .ticket-currency .tc-row img { width: 24px; height: 24px; image-rendering: pixelated; flex-shrink: 0; }
+
+  .ticket-foot { position: absolute; left: 39.3px; top: 508.3px; width: 384px; height: 46.8px;
+    display: flex; flex-direction: column; justify-content: center; gap: 5px; padding-left: 14px; box-sizing: border-box; }
+  .ticket-foot .tf-class { font-family: var(--pixel); font-size: 19px; color: var(--ink); line-height: 1; }
+  .ticket-foot .tf-sub { font-size: 12px; color: var(--faint); letter-spacing: .3px; line-height: 1; }
+
+  /* stuck-on sparkle stickers in the corner, like someone slapped them onto
+     the paper - pixel-perfect white outline is baked into the PNG itself. */
+  .ticket-sticker { position: absolute; image-rendering: pixelated; pointer-events: none; user-select: none; }
+  .ticket-sticker.sticker-red { width: 46px; bottom: 14px; right: 42px; rotate: -16deg; z-index: 2; }
+  .ticket-sticker.sticker-gold { width: 54px; bottom: -12px; right: 4px; rotate: 12deg; z-index: 3; }
+
+  .dash-section { margin: 13px 0 24px; }
+  .dash-h { font-family: var(--pixel); font-size: 15px; color: var(--ink); letter-spacing: .5px; margin-bottom: 10px;
+    display: flex; align-items: center; gap: 8px; }
+  .dash-h::before { content: ""; width: 8px; height: 8px; background: var(--gold); border: 1px solid var(--stroke); flex-shrink: 0; }
+
+  .activity-list { display: flex; flex-direction: column; gap: 8px; }
+  .activity-row { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: var(--panel);
+    border: var(--bw) solid var(--stroke); font-size: 13.5px; }
+  .activity-row .adot { width: 9px; height: 9px; flex-shrink: 0; background: var(--good); border: 1px solid var(--stroke); }
+  .activity-row .abody { flex: 1; color: var(--ink); }
+  .activity-row .atime { color: var(--faint); font-size: 11.5px; flex-shrink: 0; }
+
+  .badge-grid { display: flex; flex-wrap: wrap; gap: 10px; }
+  .badge-cell { width: 62px; }
+  .badge-cell .b-thumb { width: 62px; height: 62px; background: var(--img-slot); border: var(--bw) solid var(--stroke);
+    display: grid; place-items: center; overflow: hidden; font-size: 22px; }
+  .badge-cell .b-thumb img { width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; }
+  .badge-cell .b-name { font-size: 10px; text-align: center; color: var(--faint); margin-top: 4px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+
+  .ship-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
