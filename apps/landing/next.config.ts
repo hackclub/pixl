@@ -28,10 +28,13 @@ const SERVER_ORIGIN = "http://pixl-server.ysws-pixl.svc.cluster.local:3000";
 // no way to reach the web login link that actually sets the session cookie -
 // confusing for anyone who expects being logged into the game to carry
 // over. Re-cut over once that gate gets a real login path, not before.
+// "project" (singular) is the shareable per-project permalink, served by the
+// game host's web/api/project-meta.ts - not to be confused with "projects",
+// the player's own list.
 const SHELL_PATHS = [
-  "shop", "orders", "collectibles", "vault", "explore", "ideas", "quests",
-  "trials", "timeline", "projects", "report", "dashboard", "hackatime",
-  "refers", "account", "calc", "show-n-tell",
+  "shop", "orders", "collectibles", "vault", "explore", "project", "ideas",
+  "quests", "trials", "timeline", "projects", "report", "dashboard",
+  "hackatime", "refers", "account", "calc", "show-n-tell",
 ];
 
 // The Godot export and the shell request these by absolute path, so they have to
@@ -63,6 +66,14 @@ const nextConfig: NextConfig = {
       { source: "/form", destination: `${WEB_SHELL_ORIGIN}/form` },
       { source: "/form/:path*", destination: `${WEB_SHELL_ORIGIN}/form/:path*` },
       { source: "/api/forms/:path*", destination: `${SERVER_ORIGIN}/api/forms/:path*` },
+      // Link-preview card renderers, which live on the game host next to the
+      // pages they unfurl. Their og:image URLs are built off packages/config's
+      // canonical site host (the apex), so without these the apex serves its
+      // own 404 for them and every shared /shop/item or /project/:id link
+      // unfurls with a broken image - which is what /shop/item had been doing
+      // since the apex proxy went in.
+      { source: "/api/shop-og", destination: `${GAME_ORIGIN}/api/shop-og` },
+      { source: "/api/project-og", destination: `${GAME_ORIGIN}/api/project-og` },
       // apps/web-shell's own JS/CSS chunks (Next "Multi Zone" assetPrefix -
       // see that app's next.config.ts). Without this, both apps generate
       // chunk URLs at the same bare /_next/static/... path and this app's

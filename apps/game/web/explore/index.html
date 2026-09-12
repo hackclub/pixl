@@ -240,8 +240,26 @@
 
 <script src="/pixl.js?v=6"></script>
 <script>
-Pixl.mountTopbar("explore");
+// /project/<id> is the canonical shareable URL for one project (served by
+// web/api/project-meta.ts, which hands back this very page with that
+// project's preview meta patched in). It's the one view here that works
+// signed out, so a link posted outside Pixl opens the project instead of the
+// trimmed "LOG IN" rail every other page shows a guest - same guestNoShell
+// treatment /shop and /shop/item already use for their public pages.
+const PERMALINK_ID = location.pathname.match(/^\/project\/(\d+)\/?$/)?.[1] ?? null;
+const GUEST_PERMALINK = !!PERMALINK_ID && !Pixl.hasToken;
+
+Pixl.mountTopbar("explore", PERMALINK_ID ? { guestNoShell: true } : undefined);
 Pixl.loadWallet();
+
+if (GUEST_PERMALINK) {
+  // The tabs all lead somewhere a signed-out visitor can't use, so a guest
+  // gets the project and a way in, nothing else.
+  document.getElementById("tabs").remove();
+  document.querySelector(".hero .page-title").textContent = "A PIXL PROJECT";
+  document.querySelector(".hero .page-sub").innerHTML =
+    `BUILT AND SHIPPED ON PIXL. <a href="/">START YOUR OWN</a>.`;
+}
 
 const view = document.getElementById("view");
 const cache = {};
@@ -292,7 +310,7 @@ function beaconChip(p) {
 
 function projCard(p) {
   return `
-    <a class="card panel proj-card" href="#project=${Pixl.esc(p.id)}">
+    <a class="card panel proj-card" href="/project/${Number(p.id)}">
       <div class="proj-thumb">${p.image_url ? `<img src="${Pixl.esc(p.image_url)}" alt="" loading="lazy" onerror="this.remove()">` : ""}</div>
       <div class="proj-name">${Pixl.esc(p.name)}${p.is_peak ? " ★" : ""}</div>
       <div class="proj-meta">
@@ -305,6 +323,25 @@ function projCard(p) {
       </div>
     </a>`;
 }
+
+// The canonical, unfurlable link for a project. Kept as one helper so the
+// card, the detail view and /projects all hand out the same URL shape.
+window.projectLink = function (id) {
+  return location.origin + "/project/" + Number(id);
+};
+
+window.copyProjectLink = async function (e, id) {
+  e.preventDefault();
+  e.stopPropagation();
+  const link = window.projectLink(id);
+  try {
+    await navigator.clipboard.writeText(link);
+    Pixl.toast("Link copied!");
+  } catch {
+    Pixl.toast(link);
+  }
+  return false;
+};
 
 // Upvote pill. Click again to remove your vote; disabled only while the
 // opposite direction is active (remove that one first to switch).
@@ -637,10 +674,21 @@ function collChip(c) {
   </div>`;
 }
 
+// GET /api/explore/projects/:id takes the session token as optional - it only
+// needs it to fill in has_upvoted/has_downvoted. Pixl.api always attaches one,
+// so a signed-out visitor on a /project/<id> permalink goes direct instead.
+async function fetchProject(id) {
+  const path = "/api/explore/projects/" + encodeURIComponent(id);
+  if (Pixl.hasToken) return Pixl.api(path);
+  const res = await fetch(Pixl.API + path);
+  if (!res.ok) throw new Error("http_" + res.status);
+  return res.json();
+}
+
 async function showProject(id) {
   view.innerHTML = `<div class="spin"></div>`;
   let data;
-  try { data = await Pixl.api("/api/explore/projects/" + encodeURIComponent(id)); }
+  try { data = await fetchProject(id); }
   catch { view.innerHTML = `<div class="empty-note">PROJECT NOT FOUND.</div>`; return; }
   const p = data.project;
   const owner = data.owner;
@@ -657,8 +705,14 @@ async function showProject(id) {
   }
   timeline.sort((a, b) => new Date(a.time) - new Date(b.time));
 
+  // Under /project/<id> the hash links below would resolve against the
+  // permalink path instead of the explore page, so they get spelled out.
+  const exploreHref = (hash) => (PERMALINK_ID ? "/explore/" + hash : hash);
+
   view.innerHTML = `
-    <button class="btn dark back-btn" onclick="history.length > 1 ? history.back() : location.hash='#projects'">← BACK</button>
+    ${GUEST_PERMALINK
+      ? "" /* nowhere to go back to - /explore is signed-in only */
+      : `<button class="btn dark back-btn" onclick="${PERMALINK_ID ? `location.href='/explore/#projects'` : `history.length > 1 ? history.back() : location.hash='#projects'`}">← BACK</button>`}
     <div class="profile-head panel proj-view">
       <div class="proj-thumb proj-hero-thumb">${p.image_url ? `<img src="${Pixl.esc(p.image_url)}" alt="" onerror="this.remove()">` : ""}</div>
       <div class="profile-info">
@@ -667,12 +721,15 @@ async function showProject(id) {
           ${p.hackatime_seconds ? `<span class="chip teal">${Pixl.hours(p.hackatime_seconds)} CODED</span>` : ""}
           ${p.level ? `<span class="chip">LEVEL ${p.level}</span>` : ""}
         </div>
-        <div class="muted" style="font-size:14px">by ${owner ? `<a href="#player=${Pixl.esc(owner.id)}">${Pixl.esc(owner.display_name)}</a>` : "?"} · started ${Pixl.timeAgo(p.created_at)}${p.shipped_at ? ` · shipped ${Pixl.timeAgo(p.shipped_at)}` : ""}</div>
+        <div class="muted" style="font-size:14px">by ${owner ? `<a href="${exploreHref("#player=" + Pixl.esc(owner.id))}">${Pixl.esc(owner.display_name)}</a>` : "?"} · started ${Pixl.timeAgo(p.created_at)}${p.shipped_at ? ` · shipped ${Pixl.timeAgo(p.shipped_at)}` : ""}</div>
         <div class="proj-links">
           ${p.repo_url ? `<a class="btn ghost" href="${Pixl.esc(p.repo_url)}" target="_blank" rel="noopener noreferrer">REPO</a>` : ""}
           ${p.demo_url ? `<a class="btn ghost" href="${Pixl.esc(p.demo_url)}" target="_blank" rel="noopener noreferrer">DEMO</a>` : ""}
+          <button class="btn ghost" onclick="return copyProjectLink(event,${Number(p.id)})">COPY LINK</button>
         </div>
-        <div class="vote-group" style="margin-top:12px">${upvoteBtn({ id: p.id, upvotes: data.upvotes, has_upvoted: data.has_upvoted, has_downvoted: data.has_downvoted })}${downvoteBtn({ id: p.id, downvotes: data.downvotes, has_upvoted: data.has_upvoted, has_downvoted: data.has_downvoted })}</div>
+        ${Pixl.hasToken
+          ? `<div class="vote-group" style="margin-top:12px">${upvoteBtn({ id: p.id, upvotes: data.upvotes, has_upvoted: data.has_upvoted, has_downvoted: data.has_downvoted })}${downvoteBtn({ id: p.id, downvotes: data.downvotes, has_upvoted: data.has_upvoted, has_downvoted: data.has_downvoted })}</div>`
+          : `<div class="muted" style="font-size:13px;margin-top:12px">${data.upvotes || 0} upvote${data.upvotes === 1 ? "" : "s"} · <a href="${Pixl.esc(Pixl.loginUrl())}">sign in</a> to vote</div>`}
       </div>
     </div>
     ${p.description ? `<div class="jbody md" style="margin-top:16px;font-size:16px">${Pixl.markdown(p.description)}</div>` : ""}
@@ -689,9 +746,10 @@ async function showProject(id) {
           </div>`).join("")}</div>`}`;
 }
 
-/* ---------- hash router ---------- */
+/* ---------- router ---------- */
 
 function route() {
+  if (PERMALINK_ID && !location.hash) return showProject(PERMALINK_ID);
   if (!Pixl.hasToken) return;
   const h = location.hash.replace(/^#/, "") || "players";
   const [key, val] = h.split("=");
@@ -704,8 +762,14 @@ function route() {
   return showPlayers();
 }
 
+// On a permalink the tabs have to leave the /project/<id> path entirely,
+// otherwise they'd just append a hash to it and this page would try to render
+// a tab view under a project URL.
 document.querySelectorAll(".tab").forEach((t) =>
-  t.addEventListener("click", () => { location.hash = "#" + t.dataset.view; }));
+  t.addEventListener("click", () => {
+    if (PERMALINK_ID) location.href = "/explore/#" + t.dataset.view;
+    else location.hash = "#" + t.dataset.view;
+  }));
 window.addEventListener("hashchange", route);
 route();
 </script>

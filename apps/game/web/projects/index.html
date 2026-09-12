@@ -1552,6 +1552,7 @@
         <div class="proj-links">
           ${p.repo_url ? `<a href="${Pixl.esc(p.repo_url)}" target="_blank" rel="noopener">CODE</a>` : ""}
           ${p.demo_url ? `<a href="${Pixl.esc(p.demo_url)}" target="_blank" rel="noopener">DEMO</a>` : ""}
+          <a href="#" data-copy="${Number(p.id)}">COPY LINK</a>
           ${ht ? `<span class="ht">Hackatime: ${Pixl.esc(ht)}${secs ? ` · ${Pixl.hours(secs)}` : ""}</span>` : `<span class="ht">no hackatime linked</span>`}
           ${p.pixels_earned ? `<span class="earned">+${Math.round(p.pixels_earned)} px earned</span>` : ""}
         </div>`;
@@ -1563,6 +1564,20 @@
         const total = htSecs + jSecs;
         if (!total) return "";
         return `<span class="chip teal tip-wrap" tabindex="0"><span class="tip-main">${Pixl.hours(total)}</span><span class="tip-pop">Hackatime: ${Pixl.hours(htSecs)} · Journal: ${Pixl.hours(jSecs)}</span></span>`;
+      }
+
+      // /project/<id> is the canonical shareable URL - a real path, so link
+      // previews resolve it (web/api/project-meta.ts). The old
+      // /explore/#project=<id> form was a hash fragment, which never reaches
+      // the server, so every share unfurled as the generic Explore card.
+      async function copyProjectLink(id) {
+        const link = location.origin + "/project/" + Number(id);
+        try {
+          await navigator.clipboard.writeText(link);
+          Pixl.toast("Link copied!");
+        } catch {
+          Pixl.toast(link);
+        }
       }
 
       function renderList() {
@@ -1619,6 +1634,14 @@
       // be real links (anchors can't nest), but the whole card should still
       // navigate. Delegated so it survives every re-render.
       $("view").addEventListener("click", (e) => {
+        // Checked before the anchor bail-out below: the copy control is an
+        // anchor so it picks up .proj-links styling, but it must not navigate.
+        const copy = e.target.closest("[data-copy]");
+        if (copy) {
+          e.preventDefault();
+          copyProjectLink(copy.dataset.copy);
+          return;
+        }
         if (e.target.closest("a")) return;
         const card = e.target.closest(".proj-row[data-href]");
         if (card) location.hash = card.dataset.href;
@@ -2488,15 +2511,7 @@
           $("details-body").hidden = !$("details-body").hidden;
           $("details-toggle").textContent = $("details-body").hidden ? "EDIT DETAILS" : "HIDE DETAILS";
         });
-        $("share-btn").addEventListener("click", async () => {
-          const link = location.origin + "/explore/#project=" + p.id;
-          try {
-            await navigator.clipboard.writeText(link);
-            Pixl.toast("Link copied!");
-          } catch {
-            Pixl.toast(link);
-          }
-        });
+        $("share-btn").addEventListener("click", () => copyProjectLink(p.id));
         if ($("s-ship") && !inReview)
           $("s-ship").addEventListener("click", async () => {
             const blockers = shipBlockers(p, isUpdate);

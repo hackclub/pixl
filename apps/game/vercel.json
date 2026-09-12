@@ -5,11 +5,12 @@
   "outputDirectory": ".",
   "rewrites": [
     { "source": "/docs/:slug", "destination": "/docs/:slug/" },
-    { "source": "/shop/item", "destination": "/api/shop-item-meta" }
+    { "source": "/shop/item", "destination": "/api/shop-item-meta" },
+    { "source": "/project/:id", "destination": "/api/project-meta?id=:id" }
   ],
   "headers": [
     {
-      "source": "/((?!shop|orders|collectibles|vault|explore|quests|timeline|projects|report|hackatime|fonts|img|pixl|show-n-tell).*)",
+      "source": "/((?!shop|orders|collectibles|vault|explore|project|quests|timeline|projects|report|hackatime|fonts|img|pixl|show-n-tell).*)",
       "headers": [
         { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
         { "key": "Cross-Origin-Embedder-Policy", "value": "require-corp" }
