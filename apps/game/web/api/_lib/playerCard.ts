@@ -155,7 +155,10 @@ export function renderPlayerCard({
   lines.forEach((line, i) => drawText(canvas, line, left, nameTop + i * lineHeight, scale, INK));
 
   const cells: [string, string][] = [
-    ["LEVEL", String(level || 1)],
+    // ?? rather than ||: levelForRe(0) really is 0 for an account that hasn't
+    // shipped yet, and the profile page shows that. `|| 1` printed LEVEL 1 on
+    // the card for someone the page said was LEVEL 0.
+    ["LEVEL", String(level ?? 1)],
     ["HOURS", `${Math.round(hours)}H`],
     ["SHIPS", String(projects)],
   ];
