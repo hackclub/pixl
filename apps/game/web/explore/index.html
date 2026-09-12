@@ -240,8 +240,26 @@
 
 <script src="/pixl.js?v=6"></script>
 <script>
-Pixl.mountTopbar("explore");
+// /players/<id> is the canonical shareable URL for a profile, and it's this
+// page (web/api/player-meta.ts serves this HTML for it with that player's
+// preview meta patched in). Unlike a project there's nothing to edit here
+// (that's /account), so it's the same view for everybody, it just has to work
+// without a session for a link pasted outside Pixl to be worth anything.
+const PLAYER_ID = location.pathname.match(/^\/players\/([0-9a-f-]{36})\/?$/i)?.[1] ?? null;
+const GUEST_PERMALINK = !!PLAYER_ID && !Pixl.hasToken;
+
+// Chrome-free for a signed-out visitor, same treatment /shop and /shop/item
+// give their public pages.
+Pixl.mountTopbar("explore", PLAYER_ID ? { guestNoShell: true } : undefined);
 Pixl.loadWallet();
+
+if (GUEST_PERMALINK) {
+  // Every tab here needs a session, so a guest gets the profile and a way in.
+  document.getElementById("tabs").remove();
+  document.querySelector(".hero .page-title").textContent = "A PIXL BUILDER";
+  document.querySelector(".hero .page-sub").innerHTML =
+    `THEY BUILD AND SHIP ON PIXL. <a href="/">START YOUR OWN</a>.`;
+}
 
 const view = document.getElementById("view");
 const cache = {};
@@ -301,10 +319,28 @@ function projCard(p) {
       </div>
       <div class="proj-foot">
         <span>${statusChip(p)}${levelBadge(p)}${beaconChip(p)}${p.hackatime_seconds ? ` <span class="chip teal">${Pixl.hours(p.hackatime_seconds)}</span>` : ""}</span>
-        <span class="vote-group">${upvoteBtn(p)}${downvoteBtn(p)}</span>
+        ${Pixl.hasToken
+          ? `<span class="vote-group">${upvoteBtn(p)}${downvoteBtn(p)}</span>`
+          /* A guest reaching these through a shared profile can't vote, and a
+             live button would only send them into the sign-in gate. */
+          : `<span class="chip">▲ ${p.upvotes || 0}</span>`}
       </div>
     </a>`;
 }
+
+// The canonical, unfurlable link for a profile.
+window.copyPlayerLink = async function (e, id) {
+  e.preventDefault();
+  e.stopPropagation();
+  const link = location.origin + "/players/" + id;
+  try {
+    await navigator.clipboard.writeText(link);
+    Pixl.toast("Link copied!");
+  } catch {
+    Pixl.toast(link);
+  }
+  return false;
+};
 
 // Upvote pill. Click again to remove your vote; disabled only while the
 // opposite direction is active (remove that one first to switch).
@@ -379,7 +415,7 @@ async function showPlayers(q = "") {
   results.innerHTML = players.length === 0
     ? `<div class="empty-note">NOBODY HERE BY THAT NAME.</div>`
     : `<div class="grid">${players.map((p) => `
-        <a class="card panel pcard" href="#player=${Pixl.esc(p.id)}">
+        <a class="card panel pcard" href="/players/${Pixl.esc(p.id)}">
           ${avatarHtml(p)}
           <div class="pname">${Pixl.esc(p.display_name)}</div>
           <div class="pmeta">${p.project_count} project${p.project_count === 1 ? "" : "s"} · joined ${Pixl.timeAgo(p.created_at)}</div>
@@ -569,10 +605,21 @@ function badgeCell(c) {
   </div>`;
 }
 
+// Signed in, the full profile (every project, the collectibles shelf). Signed
+// out, the narrower public view: approved ships only, no collectibles, so a
+// link anyone can open can't leak what somebody is still working on.
+async function fetchPlayer(id) {
+  const path = "/api/explore/players/" + encodeURIComponent(id);
+  if (Pixl.hasToken) return Pixl.api(path);
+  const res = await fetch(Pixl.API + path + "/public");
+  if (!res.ok) throw new Error("http_" + res.status);
+  return res.json();
+}
+
 async function showPlayer(id) {
   view.innerHTML = `<div class="spin"></div>`;
   let data;
-  try { data = await Pixl.api("/api/explore/players/" + encodeURIComponent(id)); }
+  try { data = await fetchPlayer(id); }
   catch { view.innerHTML = `<div class="empty-note">PLAYER NOT FOUND.</div>`; return; }
   const p = data.player;
   const projects = data.projects || [];
@@ -582,7 +629,10 @@ async function showPlayer(id) {
   const joinedYear = p.created_at ? new Date(p.created_at).getFullYear() : "-";
 
   view.innerHTML = `
-    <button class="btn dark back-btn" onclick="location.hash='#players'">← ALL PLAYERS</button>
+    ${GUEST_PERMALINK
+      ? "" /* nowhere to go back to, /explore needs a session */
+      : `<button class="btn dark back-btn" onclick="${PLAYER_ID ? `location.href='/explore/#players'` : `location.hash='#players'`}">← ALL PLAYERS</button>`}
+    <button class="btn ghost back-btn" onclick="return copyPlayerLink(event,'${Pixl.esc(id)}')">COPY LINK</button>
     <div class="ticket-layout">
       <div class="ticket-frame">
         <div class="ticket-head"><span class="tname">${Pixl.esc(p.display_name)}</span></div>
@@ -640,22 +690,30 @@ function collChip(c) {
 /* ---------- router ---------- */
 
 function route() {
+  // The permalink runs before the signed-in guard: working signed out is the
+  // entire point of a link you can paste anywhere.
+  if (PLAYER_ID) return showPlayer(PLAYER_ID);
   if (!Pixl.hasToken) return;
   const h = location.hash.replace(/^#/, "") || "players";
   const [key, val] = h.split("=");
   // #project=<id> was this page's own deep link before projects got a real
   // URL. Shared links still arrive on it, so it forwards to the canonical one.
   if (key === "project" && val) return void location.replace("/project/" + encodeURIComponent(val));
+  if (key === "player" && val) return void location.replace("/players/" + encodeURIComponent(val));
   document.querySelectorAll(".tab").forEach((t) =>
     t.classList.toggle("active", t.dataset.view === (key === "player" ? "players" : key === "project" ? "projects" : key)));
-  if (key === "player" && val) return showPlayer(decodeURIComponent(val));
   if (key === "projects") return showProjects();
   if (key === "leaderboard") return showLeaderboard(val);
   return showPlayers();
 }
 
 document.querySelectorAll(".tab").forEach((t) =>
-  t.addEventListener("click", () => { location.hash = "#" + t.dataset.view; }));
+  t.addEventListener("click", () => {
+    // On a permalink a hash would just hang off /players/<id>, so the tabs
+    // navigate back to the explore page itself.
+    if (PLAYER_ID) location.href = "/explore/#" + t.dataset.view;
+    else location.hash = "#" + t.dataset.view;
+  }));
 window.addEventListener("hashchange", route);
 route();
 </script>

@@ -8,6 +8,8 @@ import shopItemMeta from "./web/api/shop-item-meta.ts";
 import shopOg from "./web/api/shop-og.ts";
 import projectMeta from "./web/api/project-meta.ts";
 import projectOg from "./web/api/project-og.ts";
+import playerMeta from "./web/api/player-meta.ts";
+import playerOg from "./web/api/player-og.ts";
 
 const ROOT = resolve(process.env.SITE_ROOT ?? "/srv/site");
 const PORT = Number(process.env.PORT ?? 3000);
@@ -16,7 +18,7 @@ const PORT = Number(process.env.PORT ?? 3000);
 // isolation, but the shell pages embed third-party images that require-corp
 // would block. Same split as the negative lookahead in vercel.json.
 const NO_ISOLATION =
-  /^\/(shop|orders|collectibles|vault|explore|project|quests|trials|timeline|projects|report|hackatime|fonts|img|pixl|show-n-tell)/;
+  /^\/(shop|orders|collectibles|vault|explore|project|players|quests|trials|timeline|projects|report|hackatime|fonts|img|pixl|show-n-tell)/;
 
 function withIsolation(headers: Headers, pathname: string): Headers {
   if (!NO_ISOLATION.test(pathname)) {
@@ -124,6 +126,7 @@ Bun.serve({
 
     if (pathname === "/api/shop-og") return runHandler(shopOg, url);
     if (pathname === "/api/project-og") return runHandler(projectOg, url);
+    if (pathname === "/api/player-og") return runHandler(playerOg, url);
 
     // vercel.json rewrite: /shop/item -> /api/shop-item-meta
     if (pathname === "/shop/item" || pathname === "/shop/item/") {
@@ -135,6 +138,12 @@ Bun.serve({
     // pathname rather than a query param.
     if (/^\/project\/\d+\/?$/.test(pathname)) {
       return runHandler(projectMeta, url);
+    }
+
+    // vercel.json rewrite: /players/:id -> /api/player-meta. Player ids are
+    // uuids, not the numeric ids projects use.
+    if (/^\/players\/[0-9a-f-]{36}\/?$/i.test(pathname)) {
+      return runHandler(playerMeta, url);
     }
 
     const ifNoneMatch = request.headers.get("if-none-match");

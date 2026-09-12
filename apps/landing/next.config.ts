@@ -32,8 +32,8 @@ const SERVER_ORIGIN = "http://pixl-server.ysws-pixl.svc.cluster.local:3000";
 // game host's web/api/project-meta.ts - not to be confused with "projects",
 // the player's own list.
 const SHELL_PATHS = [
-  "shop", "orders", "collectibles", "vault", "explore", "project", "ideas",
-  "quests", "trials", "timeline", "projects", "report", "dashboard",
+  "shop", "orders", "collectibles", "vault", "explore", "project", "players",
+  "ideas", "quests", "trials", "timeline", "projects", "report", "dashboard",
   "hackatime", "refers", "account", "calc", "show-n-tell",
 ];
 
@@ -74,6 +74,7 @@ const nextConfig: NextConfig = {
       // since the apex proxy went in.
       { source: "/api/shop-og", destination: `${GAME_ORIGIN}/api/shop-og` },
       { source: "/api/project-og", destination: `${GAME_ORIGIN}/api/project-og` },
+      { source: "/api/player-og", destination: `${GAME_ORIGIN}/api/player-og` },
       // apps/web-shell's own JS/CSS chunks (Next "Multi Zone" assetPrefix -
       // see that app's next.config.ts). Without this, both apps generate
       // chunk URLs at the same bare /_next/static/... path and this app's

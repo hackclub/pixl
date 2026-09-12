@@ -371,6 +371,56 @@ router.get("/api/explore/players/:id", async (req, res) => {
   });
 });
 
+// #public, no session needed - what a shared /players/<id> link shows, and
+// what its preview card is drawn from.
+//
+// Deliberately narrower than the authed route above. That one returns every
+// project including drafts, plus the collectibles shelf; this returns only
+// approved ships, so a link you can paste anywhere can't leak what somebody
+// is still working on. Fields match the already-public directory
+// (/api/explore/players) plus the builder stats the profile shows: level, RE,
+// approved hours, pixels. Pixel balances are already public through the
+// leaderboard, so this adds no new exposure there.
+//
+// No referral-window holdout here, unlike the directory. That holdout exists
+// to stop the directory being a newest-signups list to DM referral codes at;
+// looking somebody up by their UUID isn't an enumeration vector, and holding
+// new accounts out would break the profile link of the players most likely to
+// be sharing one.
+router.get("/api/explore/players/:id/public", async (req, res) => {
+  const id = String(req.params.id);
+  // Postgres errors on a malformed uuid rather than returning no rows.
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
+    return res.status(404).json({ ok: false });
+
+  const userQuery = (fields: string) =>
+    supabase.from("users").select(fields).eq("id", id).maybeSingle();
+  // card_pixelate arrives with migration 0030, same graceful fallback the
+  // directory route uses. slack_id/email are never selected.
+  const [user, fallbackUser, projects] = await Promise.all([
+    userQuery("id, display_name, skin, created_at, pixels, avatar_url, card_pixelate"),
+    userQuery("id, display_name, skin, created_at, pixels, avatar_url"),
+    supabase
+      .from("projects")
+      .select(PUBLIC_PROJECT_COLUMNS)
+      .eq("user_id", id)
+      .eq("status", "approved")
+      .is("archived_at", null)
+      .is("rejected_at", null)
+      .is("banned_at", null)
+      .order("shipped_at", { ascending: false }),
+  ]);
+  const data = (user.error ? fallbackUser.data : user.data) as Record<string, unknown> | null;
+  if (!data) return res.status(404).json({ ok: false });
+
+  const [xp, re] = await Promise.all([approvedHoursFor(id), lifetimeRe(id)]);
+  res.json({
+    ok: true,
+    player: { ...data, xp_hours: xp, re, level: levelForRe(re) },
+    projects: projects.data ?? [],
+  });
+});
+
 // Browse everyone's projects (including drafts), newest first, with optional
 // search/tier/shipped filters.
 // #public, token optional (just for has_upvoted/has_downvoted)
