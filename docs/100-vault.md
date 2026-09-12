@@ -6,18 +6,18 @@ description: The community-wide progress engine powering world unlocks.
 
 # The Core Vault
 
-^ Located in the heart of Pixl, the **Core Vault** pools Restoration Energy from every maker across the globe.
+^ The **Core Vault** sits in the middle of Pixl and pools Restoration Energy from every maker in the game.
 
 ## How it works
 
-Every approved ship adds its RE directly to the Vault. As the Vault reaches major milestones:
+Every approved ship adds its RE to the Vault. Cross a milestone and something opens up:
 
-- **New Regions Unlock:** Sealed bridges and teleporters open up new biomes and NPCs.
-- **Shop Upgrades:** Rare hardware, dev boards, and prizes enter the global catalogue.
-- **Community Events:** Global multiplier weekends and collaborative sidequests activate.
+- Sealed bridges and teleporters unlock, along with the biomes and NPCs behind them.
+- Rarer hardware, dev boards and prizes reach the shop catalogue.
+- Community events switch on, like multiplier weekends and collaborative sidequests.
 
 ## Tier progression
 
-The Vault displays the current tier, total RE deposited, and the next unlock threshold. Even if you're building a beginner 2-hour HTML page, your RE counts toward the collective total just as much as an advanced 40-hour embedded systems build.
+The Vault shows the current tier, how much RE is in it, and what the next unlock needs. A two-hour beginner HTML page contributes to that total the same way a 40-hour embedded build does, just less of it.
 
-You can inspect the Vault directly in-game or track real-time contributions from the web dashboard.
+You can look at the Vault in game, or follow contributions in real time from the web dashboard.

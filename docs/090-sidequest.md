@@ -6,17 +6,18 @@ description: Trials are guided challenges with exclusive rewards.
 
 # Your trial
 
-^ When exploring the world, you'll encounter NPCs offering **Trials**: specific project briefs designed around hardware, game dev, web apps, or systems engineering.
+^ Wander around the world and you'll run into NPCs handing out **Trials**: project briefs built around hardware, game dev, web apps or systems work.
 
 ## Taking on a trial
 
-- Walk up to any NPC with an active quest icon and talk to them to inspect the trial.
-- Accept the trial to bind it to your builder terminal.
-- Each trial specifies what to build, suggested tech stacks, minimum hour targets, and an exclusive reward (like hardware tools, gaming perks, or specialized grants).
+Walk up to any NPC with a quest icon and talk to them to read the brief. Accept it and it binds to your builder terminal.
 
-## Inventions vs. Trials
+Each trial tells you what to build, suggests a stack, sets a minimum number of hours, and names its reward, which might be hardware, a gaming perk or a grant of some kind.
 
-- **Trials:** Structured prompts with custom physical/digital prizes + bonus {{trialBonusRe}} RE on completion.
-- **Inventions:** Freeform builds. If you have an original idea that doesn't fit any NPC prompt, create an Invention. Inventions pay out full pixel rates based on your tracked hours.
+## Trials vs. inventions
 
-You can work on trials and custom inventions in parallel. Pick what excites you and start coding.
+A **trial** is someone else's prompt with a specific prize attached, plus {{trialBonusRe}} bonus RE when you finish it.
+
+An **invention** is whatever you want. If your idea doesn't match any NPC's brief, make it an invention instead. Inventions pay full pixel rates on your tracked hours, they just don't come with a prize.
+
+You can have a trial and an invention going at the same time.

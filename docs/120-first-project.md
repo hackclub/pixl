@@ -6,28 +6,28 @@ description: A complete zero-to-one guide to shipping your first project on Pixl
 
 # Build your first project
 
-^ Here is the exact checklist to get your first project built, tracked, and shipped for rewards.
+^ The whole path from nothing to a shipped project, in order.
 
-## 1. Pick a project
+## 1. Pick something
 
-Pick a small, achievable idea or grab a beginner trial from an NPC in-game. If you've never built a website before, start with [Your first site, line by line](/docs/first-site/).
+A small idea of your own, or a beginner trial from an NPC in game. Never built a website? Start with [Your first site, line by line](/docs/first-site/).
 
-## 2. Set up a local folder & Git repo
+## 2. Set up a folder and a Git repo
 
-Create a folder on your machine, initialize a Git repository, and push it to GitHub. Reviewers need to see your source code to approve your hours. (New to Git? Follow our [Git and GitHub guide](/docs/git/)).
+Make a folder, run `git init`, push it to GitHub. Reviewers read your source to approve your hours, so this isn't optional. New to Git? [Git and GitHub](/docs/git/) covers it.
 
-## 3. Install Hackatime first
+## 3. Install Hackatime before you write anything
 
-**Do not skip this step.** Hackatime tracks your coding time directly in your editor (VS Code, Cursor, Neovim, etc.). Hours you spend before installing Hackatime cannot be tracked or credited. Follow the [Hackatime setup guide](/docs/hackatime/) right now.
+Hackatime tracks your coding time from inside your editor. Hours you spend before installing it can't be recovered, so do this now rather than after your first session. The [Hackatime setup guide](/docs/hackatime/) takes a couple of minutes.
 
-## 4. Register the project on Pixl
+## 4. Register the project
 
-Open your web dashboard, click **+ NEW PROJECT**, enter your title, and link your GitHub repo. Select your tracked Hackatime project name so hours sync automatically.
+Open your web dashboard, hit **+ NEW PROJECT**, give it a title and link your GitHub repo. Pick the Hackatime project name it should pull hours from.
 
 ## 5. Build and journal
 
-Write your code, test it locally, and push commits as you make progress. Write short journal entries after each coding session describing what you built.
+Write your code, test it, push as you go. After each session write a short journal entry about what you did.
 
-## 6. Ship for review
+## 6. Ship it
 
-Once your project runs and you have tracked your hours, hit **SHIP**. Add your live demo link, upload a screenshot, answer the short AI reflection questions, and submit. A reviewer will verify the build, approve your hours, and deposit your pixels!
+Once it runs and your hours are tracked, hit **SHIP**. Add the demo link, upload a screenshot, answer the reflection questions and submit. A reviewer checks the build, approves your hours and your pixels land.

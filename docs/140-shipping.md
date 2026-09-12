@@ -1,19 +1,19 @@
 ---
 title: Shipping
 group: Build & ship
-description: Building is only half the battle. Shipping gets you across the finish line.
+description: Logged hours only become rewards once the project is actually shipped.
 ---
 
 # Shipping
 
-^ A project isn't truly done until you ship it. Shipping is how you turn logged build hours into real rewards.
+^ A project isn't done until you ship it. Shipping is what turns your logged hours into rewards.
 
-## The shipping checklist
+## The checklist
 
-1. **Working Build:** Your code runs without fatal crashes, and your repo has a proper README.
-2. **Live Demo:** Hosted URL (web app), playable itch.io link (game), binary release, or a video demo for hardware.
-3. **Hackatime Hours:** Verify your hours are tracked under your project on your Pixl dashboard.
-4. **Journal Entries:** A few sentences per work session describing the build process.
-5. **Reflection:** Quick notes on what you learned, what failed, and how you used AI.
+1. **It runs.** No fatal crashes, and the repo has a real README.
+2. **A demo anyone can open.** A hosted URL for a web app, an itch.io link for a game, a binary release, or a video for hardware.
+3. **Tracked hours.** Check your Pixl dashboard actually shows them against this project.
+4. **Journal entries.** A few sentences per work session on what you did.
+5. **A reflection.** What you learned, what didn't work, and where you used AI.
 
-Submit through the Builder Terminal. A human reviewer will inspect your code, confirm your hours, and approve your pixel payout!
+Submit through the Builder Terminal. A reviewer reads your code, confirms the hours and approves the payout.

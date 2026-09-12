@@ -23,7 +23,7 @@ There are two key areas of our Design Submission Requirements:
 
 We’re here to help! But we can’t tell you exactly what to do. Before directly reaching out to us, read our documentation, ask in [#pixl](https://hackclub.enterprise.slack.com/archives/C0B5P4N0WHH), Google it!
 
-**Note : missing any of these will get your project returned. You would have to wait some more days to get it reviewed as it goes last in the queue**
+**Note: missing any of these gets your project returned, and it goes to the back of the queue, so you wait a few more days for another review.**
 
 ## 1. A Good README
 
@@ -80,16 +80,16 @@ The design should also reasonably actually work\! Of course, you can’t be sure
 -  Designs copied from other people. It’s okay to reference or use parts of other’s work. Make sure to credit it. Never present others’ work as your own.
 -  Missing files! Check the above
 
- **Note :  Any project containing plagiarized content, Fully AI generated design files or stolen work may be permanently rejected and could even result in a ban in Hackclub programs.**
+ **Note :  Any project containing plagiarized content, Fully AI generated design files or stolen work may be permanently rejected and could even result in a ban from Hack Club programs.**
 
-# Sumbitting Build
+# Submitting your build
 
-Whoaa! You built the project irl which you designed. Now its time to get it approved to get pixels to spend in shop
+Whoaa! You built the thing you designed. Now it's time to get it approved so you can spend the pixels in the shop.
 
-For submitting your build, You should lapse the building phase and journal it. If not lapsed building it, We might deflate the time accordingly.
+To submit a build, lapse the building phase and journal it. If you don't lapse it, we might deflate the time accordingly.
 
 - It should have several pictures of the build in journals to show the progress.
-- Pictures of the finished build and the link of demo video in the readme of the repo.
-- If any changes made like adding a wire in pcb as you forgot a connection, Update in pcb and repo.
+- Pictures of the finished build, plus a link to a demo video, in the repo's README.
+- If you changed anything while building, like bodging a wire for a connection you forgot, update the PCB and the repo to match.
 
- Note: Submitting your build requires you to follow the design submission requirements too. If not, Your project will be returned for changes due to that you would have to wait again for the next review.
+Note: submitting a build means meeting the design submission requirements too. Miss them and the project comes back for changes, and you wait for the next review round again.

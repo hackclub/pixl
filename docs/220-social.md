@@ -8,18 +8,18 @@ description: Search for a player by display name, send a request, and once they 
 
 ## Friends
 
-Find other builders by searching their display name and sending a friend request. Once connected, you can track each other's activity and see when friends are online.
+Search someone's display name and send a friend request. Once they accept you can see each other's activity and who's online.
 
 ## Villages
 
-A **Village** is a private instance for you and up to **16 friends** to hang out and build together away from the main world hub.
+A **village** is a private instance for you and up to 16 friends, away from the main world hub.
 
-Villages can be customized with dynamic color themes purchased with pixels (Autumn, Blossom, Verdant for 500 px; Dusk for 750 px), altering the atmospheric lighting for everyone inside.
+You can buy colour themes for one with pixels (Autumn, Blossom and Verdant at 500 px, Dusk at 750 px). The theme changes the lighting for everyone inside.
 
 ## Explore feed
 
-The Explore feed showcases all approved community ships. It's the fastest way to see how other hackers structure their repos, demos, and project writeups.
+The Explore feed lists every approved ship. It's the quickest way to see how other people lay out their repos, demos and writeups.
 
-## Notifications & activity timeline
+## Notifications and timeline
 
-Your Notifications tab alerts you when projects get approved, orders ship, or collaborator invites arrive. Your personal Timeline tracks your complete shipping history in chronological order.
+Notifications tell you when a project is approved, an order ships, or someone invites you onto a build. Your Timeline is your own shipping history in order.

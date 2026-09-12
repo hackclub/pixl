@@ -6,20 +6,22 @@ description: Hackatime is how your build time gets tracked, and it's what turns 
 
 # Hackatime setup
 
-^ Hackatime logs the time you spend coding in your editor, converting your real build hours into pixels. Set it up before you begin working on a project.
+^ Hackatime logs the time you spend coding in your editor, and that's what becomes pixels. Set it up before you start a project, not after.
 
-## Installation steps
+## Installing it
 
-1. Install the **WakaTime** extension in your editor (VS Code, Cursor, Neovim, JetBrains, etc.).
-2. When prompted for your API Key, use your personal **Hackatime API Key** from your Pixl/Hack Club profile.
-3. Set your custom API URL endpoint to `https://waka.hackclub.com/api`.
+1. Install the **WakaTime** extension in your editor. VS Code, Cursor, Neovim and JetBrains all have one.
+2. When it asks for an API key, give it your **Hackatime API key** from your Pixl or Hack Club profile.
+3. Set the API URL to `https://waka.hackclub.com/api`.
 
-## Verifying tracking
+That third step is the one people miss. Without it the extension reports to WakaTime instead of Hackatime and none of your hours count.
 
-Write code in your project for 5 minutes, then check your Hackatime dashboard. You should see active coding time appear under your current project folder name.
+## Checking it works
 
-If hours aren't tracking, double-check that your API URL and Secret Key are pasted correctly into your editor settings.
+Write code for five minutes, then open your Hackatime dashboard. Your time should show up under your project's folder name.
 
-## Project folder naming
+If nothing appears, the API URL or the key is wrong in your editor settings. It's almost always one of those two.
 
-Hackatime uses your local folder name as the project identifier. Keep each build in its own dedicated directory so your hours log to the correct submission.
+## Folder naming
+
+Hackatime identifies projects by your local folder name, so keep each build in its own directory. Two projects in one folder means their hours land on the same submission.

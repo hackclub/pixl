@@ -6,12 +6,8 @@ description: A board for "someone should build this".
 
 # The ideas board
 
-^ Have an idea you don't have time to build? Or looking for something interesting to tackle? Check the **Ideas Board**.
+^ Got an idea you'll never get round to? Looking for something to build? That's what the **Ideas Board** is for.
 
-## Posting & browsing
+Post an idea straight away, no review queue. Filter by newest or trending, or search for something specific. Vote on the ones you'd like to see exist.
 
-- Post an idea instantly, no review queue required.
-- Filter by newest, trending, or search by keywords.
-- Vote on prompts you'd love to see built.
-
-If you're facing builder's block, browse the board for inspiration. If you think of a fun mechanic, bot, or hardware concept, post it so another maker can bring it to life.
+If you're out of ideas, read the board. If you've got one you won't use, put it up so someone else can.

@@ -6,23 +6,23 @@ description: Bring someone into Pixl and you both get paid for it, once they act
 
 # Referrals
 
-^ Invite friends into Pixl and earn bonus pixels once they build and ship their first project.
+^ Invite a friend and you both earn bonus pixels, once they've built and shipped something.
 
 ## How it works
 
-Your 6-character referral code is located on the Referrals page. When a friend signs up, they enter your code.
+Your 6-character referral code is on the Referrals page. Your friend enters it when they sign up.
 
-::: warn 48-Hour window
-A referral code must be applied within the referred player's **first 2 days** on Pixl. After 48 hours, the prompt locks out. Share your code when they join.
+::: warn You get 48 hours
+A referral code has to be applied within the referred player's first 2 days on Pixl. After that the prompt locks out, so send your code when they join, not a week later.
 :::
 
 ## What the new builder gets
 
-A **+5 px/hr bonus** on top of their standard rate for their **first approved project**. It's a starter boost to kickstart their pixel balance.
+An extra 5 px/hr on top of their normal rate for their first approved project, to get their balance moving.
 
-## What the referrer gets
+## What you get
 
-A one-time bounty when your referral lands their first approved ship, scaled by the size of their project:
+A one-off bounty when your referral lands their first approved ship, sized by how big their project was:
 
 - **2h+** → 10 px
 - **5h+** → 19 px
@@ -31,8 +31,8 @@ A one-time bounty when your referral lands their first approved ship, scaled by 
 - **50h+** → 105 px
 - **100h+** → 190 px
 
-Rewards trigger when real builds get shipped, not for empty account registrations.
+It pays on shipped builds, not on signups.
 
 ## Milestone bonuses
 
-Every 10 successful referrals that complete a ship unlocks an extra **119 px milestone bonus** on top.
+Every 10 referrals who complete a ship adds another 119 px on top.

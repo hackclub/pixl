@@ -6,28 +6,28 @@ description: Turn your shipped hours into real gear and rewards.
 
 # The shop and your orders
 
-^ Shipped work turns into pixels, and the shop is where you spend them. Everything listed is a real physical item or digital grant sent directly to you.
+^ Shipped work becomes pixels, and the shop is where they go. Everything listed is a real item or a digital grant sent to you.
 
 ## Regional catalogues
 
-Because international shipping and customs vary around the world, the shop catalogue automatically filters items available in your region (US, North America, South America, Europe, Asia, India, Africa). You will only see items we can reliably deliver to your address.
+Shipping and customs differ everywhere, so the catalogue filters itself by region (US, North America, South America, Europe, Asia, India, Africa). You only see what we can get to your address without it going missing.
 
 ## Level trophies
 
-Certain special items are **Level Trophies**. These aren't purchased with pixels: they unlock automatically for free once your account hits specific level milestones!
+Some items are **level trophies**. You don't buy those. They unlock on their own when your account passes certain levels.
 
 ## Address verification
 
-Before placing an order, make sure you have a valid mailing address saved on your profile. The shop will block checkout until your address is set.
+Save a valid mailing address on your profile before ordering. Checkout stays blocked until you do.
 
-## Order status stages
+## Order stages
 
-Track your shipments directly on your Orders page:
+Your Orders page tracks each one:
 
-- **NEW:** Order received and logged. Pixels are deducted immediately.
-- **ORDERED:** Our fulfillment team has ordered or packed the item.
-- **PAID:** Payment and processing confirmed on our end.
-- **SHIPPED:** Package is in transit with carrier tracking details attached.
-- **DELIVERED:** Arrived at your door.
+- **NEW.** Order received. Pixels come out of your balance straight away.
+- **ORDERED.** Fulfillment has ordered or packed it.
+- **PAID.** Payment confirmed on our end.
+- **SHIPPED.** In transit, with tracking attached.
+- **DELIVERED.** At your door.
 
-If an item is out of stock or cancelled, your pixels are refunded back to your balance automatically.
+If something's out of stock or gets cancelled, your pixels come back automatically.

@@ -6,13 +6,12 @@ description: Pixl is a collaborative effort to restore a broken world.
 
 # How the Restoration works
 
-^ Pixl is built around a collective community goal: rebuilding Origin island by island.
+^ Pixl is built around one shared goal: rebuilding Origin, island by island.
 
-Every time anyone in the community ships a project, they generate **Restoration Energy (RE)**. RE flows into the world in two ways:
+Every project anyone ships generates **Restoration Energy (RE)**, and that RE goes two places at once.
 
-1. **Your Personal Level:** Pushes up your own hourly pixel payout rate permanently.
-2. **The Core Vault:** Fuels global world unlocks that benefit every player in the game.
+The first is your own level, which permanently raises what you're paid per hour. The second is the Core Vault, which funds unlocks that land for everyone in the game.
 
-As the community hits Vault milestones, new zones unlock, higher tier trials become available, new shop inventory drops, and the map evolves. You don't have to coordinate with anyone, just build your own projects, ship them, and your hours contribute to the global progress bar automatically.
+Nobody has to coordinate this. You build your own projects and ship them, and the hours feed the global progress bar on their own. As the Vault passes its milestones, new regions open up, higher tier trials appear and more stock reaches the shop.
 
-Check the Core Vault in the center of the world or open the Vault dashboard to see current progress toward the next community tier.
+You can check the Core Vault in the middle of the world, or open the Vault dashboard, to see how far off the next tier is.

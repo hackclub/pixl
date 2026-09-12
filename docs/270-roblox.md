@@ -6,21 +6,21 @@ description: Build and publish 3D multiplayer experiences with Roblox Studio and
 
 # Roblox guide
 
-^ Roblox is a powerful platform for game developers: it handles multiplayer networking, server hosting, and cross-platform clients out of the box.
+^ Roblox hands you multiplayer networking, server hosting and cross-platform clients for free, which is most of the hard part of a multiplayer game.
 
 ## Getting started
 
-Download **Roblox Studio** from [create.roblox.com](https://create.roblox.com). Launch Studio and create a new project using the standard **Baseplate** template.
+Get **Roblox Studio** from [create.roblox.com](https://create.roblox.com), open it, and start a new project from the **Baseplate** template.
 
 ## Understanding the workspace
 
-- **Workspace:** Contains all 3D geometry, models, lights, and physics parts.
-- **ServerScriptService:** Runs secure backend scripts that handle game logic, leaderboards, and currencies.
-- **StarterGui:** Holds 2D interface elements (HUDs, buttons, inventory screens) copied to players upon spawning.
+- **Workspace:** everything in 3D. Geometry, models, lights, physics parts.
+- **ServerScriptService:** server-side scripts. Game logic, leaderboards and currency go here, where players can't tamper with them.
+- **StarterGui:** the 2D interface (HUDs, buttons, inventory) that gets copied to each player when they spawn.
 
 ## Scripting gameplay with Luau
 
-Create a coin pickup mechanic by adding a `Script` inside a Part model:
+A coin pickup, as a `Script` inside a Part:
 
 ```lua
 local coin = script.Parent
@@ -41,7 +41,7 @@ end)
 
 ## Creating player leaderstats
 
-Use this standard pattern in `ServerScriptService` to display player scores on the in-game scoreboard:
+This is the standard way to get a score onto the in-game scoreboard. It goes in `ServerScriptService`:
 
 ```lua
 game.Players.PlayerAdded:Connect(function(player)
@@ -61,4 +61,4 @@ end)
 1. Go to **File → Publish to Roblox**.
 2. Set a title, description, and thumbnail.
 3. In Game Settings, set the **Age Recommendation to 16+** (publishing games under 16+ may incur Roblox platform review fees, while 16+ is free).
-4. Share the playable Roblox link in your Pixl ship submission!
+4. Put the playable Roblox link in your Pixl submission.

@@ -1,18 +1,18 @@
 ---
 title: Your first site, line by line
 group: Build & ship
-description: The complete starter code for a personal webpage you can build and ship today.
+description: Starter code for a personal webpage you can build and ship today.
 ---
 
 # Your first site, line by line
 
-^ Want to build and ship something real today? Here is a clean starter site. Copy the code, customize it with your own personality, and ship it.
+^ Here's a small site that works. Copy it, make it yours, ship it.
 
 ## 1. Create your files
 
-Open your editor (like VS Code), create a new folder named `my-site`, and make two files inside: `index.html` and `style.css`.
+In your editor, make a folder called `my-site` with two files in it: `index.html` and `style.css`.
 
-## 2. The HTML markup: `index.html`
+## 2. The markup: `index.html`
 
 ```html
 <!DOCTYPE html>
@@ -29,7 +29,7 @@ Open your editor (like VS Code), create a new folder named `my-site`, and make t
     <p>I'm building hardware and software projects on Pixl.</p>
     <ul>
       <li><a href="https://github.com/yourusername" target="_blank">GitHub</a></li>
-      <li><a href="https://pixl.rsvp" target="_blank">Pixl</a></li>
+      <li><a href="https://pixl.hackclub.com" target="_blank">Pixl</a></li>
     </ul>
   </main>
 </body>
@@ -81,14 +81,14 @@ ul {
 }
 ```
 
-Double-click `index.html` to open it in your browser. You've got a live local website running.
+Double-click `index.html` to open it in your browser. That's a working site.
 
 ## 4. Make it your own
 
-Don't just leave placeholder text. Change the name, add a paragraph about projects you want to make, throw in an image (`<img src="me.png" alt="profile">`), or tweak the color palette in `style.css`. 
+Don't ship it with the placeholder text still in. Change the name, write a paragraph about what you want to build, drop in an image (`<img src="me.png" alt="profile">`), pick your own colours in `style.css`.
 
 ## 5. Push to GitHub & deploy
 
 1. Initialize Git in the folder and push to GitHub.
-2. Deploy for free in 30 seconds using GitHub Pages, Cloudflare Pages, or Vercel.
-3. Link your Hackatime project, write a short journal entry, and hit Ship in Pixl!
+2. Deploy it free on GitHub Pages, Cloudflare Pages or Vercel.
+3. Link your Hackatime project, write a short journal entry, and hit Ship.

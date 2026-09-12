@@ -1,16 +1,16 @@
 ---
 title: HTML guide
 group: Guides
-description: Practical basics for building and styling your first clean web page.
+description: The basics for building and styling your first web page.
 ---
 
 # HTML guide
 
-^ Web development doesn't require complex frameworks to start. Plain HTML and CSS can build fast, clean, and interactive websites.
+^ You don't need a framework to start. Plain HTML and CSS get you a real site.
 
-## Core HTML skeleton
+## The skeleton
 
-Every web page starts with this boilerplate:
+Every page starts here:
 
 ```html
 <!DOCTYPE html>
@@ -30,16 +30,16 @@ Every web page starts with this boilerplate:
 
 ## Essential tags
 
-- `<h1>` to `<h6>`: Headings for page hierarchy.
-- `<p>`: Paragraphs for text content.
-- `<a href="URL">`: Hyperlinks to external pages or local files.
-- `<img src="image.png" alt="description">`: Images.
-- `<button>` and `<input>`: Interactive elements and form controls.
-- `<div>` and `<main>`: Structural layout containers.
+- `<h1>` to `<h6>`: headings, in order of importance.
+- `<p>`: a paragraph.
+- `<a href="URL">`: a link, to another page or a local file.
+- `<img src="image.png" alt="description">`: an image. The `alt` text matters.
+- `<button>` and `<input>`: things people click and type into.
+- `<div>` and `<main>`: containers you hang layout off.
 
-## Adding modern styling (`style.css`)
+## Styling it (`style.css`)
 
-Drop this into `style.css` for clean typography and centered dark-mode styling:
+Drop this in `style.css` for centered, dark-mode text:
 
 ```css
 body {
@@ -65,9 +65,10 @@ main {
 
 ## Building a showcase project
 
-If you're tackling a trial like an item shop or personal portfolio, break the UI into distinct sections:
-1. A clean header with your project title.
-2. A grid of cards (items, projects, or blog posts) with images and descriptions.
-3. A footer with social/GitHub links.
+For a trial like an item shop or a portfolio, split the page into three parts:
 
-Get the layout working first, then refine the details.
+1. A header with the project title.
+2. A grid of cards (items, projects, posts) with images and descriptions.
+3. A footer with your links.
+
+Get the layout roughly right before you start fussing over details.

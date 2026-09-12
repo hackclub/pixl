@@ -6,16 +6,16 @@ description: Getting stuck happens to literally everyone, here's what to do abou
 
 # Need help?
 
-^ Hitting bugs and getting stuck is a normal part of building. Here is how to get unstuck fast:
+^ Everyone gets stuck. Here's the fastest way out.
 
-1. **Search First:** Search the `#pixl` channel history on Slack: odds are another builder ran into the exact same error and already found the fix.
-2. **Ask in `#pixl`:** Drop your code snippet, error message, and what you've already tried. The community and mentors are always around to help.
-3. **Ask the Pixo Bot:** For questions about game rules, eligibility, or payout math, tag Pixo on Slack for an instant answer.
+1. **Search first.** Look through `#pixl` on Slack. Good odds someone hit your exact error and the fix is already sitting there.
+2. **Then ask in `#pixl`.** Post the code, the error, and what you've already tried. That last part gets you a useful answer much faster.
+3. **Ask Pixo.** For questions about rules, eligibility or payout math, tag Pixo on Slack.
 
 ::: note Debugging is a core skill
-Nobody knows everything upfront. Being able to read error logs, search documentation, and ask clear technical questions is what makes a great engineer.
+Nobody starts out knowing everything. Reading error logs, searching documentation and asking a clear question are most of the job.
 :::
 
 ::: warn Make tutorials your own
-Following a tutorial to learn a concept is great, but don't submit an untouched tutorial copy as your ship. Add your own features, UI changes, and personal twist.
+Following a tutorial to learn something is fine. Submitting the untouched result of one isn't. Add your own features and ideas before you ship it.
 :::

@@ -6,7 +6,7 @@ description: Build real cross-platform mobile apps for iOS and Android using Exp
 
 # React Native app guide
 
-^ Want to build an app that runs natively on your phone? React Native and Expo give you a fast workflow with hot-reloading on physical devices.
+^ React Native plus Expo gets a real app onto your actual phone, hot-reloading as you type.
 
 ## 1. Create your Expo project
 
@@ -18,11 +18,11 @@ cd my-mobile-app
 npx expo start
 ```
 
-Scan the terminal QR code with the **Expo Go** app on your iPhone or Android phone to test your app live as you write code.
+Scan the QR code in your terminal with the **Expo Go** app and the app opens on your phone, updating as you edit.
 
 ## 2. Building a screen
 
-Create a clean screen with native layout components:
+A screen, using native layout components:
 
 ```javascript
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
 
 ## 3. Local data persistence
 
-Use `@react-native-async-storage/async-storage` to save data across app restarts:
+`@react-native-async-storage/async-storage` keeps data around between app restarts:
 
 ```javascript
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -77,4 +77,4 @@ const data = jsonValue != null ? JSON.parse(jsonValue) : null;
 
 ## 4. Submitting your build
 
-For your Pixl ship, record a quick video demo of the app running on your phone or provide an Expo snack / test build link alongside your GitHub repository.
+For your Pixl ship, record a short video of the app running on your phone, or link an Expo snack or test build, alongside the repo.

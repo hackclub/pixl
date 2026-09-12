@@ -6,21 +6,22 @@ description: Build interactive bots, slash commands, and automations for Slack.
 
 # Slack app guide
 
-^ Because Hack Club runs on Slack, building a Slack bot or integration is one of the most practical projects you can ship.
+^ Hack Club runs on Slack, so a bot or integration is one of the more useful things you can build here. You'll actually use it.
 
 ## 1. Create your Slack app
 
 1. Head to [api.slack.com/apps](https://api.slack.com/apps) and click **Create New App**.
 2. Select **From scratch**.
-3. Choose your development testing workspace (use a private test workspace while building, not the main Hack Club workspace).
+3. Pick a workspace to develop against. Use a private test one, not the main Hack Club workspace.
 
 ## 2. Configure OAuth scopes
 
-Under **OAuth & Permissions**, add the bot token scopes your app needs:
-- `chat:write`: Allows the bot to post messages.
-- `channels:history`: Allows reading messages in public channels.
-- `commands`: Enables custom slash commands (like `/pixl-stats`).
-- `app_mentions:read`: Triggers events when someone @mentions your bot.
+Under **OAuth & Permissions**, add the scopes your bot needs:
+
+- `chat:write`: post messages.
+- `channels:history`: read messages in public channels.
+- `commands`: add slash commands like `/pixl-stats`.
+- `app_mentions:read`: get an event when someone @mentions the bot.
 
 Click **Install to Workspace** and copy your **Bot User OAuth Token** (`xoxb-...`).
 
@@ -30,7 +31,7 @@ Never commit your Slack API keys or tokens to GitHub. Store them in a `.env` fil
 
 ## 3. Starter code with `@slack/bolt`
 
-Using Node.js and the official Bolt framework in Socket Mode makes local development seamless without exposing public ports:
+Bolt in Socket Mode means you can develop locally without exposing a public port:
 
 ```javascript
 const { App } = require('@slack/bolt');
@@ -55,4 +56,4 @@ app.message('ping', async ({ message, say }) => {
 
 ## 4. Deploying 24/7
 
-Once your bot works locally, deploy it to **Nest** (Hack Club's free Linux hosting) so it stays online 24/7 without needing your laptop open.
+Once it works locally, put it on **Nest**, Hack Club's free Linux hosting, so it keeps running when your laptop is shut.

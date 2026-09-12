@@ -6,25 +6,26 @@ description: You can ship a project with other builders on it.
 
 # Building with other people
 
-^ You can collaborate and ship projects with other builders. The most important rule: **collaborating never splits or reduces anyone's individual payout**.
+^ You can build and ship with other people. The rule that matters most: collaborating never splits or reduces anyone's payout.
 
-## Inviting team members
+## Inviting people
 
-The project creator invites team members from the project dashboard or shares an invite code. Collaborators must accept the invite to join. Once added, everyone on the team can view the build and add their own journal logs.
+The project creator invites people from the project dashboard, or shares an invite code. They have to accept before they're on it. Once they're in, everyone can see the build and add their own journal entries.
 
 ## Everyone tracks their own time
 
-Each team member connects their **own** Hackatime project. You are credited strictly for the hours you personally logged and coded. There is no shared pool of hours to divide up.
+Each person links their own Hackatime project. You're credited for the hours you personally logged. There's no shared pool that gets divided up.
 
-## Individual payouts at review
+## Payouts are worked out per person
 
-When a team project is reviewed and approved, every collaborator is processed independently:
-- **Your own logged hours** on the project.
-- **Your own pay rate**, based on your lifetime RE (a beginner and a max-level builder on the same team each receive their respective rates).
-- **Your own RE bump**, permanently leveling up your profile.
+When a team project is approved, each collaborator is processed on their own:
 
-A 3-person team project doesn't pay a 1/3 cut; it pays 100% of each maker's tracked hours at their full individual rates.
+- The hours they personally logged.
+- Their own rate, from their own lifetime RE. A beginner and a max-level builder on the same team each get their own rate.
+- Their own RE bump.
+
+A three-person project doesn't pay a third each. It pays every maker in full for their own tracked hours.
 
 ::: warn Zero-work collaborators get rejected
-Adding friends who didn't write code so they can siphon free pixels is considered fraud and will cause the entire submission to be rejected. Everyone on a project needs clear commit activity, Hackatime logs, and journal notes.
+Adding friends who wrote no code so they can pick up free pixels is fraud, and it rejects the whole submission, not just theirs. Everyone listed needs commits, Hackatime logs and journal entries.
 :::

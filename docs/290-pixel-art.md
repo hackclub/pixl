@@ -1,33 +1,34 @@
 ---
 title: Pixel art guide
 group: Guides
-description: Techniques for crafting crisp, consistent pixel art sprites and game icons.
+description: How to make sprites and icons that stay readable at 16 pixels across.
 ---
 
 # Pixel art guide
 
-^ Pixel art is about deliberate constraint. Creating clean sprites requires clarity and cohesive palette choices rather than complex drawing skills.
+^ Pixel art is mostly about constraint. Good sprites come from clear shapes and a tight palette, not from being able to draw.
 
 ## Recommended software
 
-- **Aseprite:** The gold standard for indie game devs and pixel artists (paid, but affordable and packed with animation tools).
-- **Piskel:** Free, open-source, in-browser pixel editor.
-- **LibreSprite:** Free open-source fork of Aseprite.
+- **Aseprite:** what most people use. Paid, but cheap, and the animation tools are worth it.
+- **Piskel:** free, open source, runs in the browser.
+- **LibreSprite:** free, open source fork of Aseprite.
 
 ## Canvas sizing
 
 Start small:
-- **16×16 px:** Perfect for inventory icons, runes, and micro-sprites.
-- **32×32 px:** Great for character portraits, weapons, and detailed tiles.
 
-Working with smaller resolutions forces you to focus on silhouette and readability instead of noisy details that disappear in-game.
+- **16×16:** inventory icons, runes, tiny sprites.
+- **32×32:** character portraits, weapons, detailed tiles.
+
+A small canvas forces you to work on the silhouette, which is the thing people actually read. Fine detail disappears in game anyway.
 
 ## Palettes and lighting
 
-1. **Limit your palette:** Restrict each sprite set to 8 to 16 cohesive colors. Keeping the same palette across multiple items makes the collection look unified.
-2. **Consistent light source:** Pick a lighting angle (usually top-left) and stick to it on every sprite so highlights and shadows match.
-3. **Clean outlines:** Use dark outlines to separate foreground objects from varying game background tiles.
+1. **Keep the palette small.** Eight to sixteen colours per sprite set. Reusing the same palette across items is what makes a set look like a set.
+2. **Pick a light source and keep it.** Usually top-left. If it moves between sprites, the whole sheet looks wrong and it's hard to say why.
+3. **Outline in something dark.** It keeps the sprite readable against whatever tile it's standing on.
 
 ## Exporting for projects
 
-Always export sprites at their **1x native resolution** as PNGs. Scale them up in CSS (`image-rendering: pixelated;`) or your game engine settings so the pixels stay sharp without blurry interpolation.
+Export PNGs at 1x, their real size. Scale them up in CSS with `image-rendering: pixelated;` or in your engine's import settings, so they stay sharp instead of going blurry.

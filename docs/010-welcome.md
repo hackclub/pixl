@@ -6,10 +6,10 @@ description: So here's the deal.
 
 # Welcome to Pixl
 
-^ Pixl is a Hack Club **YSWS** (You Ship, We Ship). There's some lore about an ancient civilization named Origin getting shattered by the "Great Static" into floating islands, and how everyone's teaming up to rebuild it.
+^ Pixl is a Hack Club **YSWS** (You Ship, We Ship). There's lore about an ancient civilization called Origin, shattered into floating islands by the "Great Static", and everyone teaming up to rebuild it.
 
-Honestly? You don't need to care about the lore to play and ship. Strip away the story and Pixl is dead simple: build cool hardware or software, ship it, and get real rewards. 
+You don't have to care about any of that to play. Underneath the story, Pixl is simple: build hardware or software, ship it, get real things back.
 
-NPCs scattered across the retro 2D map hand out *trials*, curated project challenges with dedicated bounties. If you already have your own idea, you can ignore the NPCs completely and build a custom *invention*. 
+NPCs around the 2D map hand out *trials*, project briefs with their own prizes attached. Already know what you want to make? Ignore the NPCs and build an *invention* instead.
 
-You roam around the world with your character, meet people, log the hours you spend building, and cash those hours in for gear from the shop. It's not a competition against anyone else. Whatever you build and ship earns you real stuff, period.
+You walk around the world, meet people, log the hours you spend building, and trade those hours for gear in the shop. You're not competing with anyone. Whatever you build and ship, you get paid for.
