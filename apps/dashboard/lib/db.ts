@@ -487,6 +487,8 @@ export interface ShippedProject extends ProjectWithUser {
   journalHours: number;
   entries: number;
   own?: boolean;
+  /** Slack id of another reviewer actively holding this, if any. */
+  claimedBy?: string;
 }
 
 export interface IdeaWithUser {
@@ -541,17 +543,35 @@ function claimedByOther(p: ShippedProject, viewer?: string): boolean {
   return Date.now() - new Date(p.reviewing_at).getTime() < REVIEW_LOCK_MS;
 }
 
+// Tags rows another reviewer is actively holding instead of dropping them.
+// The queues used to filter these out entirely, which made projects blink out
+// of the list with no explanation and left reviewers unsure whether something
+// had been handled or had simply vanished. The detail page still refuses the
+// claim (see claimReview + the "already reviewing this" banner on
+// app/review/[id]/page.tsx), so showing them costs nothing and the queue stops
+// lying about its own length.
+export function annotateClaims(rows: ShippedProject[], viewer?: string): ShippedProject[] {
+  for (const p of rows) {
+    if (claimedByOther(p, viewer)) p.claimedBy = p.reviewing_by as string;
+  }
+  return rows;
+}
+
 // A reviewer may see their own submission in the queue (flagged) but the
 // detail page and actions never let them grade it.
 function ownedByViewer(p: ShippedProject, viewer?: string): boolean {
   return !!viewer && !!p.users?.slack_id && p.users.slack_id === viewer;
 }
 
-// Review queue: shipped projects oldest-first, hiding anything another reviewer
-// is currently reviewing.
+// Review queue: shipped projects oldest-first. By default anything another
+// reviewer is actively holding is dropped, which is what nextReviewId wants
+// (never auto-advance someone onto a project they can't action). The queue
+// page passes includeClaimed so it can show them with a "being reviewed" tag
+// instead - see annotateClaims.
 export async function listShippedProjects(
   viewer?: string,
   kind?: "software" | "hardware",
+  opts?: { includeClaimed?: boolean },
 ): Promise<ShippedProject[]> {
   let q = db
     .from("projects")
@@ -568,9 +588,10 @@ export async function listShippedProjects(
     console.error("listShippedProjects", error.message);
     return [];
   }
-  const visible = (data ?? []).filter(
-    (p) => !claimedByOther(p as ShippedProject, viewer),
-  ) as ShippedProject[];
+  const rows = (data ?? []) as ShippedProject[];
+  const visible = opts?.includeClaimed
+    ? annotateClaims(rows, viewer)
+    : rows.filter((p) => !claimedByOther(p, viewer));
   for (const p of visible) if (ownedByViewer(p, viewer)) p.own = true;
   return hydrateHours(visible);
 }
@@ -603,6 +624,7 @@ export async function claimReview(
 export async function listSecondReviewProjects(
   viewer?: string,
   kind?: "software" | "hardware",
+  opts?: { includeClaimed?: boolean },
 ): Promise<ShippedProject[]> {
   let q = db
     .from("projects")
@@ -619,8 +641,11 @@ export async function listSecondReviewProjects(
     console.error("listSecondReviewProjects", error.message);
     return [];
   }
-  const visible = (data ?? []).filter((p) => !claimedByOther(p as ShippedProject, viewer));
-  return hydrateHours(visible as ShippedProject[]);
+  const rows = (data ?? []) as ShippedProject[];
+  const visible = opts?.includeClaimed
+    ? annotateClaims(rows, viewer)
+    : rows.filter((p) => !claimedByOther(p, viewer));
+  return hydrateHours(visible);
 }
 
 // The next project a reviewer should look at after finishing one, so the review
@@ -730,11 +755,15 @@ export async function listReviewedProjects(): Promise<ShippedProject[]> {
   return hydrateHours((data ?? []) as ShippedProject[]);
 }
 
-// Pending-review count for the sidebar badge. With no opts it's the raw global
-// count (shipped + second_review). Pass the viewer to get a count that matches
-// what they can actually action: second_review items only count for final
-// reviewers, and anything another reviewer is actively holding is excluded , so
-// the badge never shows work the viewer can't see in their queue.
+// Pending-review count for the queue badges. With no opts it's the raw global
+// count (shipped + second_review) - fine for /api/review/pending, whose caller
+// (LiveReview) only watches it for a change to refresh on and never shows the
+// number, but wrong for anything a reviewer reads. Every badge must pass the
+// viewer so second_review work stays out of a plain reviewer's number.
+//
+// Projects another reviewer is holding are counted, matching what
+// listShippedProjects(..., { includeClaimed: true }) now puts in the list:
+// the badge and the list it labels have to agree, or one of them is lying.
 export async function countPendingReviews(
   opts?: { viewer?: string; canSecondPass?: boolean },
 ): Promise<number> {
@@ -753,21 +782,18 @@ export async function countPendingReviews(
     return count ?? 0;
   }
   const statuses = opts.canSecondPass ? ["shipped", "second_review"] : ["shipped"];
-  const { data, error } = await db
+  const { count, error } = await db
     .from("projects")
-    .select("id, reviewing_by, reviewing_at")
+    .select("id", { count: "exact", head: true })
     .in("status", statuses)
     .is("archived_at", null)
     .is("rejected_at", null)
-    .is("banned_at", null)
-    .limit(500);
+    .is("banned_at", null);
   if (error) {
     console.error("countPendingReviews", error.message);
     return 0;
   }
-  return (data ?? []).filter(
-    (p) => !claimedByOther(p as ShippedProject, opts.viewer),
-  ).length;
+  return count ?? 0;
 }
 
 // Second-pass queue count for the "Second pass" tab badge (super-admins

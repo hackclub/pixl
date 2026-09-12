@@ -16,8 +16,16 @@ export default async function ReviewLayout({
   children: React.ReactNode;
 }) {
   const access = await requirePagePerm(["review"]);
+  // Scoped to the viewer's role. This used to call countPendingReviews() with
+  // no arguments, which returns the raw global shipped + second_review count -
+  // so a plain reviewer's "Needs review" badge included final-pass work they
+  // can't see in the queue below it or action at all, and disagreed with the
+  // sidebar badge (app/layout.tsx), which was already passing the viewer.
   const [pending, secondPassCount, spotCheckCount] = await Promise.all([
-    countPendingReviews(),
+    countPendingReviews({
+      viewer: access.session.slackId,
+      canSecondPass: access.canSecondPass,
+    }),
     access.isSuper ? countSecondPassReviews() : Promise.resolve(undefined),
     access.isSuper ? countSpotCheckProjects() : Promise.resolve(undefined),
   ]);

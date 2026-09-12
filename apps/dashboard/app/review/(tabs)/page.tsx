@@ -47,9 +47,11 @@ export default async function ReviewListPage({
   // None of these three depend on each other's result, so they run together
   // instead of as a chain of sequential round-trips.
   const [finalRows, myRecent, rowsRaw] = await Promise.all([
-    access.canSecondPass ? listSecondReviewProjects(viewer, kind) : Promise.resolve([]),
+    access.canSecondPass
+      ? listSecondReviewProjects(viewer, kind, { includeClaimed: true })
+      : Promise.resolve([]),
     listReviewAudits(5, viewer),
-    listShippedProjects(viewer, kind),
+    listShippedProjects(viewer, kind, { includeClaimed: true }),
   ]);
   let rows = rowsRaw;
   if (sort === "hours") rows = [...rows].sort((a, b) => b.hours - a.hours);
@@ -60,11 +62,13 @@ export default async function ReviewListPage({
   const cur = Math.min(Math.max(parseInt(page ?? "1", 10) || 1, 1), pages);
   const start = (cur - 1) * PER;
   const slice = rows.slice(start, start + PER);
+  // claimedBy is another reviewer's slack id, resolved through the same map
+  // the maker column uses so the "being reviewed" tag can name them.
   const [finalHandles, handles] = await Promise.all([
     finalRows.length
-      ? slackHandles(finalRows.map((p) => p.users?.slack_id))
+      ? slackHandles(finalRows.flatMap((p) => [p.users?.slack_id, p.claimedBy]))
       : Promise.resolve(new Map<string, string>()),
-    slackHandles(slice.map((p) => p.users?.slack_id)),
+    slackHandles(slice.flatMap((p) => [p.users?.slack_id, p.claimedBy])),
   ]);
   const sortKey = SORTS.some((s) => s.key === sort) ? sort : "oldest";
   const qp = (p: number) =>

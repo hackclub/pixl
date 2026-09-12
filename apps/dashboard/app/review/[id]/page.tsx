@@ -310,7 +310,13 @@ export default async function ReviewDetail({
     fetchTrustFactor(p.users?.slack_id),
     yswsShipsFor(p.users?.slack_id, p.repo_url, p.demo_url),
     slackHandle(p.users?.slack_id),
-    isFinalStage ? listSecondReviewProjects(viewer) : listShippedProjects(viewer),
+    // includeClaimed so prev/next and the "Submission N of M" counter below
+    // walk the same queue the list page shows. nextReviewId (the auto-advance
+    // after a verdict) deliberately keeps excluding them - that one picks a
+    // project for you, so it should only ever pick actionable work.
+    isFinalStage
+      ? listSecondReviewProjects(viewer, undefined, { includeClaimed: true })
+      : listShippedProjects(viewer, undefined, { includeClaimed: true }),
     hackatimeReportPromise,
     p.bom_url ? fetchBomRows(p.bom_url) : Promise.resolve(null),
   ]);

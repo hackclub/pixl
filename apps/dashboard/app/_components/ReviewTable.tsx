@@ -168,6 +168,15 @@ export function ReviewTable({
                         🔒 on hold
                       </Badge>
                     )}
+                    {p.claimedBy && (
+                      <Badge
+                        variant="secondary"
+                        className="text-[0.65rem] uppercase tracking-wide"
+                        title={`${handles.get(p.claimedBy) ?? p.claimedBy} opened this for review in the last 30 minutes. You can still open it, but you won't be able to grade it while their claim is live.`}
+                      >
+                        {handles.get(p.claimedBy) ?? "someone"} is reviewing
+                      </Badge>
+                    )}
                   </div>
                 </TableCell>
 
