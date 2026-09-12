@@ -1,6 +1,6 @@
 import { requirePagePerm } from "@/lib/guard";
 import { listFormSubmissions, listFormConfigs, type FormSubmissionRow } from "@/lib/db";
-import { slackAvatarsFor } from "@/lib/slack";
+import { slackAvatarsFor, slackHandles } from "@/lib/slack";
 import {
   decideFormSubmission,
   saveFormConfig,
@@ -161,8 +161,15 @@ export default async function FormsPage() {
   const [submissions, configs] = await Promise.all([listFormSubmissions(), listFormConfigs()]);
   const pending = submissions.filter((s) => s.status === "pending" && !s.interesting_at);
   const interesting = submissions.filter((s) => s.status === "pending" && s.interesting_at);
-  const decided = submissions.filter((s) => s.status !== "pending");
-  const avatars = await slackAvatarsFor(submissions.map((s) => s.slack_id));
+  // Split out from "decided" so accepted applicants have their own place to
+  // scan later - the accept DM already goes out immediately, this is just
+  // for going back to message them again afterwards (e.g. once onboarding).
+  const accepted = submissions.filter((s) => s.status === "accepted");
+  const rejected = submissions.filter((s) => s.status === "rejected");
+  const [avatars, handles] = await Promise.all([
+    slackAvatarsFor(submissions.map((s) => s.slack_id)),
+    slackHandles(submissions.map((s) => s.slack_id)),
+  ]);
   // form_key -> {question key -> label}, so an answer's heading shows the
   // actual question asked instead of its internal storage key (e.g.
   // "message") - falls back to the raw key if a question was since
@@ -249,18 +256,40 @@ export default async function FormsPage() {
         )}
       </div>
 
-      {decided.length > 0 && (
+      {accepted.length > 0 && (
         <div>
-          <div className="text-sm font-medium text-muted-foreground mb-3">Decided</div>
+          <div className="text-sm font-medium text-muted-foreground mb-3">
+            ✅ {accepted.length} accepted - for DMing later
+          </div>
           <Card className="overflow-hidden py-0 divide-y divide-border">
-            {decided.map((s) => (
+            {accepted.map((s) => (
+              <div key={s.id} className="p-3.5 flex items-center gap-3 flex-wrap">
+                <Avatar url={avatars.get(s.slack_id)} name={s.name || s.slack_id} />
+                <div className="min-w-0">
+                  <div className="font-medium">{s.name || s.slack_id}</div>
+                  <div className="text-xs text-muted-foreground font-mono">
+                    {handles.get(s.slack_id) ?? s.slack_id}
+                  </div>
+                </div>
+                <Badge variant="secondary">{s.form_key}</Badge>
+                <span className="text-xs text-muted-foreground ml-auto">
+                  accepted by {s.decided_by} · {dateLabel(s.decided_at)}
+                </span>
+              </div>
+            ))}
+          </Card>
+        </div>
+      )}
+
+      {rejected.length > 0 && (
+        <div>
+          <div className="text-sm font-medium text-muted-foreground mb-3">Rejected</div>
+          <Card className="overflow-hidden py-0 divide-y divide-border">
+            {rejected.map((s) => (
               <div key={s.id} className="p-3.5 flex items-center gap-3 flex-wrap">
                 <Avatar url={avatars.get(s.slack_id)} name={s.name || s.slack_id} />
                 <span className="font-medium">{s.name || s.slack_id}</span>
                 <Badge variant="secondary">{s.form_key}</Badge>
-                <Badge variant={s.status === "accepted" ? "success" : "destructive"}>
-                  {s.status}
-                </Badge>
                 <span className="text-xs text-muted-foreground">
                   by {s.decided_by} · {dateLabel(s.decided_at)}
                 </span>
