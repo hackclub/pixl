@@ -3,5 +3,5 @@ import { getFirstSlug } from "@/lib/docs";
 
 export default async function DocsIndexPage() {
   const first = await getFirstSlug();
-  redirect(`/docs/${first}/`);
+  redirect(`/docs/${first}`);
 }

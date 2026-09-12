@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { NavItem } from "@/lib/docs";
 
 const OPEN_KEY = "pixl-docs-open-groups";
@@ -20,17 +21,10 @@ function groupNav(nav: NavItem[]): { label: string; items: NavItem[] }[] {
   return groups;
 }
 
-export function DocsShell({
-  nav,
-  activeSlug,
-  headings,
-  children,
-}: {
-  nav: NavItem[];
-  activeSlug: string;
-  headings: { id: string; text: string }[];
-  children: React.ReactNode;
-}) {
+export function DocsShell({ nav, children }: { nav: NavItem[]; children: React.ReactNode }) {
+  // The shell outlives any single doc now (see layout.tsx), so the active
+  // page can't come in as a prop - it changes underneath a mounted shell.
+  const activeSlug = usePathname().replace(/^\/docs\/?/, "").replace(/\/$/, "");
   const groups = groupNav(nav);
   const activeGroup = groups.find((g) => g.items.some((i) => i.slug === activeSlug))?.label;
 
@@ -44,7 +38,6 @@ export function DocsShell({
   const [backHref, setBackHref] = useState("/dashboard/");
   const [theme, setThemeState] = useState("light");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [activeHeading, setActiveHeading] = useState(headings[0]?.id ?? "");
 
   // Whether a group renders expanded: manually opened (persisted in `open`)
   // OR it's the group holding the page you're currently on. The active-group
@@ -110,26 +103,6 @@ export function DocsShell({
       document.removeEventListener("keydown", onKey);
     };
   }, [menuOpen]);
-
-  useEffect(() => {
-    if (headings.length === 0) return;
-    function markToc() {
-      const atBottom = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 4;
-      if (atBottom) {
-        setActiveHeading(headings[headings.length - 1]!.id);
-        return;
-      }
-      let current = headings[0]!.id;
-      for (const h of headings) {
-        const el = document.getElementById(h.id);
-        if (el && el.getBoundingClientRect().top <= 96) current = h.id;
-      }
-      setActiveHeading(current);
-    }
-    window.addEventListener("scroll", markToc, { passive: true });
-    markToc();
-    return () => window.removeEventListener("scroll", markToc);
-  }, [headings]);
 
   function toggleGroup(label: string) {
     setOpen((prev) => {
@@ -220,12 +193,18 @@ export function DocsShell({
                 <span className="count">{g.items.length}</span>
                 <span className="chev">▼</span>
               </button>
+              {/* No trailing slash: this app runs with Next's default
+                  trailingSlash: false, so /docs/<slug>/ answers an RSC
+                  request with a bare 308 instead of a flight payload. The
+                  client router reads that as "not a Next route" and falls
+                  back to a full browser navigation - which is what made
+                  every sidebar click reload the page. */}
               <div className="docs-group-items">
                 {g.items.map((i) => (
                   <Link
                     key={i.slug}
                     className={`section-link${i.slug === activeSlug ? " active" : ""}`}
-                    href={`/docs/${i.slug}/`}
+                    href={`/docs/${i.slug}`}
                   >
                     {i.title}
                   </Link>
@@ -236,28 +215,11 @@ export function DocsShell({
         </nav>
       </aside>
 
-      <main className="docs-main">{children}</main>
-
-      <aside className={`docs-toc${headings.length >= 2 ? "" : " empty"}`}>
-        {headings.length >= 2 && (
-          <>
-            <div className="docs-toc-h">On this page</div>
-            {headings.map((h) => (
-              <a
-                key={h.id}
-                href={`#${h.id}`}
-                className={h.id === activeHeading ? "active" : ""}
-                onClick={(e) => {
-                  e.preventDefault();
-                  document.getElementById(h.id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-                }}
-              >
-                {h.text}
-              </a>
-            ))}
-          </>
-        )}
-      </aside>
+      {/* The page renders both remaining grid columns (.docs-main and the
+          on-this-page rail) - neither Next's layout plumbing nor a fragment
+          emits DOM, so they land as direct children of this grid. The rail
+          has to come from the page because its headings are per-doc. */}
+      {children}
     </div>
   );
 }

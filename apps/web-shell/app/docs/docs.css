@@ -116,7 +116,11 @@ body { overflow-y: auto; }
   .callout.warn { border-left-color: var(--accent); }
   .callout .k { font-family: var(--pixel); font-weight: 600; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--ink); display: block; margin-bottom: 5px; }
   .callout p { margin: 0; color: var(--ink); }
-  code { background: var(--panel-2); border: 1px solid var(--stroke); border-radius: 0; padding: 1px 6px; font-size: 13px; color: var(--ink); }
+  code { background: var(--panel-2); border: 1px solid var(--stroke); border-radius: 0; padding: 1px 6px;
+    font-family: var(--mono); font-size: 14.5px; color: var(--ink); }
+  /* A handful of h2s wrap a filename in backticks - a fixed px size next to a
+     30px heading reads as a mistake, so scale those off the heading instead. */
+  .doc h1 code, .doc h2 code, .doc h3 code { font-size: .78em; padding: 0 5px; }
 
   /* Code block theme. Blocks stay dark in both page themes (a terminal reads
      better that way), retinted off landing's ink and orange rather than the
@@ -134,7 +138,7 @@ body { overflow-y: auto; }
   pre { position: relative; background: var(--code-bg); border: var(--bw) solid var(--stroke); border-radius: 0;
     box-shadow: var(--drop); overflow: hidden; margin: 18px 0; }
   pre code { display: block; background: none; border: none; padding: 16px 44px 16px 18px;
-    font-size: 13px; color: var(--code-fg); line-height: 1.65; overflow-x: auto; }
+    font-family: var(--mono); font-size: 14.5px; color: var(--code-fg); line-height: 1.7; overflow-x: auto; }
 
   .copy-btn { position: absolute; top: 8px; right: 8px; display: flex; align-items: center; gap: 5px;
     padding: 5px 10px; font-family: var(--sans); font-size: 11.5px; letter-spacing: .2px;
