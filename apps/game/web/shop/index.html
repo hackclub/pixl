@@ -631,7 +631,7 @@
         for (const card of $("trophies").querySelectorAll(".card")) {
           card.addEventListener("click", (e) => {
             if (e.target.closest("[data-claim]")) return;
-            location.href = `/shop/item?id=${card.dataset.id}`;
+            location.href = `/shop/${card.dataset.id}`;
           });
         }
         for (const btn of $("trophies").querySelectorAll("[data-claim]")) {
@@ -642,7 +642,7 @@
         }
         for (const card of $("items").querySelectorAll(".card")) {
           card.addEventListener("click", () => {
-            location.href = `/shop/item?id=${card.dataset.id}`;
+            location.href = `/shop/${card.dataset.id}`;
           });
         }
         for (const btn of $("items").querySelectorAll("[data-pin]")) {

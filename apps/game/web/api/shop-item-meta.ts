@@ -1,8 +1,12 @@
-// Serves /shop/item (see the rewrite in ../../vercel.json) so a shared
-// /shop/item?id=88 link shows that item's own name/photo instead of the
-// generic "Pixl · Shop" card every crawler used to see - crawlers don't run
-// the page's JS, so the fix has to live in the actual HTML response, not the
-// client-side fetch the page already does for real visitors.
+// Serves /shop/<id> (see the rewrite in ../../vercel.json) so a shared link
+// shows that item's own name/photo instead of the generic "Pixl · Shop" card
+// every crawler used to see - crawlers don't run the page's JS, so the fix has
+// to live in the actual HTML response, not the client-side fetch the page
+// already does for real visitors.
+//
+// The old form was /shop/item?id=88. Both still reach this handler: Vercel
+// rewrites to a query param either way, and the container passes the original
+// path through.
 //
 // This fetches the same static index.html the site always served (the
 // client-side page is untouched - identical JS/CSS/markup, same interactive
@@ -44,7 +48,9 @@ const esc = (s: string) =>
 
 export default async function handler(req: MinimalReq, res: MinimalRes): Promise<void> {
   const url = new URL(req.url ?? "/", "http://internal");
-  const id = url.searchParams.get("id");
+  // Vercel rewrites /shop/<id> to ?id=<id>; the container (serve.ts) passes
+  // the original path through, and ?id= also still arrives on old links.
+  const id = url.searchParams.get("id") ?? url.pathname.match(/^\/shop\/(\d+)\/?$/)?.[1] ?? null;
 
   const proto = (req.headers?.["x-forwarded-proto"] as string) || "https";
   const host = (req.headers?.host as string) || SITE_HOST;
@@ -61,7 +67,7 @@ export default async function handler(req: MinimalReq, res: MinimalRes): Promise
           const description = item.description
             ? item.description.slice(0, 200)
             : `${item.name}: ${Math.round(item.price).toLocaleString()} px in the Pixl shop.`;
-          const pageUrl = `${SITE}/shop/item?id=${id}`;
+          const pageUrl = `${SITE}/shop/${id}`;
           const image = `${SITE}/api/shop-og?id=${id}`;
 
           const block = [
@@ -84,6 +90,9 @@ export default async function handler(req: MinimalReq, res: MinimalRes): Promise
           ].join("\n    ");
 
           html = html.replace(new RegExp(`${OPEN}[\\s\\S]*?${CLOSE}`), block);
+          // The <title> is what a Slack unfurl falls back to and what the tab
+          // shows while the page boots, so it tracks the item too.
+          html = html.replace(/<title>[\s\S]*?<\/title>/, `<title>${esc(title)}</title>`);
         }
       }
     } catch (err) {

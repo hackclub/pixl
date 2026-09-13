@@ -6,6 +6,7 @@
   "rewrites": [
     { "source": "/docs/:slug", "destination": "/docs/:slug/" },
     { "source": "/shop/item", "destination": "/api/shop-item-meta" },
+    { "source": "/shop/:id(\\d+)", "destination": "/api/shop-item-meta?id=:id" },
     { "source": "/project/:id", "destination": "/api/project-meta?id=:id" },
     { "source": "/players/:id", "destination": "/api/player-meta?id=:id" },
     { "source": "/explore/leaderboard/:board", "destination": "/explore/leaderboard/" },

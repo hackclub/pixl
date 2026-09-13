@@ -128,8 +128,16 @@ Bun.serve({
     if (pathname === "/api/project-og") return runHandler(projectOg, url);
     if (pathname === "/api/player-og") return runHandler(playerOg, url);
 
-    // vercel.json rewrite: /shop/item -> /api/shop-item-meta
+    // vercel.json rewrite: /shop/:id -> /api/shop-item-meta. /shop/item was the
+    // old URL (with the id as ?id=); it still forwards so shared links survive.
     if (pathname === "/shop/item" || pathname === "/shop/item/") {
+      const legacy = url.searchParams.get("id");
+      if (legacy && /^\d+$/.test(legacy)) {
+        return Response.redirect(`/shop/${legacy}`, 301);
+      }
+      return Response.redirect("/shop/", 302);
+    }
+    if (/^\/shop\/\d+\/?$/.test(pathname)) {
       return runHandler(shopItemMeta, url);
     }
 

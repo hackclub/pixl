@@ -282,7 +282,12 @@
       Pixl.mountTopbar("shop", { guestNoShell: true });
 
       const $ = (id) => document.getElementById(id);
-      const itemId = Number(new URLSearchParams(location.search).get("id"));
+      // /shop/<id> is the canonical URL. ?id= still arrives from links shared
+      // before that, so it's read as a fallback rather than dropped.
+      const itemId = Number(
+        location.pathname.match(/^\/shop\/(\d+)\/?$/)?.[1] ??
+          new URLSearchParams(location.search).get("id"),
+      );
       let selected = null;
       let wallet = null;
       let xp = 0;
@@ -806,8 +811,10 @@
       // live (not just whatever Pixl already has cached), only ever fired
       // by an explicit button click, never automatically.
       function startAddressVerification(id) {
+        // The id is in the path (/shop/<id>) now, so the return URL doesn't
+        // need to carry it as a query param too.
         const back = new URL(location.href);
-        back.searchParams.set("id", id);
+        back.searchParams.delete("id");
         back.searchParams.delete("addr_verified");
         back.searchParams.set("addr_verified_return", "1");
         location.href = Pixl.apiUrl(
@@ -995,7 +1002,7 @@
         const params = new URLSearchParams(location.search);
         if (params.has("addr_verified_return")) {
           const verified = params.get("addr_verified") === "1";
-          history.replaceState(null, "", location.pathname + "?id=" + itemId);
+          history.replaceState(null, "", location.pathname);
           if (verified) {
             Pixl.toast("Address verified.");
             confirmAddressThenBuy(itemId);
