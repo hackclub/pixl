@@ -2309,7 +2309,10 @@
         Pixl.toast(p.id ? "Saved!" : "Project created!");
         await loadProjects();
         skipDetailsCollapse = true;
-        location.href = "/project/" + r.project.id;
+        // Navigating to the page we're already on reloads it, which killed the
+        // ship POST that SHIP fires right after this save.
+        if (Number(PERMALINK_ID) !== Number(r.project.id))
+          location.href = "/project/" + r.project.id;
         return true;
       }
 
