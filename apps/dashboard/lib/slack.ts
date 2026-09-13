@@ -24,6 +24,9 @@ async function slackCall(
   method: string,
   body: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
+  // slackHandle() runs inside the review page's render, so a Slack call with
+  // no deadline is a render with no deadline. Same 8s the other outbound
+  // calls here use.
   const res = await fetch(`${API}/${method}`, {
     method: "POST",
     headers: {
@@ -31,6 +34,7 @@ async function slackCall(
       "Content-Type": "application/x-www-form-urlencoded",
     },
     body: toFormBody(body),
+    signal: AbortSignal.timeout(8000),
   });
   const json = (await res.json()) as Record<string, unknown> & {
     ok: boolean;
