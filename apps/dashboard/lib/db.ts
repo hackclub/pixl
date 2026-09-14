@@ -755,37 +755,26 @@ export async function listReviewedProjects(): Promise<ShippedProject[]> {
   return hydrateHours((data ?? []) as ShippedProject[]);
 }
 
-// Pending-review count for the queue badges. With no opts it's the raw global
-// count (shipped + second_review) - fine for /api/review/pending, whose caller
-// (LiveReview) only watches it for a change to refresh on and never shows the
-// number, but wrong for anything a reviewer reads. Every badge must pass the
-// viewer so second_review work stays out of a plain reviewer's number.
+// Pending-review count for the "Needs review" badges (sidebar nav + the
+// /review tab bar) - first-pass ("shipped") work only. Second-pass
+// ("second_review") work has its own dedicated count (countSecondPassReviews)
+// and its own "Second pass" tab/badge - folding it in here used to make
+// "Needs review" show a combined total that didn't match either queue it was
+// supposed to summarize.
+//
+// /api/review/pending's caller (LiveReview) only watches this for a change to
+// refresh on and never shows the number.
 //
 // Projects another reviewer is holding are counted, matching what
 // listShippedProjects(..., { includeClaimed: true }) now puts in the list:
 // the badge and the list it labels have to agree, or one of them is lying.
 export async function countPendingReviews(
-  opts?: { viewer?: string; canSecondPass?: boolean },
+  opts?: { viewer?: string },
 ): Promise<number> {
-  if (!opts) {
-    const { count, error } = await db
-      .from("projects")
-      .select("id", { count: "exact", head: true })
-      .in("status", ["shipped", "second_review"])
-      .is("archived_at", null)
-      .is("rejected_at", null)
-      .is("banned_at", null);
-    if (error) {
-      console.error("countPendingReviews", error.message);
-      return 0;
-    }
-    return count ?? 0;
-  }
-  const statuses = opts.canSecondPass ? ["shipped", "second_review"] : ["shipped"];
   const { count, error } = await db
     .from("projects")
     .select("id", { count: "exact", head: true })
-    .in("status", statuses)
+    .eq("status", "shipped")
     .is("archived_at", null)
     .is("rejected_at", null)
     .is("banned_at", null);

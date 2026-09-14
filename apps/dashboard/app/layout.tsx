@@ -89,10 +89,7 @@ export default async function RootLayout({
     : null;
   const reviewCount =
     nav?.review && access
-      ? await countPendingReviews({
-          viewer: access.session.slackId,
-          canSecondPass: access.canSecondPass,
-        })
+      ? await countPendingReviews({ viewer: access.session.slackId })
       : 0;
   const reportCount = reportViewer ? await countOpenReports() : 0;
   const ticketCount = helper ? (await ticketStats()).open : 0;
