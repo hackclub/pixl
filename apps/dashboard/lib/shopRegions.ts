@@ -6,6 +6,7 @@ export const SHOP_REGIONS = [
   "EUROPE",
   "INDIA",
   "AFRICA",
+  "BANGLADESH",
 ] as const;
 export type ShopRegion = (typeof SHOP_REGIONS)[number];
 export const SHOP_REGION_LABELS: Record<ShopRegion, string> = {
@@ -16,4 +17,5 @@ export const SHOP_REGION_LABELS: Record<ShopRegion, string> = {
   EUROPE: "Europe",
   INDIA: "India",
   AFRICA: "Africa",
+  BANGLADESH: "Bangladesh",
 };

@@ -44,6 +44,7 @@ const REGION_ORDER = [
   "ASIA",
   "INDIA",
   "AFRICA",
+  "BANGLADESH",
 ];
 
 const px = (n: number | null | undefined) => `${n ?? 0}px`;

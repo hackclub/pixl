@@ -8,7 +8,7 @@ import { decryptPII } from "../crypto.js";
 
 const router = Router();
 
-const SHOP_REGIONS = ["US", "ASIA", "NORTH_AMERICA", "SOUTH_AMERICA", "EUROPE", "INDIA", "AFRICA"];
+const SHOP_REGIONS = ["US", "ASIA", "NORTH_AMERICA", "SOUTH_AMERICA", "EUROPE", "INDIA", "AFRICA", "BANGLADESH"];
 
 // ISO 3166-1 alpha-2 -> shop region, from Hack Club Auth's address.country
 // (confirmed live: it sends 2-letter codes, not full names). Only a first
@@ -39,7 +39,7 @@ const COUNTRY_REGION: Record<string, string> = {
   ZA: "AFRICA", MU: "AFRICA", RE: "AFRICA", KE: "AFRICA", ET: "AFRICA", TZ: "AFRICA",
   UG: "AFRICA", ZM: "AFRICA", ZW: "AFRICA", SN: "AFRICA", CI: "AFRICA", CM: "AFRICA",
   // Asia + Middle East + Oceania (no dedicated bucket for the latter two)
-  PK: "ASIA", PH: "ASIA", SG: "ASIA", BD: "ASIA", ID: "ASIA", IL: "ASIA", AE: "ASIA",
+  PK: "ASIA", PH: "ASIA", SG: "ASIA", BD: "BANGLADESH", ID: "ASIA", IL: "ASIA", AE: "ASIA",
   QA: "ASIA", MY: "ASIA", HK: "ASIA", VN: "ASIA", TW: "ASIA", NP: "ASIA", JP: "ASIA",
   KR: "ASIA", CN: "ASIA", TH: "ASIA", SA: "ASIA", KW: "ASIA", BH: "ASIA", OM: "ASIA",
   JO: "ASIA", LB: "ASIA", AU: "ASIA", NZ: "ASIA",
