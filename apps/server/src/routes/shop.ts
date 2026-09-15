@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { verifySessionToken } from "../auth/session.js";
 import { supabase } from "../db/client.js";
+import { orValue } from "../db/pgCompat.js";
 import { activeEvents } from "../events.js";
 import { levelFor } from "../xp.js";
 import { addNotification } from "./notifications.js";
@@ -83,7 +84,7 @@ async function fetchItems(filterIds?: number[], region?: string) {
     let q = supabase.from("shop_items").select(cols);
     if (filterIds) q = q.in("id", filterIds);
     else q = q.eq("active", true);
-    if (withRegion && region) q = q.or(`region.eq.${region},unlock_xp.gt.0`);
+    if (withRegion && region) q = q.or(`region.eq.${orValue(region)},unlock_xp.gt.0`);
     return q.order("position", { ascending: true }).order("id", { ascending: true });
   };
   const first = await build(ITEM_COLUMNS, true);

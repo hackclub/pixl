@@ -84,6 +84,74 @@ function ident(name: string): string {
     .join(".");
 }
 
+// Splits a comma separated filter list, respecting both paren depth (a
+// comma inside an "and(...)" group is not a separator) and double quoted
+// values (a comma inside a value is not a separator either). Without the
+// quote handling a value could close its own term and append new ones,
+// which is how an injected user id used to rewrite the whole filter.
+function splitTopLevel(list: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let quoted = false;
+  let escaped = false;
+  let cur = "";
+  for (const ch of list) {
+    if (escaped) {
+      cur += ch;
+      escaped = false;
+      continue;
+    }
+    if (quoted) {
+      if (ch === "\\") escaped = true;
+      else if (ch === '"') quoted = false;
+      cur += ch;
+      continue;
+    }
+    if (ch === '"') {
+      quoted = true;
+      cur += ch;
+      continue;
+    }
+    if (ch === "(") depth++;
+    if (ch === ")") depth--;
+    if (ch === "," && depth === 0) {
+      out.push(cur.trim());
+      cur = "";
+    } else cur += ch;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+
+// Any value interpolated into an .or() string has to go through this. The
+// filter string is parsed, not parameterized, so an unquoted value carrying a
+// comma, paren or dot is read as filter syntax and silently changes which
+// rows the query matches.
+export function orValue(v: unknown): string {
+  if (v === null || v === undefined) return "null";
+  return `"${String(v).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function unquote(raw: string): string {
+  const t = raw.trim();
+  if (t.length >= 2 && t.startsWith('"') && t.endsWith('"'))
+    return t.slice(1, -1).replace(/\\(.)/g, "$1");
+  return t;
+}
+
+// Only these follow "is" in a filter. It used to splice `raw` straight into
+// the SQL text, which made every .or() carrying a user supplied value a
+// direct injection point.
+const IS_LITERALS: Record<string, string> = {
+  null: "null",
+  "not.null": "not null",
+  true: "true",
+  false: "false",
+  unknown: "unknown",
+};
+
+const COLUMN_RE = /^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*$/;
+
 // PostgREST spells one filter as "col.op.value"; .or() takes them comma
 // separated, and a term can itself be an "and(...)"/"or(...)" group of flat
 // terms (e.g. "and(a.eq.1,b.eq.2),and(a.eq.2,b.eq.1)" for a symmetric-pair
@@ -113,14 +181,19 @@ function parseOrTerm(term: string): { text: string; values: unknown[] } | null {
   const col = t.slice(0, first);
   const op = t.slice(first + 1, second) as Op;
   const raw = t.slice(second + 1);
-  if (op === "is") return { text: `${ident(col)} is ${raw === "null" ? "null" : raw}`, values: [] };
+  if (!COLUMN_RE.test(col)) return null;
+  if (op === "is") {
+    const lit = IS_LITERALS[unquote(raw).toLowerCase()];
+    return lit ? { text: `${ident(col)} is ${lit}`, values: [] } : null;
+  }
   if (op === "in") {
-    const items = raw.replace(/^\(|\)$/g, "").split(",").map((s) => s.replace(/^"|"$/g, ""));
+    const items = splitTopLevel(raw.replace(/^\(|\)$/g, "")).map(unquote);
     return { text: `${ident(col)} = any(?)`, values: [items] };
   }
   const sqlOp = OPERATORS[op as keyof typeof OPERATORS];
   if (!sqlOp) return null;
-  return { text: `${ident(col)} ${sqlOp} ?`, values: [raw === "null" ? null : raw] };
+  const val = unquote(raw);
+  return { text: `${ident(col)} ${sqlOp} ?`, values: [raw.trim() === "null" ? null : val] };
 }
 
 // PostgREST lets a select embed a related table: "*, users(display_name)" or
@@ -133,21 +206,6 @@ interface Embed {
   cols: string[];
 }
 
-function splitTopLevel(list: string): string[] {
-  const out: string[] = [];
-  let depth = 0;
-  let cur = "";
-  for (const ch of list) {
-    if (ch === "(") depth++;
-    if (ch === ")") depth--;
-    if (ch === "," && depth === 0) {
-      out.push(cur.trim());
-      cur = "";
-    } else cur += ch;
-  }
-  if (cur.trim()) out.push(cur.trim());
-  return out;
-}
 
 function parseColumns(columns: string): { base: string[]; embeds: Embed[] } {
   const base: string[] = [];

@@ -84,6 +84,35 @@ function ident(name: string): string {
     .join(".");
 }
 
+// Any value interpolated into an .or() string has to go through this. The
+// filter string is parsed, not parameterized, so an unquoted value carrying a
+// comma, paren or dot is read as filter syntax and silently changes which
+// rows the query matches.
+export function orValue(v: unknown): string {
+  if (v === null || v === undefined) return "null";
+  return `"${String(v).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function unquote(raw: string): string {
+  const t = raw.trim();
+  if (t.length >= 2 && t.startsWith('"') && t.endsWith('"'))
+    return t.slice(1, -1).replace(/\\(.)/g, "$1");
+  return t;
+}
+
+// Only these follow "is" in a filter. It used to splice `raw` straight into
+// the SQL text, which made every .or() carrying a user supplied value a
+// direct injection point.
+const IS_LITERALS: Record<string, string> = {
+  null: "null",
+  "not.null": "not null",
+  true: "true",
+  false: "false",
+  unknown: "unknown",
+};
+
+const COLUMN_RE = /^[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*$/;
+
 // PostgREST spells one filter as "col.op.value"; .or() takes them comma
 // separated. Only the flat form the call sites use is supported.
 function parseOrTerm(term: string): { text: string; value: unknown } | null {
@@ -93,14 +122,18 @@ function parseOrTerm(term: string): { text: string; value: unknown } | null {
   const col = term.slice(0, first);
   const op = term.slice(first + 1, second) as Op;
   const raw = term.slice(second + 1);
-  if (op === "is") return { text: `${ident(col)} is ${raw === "null" ? "null" : raw}`, value: undefined };
+  if (!COLUMN_RE.test(col)) return null;
+  if (op === "is") {
+    const lit = IS_LITERALS[unquote(raw).toLowerCase()];
+    return lit ? { text: `${ident(col)} is ${lit}`, value: undefined } : null;
+  }
   if (op === "in") {
-    const items = raw.replace(/^\(|\)$/g, "").split(",").map((s) => s.replace(/^"|"$/g, ""));
+    const items = splitTopLevel(raw.replace(/^\(|\)$/g, "")).map(unquote);
     return { text: `${ident(col)} = any(?)`, value: items };
   }
   const sqlOp = OPERATORS[op as keyof typeof OPERATORS];
   if (!sqlOp) return null;
-  return { text: `${ident(col)} ${sqlOp} ?`, value: raw === "null" ? null : raw };
+  return { text: `${ident(col)} ${sqlOp} ?`, value: raw.trim() === "null" ? null : unquote(raw) };
 }
 
 // PostgREST lets a select embed a related table: "*, users(display_name)" or
@@ -113,11 +146,32 @@ interface Embed {
   cols: string[];
 }
 
+// Respects paren depth and double quoted values alike: a comma inside either
+// is part of a value, not a separator. Without the quote handling an
+// interpolated value could close its own term and append new filters.
 function splitTopLevel(list: string): string[] {
   const out: string[] = [];
   let depth = 0;
+  let quoted = false;
+  let escaped = false;
   let cur = "";
   for (const ch of list) {
+    if (escaped) {
+      cur += ch;
+      escaped = false;
+      continue;
+    }
+    if (quoted) {
+      if (ch === "\\") escaped = true;
+      else if (ch === '"') quoted = false;
+      cur += ch;
+      continue;
+    }
+    if (ch === '"') {
+      quoted = true;
+      cur += ch;
+      continue;
+    }
     if (ch === "(") depth++;
     if (ch === ")") depth--;
     if (ch === "," && depth === 0) {
@@ -295,7 +349,7 @@ class Builder<T = any> implements PromiseLike<PgResult<T[]>> {
 
     for (const group of this.orTerms) {
       const ors: string[] = [];
-      for (const term of group.split(",")) {
+      for (const term of splitTopLevel(group)) {
         const parsed = parseOrTerm(term.trim());
         if (!parsed) continue;
         if (parsed.value === undefined) ors.push(parsed.text);

@@ -1,4 +1,5 @@
 import { supabase } from "./db/client.js";
+import { orValue } from "./db/pgCompat.js";
 
 // Normalized roots (see normalize below): lowercase, leetspeak folded, symbols
 // stripped. Substring match, so common evasions like f.u-c_k or sh1t still hit.
@@ -365,7 +366,7 @@ export async function activeBan(userId: string): Promise<BanRow | null> {
     .select("*")
     .eq("user_id", userId)
     .is("lifted_at", null)
-    .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+    .or(`expires_at.is.null,expires_at.gt.${orValue(new Date().toISOString())}`)
     .order("created_at", { ascending: false })
     .limit(1);
   if (error) {

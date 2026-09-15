@@ -5,6 +5,7 @@ import { activeBan, censorChat, recordChatViolation } from "../moderation.js";
 import { areFriends } from "../social.js";
 import { getPixoChatReply } from "../pixoChat.js";
 import { supabase, type PlayerStateRow } from "../db/client.js";
+import { orValue } from "../db/pgCompat.js";
 import {
   type Lobby,
   lobbies,
@@ -382,7 +383,7 @@ async function sweepBans() {
     .select("user_id, expires_at")
     .in("user_id", [...players.keys()])
     .is("lifted_at", null)
-    .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`);
+    .or(`expires_at.is.null,expires_at.gt.${orValue(new Date().toISOString())}`);
   if (error) {
     console.error("Failed to sweep bans", error);
     return;

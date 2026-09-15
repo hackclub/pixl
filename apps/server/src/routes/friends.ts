@@ -1,9 +1,10 @@
 import { Router } from "express";
 import { verifySessionToken } from "../auth/session.js";
 import { supabase } from "../db/client.js";
+import { orValue } from "../db/pgCompat.js";
 import { addNotification } from "./notifications.js";
 import { presenceFor } from "../ws/gameServer.js";
-import { rowBetween, type FriendRow } from "../social.js";
+import { isUserId, rowBetween, type FriendRow } from "../social.js";
 
 const router = Router();
 
@@ -12,7 +13,7 @@ async function rowsFor(userId: string): Promise<FriendRow[]> {
   const { data, error } = await supabase
     .from("friends")
     .select("*")
-    .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`);
+    .or(`requester_id.eq.${orValue(userId)},addressee_id.eq.${orValue(userId)}`);
   if (error) {
     console.error("[friends] rows query failed", error);
     return [];
@@ -71,7 +72,7 @@ router.post("/api/friends/request", async (req, res) => {
   if (!session) return res.status(401).json({ ok: false });
 
   const targetId = typeof req.body?.userId === "string" ? req.body.userId : "";
-  if (!targetId || targetId === session.userId)
+  if (!isUserId(targetId) || targetId === session.userId)
     return res.status(400).json({ ok: false, reason: "Invalid target." });
 
   const { data: target } = await supabase
@@ -133,6 +134,7 @@ router.post("/api/friends/accept", async (req, res) => {
 
   const requesterId =
     typeof req.body?.userId === "string" ? req.body.userId : "";
+  if (!isUserId(requesterId)) return res.status(400).json({ ok: false });
   const { data, error } = await supabase
     .from("friends")
     .update({ status: "accepted" })
@@ -160,11 +162,13 @@ router.post("/api/friends/remove", async (req, res) => {
   if (!session) return res.status(401).json({ ok: false });
 
   const otherId = typeof req.body?.userId === "string" ? req.body.userId : "";
+  if (!isUserId(otherId)) return res.status(400).json({ ok: false });
   const { error } = await supabase
     .from("friends")
     .delete()
     .or(
-      `and(requester_id.eq.${session.userId},addressee_id.eq.${otherId}),and(requester_id.eq.${otherId},addressee_id.eq.${session.userId})`,
+      `and(requester_id.eq.${orValue(session.userId)},addressee_id.eq.${orValue(otherId)}),` +
+        `and(requester_id.eq.${orValue(otherId)},addressee_id.eq.${orValue(session.userId)})`,
     );
   if (error) {
     console.error("[friends] remove failed", error);
@@ -206,6 +210,7 @@ router.get("/api/players/profile", async (req, res) => {
   if (!session) return res.status(401).json({ ok: false });
 
   const targetId = typeof req.query.userId === "string" ? req.query.userId : "";
+  if (!isUserId(targetId)) return res.status(400).json({ ok: false });
   const { data: user } = await supabase
     .from("users")
     .select("id, display_name, skin, created_at")

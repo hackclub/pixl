@@ -11,6 +11,7 @@ import {
   hackatimeCutoffUnix,
   hackatimeCutoffLabel,
 } from "./_generated/config";
+import { orValue } from "@/lib/pgCompat";
 import {
   notifyShopInsert,
   notifyShopDelete,
@@ -2805,7 +2806,7 @@ export async function sendNotification(formData: FormData): Promise<void> {
     const { data } = await db
       .from("users")
       .select("id, display_name, real_name")
-      .or(`display_name.ilike.${likeName},real_name.ilike.${likeName}`)
+      .or(`display_name.ilike.${orValue(likeName)},real_name.ilike.${orValue(likeName)}`)
       .limit(2);
     if (!data || data.length !== 1) {
       if (backTo)
@@ -2860,7 +2861,7 @@ export async function searchPlayers(query: string): Promise<PlayerHit[]> {
   const { data, error } = await db
     .from("users")
     .select("id, display_name, real_name, slack_id")
-    .or(`display_name.ilike.%${clean}%,real_name.ilike.%${clean}%`)
+    .or(`display_name.ilike.${orValue(`%${clean}%`)},real_name.ilike.${orValue(`%${clean}%`)}`)
     .order("display_name", { ascending: true })
     .limit(8);
   if (error) {
