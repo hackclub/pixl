@@ -78,10 +78,10 @@ function VerdictButtons({
         {pending && clicked === "ban"
           ? secondPass
             ? "Banning…"
-            : "Proposing…"
+            : "Perm rejecting…"
           : secondPass
             ? "Ban project"
-            : "Propose ban"}
+            : "Perm reject project"}
       </Button>
     </>
   );
