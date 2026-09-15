@@ -57,6 +57,11 @@ export function ReviewTable({
       <Card className="p-10 text-center text-muted-foreground">{emptyLabel}</Card>
     );
   }
+  // Only the second-pass queue (and any other list mixing in second_review
+  // rows, like the "Awaiting your final pass" section) has a first-pass
+  // reviewer to show - the plain first-pass ("shipped") queue never does, so
+  // skip the column there instead of rendering it always-empty.
+  const showFirstPass = rows.some((p) => p.first_pass_by);
   return (
     <Card className="overflow-hidden py-0">
       <Table>
@@ -71,6 +76,11 @@ export function ReviewTable({
             <TableHead className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Status
             </TableHead>
+            {showFirstPass && (
+              <TableHead className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                First-pass reviewer
+              </TableHead>
+            )}
             <TableHead className="px-5 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Waiting
             </TableHead>
@@ -179,6 +189,12 @@ export function ReviewTable({
                     )}
                   </div>
                 </TableCell>
+
+                {showFirstPass && (
+                  <TableCell className="py-3.5 text-sm text-foreground/80 truncate max-w-[180px]">
+                    {p.first_pass_by ? p.first_pass_by.replace(/\s*\([^)]*\)\s*$/, "") : "—"}
+                  </TableCell>
+                )}
 
                 <TableCell className="px-5 py-3.5 text-right">
                   <div className="text-foreground/70">{waited(p.shipped_at)}</div>
