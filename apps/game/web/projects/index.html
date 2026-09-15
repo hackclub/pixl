@@ -4134,8 +4134,17 @@
       // an in-progress edit.
       document.addEventListener("visibilitychange", async () => {
         if (document.visibilityState !== "visible" || !Pixl.hasToken) return;
+        // The new-project form has nothing server-side to refresh (there's no
+        // project yet, so no review status to catch up on) and, unlike an
+        // existing project's editor, no autosave to fall back on - route()
+        // re-rendering it here just wiped out whatever was typed. The old
+        // focus check alone didn't cover this: it only skipped the refresh
+        // if an INPUT/TEXTAREA happened to still be focused at the exact
+        // moment the tab regained visibility, missing SELECT fields and the
+        // very common case of having clicked away from a field first.
+        if (NEW_PROJECT) return;
         const active = document.activeElement;
-        if (active && (active.tagName === "TEXTAREA" || active.tagName === "INPUT")) return;
+        if (active && (active.tagName === "TEXTAREA" || active.tagName === "INPUT" || active.tagName === "SELECT")) return;
         try {
           await loadProjects();
         } catch (e) {
