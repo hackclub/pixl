@@ -295,7 +295,7 @@ router.get("/api/explore/showcase", async (req, res) => {
 
   const { data: projects, error } = await supabase
     .from("projects")
-    .select("*")
+    .select(PUBLIC_PROJECT_COLUMNS)
     .is("archived_at", null)
     .is("rejected_at", null)
     .is("banned_at", null)
@@ -339,7 +339,7 @@ router.get("/api/explore/players/:id", async (req, res) => {
     userQuery("id, display_name, skin, created_at, pixels, avatar_url"),
     supabase
       .from("projects")
-      .select("*")
+      .select(PUBLIC_PROJECT_COLUMNS)
       .eq("user_id", id)
       .is("archived_at", null)
       .is("rejected_at", null)
