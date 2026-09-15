@@ -841,6 +841,48 @@ export async function countSpotCheckProjects(): Promise<number> {
   return count ?? 0;
 }
 
+// Proposed-ban queue: a first-pass reviewer's "ban" verdict never bans
+// outright (see reviewProject's first-pass branch) - it parks the project in
+// second_review with first_pass_verdict='banned' for a different, final
+// reviewer to confirm or overturn. This surfaces just those, super-admin only
+// (same as Second pass/Spot check), so a proposed ban doesn't get lost in the
+// general second-pass queue. Read-only list - the actual confirm/overturn
+// still happens on the project's own review page, which requires the same
+// full audit-note fields as any other second-pass verdict.
+export async function listProposedBanProjects(kind?: "software" | "hardware"): Promise<ShippedProject[]> {
+  let q = db
+    .from("projects")
+    .select("*, users(id, display_name, real_name, slack_id)")
+    .eq("status", "second_review")
+    .eq("first_pass_verdict", "banned")
+    .is("archived_at", null)
+    .is("rejected_at", null)
+    .is("banned_at", null);
+  if (kind) q = q.eq("kind", kind);
+  const { data, error } = await q.order("first_pass_at", { ascending: true }).limit(500);
+  if (error) {
+    console.error("listProposedBanProjects", error.message);
+    return [];
+  }
+  return hydrateHours((data ?? []) as ShippedProject[]);
+}
+
+export async function countProposedBanProjects(): Promise<number> {
+  const { count, error } = await db
+    .from("projects")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "second_review")
+    .eq("first_pass_verdict", "banned")
+    .is("archived_at", null)
+    .is("rejected_at", null)
+    .is("banned_at", null);
+  if (error) {
+    console.error("countProposedBanProjects", error.message);
+    return 0;
+  }
+  return count ?? 0;
+}
+
 async function attachPlayerNames(rows: (ModActionRow & { player_name?: string })[]) {
   const ids = [...new Set(rows.map((r) => r.user_id))];
   if (ids.length === 0) return;

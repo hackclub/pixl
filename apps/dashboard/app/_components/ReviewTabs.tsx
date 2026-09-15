@@ -10,11 +10,13 @@ export function ReviewTabs({
   pending,
   secondPassCount,
   spotCheckCount,
+  proposedBanCount,
 }: {
   isSuper: boolean;
   pending?: number;
   secondPassCount?: number;
   spotCheckCount?: number;
+  proposedBanCount?: number;
 }) {
   const pathname = usePathname();
   const tabs: { href: string; label: string; count?: number }[] = [
@@ -28,6 +30,12 @@ export function ReviewTabs({
     // pass", but that's easy to miss buried in the main queue , this is a
     // dedicated view of just that stage.
     tabs.push({ href: "/review/second-pass", label: "Second pass", count: secondPassCount });
+    // A first-pass reviewer's "ban" verdict is only a proposal (see
+    // reviewProject) - it sits in second_review like any other second-pass
+    // work, but a proposed ban is easy to miss buried in that general queue,
+    // so it gets its own tab. Read-only list; confirming/overturning still
+    // happens on the project's own review page.
+    tabs.push({ href: "/review/proposed-bans", label: "Proposed bans", count: proposedBanCount });
     // An optional QA pass over the same second_review stage - not an action
     // queue, just "has a super glanced at how this was first-pass reviewed".
     // Separate from Second pass above since it never blocks or resolves a

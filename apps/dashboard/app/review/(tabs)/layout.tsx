@@ -1,5 +1,10 @@
 import { requirePagePerm } from "@/lib/guard";
-import { countPendingReviews, countSecondPassReviews, countSpotCheckProjects } from "@/lib/db";
+import {
+  countPendingReviews,
+  countSecondPassReviews,
+  countSpotCheckProjects,
+  countProposedBanProjects,
+} from "@/lib/db";
 import { ReviewTabs } from "@/app/_components/ReviewTabs";
 
 export const dynamic = "force-dynamic";
@@ -20,10 +25,11 @@ export default async function ReviewLayout({
   // regardless of role - second-pass work has its own "Second pass"
   // tab/badge below, so folding it in here just made this badge show a
   // combined total that didn't match either queue.
-  const [pending, secondPassCount, spotCheckCount] = await Promise.all([
+  const [pending, secondPassCount, spotCheckCount, proposedBanCount] = await Promise.all([
     countPendingReviews({ viewer: access.session.slackId }),
     access.isSuper ? countSecondPassReviews() : Promise.resolve(undefined),
     access.isSuper ? countSpotCheckProjects() : Promise.resolve(undefined),
+    access.isSuper ? countProposedBanProjects() : Promise.resolve(undefined),
   ]);
   return (
     <div>
@@ -32,6 +38,7 @@ export default async function ReviewLayout({
         pending={pending}
         secondPassCount={secondPassCount}
         spotCheckCount={spotCheckCount}
+        proposedBanCount={proposedBanCount}
       />
       {children}
     </div>
