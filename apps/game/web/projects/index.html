@@ -1237,7 +1237,7 @@
         demo_is_repo: "The demo can't be your GitHub repo. Use a playable build or a Releases page.",
         demo_invalid: "That demo link isn't a valid URL.",
         hackatime_hours_required:
-          "Link Hackatime projects with at least 1 hour of coding first.",
+          "Link Hackatime projects with at least 1 hour of coding first (journal hours don't count toward this for software projects).",
         hackatime_unavailable:
           "Hackatime is unreachable right now, try again in a bit.",
         update_notes_required: "Describe what changed in this update.",
@@ -1368,7 +1368,7 @@
           return Date.now() < HT_CUTOFF_MS
             ? `wait for ${HT_CUTOFF_LABEL}: only hours tracked from then on count, and your ${Pixl.hours(total)} is all logged before it`
             : `track time from ${HT_CUTOFF_LABEL} onward: your ${Pixl.hours(total)} was all logged before then`;
-        return `≥ 1h tracked from ${HT_CUTOFF_LABEL} onward (you have ${Pixl.hours(counted)} of ${Pixl.hours(total)})`;
+        return `≥ 1h Hackatime-tracked from ${HT_CUTOFF_LABEL} onward (you have ${Pixl.hours(counted)} of ${Pixl.hours(total)})`;
       }
 
       // Shared by the initial checklist render and the live refresh as boxes
@@ -1384,7 +1384,7 @@
             : `${Pixl.hours(counted)} counts, ${Pixl.hours(total)} linked`;
         const label = isHardware
           ? "≥ 1h tracked (optional for hardware)"
-          : `≥ 1h tracked from ${HT_CUTOFF_LABEL} onward`;
+          : `≥ 1h Hackatime-tracked from ${HT_CUTOFF_LABEL} onward`;
         return `<span class="${ok ? "ok" : "no"}">${ok ? "+" : "-"}</span> ${label} <span class="teal">(${detail})</span>`;
       }
 
