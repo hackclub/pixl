@@ -92,7 +92,14 @@ export function SpotCheckTable({
             return (
               <TableRow key={p.id}>
                 <TableCell className="px-5 py-3.5">
-                  <Link href={`/review/${p.id}`} className="flex items-center gap-3 min-w-0">
+                  {/* prefetch=false: this page's server component claims the
+                      project for review as a side effect (claimReview), so
+                      Next's default link-prefetch-on-hover/viewport would
+                      silently "claim" every row just from scrolling this
+                      list, making it look like this admin is reviewing many
+                      projects at once. Same fix already applied in
+                      ReviewTable.tsx. */}
+                  <Link href={`/review/${p.id}`} prefetch={false} className="flex items-center gap-3 min-w-0">
                     {p.image_url ? (
                       <img
                         src={p.image_url}
