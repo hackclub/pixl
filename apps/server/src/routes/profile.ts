@@ -197,8 +197,20 @@ router.post("/api/profile/card-image", async (req, res) => {
   const session = token ? verifySessionToken(token) : null;
   if (!session) return res.status(401).json({ ok: false });
 
-  const url = typeof req.body?.url === "string" ? req.body.url.trim() : "";
-  if (!url.startsWith("https://") || url.length > 500)
+  const raw = typeof req.body?.url === "string" ? req.body.url.trim() : "";
+  // Parse it rather than prefix-match it. This value is rendered back into
+  // other players' pages, so anything that is not a plain https url (quotes,
+  // angle brackets, whitespace, a second scheme) has no business being stored.
+  let url = "";
+  try {
+    const parsed = new URL(raw);
+    // Store the normalized form, which percent-encodes anything exotic in the
+    // path/query rather than carrying it through verbatim.
+    if (parsed.protocol === "https:") url = parsed.href;
+  } catch {
+    url = "";
+  }
+  if (!url || url.length > 500 || /["'<>\s\\]/.test(url))
     return res.status(400).json({ ok: false, error: "bad_url" });
   const { error } = await supabase
     .from("users")

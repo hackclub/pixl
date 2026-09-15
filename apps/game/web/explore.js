@@ -16,9 +16,20 @@ function levelBadge(p) {
   return p.level != null ? `<span class="chip gold">LV ${p.level}</span>` : "";
 }
 
+// Only ever point an <img> at a real web url. A player picks their own
+// avatar_url, so it is attacker controlled all the way down to here.
+function safeImageUrl(raw) {
+  try {
+    const u = new URL(String(raw), location.href);
+    return u.protocol === "https:" || u.protocol === "http:" ? u.href : "";
+  } catch {
+    return "";
+  }
+}
+
 function avatarHtml(p) {
   const letter = Pixl.esc(String(p.display_name || "?").trim().charAt(0).toUpperCase() || "?");
-  const avatarUrl = p.avatar_url ? String(p.avatar_url) : "";
+  const avatarUrl = safeImageUrl(p.avatar_url || "");
   const pixifySrc =
     p.id && p.card_pixelate !== false
       ? Pixl.apiUrl(`/api/pixify?user=${encodeURIComponent(p.id)}&size=48`)
@@ -55,12 +66,15 @@ document.addEventListener(
   (e) => {
     const img = e.target;
     if (!(img instanceof HTMLImageElement) || !img.classList.contains("avatar-img")) return;
-    const fallbackSrc = img.dataset.fallbackSrc;
+    // Already scheme-checked on the way in, checked again on the way out:
+    // this is the one place a url from the DOM becomes a live img.src.
+    const fallbackSrc = safeImageUrl(img.dataset.fallbackSrc || "");
     if (fallbackSrc) {
       img.removeAttribute("data-fallback-src");
       img.src = fallbackSrc;
       return;
     }
+    // textContent, not innerHTML, the letter stays text whatever it is.
     if (img.parentNode) img.parentNode.textContent = img.dataset.fallbackLetter || "?";
   },
   true,
@@ -109,10 +123,18 @@ function projCard(p) {
 }
 
 // The canonical, unfurlable link for a profile.
+// Bound by delegation off data-player-id rather than an inline onclick: the
+// id comes out of the url, and an escaped value spliced into an inline
+// handler is still live JS once the browser decodes the entities.
+document.addEventListener("click", (e) => {
+  const btn = e.target instanceof Element ? e.target.closest(".copy-link-btn") : null;
+  if (btn) copyPlayerLink(e, btn.dataset.playerId || "");
+});
+
 window.copyPlayerLink = async function (e, id) {
   e.preventDefault();
   e.stopPropagation();
-  const link = location.origin + "/players/" + id;
+  const link = location.origin + "/players/" + encodeURIComponent(id);
   try {
     await navigator.clipboard.writeText(link);
     Pixl.toast("Link copied!");
@@ -414,7 +436,7 @@ async function showPlayer(id) {
     ${Pixl.hasToken
       ? `<a class="btn dark back-btn" href="/players/">← ALL PLAYERS</a>`
       : "" /* the directory needs a session, so a guest has nowhere to go back to */}
-    <button class="btn ghost back-btn" onclick="return copyPlayerLink(event,'${Pixl.esc(id)}')">COPY LINK</button>
+    <button class="btn ghost back-btn copy-link-btn" data-player-id="${Pixl.esc(id)}">COPY LINK</button>
     <div class="ticket-layout">
       <div class="ticket-frame">
         <div class="ticket-head"><span class="tname">${Pixl.esc(p.display_name)}</span></div>
