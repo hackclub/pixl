@@ -27,7 +27,7 @@ export default async function ReviewLayout({
   // combined total that didn't match either queue.
   const [pending, secondPassCount, spotCheckCount, proposedBanCount] = await Promise.all([
     countPendingReviews({ viewer: access.session.slackId }),
-    access.isSuper ? countSecondPassReviews() : Promise.resolve(undefined),
+    access.canSecondPass ? countSecondPassReviews() : Promise.resolve(undefined),
     access.isSuper ? countSpotCheckProjects() : Promise.resolve(undefined),
     access.isSuper ? countProposedBanProjects() : Promise.resolve(undefined),
   ]);
@@ -35,6 +35,7 @@ export default async function ReviewLayout({
     <div>
       <ReviewTabs
         isSuper={access.isSuper}
+        canSecondPass={access.canSecondPass}
         pending={pending}
         secondPassCount={secondPassCount}
         spotCheckCount={spotCheckCount}

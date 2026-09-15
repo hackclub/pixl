@@ -6,15 +6,20 @@ import { ReviewTable } from "@/app/_components/ReviewTable";
 
 export const dynamic = "force-dynamic";
 
-// A dedicated, super-admin-only view of every project sitting in second_review
-// (the final pass after fraud review). The main /review queue folds these
-// into an "Awaiting your final pass" section alongside everything else, which
-// is easy to miss , this gives supers a plain list of just that stage across
-// both kinds, oldest first.
+// A dedicated view of every project sitting in second_review (the final pass
+// after fraud review), for anyone who can do that pass - supers, and anyone
+// else granted the SECOND_PASS marker (e.g. a Sponsor, see addSponsor in
+// app/actions.ts, which promises "review access, including the final pass").
+// This used to be gated on isSuper alone, which silently locked non-super
+// second-pass reviewers out of this tab even though they could already work
+// the same queue via the main /review page's "Awaiting your final pass"
+// section , that queue folds these into a section alongside everything else,
+// easy to miss, this gives a plain list of just that stage across both kinds,
+// oldest first.
 export default async function SecondPassPage() {
   const access = await requirePagePerm(["review"]);
   await requireGuidelinesAck(access);
-  if (!access.isSuper) redirect("/review");
+  if (!access.canSecondPass) redirect("/review");
 
   const rows = await listSecondReviewProjects(access.session.slackId);
   const handles = await slackHandles(rows.map((p) => p.users?.slack_id));

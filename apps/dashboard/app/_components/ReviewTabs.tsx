@@ -7,12 +7,14 @@ import { Badge } from "@/components/ui/badge";
 
 export function ReviewTabs({
   isSuper,
+  canSecondPass,
   pending,
   secondPassCount,
   spotCheckCount,
   proposedBanCount,
 }: {
   isSuper: boolean;
+  canSecondPass: boolean;
   pending?: number;
   secondPassCount?: number;
   spotCheckCount?: number;
@@ -24,12 +26,18 @@ export function ReviewTabs({
     { href: "/review/reviewed", label: "Reviewed" },
     { href: "/review/stats", label: "Stats" },
   ];
-  if (isSuper) {
-    // Super-admin only: the second_review stage (after fraud review, before
-    // final approval) also shows inline on /review as "Awaiting your final
-    // pass", but that's easy to miss buried in the main queue , this is a
-    // dedicated view of just that stage.
+  if (canSecondPass) {
+    // Anyone who can do the final pass - supers, and anyone else granted the
+    // SECOND_PASS marker (e.g. a Sponsor, see addSponsor in app/actions.ts,
+    // which promises "review access, including the final pass"). This used to
+    // be nested under the isSuper block below, which silently hid the tab
+    // from non-super second-pass reviewers even though they could already
+    // work the same queue via /review's "Awaiting your final pass" section ,
+    // that's easy to miss buried in the main queue, this is a dedicated view
+    // of just that stage.
     tabs.push({ href: "/review/second-pass", label: "Second pass", count: secondPassCount });
+  }
+  if (isSuper) {
     // A first-pass reviewer's "ban" verdict is only a proposal (see
     // reviewProject) - it sits in second_review like any other second-pass
     // work, but a proposed ban is easy to miss buried in that general queue,
