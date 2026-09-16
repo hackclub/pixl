@@ -10,6 +10,13 @@ interface Bucket {
   resetAt: number;
 }
 
+export interface RateLimitOptions {
+  readonly windowMs: number;
+  readonly max: number;
+  readonly name: string;
+  readonly key?: (req: Request) => string;
+}
+
 const buckets = new Map<string, Bucket>();
 
 setInterval(() => {
@@ -17,19 +24,24 @@ setInterval(() => {
   for (const [k, b] of buckets) if (b.resetAt <= now) buckets.delete(k);
 }, 60_000).unref();
 
-export function rateLimit(opts: { windowMs: number; max: number; name: string }) {
+export function consumeRateLimit(opts: RateLimitOptions, key: string): number | null {
+  const bucketKey = `${opts.name}:${key}`;
+  const now = Date.now();
+  let bucket = buckets.get(bucketKey);
+  if (!bucket || bucket.resetAt <= now) {
+    bucket = { count: 0, resetAt: now + opts.windowMs };
+    buckets.set(bucketKey, bucket);
+  }
+  bucket.count++;
+  return bucket.count > opts.max ? Math.ceil((bucket.resetAt - now) / 1000) : null;
+}
+
+export function rateLimit(opts: RateLimitOptions) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (req.method === "OPTIONS") return next();
-    const key = `${opts.name}:${req.ip ?? "unknown"}`;
-    const now = Date.now();
-    let b = buckets.get(key);
-    if (!b || b.resetAt <= now) {
-      b = { count: 0, resetAt: now + opts.windowMs };
-      buckets.set(key, b);
-    }
-    b.count++;
-    if (b.count > opts.max) {
-      res.setHeader("Retry-After", Math.ceil((b.resetAt - now) / 1000));
+    const retryAfter = consumeRateLimit(opts, opts.key?.(req) ?? req.ip ?? "unknown");
+    if (retryAfter !== null) {
+      res.setHeader("Retry-After", retryAfter);
       return res.status(429).json({ ok: false, error: "rate_limited" });
     }
     next();

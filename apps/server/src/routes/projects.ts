@@ -388,7 +388,10 @@ export function parseProjectBody(
   const fundingUsd = needsFunding
     ? Math.min(Math.max(Number(body?.fundingUsd) || 0, 0), 100000)
     : 0;
-  const bomUrl = needsFunding ? String(body?.bomUrl ?? "").trim().slice(0, 500) : "";
+  // BOM URLs are written only by the project-scoped upload endpoint. Accepting
+  // them from this general project payload would let callers attach arbitrary
+  // storage URLs without the endpoint's ownership and CSV checks.
+  const bomUrl = "";
   const cartScreenshotUrls = needsFunding && Array.isArray(body?.cartScreenshotUrls)
     ? body.cartScreenshotUrls.map((u: unknown) => String(u)).slice(0, 10)
     : [];
@@ -493,11 +496,12 @@ router.put("/api/projects/:id", async (req, res) => {
   // their RE). Keep the existing level on approved projects; the reviewer owns it.
   const { data: cur } = await supabase
     .from("projects")
-    .select("status, level, sidequest_id")
+    .select("status, level, sidequest_id, bom_url")
     .eq("id", id)
     .eq("user_id", session.userId)
     .maybeSingle();
   const fields: Record<string, unknown> = { ...parsed.fields };
+  fields.bom_url = (cur as { bom_url?: string } | null)?.bom_url ?? "";
 
   // Trial link is picked at creation and editable while the project is a draft.
   // Same acceptance rule as create: only a Trial the player has accepted links.

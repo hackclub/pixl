@@ -1,6 +1,9 @@
 import express, { Router } from "express";
 import { verifySessionToken } from "../auth/session.js";
+import { supabase } from "../db/client.js";
 import { checkImageSafe, MAX_MODERATE_BYTES } from "../imageModeration.js";
+import { consumeRateLimit, type RateLimitOptions } from "../rateLimit.js";
+import { validateBomCsv } from "./bomCsv.js";
 
 const router = Router();
 
@@ -86,17 +89,50 @@ router.post(
 );
 
 const CSV_TYPES = ["text/csv", "application/vnd.ms-excel", "application/csv"];
-const MAX_CSV_BYTES = 2_000_000;
+const MAX_CSV_BYTES = 512 * 1024;
+const BOM_ACCOUNT_LIMIT: RateLimitOptions = {
+  windowMs: 24 * 60 * 60 * 1000,
+  max: 20,
+  name: "bom_upload_account",
+};
+const BOM_PROJECT_LIMIT: RateLimitOptions = {
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  name: "bom_upload_project",
+};
 
-// A hardware ship's Bill of Materials, not an image, so no vision moderation,
-// just a straight proxy to the CDN like the image route above.
 router.post(
-  "/api/uploads/bom",
+  "/api/projects/:projectId/bom",
   express.raw({ type: CSV_TYPES, limit: MAX_CSV_BYTES }),
   async (req, res) => {
     const token = typeof req.query.token === "string" ? req.query.token : "";
     const session = token ? verifySessionToken(token) : null;
     if (!session) return res.status(401).json({ ok: false });
+
+    const projectId = Number(req.params.projectId);
+    if (!Number.isSafeInteger(projectId) || projectId <= 0)
+      return res.status(400).json({ ok: false, error: "project_not_found" });
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("id", projectId)
+      .eq("user_id", session.userId)
+      .maybeSingle();
+    if (projectError) {
+      console.error("[uploads] bom project lookup failed", projectError);
+      return res.status(500).json({ ok: false });
+    }
+    if (!project) return res.status(404).json({ ok: false, error: "project_not_found" });
+    const accountRetryAfter = consumeRateLimit(BOM_ACCOUNT_LIMIT, session.userId);
+    if (accountRetryAfter !== null) {
+      res.setHeader("Retry-After", accountRetryAfter);
+      return res.status(429).json({ ok: false, error: "rate_limited" });
+    }
+    const projectRetryAfter = consumeRateLimit(BOM_PROJECT_LIMIT, String(projectId));
+    if (projectRetryAfter !== null) {
+      res.setHeader("Retry-After", projectRetryAfter);
+      return res.status(429).json({ ok: false, error: "rate_limited" });
+    }
 
     const key = process.env.HACKCLUB_CDN_KEY;
     if (!key) {
@@ -111,6 +147,8 @@ router.post(
         return res.status(415).json({ ok: false, error: "unsupported_type" });
       return res.status(400).json({ ok: false, error: "empty_body" });
     }
+    const validation = validateBomCsv(buf);
+    if (!validation.ok) return res.status(400).json({ ok: false, error: validation.error });
 
     const form = new FormData();
     form.append("file", new Blob([new Uint8Array(buf)], { type: "text/csv" }), `bom-${Date.now()}.csv`);
@@ -129,6 +167,15 @@ router.post(
       if (!json.url) {
         console.error("[uploads] bom cdn response missing url", json);
         return res.status(502).json({ ok: false, error: "cdn_failed" });
+      }
+      const { error: updateError } = await supabase
+        .from("projects")
+        .update({ bom_url: json.url })
+        .eq("id", projectId)
+        .eq("user_id", session.userId);
+      if (updateError) {
+        console.error("[uploads] bom project update failed", updateError);
+        return res.status(500).json({ ok: false });
       }
       res.json({ ok: true, url: json.url });
     } catch (e) {

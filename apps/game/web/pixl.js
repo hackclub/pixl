@@ -297,16 +297,19 @@ const Pixl = (() => {
   }
 
   async function upload(file, opts = {}) {
-    // opts.kind: "image" (default, /api/uploads) or "bom" (/api/uploads/bom,
+    // opts.kind: "image" (default, /api/uploads) or "bom" (project-scoped,
     // a hardware ship's Bill of Materials CSV, see MAX_CSV_BYTES server-side).
     const isBom = opts.kind === "bom";
     // Must match MAX_MODERATE_BYTES in apps/server/src/imageModeration.ts (images)
     // or MAX_CSV_BYTES in apps/server/src/routes/uploads.ts (bom), those are the
     // hard server-side caps, so reject early instead of making the caller wait
     // on an upload that's guaranteed to 413.
-    if (file && file.size > (isBom ? 2_000_000 : 15_000_000))
+    if (file && file.size > (isBom ? 512 * 1024 : 15_000_000))
       throw new Error("file_too_large");
-    const res = await fetch(apiUrl(isBom ? "/api/uploads/bom" : "/api/uploads"), {
+    if (isBom && !Number.isSafeInteger(Number(opts.projectId)))
+      throw new Error("project_required");
+    const path = isBom ? `/api/projects/${Number(opts.projectId)}/bom` : "/api/uploads";
+    const res = await fetch(apiUrl(path), {
       method: "POST",
       headers: { "Content-Type": file.type || (isBom ? "text/csv" : "image/png") },
       body: file,

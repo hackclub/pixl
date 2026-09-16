@@ -1248,7 +1248,10 @@
         project_banned: "This project is banned and can't be shipped.",
         cdn_not_configured: "Image uploads aren't configured on the server.",
         cdn_failed: "Image upload failed, try again.",
-        file_too_large: "That image is too big. Keep it under 15 MB.",
+        file_too_large: "That file is too big.",
+        invalid_csv: "Upload a valid BOM CSV with a header and at least one part.",
+        project_not_found: "That project isn't available for a BOM upload.",
+        project_required: "Save the project before uploading a BOM.",
         unsupported_type: "That file type isn't supported , use PNG, JPG, or WebP.",
         empty_body: "That upload came through empty, try again.",
         journal_too_short:
@@ -2195,7 +2198,11 @@
             const file = $("f-bom-file").files[0];
             if (!file) return;
             Pixl.toast("Uploading BOM…");
-            const task = Pixl.upload(file, { kind: "bom" })
+            if (!p.id) {
+              Pixl.toast("Save the project before uploading a BOM.", true);
+              return;
+            }
+            const task = Pixl.upload(file, { kind: "bom", projectId: p.id })
               .then((url) => {
                 form.bomUrl = url;
                 if ($("f-bom-status"))
