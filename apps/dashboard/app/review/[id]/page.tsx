@@ -18,6 +18,7 @@ import { fetchBomRows } from "@/lib/bom";
 import { fetchUserSpans, attachTrackedTime, fetchTrustFactor, fetchHackatimeReport } from "@/lib/hackatime";
 import { yswsShipsFor } from "@/lib/ysws";
 import { renderMarkdown } from "@/lib/markdown";
+import { isSafeUrl } from "@/lib/safeUrl";
 import { db } from "@/lib/db";
 import { ReviewForm, type BountyOption } from "@/app/_components/ReviewForm";
 import {
@@ -634,21 +635,21 @@ export default async function ReviewDetail({
           )}
 
           <div className="flex items-center gap-3 flex-wrap">
-            {p.repo_url && (
+            {isSafeUrl(p.repo_url) && (
               <Button asChild variant="secondary" size="sm">
                 <a href={p.repo_url} target="_blank" rel="noreferrer">
                   Repo ↗
                 </a>
               </Button>
             )}
-            {p.repo_url && (
+            {isSafeUrl(p.repo_url) && (
               <Button asChild variant="secondary" size="sm">
                 <a href={`${p.repo_url.replace(/\/$/, "")}#readme`} target="_blank" rel="noreferrer">
                   README ↗
                 </a>
               </Button>
             )}
-            {p.demo_url && (
+            {isSafeUrl(p.demo_url) && (
               <Button asChild variant="secondary" size="sm">
                 <a href={p.demo_url} target="_blank" rel="noreferrer">
                   Live demo ↗

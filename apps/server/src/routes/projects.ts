@@ -8,6 +8,7 @@ import { findAllInYswsArchive } from "../ysws/archive.js";
 import { buildDoubleDip, type TeamMember } from "../ysws/doubleDip.js";
 import { fetchHackatimeStats, fetchTrackedSecondsSince } from "../hackatime/api.js";
 import { postShipToSlack } from "../shipNotify.js";
+import { normalizeProjectUrl } from "./projectUrlSafety.js";
 
 const router = Router();
 
@@ -219,19 +220,12 @@ function isVideoUrl(url: string): boolean {
   return VIDEO_HOSTS.has(host);
 }
 
-// Players routinely paste a link without the scheme ("foo.itch.io/game"). Store
-// it with https:// so it's a real URL , otherwise every liveness check (which
-// does fetch(url)) throws and the ship is rejected as "unreachable".
-function ensureProtocol(raw: string): string {
-  const s = String(raw ?? "").trim();
-  if (!s) return "";
-  return /^[a-z][a-z0-9+.-]*:\/\//i.test(s) ? s : `https://${s}`;
-}
-
 // A demo must be a playable page, not the source. A bare github.com/<user>/<repo>
 // link is rejected; github *releases* pages are allowed (they host builds).
 function normalizeDemoUrl(raw: string): { error: string } | { url: string } {
-  const s = ensureProtocol(raw).slice(0, 500);
+  const normalized = normalizeProjectUrl(raw);
+  if (!normalized.ok) return { error: "demo_invalid" };
+  const s = normalized.url;
   if (!s) return { url: "" };
   let u: URL;
   try {
@@ -371,10 +365,22 @@ export function parseProjectBody(
 ): { error: string; fields?: never } | { error?: never; fields: ProjectFields } {
   const name = String(body?.name ?? "").trim().slice(0, 120);
   if (!name) return { error: "name_required" };
-  // Save accepts any URL , repo/demo are only validated at ship time, so people
-  // can jot down a link and fix it up before shipping.
-  const repoUrl = ensureProtocol(body?.repoUrl).slice(0, 500);
-  const demoUrl = ensureProtocol(body?.demoUrl).slice(0, 500);
+  // Save accepts any ordinary link , repo/demo are only checked for being the
+  // *right kind* of link (a GitHub repo, a live demo) at ship time, so people
+  // can jot one down and fix it up before shipping. But a dangerous URL
+  // scheme (javascript:, vbscript:, file:, data:, ...) is never acceptable at
+  // any stage, ship-time or not: a draft (which never goes through ship-time
+  // validation) is still exposed read-only via GET /api/explore/projects, and
+  // every page that renders repo_url/demo_url puts it straight into
+  // <a href=...> - HTML-escaping that value doesn't stop a dangerous scheme
+  // from executing when someone clicks it. normalizeProjectUrl rejects those
+  // outright instead of storing them.
+  const repoUrlResult = normalizeProjectUrl(body?.repoUrl);
+  if (!repoUrlResult.ok) return { error: "repo_invalid" };
+  const demoUrlResult = normalizeProjectUrl(body?.demoUrl);
+  if (!demoUrlResult.ok) return { error: "demo_invalid" };
+  const repoUrl = repoUrlResult.url;
+  const demoUrl = demoUrlResult.url;
   const usedAi = body?.usedAi === true;
   const aiNotes = String(body?.aiNotes ?? "").trim().slice(0, 500);
   if (usedAi && aiNotes.length < 10) return { error: "ai_notes_required" };
@@ -392,6 +398,13 @@ export function parseProjectBody(
   // them from this general project payload would let callers attach arbitrary
   // storage URLs without the endpoint's ownership and CSV checks.
   const bomUrl = "";
+  // image_url is normally the real upload endpoint's own storage URL, but this
+  // payload still accepts it directly (unlike bom_url above) - defense in
+  // depth against a dangerous scheme landing here the same way repo_url/
+  // demo_url could. <img src="javascript:...">  doesn't execute in modern
+  // browsers, but there's no reason to store a non-http(s) value here either.
+  const imageUrlResult = normalizeProjectUrl(body?.imageUrl);
+  const imageUrl = imageUrlResult.ok ? imageUrlResult.url : "";
   const cartScreenshotUrls = needsFunding && Array.isArray(body?.cartScreenshotUrls)
     ? body.cartScreenshotUrls.map((u: unknown) => String(u)).slice(0, 10)
     : [];
@@ -407,7 +420,7 @@ export function parseProjectBody(
       description: String(body?.description ?? "").trim().slice(0, 2000),
       repo_url: repoUrl,
       demo_url: demoUrl,
-      image_url: String(body?.imageUrl ?? "").trim().slice(0, 500),
+      image_url: imageUrl,
       project_type: projectType,
       used_ai: usedAi,
       ai_notes: usedAi ? aiNotes : "",

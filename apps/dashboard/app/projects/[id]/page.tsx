@@ -22,6 +22,7 @@ import {
 import { CommitList } from "@/app/_components/CommitList";
 import { PendingButton } from "@/app/_components/PendingButton";
 import { renderMarkdown } from "@/lib/markdown";
+import { isSafeUrl } from "@/lib/safeUrl";
 import { slackHandle } from "@/lib/slack";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -221,21 +222,21 @@ export default async function ProjectPage({
           </div>
         )}
         <div className="flex gap-2 flex-wrap mt-4 text-sm font-bold">
-          {project.repo_url && (
+          {project.repo_url && isSafeUrl(project.repo_url) && (
             <Button asChild variant="secondary">
               <a href={project.repo_url} target="_blank" rel="noreferrer">
                 Repo
               </a>
             </Button>
           )}
-          {project.demo_url && (
+          {project.demo_url && isSafeUrl(project.demo_url) && (
             <Button asChild variant="secondary">
               <a href={project.demo_url} target="_blank" rel="noreferrer">
                 Demo
               </a>
             </Button>
           )}
-          {!project.repo_url && !project.demo_url && (
+          {!isSafeUrl(project.repo_url) && !isSafeUrl(project.demo_url) && (
             <span className="text-muted-foreground font-normal">No links yet.</span>
           )}
         </div>

@@ -18,6 +18,7 @@ import {
   rePerHour,
 } from "@/app/_generated/config";
 import { TECHNICAL_FEATURES_MIN } from "@/lib/auditNote";
+import { isSafeUrl } from "@/lib/safeUrl";
 import { PendingButton } from "@/app/_components/PendingButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -827,7 +828,7 @@ export function ReviewForm({
 
       <div className={step === 1 ? "flex flex-col gap-4" : "hidden"}>
       <div className="flex flex-wrap gap-2 items-center text-sm font-bold">
-        {repoUrl && (
+        {repoUrl && isSafeUrl(repoUrl) && (
           <Button asChild variant="secondary">
             <a
               href={repoUrl}
@@ -839,7 +840,7 @@ export function ReviewForm({
             </a>
           </Button>
         )}
-        {demoUrl && (
+        {demoUrl && isSafeUrl(demoUrl) && (
           <Button asChild variant="secondary">
             <a
               href={demoUrl}
