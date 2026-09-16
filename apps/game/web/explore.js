@@ -26,13 +26,45 @@ function avatarHtml(p) {
   const src = pixifySrc || avatarUrl;
   if (!src) return `<div class="avatar">${letter}</div>`;
   // Pixify pulls from Slack and can 404/503 (no Slack photo, service down);
-  // fall back to the player's own uploaded pfp before giving up on a letter.
-  const fallback = pixifySrc && avatarUrl ? Pixl.esc(avatarUrl) : "";
-  const onerror = fallback
-    ? `this.onerror=function(){this.parentNode.textContent='${letter}'};this.src='${fallback}'`
-    : `this.parentNode.textContent='${letter}'`;
-  return `<div class="avatar"><img src="${Pixl.esc(src)}" alt="" loading="lazy" onerror="${onerror}"></div>`;
+  // fall back to the player's own uploaded pfp (avatar_url - player-set via
+  // POST /api/profile/card-image, only required to start with "https://",
+  // otherwise free text) before giving up on a letter.
+  //
+  // This used to build the fallback as an inline onerror="..." JS-string
+  // with avatar_url spliced into a single-quoted literal. That's unsafe even
+  // through Pixl.esc(): a browser decodes HTML entities inside an event
+  // handler ATTRIBUTE before handing the result to the JS engine, so
+  // esc()'s `'` -> `&#39;` round-trips right back into a real `'` by the
+  // time it's parsed as code - an avatar_url like
+  // "https://x'};(function(){...})();//" closes the JS string early and
+  // runs arbitrary script the moment the image fails to load, no click
+  // needed. Carrying the values in data-* attributes and applying them via
+  // a real "error" listener (below) with .src/.textContent assignment
+  // sidesteps that whole class of bug - those are DOM property writes, never
+  // re-parsed as HTML or JS.
+  const fallbackSrc = pixifySrc && avatarUrl ? Pixl.esc(avatarUrl) : "";
+  return `<div class="avatar"><img class="avatar-img" src="${Pixl.esc(src)}" alt="" loading="lazy" data-fallback-src="${fallbackSrc}" data-fallback-letter="${letter}"></div>`;
 }
+
+// error events don't bubble, so avatarHtml()'s fallback chain needs a
+// capture-phase listener on a common ancestor rather than an inline
+// onerror="..." per <img> (see the comment in avatarHtml for why that used
+// to be unsafe). Tries the uploaded pfp once, then falls back to the letter.
+document.addEventListener(
+  "error",
+  (e) => {
+    const img = e.target;
+    if (!(img instanceof HTMLImageElement) || !img.classList.contains("avatar-img")) return;
+    const fallbackSrc = img.dataset.fallbackSrc;
+    if (fallbackSrc) {
+      img.removeAttribute("data-fallback-src");
+      img.src = fallbackSrc;
+      return;
+    }
+    if (img.parentNode) img.parentNode.textContent = img.dataset.fallbackLetter || "?";
+  },
+  true,
+);
 
 // Same label vocabulary as statusInfo() in the player's own projects page: a
 // project only reads SHIPPED once it's actually approved, not the moment it's

@@ -12,6 +12,7 @@ import { setJournalHours } from "@/app/actions";
 import { PendingButton } from "@/app/_components/PendingButton";
 import { Input } from "@/components/ui/input";
 import { parseAuditNote, type AuditHeader } from "@/lib/auditNote";
+import { isSafeUrl } from "@/lib/safeUrl";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -282,12 +283,12 @@ export function ReviewDetailTabs({
                   </div>
                 )}
                 <div className="flex gap-3 text-xs">
-                  {s.codeUrl && s.codeUrl !== "null" && (
+                  {s.codeUrl && s.codeUrl !== "null" && isSafeUrl(s.codeUrl) && (
                     <a href={s.codeUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">
                       repo ↗
                     </a>
                   )}
-                  {s.demoUrl && s.demoUrl !== "null" && (
+                  {s.demoUrl && s.demoUrl !== "null" && isSafeUrl(s.demoUrl) && (
                     <a href={s.demoUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline">
                       demo ↗
                     </a>

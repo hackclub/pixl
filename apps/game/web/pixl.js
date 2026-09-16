@@ -240,6 +240,29 @@ const Pixl = (() => {
     })[c]);
   }
 
+  // esc() only makes a value safe as HTML TEXT/attribute content - it does
+  // nothing to stop a dangerous URL SCHEME (javascript:, vbscript:, file:,
+  // data:, ...) from executing once a visitor clicks an <a href> built from
+  // it. The server rejects those at save time for repo_url/demo_url (see
+  // apps/server/src/routes/projectUrlSafety.ts), but this is the
+  // defense-in-depth backstop on the render side for any database-controlled
+  // URL - old rows saved before that validation existed, or any other field
+  // that reaches an href/src without going through that check. Returns the
+  // URL unchanged if it's a plain http(s) link (a relative link like "/foo"
+  // resolves against the current page and passes too), or "" otherwise -
+  // callers should skip rendering the link entirely (or fall back to inert
+  // text) when this returns "".
+  function safeHref(url) {
+    const s = String(url ?? "").trim();
+    if (!s) return "";
+    try {
+      const u = new URL(s, location.href);
+      return u.protocol === "http:" || u.protocol === "https:" ? s : "";
+    } catch {
+      return "";
+    }
+  }
+
   function gate() {
     document.body.insertAdjacentHTML("beforeend", `
       <div class="gate">
@@ -1335,5 +1358,5 @@ const Pixl = (() => {
     document.addEventListener("DOMContentLoaded", gate);
   }
 
-  return { API, config, token, api, apiUrl, send, upload, esc, bbcode, bbstrip, markdown, toast, mountTopbar, loadWallet, loadRestoration, timeAgo, countdown, hours, hasToken: !!token, runTour, maybeOnboard, ONBOARDING_STEPS, confirm: confirmDialog, setTheme, loginUrl, enhanceSelects, reForHours, projectPayoutUsd, projectPayoutPx };
+  return { API, config, token, api, apiUrl, send, upload, esc, safeHref, bbcode, bbstrip, markdown, toast, mountTopbar, loadWallet, loadRestoration, timeAgo, countdown, hours, hasToken: !!token, runTour, maybeOnboard, ONBOARDING_STEPS, confirm: confirmDialog, setTheme, loginUrl, enhanceSelects, reForHours, projectPayoutUsd, projectPayoutPx };
 })();

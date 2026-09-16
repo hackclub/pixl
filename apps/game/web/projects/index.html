@@ -1569,8 +1569,8 @@
         const secs = linkedSeconds(p);
         return `
         <div class="proj-links">
-          ${p.repo_url ? `<a href="${Pixl.esc(p.repo_url)}" target="_blank" rel="noopener">CODE</a>` : ""}
-          ${p.demo_url ? `<a href="${Pixl.esc(p.demo_url)}" target="_blank" rel="noopener">DEMO</a>` : ""}
+          ${Pixl.safeHref(p.repo_url) ? `<a href="${Pixl.esc(p.repo_url)}" target="_blank" rel="noopener">CODE</a>` : ""}
+          ${Pixl.safeHref(p.demo_url) ? `<a href="${Pixl.esc(p.demo_url)}" target="_blank" rel="noopener">DEMO</a>` : ""}
           <a href="#" data-copy="${Number(p.id)}">COPY LINK</a>
           ${ht ? `<span class="ht">Hackatime: ${Pixl.esc(ht)}${secs ? ` · ${Pixl.hours(secs)}` : ""}</span>` : `<span class="ht">no hackatime linked</span>`}
           ${p.pixels_earned ? `<span class="earned">+${Math.round(p.pixels_earned)} px earned</span>` : ""}
@@ -1829,11 +1829,11 @@
       </div>
       <div class="two-col">
         <div class="form-row">
-          <label>GITHUB REPO ${p.repo_url ? `<a class="open-link" href="${Pixl.esc(p.repo_url)}" target="_blank" rel="noopener">↗ open</a>` : ""}</label>
+          <label>GITHUB REPO ${Pixl.safeHref(p.repo_url) ? `<a class="open-link" href="${Pixl.esc(p.repo_url)}" target="_blank" rel="noopener">↗ open</a>` : ""}</label>
           <input class="field" id="f-repo" maxlength="500" value="${Pixl.esc(p.repo_url || "")}" placeholder="https://github.com/you/project">
         </div>
         <div class="form-row">
-          <label>DEMO / PLAYABLE LINK ${p.demo_url ? `<a class="open-link" href="${Pixl.esc(p.demo_url)}" target="_blank" rel="noopener">↗ open</a>` : ""}</label>
+          <label>DEMO / PLAYABLE LINK ${Pixl.safeHref(p.demo_url) ? `<a class="open-link" href="${Pixl.esc(p.demo_url)}" target="_blank" rel="noopener">↗ open</a>` : ""}</label>
           <input class="field" id="f-demo" maxlength="500" value="${Pixl.esc(p.demo_url || "")}" placeholder="https://…">
         </div>
       </div>
@@ -2423,8 +2423,8 @@
       </div>
       ${p.description ? `<div class="jbody md" style="margin-bottom:16px">${Pixl.markdown(p.description)}</div>` : ""}
       <div class="proj-meta" style="margin-bottom:18px">
-        ${p.repo_url ? `<a class="btn ghost" href="${Pixl.esc(p.repo_url)}" target="_blank" rel="noopener noreferrer">REPO</a>` : ""}
-        ${p.demo_url ? `<a class="btn ghost" href="${Pixl.esc(p.demo_url)}" target="_blank" rel="noopener noreferrer">DEMO</a>` : ""}
+        ${Pixl.safeHref(p.repo_url) ? `<a class="btn ghost" href="${Pixl.esc(p.repo_url)}" target="_blank" rel="noopener noreferrer">REPO</a>` : ""}
+        ${Pixl.safeHref(p.demo_url) ? `<a class="btn ghost" href="${Pixl.esc(p.demo_url)}" target="_blank" rel="noopener noreferrer">DEMO</a>` : ""}
       </div>
       <div class="proj-meta" style="margin-bottom:18px">
         <span>${data.upvotes || 0} upvote${data.upvotes === 1 ? "" : "s"}</span>
@@ -2795,8 +2795,8 @@
       ${p.image_url ? `<div class="proj-hero"><img src="${Pixl.esc(p.image_url)}" alt=""></div>` : ""}
       ${p.description ? `<p style="margin-bottom:14px">${Pixl.esc(p.description)}</p>` : ""}
       <div class="proj-meta" style="margin-bottom:18px">
-        ${p.repo_url ? `<a class="btn ghost" href="${Pixl.esc(p.repo_url)}" target="_blank" rel="noreferrer">REPO</a>` : ""}
-        ${p.demo_url ? `<a class="btn ghost" href="${Pixl.esc(p.demo_url)}" target="_blank" rel="noreferrer">DEMO</a>` : ""}
+        ${Pixl.safeHref(p.repo_url) ? `<a class="btn ghost" href="${Pixl.esc(p.repo_url)}" target="_blank" rel="noreferrer">REPO</a>` : ""}
+        ${Pixl.safeHref(p.demo_url) ? `<a class="btn ghost" href="${Pixl.esc(p.demo_url)}" target="_blank" rel="noreferrer">DEMO</a>` : ""}
       </div>
 
       <div class="section-h">COLLABORATORS</div>
