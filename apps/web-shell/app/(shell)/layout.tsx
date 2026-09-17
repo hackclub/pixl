@@ -1,7 +1,9 @@
 import { headers } from "next/headers";
 import { serverApi } from "@/lib/server-api";
 import { getSession } from "@/lib/session";
-import { gameUrl } from "@/lib/urls";
+import { currentUrl, gameUrl, loginUrl } from "@/lib/urls";
+import { config } from "@/app/_generated/config";
+import { Gate } from "./gate";
 import { ShellNav } from "./shell-nav";
 
 interface Wallet {
@@ -18,24 +20,16 @@ interface EventsActive {
 
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
-  const host = (await headers()).get("host") ?? "";
+  const h = await headers();
+  const host = h.get("host") ?? "";
   const game = gameUrl(host);
 
   if (!session) {
-    return (
-      <div className="gate">
-        <div className="gate-card">
-          <img className="gate-splash" src="/img/boot-splash.png" alt="Pixl" />
-          <p>
-            This page is part of the Pixl world. Hop into the game and walk up to the shop, an NPC, or
-            press the shortcut key to open it with your account.
-          </p>
-          <a className="btn-enter" href={game}>
-            Enter the Game
-          </a>
-        </div>
-      </div>
-    );
+    // proxy.ts forwards the path it saw; without it the server would have to
+    // guess, and a login that comes back to the wrong page is worse than no
+    // login button at all. The client corrects this on mount either way.
+    const back = currentUrl(host, h.get("x-pixl-path") ?? "/");
+    return <Gate game={game} loginBase={loginUrl(config.urls.server, "")} fallbackBack={back} />;
   }
 
   const [wallet, events] = await Promise.all([

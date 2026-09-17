@@ -7,10 +7,18 @@ const MAX_AGE = 60 * 60 * 24 * 14;
 
 export function proxy(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("token");
-  if (!token) return NextResponse.next();
+  if (!token) {
+    // The signed-out gate builds a Hack Club Auth return url, and a Server
+    // Component can't see the path on its own. Forwarding it keeps the
+    // no-JS render pointing back at the page the visitor actually asked for.
+    const headers = new Headers(req.headers);
+    headers.set("x-pixl-path", req.nextUrl.pathname + req.nextUrl.search);
+    return NextResponse.next({ request: { headers } });
+  }
 
   const url = req.nextUrl.clone();
   url.searchParams.delete("token");
+  url.searchParams.delete("name");
   const res = NextResponse.redirect(url);
   res.cookies.set(SESSION_COOKIE, token, {
     httpOnly: true,

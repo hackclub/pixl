@@ -24,6 +24,21 @@ describe("proxy", () => {
     expect(res.headers.get("set-cookie")).toBeNull();
   });
 
+  test("forwards the request path so the signed-out gate can build a return url", () => {
+    const req = new NextRequest("http://localhost/dashboard?embed=1");
+    const res = proxy(req);
+    // NextResponse.next({request:{headers}}) encodes overridden request
+    // headers onto the response for the next hop to pick up.
+    expect(res.headers.get("x-middleware-request-x-pixl-path")).toBe("/dashboard?embed=1");
+  });
+
+  test("strips the display name the auth callback tacks on, not just the token", () => {
+    const req = new NextRequest("http://localhost/dashboard?embed=1&token=fake123&name=Ridit");
+    const res = proxy(req);
+    expect(res.headers.get("location")).toBe("http://localhost/dashboard?embed=1");
+    expect(res.cookies.get("pixl_session")?.value).toBe("fake123");
+  });
+
   test("redirects and sets the session cookie when a token is present", () => {
     const req = new NextRequest("http://localhost/docs/welcome/?token=fake123");
     const res = proxy(req);
