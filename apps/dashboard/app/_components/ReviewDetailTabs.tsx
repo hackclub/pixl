@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { CommitResult } from "@/lib/github";
+import type { CommitResult } from "@/lib/commits";
 import type { HackatimeReport } from "@/lib/hackatime";
 import type { JournalRow, ReviewAuditRow } from "@/lib/db";
 import type { YswsShip } from "@/lib/ysws";

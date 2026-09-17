@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { CommitResult } from "@/lib/github";
+import type { CommitResult } from "@/lib/commits";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -19,29 +19,50 @@ import {
 
 const PER_PAGE = 8;
 
+// The commit list is no longer GitHub-only, so error copy names whichever
+// host actually answered instead of blaming GitHub for a Codeberg timeout.
+function hostLabel(result: CommitResult): string {
+  return result.host ?? "The git host";
+}
+
+function tokenEnv(result: CommitResult): string {
+  if (result.provider === "gitlab") return "GITLAB_TOKEN";
+  if (result.provider === "forgejo") return "FORGEJO_TOKEN";
+  return "GITHUB_TOKEN";
+}
+
 export function CommitList({ result }: { result: CommitResult }) {
   const [page, setPage] = useState(0);
 
-  if (result.error === "not_github")
-    return <div className="p-4 text-muted-foreground text-sm">Repo link isn&apos;t a GitHub URL.</div>;
+  // Not a repo url at all, or a host that answers neither the Forgejo
+  // (Gitea/Codeberg) nor the GitLab API. The repo can still be a perfectly
+  // valid ship, we just can't list its commits.
+  if (result.error === "unsupported_host" || result.error === "not_github")
+    return (
+      <div className="p-4 text-muted-foreground text-sm">
+        No commit API for this host{result.host ? " (" + result.host + ")" : ""} , open the
+        repo link to review it by hand.
+      </div>
+    );
   if (result.error === "not_found")
     return (
       <div className="p-4 text-destructive text-sm font-medium">
-        {result.repo} , repo not found or private (404).
+        {result.repo} , repo not found or private (404){result.host ? " on " + result.host : ""}.
       </div>
     );
   if (result.error === "rate_limited")
     return (
       <div className="p-4 text-amber-600 dark:text-amber-400 text-sm font-medium">
-        GitHub API rate limit hit , this is not &ldquo;no commits&rdquo;, the commit list
-        just couldn&apos;t be fetched right now. Wait a bit and reload, or ask an admin to set
-        GITHUB_TOKEN on the dashboard to raise the limit.
+        {hostLabel(result)} API rate limit hit , this is not &ldquo;no commits&rdquo;, the
+        commit list just couldn&apos;t be fetched right now. Wait a bit and reload, or ask an
+        admin to set {tokenEnv(result)} on the dashboard to raise the limit.
       </div>
     );
   if (result.error === "forbidden")
     return (
       <div className="p-4 text-amber-600 dark:text-amber-400 text-sm font-medium">
-        GitHub refused this request , not a rate limit, and not &ldquo;no commits&rdquo;.
+        {hostLabel(result)} refused this request , not a rate limit, and not &ldquo;no
+        commits&rdquo;.
         {result.detail ? (
           <span className="block mt-1 font-normal text-muted-foreground">{result.detail}</span>
         ) : null}

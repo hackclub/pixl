@@ -1,4 +1,4 @@
-import type { Commit } from "@/lib/github";
+import type { Commit } from "@/lib/commits";
 
 const BASE = (process.env.HACKATIME_BASE ?? "https://hackatime.hackclub.com").replace(/\/$/, "");
 

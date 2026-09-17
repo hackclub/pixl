@@ -13,7 +13,7 @@ import {
   getFirstPassAuditNote,
 } from "@/lib/db";
 import { parseAuditNote } from "@/lib/auditNote";
-import { fetchCommits, attachCommitStats } from "@/lib/github";
+import { fetchCommits, attachCommitStats } from "@/lib/commits";
 import { fetchBomRows } from "@/lib/bom";
 import { fetchUserSpans, attachTrackedTime, fetchTrustFactor, fetchHackatimeReport } from "@/lib/hackatime";
 import { yswsShipsFor } from "@/lib/ysws";

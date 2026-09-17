@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePerm, canView } from "@/lib/guard";
 import { getProject, listCollaboratorsForProject } from "@/lib/db";
-import { fetchCommits } from "@/lib/github";
+import { fetchCommits } from "@/lib/commits";
 import {
   reReviewProject,
   archiveProject,
