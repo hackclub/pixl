@@ -570,10 +570,15 @@ select.field{cursor:pointer}
 }
 .btn-enter:hover{border-bottom-width:12px;transform:translate(-4px,-4px)}
 .btn-enter:active{border-bottom-width:4px;transform:translate(0,2px)}
+/* log in is the primary action on the gate, so "enter the game" needs a
+   quieter sibling rather than two identical black slabs */
+.btn-enter.ghost{background:transparent;color:#000}
+.gate-actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:18px}
 @media (max-height:620px){
   .gate-splash{--sw:min(560px,70vw)}
   .btn-enter{font-size:24px;padding:12px 26px}
   .gate-card p{font-size:14px;margin-bottom:20px}
+  .gate-actions{gap:12px}
 }
 
 /* ── misc ── */

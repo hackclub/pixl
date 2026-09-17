@@ -263,13 +263,20 @@ const Pixl = (() => {
     }
   }
 
+  // loginUrl() has existed up there the whole time and mountTopbar has always
+  // rendered a LOG IN button with it, but the gate never did - so a signed-out
+  // visitor who landed on a shell page directly was told to go play the game
+  // and given no way to just log in, which is the thing they were trying to do.
   function gate() {
     document.body.insertAdjacentHTML("beforeend", `
       <div class="gate">
         <div class="gate-card">
           <img class="gate-splash" src="/img/boot-splash.png" alt="Pixl">
-          <p>This page is part of the Pixl world. Hop into the game and walk up to the shop, an NPC, or press the shortcut key to open it with your account.</p>
-          <a class="btn-enter" href="${GAME}">Enter the Game</a>
+          <p>This page is part of the Pixl world. Log in with Hack Club to use it right here, or hop into the game and walk up to the shop or an NPC.</p>
+          <div class="gate-actions">
+            <a class="btn-enter" href="${safeHref(loginUrl())}">Log In</a>
+            <a class="btn-enter ghost" href="${GAME}">Enter the Game</a>
+          </div>
         </div>
       </div>`);
   }
