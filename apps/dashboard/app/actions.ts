@@ -126,6 +126,7 @@ async function nextReviewPath(
       isSuper: access.isSuper,
       excludeId: justReviewedId,
       prefer: stage === "second_review" ? "second_review" : "shipped",
+      reviewQueues: access.reviewQueues,
     });
     return nextId ? `/review/${nextId}` : "/review";
   } catch {
@@ -515,6 +516,14 @@ export async function setJournalHours(formData: FormData): Promise<void> {
   const approvedHours =
     raw === "" ? null : Math.max(0, Math.min(rawHours, Math.round(Number(raw) * 10) / 10));
   if (raw !== "" && !Number.isFinite(Number(raw))) return;
+  // Same requirement as the main verdict form's deflationReason: lowering
+  // credited hours below what was claimed needs a written reason. The
+  // Journals tab form only renders the textarea once the typed value would
+  // deflate, but that's a client-side nicety - enforce it here too rather
+  // than trusting the client sent one.
+  const deflating = approvedHours != null && approvedHours < rawHours;
+  const deflationReason = String(formData.get("deflationReason") ?? "").trim();
+  if (deflating && !deflationReason) return;
   const { error } = await db
     .from("project_journals")
     .update({ approved_hours: approvedHours })
@@ -532,10 +541,11 @@ export async function setJournalHours(formData: FormData): Promise<void> {
   if (project) {
     const before = journal.approved_hours == null ? `${rawHours}h claimed` : `${journal.approved_hours}h`;
     const after = approvedHours == null ? `${rawHours}h claimed` : `${approvedHours}h`;
+    const reasonSuffix = deflating ? ` , ${deflationReason}` : "";
     await logModAction(
       project.user_id as string,
       "journal_hours_set",
-      `${project.name}: entry #${journalId} ${before} → ${after}`,
+      `${project.name}: entry #${journalId} ${before} → ${after}${reasonSuffix}`,
       actorName(access),
     );
   }

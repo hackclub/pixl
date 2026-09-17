@@ -661,14 +661,19 @@ export async function nextReviewId(opts: {
   isSuper: boolean;
   excludeId: number;
   prefer: "shipped" | "second_review";
+  // A reviewer restricted to one queue (see reviewQueueScopeFor in
+  // lib/guard.ts) must only ever be advanced within that queue - "both"
+  // (or omitted) means no restriction, same as before this param existed.
+  reviewQueues?: "software" | "hardware" | "both";
 }): Promise<number | null> {
-  const { viewer, by, canSecondPass, isSuper, excludeId, prefer } = opts;
+  const { viewer, by, canSecondPass, isSuper, excludeId, prefer, reviewQueues } = opts;
+  const kind = reviewQueues && reviewQueues !== "both" ? reviewQueues : undefined;
 
-  const firstPass = (await listShippedProjects(viewer)).filter(
+  const firstPass = (await listShippedProjects(viewer, kind)).filter(
     (p) => p.id !== excludeId && (isSuper || !p.own),
   );
   const finalPass = canSecondPass
-    ? (await listSecondReviewProjects(viewer)).filter(
+    ? (await listSecondReviewProjects(viewer, kind)).filter(
         (p) =>
           p.id !== excludeId &&
           (isSuper || (p.users?.slack_id !== viewer && p.first_pass_by !== by)),

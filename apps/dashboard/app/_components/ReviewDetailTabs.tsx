@@ -11,6 +11,7 @@ import { HackatimePanel } from "@/app/_components/HackatimePanel";
 import { setJournalHours } from "@/app/actions";
 import { PendingButton } from "@/app/_components/PendingButton";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { parseAuditNote, type AuditHeader } from "@/lib/auditNote";
 import { isSafeUrl } from "@/lib/safeUrl";
 import { Card } from "@/components/ui/card";
@@ -72,6 +73,62 @@ function isGithubUrl(url: string | null): url is string {
   } catch {
     return false;
   }
+}
+
+// The "Credit" field on a journal entry (Journals tab) lets a reviewer
+// deflate that entry's hours on its own, outside the main verdict form - it
+// used to have no reason field at all, so a deflation here left no
+// explanation anywhere (just a bare before/after in the mod log, see
+// setJournalHours in app/actions.ts). Mirrors the main verdict form's
+// deflationReason requirement: show a required "why" box the moment the
+// typed value would credit less than the entry's claimed hours.
+function JournalHoursForm({
+  journalId,
+  projectId,
+  claimed,
+  approvedHours,
+}: {
+  journalId: number;
+  projectId: number;
+  claimed: number;
+  approvedHours: number | null;
+}) {
+  const [value, setValue] = useState(String(approvedHours ?? claimed));
+  const numeric = Number(value);
+  const willDeflate = value.trim() !== "" && Number.isFinite(numeric) && numeric < claimed;
+
+  return (
+    <form action={setJournalHours} className="flex flex-col gap-2">
+      <input type="hidden" name="journalId" value={journalId} />
+      <input type="hidden" name="projectId" value={projectId} />
+      <div className="flex items-center gap-2">
+        <label className="text-xs text-muted-foreground">Credit</label>
+        <Input
+          name="hours"
+          type="number"
+          min={0}
+          max={claimed}
+          step="0.1"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="w-20 h-7 text-xs"
+        />
+        <span className="text-xs text-muted-foreground">/ {claimed}h</span>
+        <PendingButton variant="outline" size="sm" pendingText="Saving…">
+          Set
+        </PendingButton>
+      </div>
+      {willDeflate && (
+        <Textarea
+          name="deflationReason"
+          required
+          rows={2}
+          placeholder="Why lower this entry's hours? (required)"
+          className="text-xs max-w-md"
+        />
+      )}
+    </form>
+  );
 }
 
 export function ReviewDetailTabs({
@@ -215,24 +272,12 @@ export function ReviewDetailTabs({
                     className="md text-sm break-words text-foreground/80 mb-2"
                     dangerouslySetInnerHTML={{ __html: renderMarkdown(j.content) }}
                   />
-                  <form action={setJournalHours} className="flex items-center gap-2">
-                    <input type="hidden" name="journalId" value={j.id} />
-                    <input type="hidden" name="projectId" value={projectId} />
-                    <label className="text-xs text-muted-foreground">Credit</label>
-                    <Input
-                      name="hours"
-                      type="number"
-                      min={0}
-                      max={claimed}
-                      step="0.1"
-                      defaultValue={j.approved_hours ?? claimed}
-                      className="w-20 h-7 text-xs"
-                    />
-                    <span className="text-xs text-muted-foreground">/ {claimed}h</span>
-                    <PendingButton variant="outline" size="sm" pendingText="Saving…">
-                      Set
-                    </PendingButton>
-                  </form>
+                  <JournalHoursForm
+                    journalId={j.id}
+                    projectId={projectId}
+                    claimed={claimed}
+                    approvedHours={j.approved_hours}
+                  />
                 </div>
               );
             })}
