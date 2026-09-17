@@ -11,11 +11,12 @@
     { "source": "/players/:id", "destination": "/api/player-meta?id=:id" },
     { "source": "/explore/leaderboard/:board", "destination": "/explore/leaderboard/" },
     { "source": "/projects/new", "destination": "/projects/" },
-    { "source": "/ideas/top", "destination": "/ideas/" }
+    { "source": "/ideas/top", "destination": "/ideas/" },
+    { "source": "/journals/:id/:token", "destination": "/journals/" }
   ],
   "headers": [
     {
-      "source": "/((?!shop|orders|collectibles|vault|explore|project|players|quests|timeline|projects|report|hackatime|fonts|img|pixl|show-n-tell).*)",
+      "source": "/((?!shop|orders|collectibles|vault|explore|project|players|quests|timeline|projects|journals|report|hackatime|fonts|img|pixl|show-n-tell).*)",
       "headers": [
         { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
         { "key": "Cross-Origin-Embedder-Policy", "value": "require-corp" }

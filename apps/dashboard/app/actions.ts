@@ -57,6 +57,7 @@ import {
   turnedNineteenSinceShipping,
   type DashEventRow,
   getReviewPayoutSettings,
+  ensureJournalShareToken,
 } from "@/lib/db";
 import { buildAuditNote, parseAuditNote, TECHNICAL_FEATURES_MIN } from "@/lib/auditNote";
 import { decryptPII } from "@/lib/crypto";
@@ -1867,6 +1868,18 @@ async function pushProjectToAirtable(projectId: number): Promise<{ ok: boolean; 
     .filter((url): url is string => !!url)
     .join(", ");
 
+  // Only worth a link (and a token) when there's actually something to show -
+  // most projects use Hackatime, not journals, for their hours evidence.
+  const { count: journalCount } = await db
+    .from("project_journals")
+    .select("id", { count: "exact", head: true })
+    .eq("project_id", projectId);
+  let journalShareUrl = "";
+  if ((journalCount ?? 0) > 0) {
+    const token = await ensureJournalShareToken(projectId);
+    if (token) journalShareUrl = `${config.urls.play}/journals/${projectId}/${token}`;
+  }
+
   const fields = buildAirtableFields({
     repoUrl: project.repo_url ?? "",
     demoUrl: project.demo_url ?? "",
@@ -1888,6 +1901,7 @@ async function pushProjectToAirtable(projectId: number): Promise<{ ok: boolean; 
     hackatimeProjectDateRanges,
     submitterHackatimeId: hackatimeReport.hackatimeUserId,
     lapseLinks,
+    journalShareUrl,
   });
 
   const result = await pushProjectRecord(fields, project.airtable_record_id ?? null);

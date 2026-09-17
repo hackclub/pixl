@@ -28,6 +28,7 @@ const baseInput = {
   hackatimeProjectDateRanges: "",
   submitterHackatimeId: "",
   lapseLinks: "",
+  journalShareUrl: "",
 };
 
 describe("githubUsernameFromRepoUrl", () => {
@@ -134,6 +135,16 @@ describe("buildAirtableFields", () => {
     expect(fields["Justification - Submitter Hackatime ID"]).toBe("25659");
     expect(fields["Justification - Lapse Links, comma-separated"]).toBe(
       "https://lapse.hackclub.com/a, https://lapse.hackclub.com/b",
+    );
+  });
+
+  test("sets the alternate-tracking-method field to the journal share URL when present", () => {
+    const fields = buildAirtableFields({
+      ...baseInput,
+      journalShareUrl: "https://play.pixl.hackclub.com/journals/482/abc123",
+    });
+    expect(fields["Justification - Alternate Tracking Method"]).toBe(
+      "https://play.pixl.hackclub.com/journals/482/abc123",
     );
   });
 });

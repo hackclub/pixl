@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pixl · Project journals</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="/index.icon.png">
+<link rel="stylesheet" href="/pixl.css?v=4">
+<style>
+  .jp-wrap { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
+  .jp-head { margin-bottom: 24px; }
+  .jp-head h1 { font-family: var(--pixel); font-size: 20px; color: var(--gold); margin: 0 0 6px; }
+  .jp-head p { color: var(--dim); font-size: 13px; margin: 0; }
+  .jp-entry { border: var(--bw) solid var(--stroke); background: var(--panel); padding: 16px; margin-bottom: 14px; }
+  .jp-entry .jp-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; color: var(--dim); margin-bottom: 8px; }
+  .jp-entry .jp-hours { color: var(--teal, var(--gold)); font-weight: 600; }
+  .jp-entry .jp-hours.deflated { text-decoration: line-through; opacity: .6; margin-right: 4px; }
+  .jp-entry .jp-title { font-weight: 700; margin-bottom: 6px; }
+  .jp-entry .jp-body { font-size: 14px; line-height: 1.55; color: var(--ink); word-wrap: break-word; }
+  .jp-entry .jp-body img { max-width: 100%; }
+  .jp-empty, .jp-error { color: var(--dim); font-size: 14px; padding: 24px 0; text-align: center; }
+</style>
+</head>
+<body>
+<main class="jp-wrap">
+  <div class="jp-head">
+    <h1 id="jp-project-name">Loading…</h1>
+    <p>Journal entries only, read-only, shared as evidence of hours worked.</p>
+  </div>
+  <div id="jp-list"></div>
+</main>
+
+<script src="/pixl.js?v=6"></script>
+<script>
+  (function () {
+    // Path is /journals/<id>/<token> - no query string, matches the URL
+    // Airtable's "Justification - Alternate Tracking Method" field gets.
+    const m = location.pathname.match(/^\/journals\/(\d+)\/([^/]+)\/?$/);
+    const list = document.getElementById("jp-list");
+    const nameEl = document.getElementById("jp-project-name");
+    if (!m) {
+      nameEl.textContent = "Not found";
+      list.innerHTML = '<div class="jp-error">That link isn\'t valid.</div>';
+      return;
+    }
+    const [, projectId, token] = m;
+
+    function fmtDate(iso) {
+      return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+    }
+
+    fetch(`${Pixl.API}/api/journals/public/${projectId}/${encodeURIComponent(token)}`)
+      .then((r) => r.ok ? r.json() : Promise.reject(new Error("not_found")))
+      .then((data) => {
+        if (!data.ok) throw new Error("not_found");
+        nameEl.textContent = data.project.name || "Project journals";
+        if (!data.journals.length) {
+          list.innerHTML = '<div class="jp-empty">No journal entries yet.</div>';
+          return;
+        }
+        list.innerHTML = data.journals
+          .map((j) => {
+            const claimed = Math.round((Number(j.hours) || 0) * 10) / 10;
+            const deflated = j.approvedHours != null && Number(j.approvedHours) !== claimed;
+            const hoursHtml = deflated
+              ? `<span class="jp-hours deflated">${claimed}h claimed</span><span class="jp-hours">${Math.round(Number(j.approvedHours) * 10) / 10}h credited</span>`
+              : `<span class="jp-hours">${claimed}h</span>`;
+            const who = data.multiContributor && j.contributor ? `<span>${Pixl.esc(j.contributor)}</span>` : "";
+            return `
+              <div class="jp-entry">
+                <div class="jp-meta">
+                  ${who}
+                  ${hoursHtml}
+                  <span>${fmtDate(j.createdAt)}</span>
+                </div>
+                ${j.title ? `<div class="jp-title">${Pixl.esc(j.title)}</div>` : ""}
+                <div class="jp-body">${Pixl.markdown(j.content || "")}</div>
+              </div>`;
+          })
+          .join("");
+      })
+      .catch(() => {
+        nameEl.textContent = "Not found";
+        list.innerHTML = '<div class="jp-error">That link isn\'t valid, or these journals aren\'t shared.</div>';
+      });
+  })();
+</script>
+</body>
+</html>

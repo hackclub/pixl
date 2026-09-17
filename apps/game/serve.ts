@@ -18,7 +18,7 @@ const PORT = Number(process.env.PORT ?? 3000);
 // isolation, but the shell pages embed third-party images that require-corp
 // would block. Same split as the negative lookahead in vercel.json.
 const NO_ISOLATION =
-  /^\/(shop|orders|collectibles|vault|explore|project|players|quests|trials|timeline|projects|report|hackatime|fonts|img|pixl|show-n-tell)/;
+  /^\/(shop|orders|collectibles|vault|explore|project|players|quests|trials|timeline|projects|journals|report|hackatime|fonts|img|pixl|show-n-tell)/;
 
 function withIsolation(headers: Headers, pathname: string): Headers {
   if (!NO_ISOLATION.test(pathname)) {
@@ -152,6 +152,14 @@ Bun.serve({
     // uuids, not the numeric ids projects use.
     if (/^\/players\/[0-9a-f-]{36}\/?$/i.test(pathname)) {
       return runHandler(playerMeta, url);
+    }
+
+    // /journals/<id>/<token> - the public, no-login journal-share page (see
+    // journal_share_token on projects). One static page reads both off the
+    // path itself, same idea as /explore/leaderboard/:board below.
+    if (/^\/journals\/\d+\/[^/]+\/?$/.test(pathname)) {
+      const journals = await serveStatic("/journals/index.html", request.headers.get("if-none-match"));
+      if (journals) return journals;
     }
 
     // /explore is the section, not a page - its three boards are the pages.

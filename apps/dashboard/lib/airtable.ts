@@ -64,6 +64,10 @@ export interface AirtableProjectInput {
   submitterHackatimeId: string;
   /** Comma-separated Lapse playback URLs across the linked projects, if any. */
   lapseLinks: string;
+  /** Public, no-login link to this project's journal entries (see
+   * ensureJournalShareToken in lib/db.ts and apps/game/web/journals) - empty
+   * string when the project has no journal entries to show. */
+  journalShareUrl: string;
 }
 
 // Every field name buildAirtableFields is allowed to set. Deliberately a
@@ -95,7 +99,8 @@ type AirtableFieldName =
   | "Optional - Override Duplicate Justification"
   | "Justification - Hackatime Project Name(s) + Date Range(s)"
   | "Justification - Submitter Hackatime ID"
-  | "Justification - Lapse Links, comma-separated";
+  | "Justification - Lapse Links, comma-separated"
+  | "Justification - Alternate Tracking Method";
 
 // Airtable's create/update API takes field NAMES as keys (not the fld...
 // IDs), matching exactly what /v0/meta/bases/{base}/tables returns.
@@ -131,6 +136,8 @@ export function buildAirtableFields(
     fields["Justification - Hackatime Project Name(s) + Date Range(s)"] = input.hackatimeProjectDateRanges;
   if (input.submitterHackatimeId) fields["Justification - Submitter Hackatime ID"] = input.submitterHackatimeId;
   if (input.lapseLinks) fields["Justification - Lapse Links, comma-separated"] = input.lapseLinks;
+  if (input.journalShareUrl)
+    fields["Justification - Alternate Tracking Method"] = input.journalShareUrl;
   return fields;
 }
 

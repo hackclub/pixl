@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { decryptPII } from "./crypto";
 import { reForProject } from "@/app/_generated/config";
 
@@ -130,6 +131,10 @@ export interface ProjectRow {
   banned_at: string | null;
   ban_reason: string;
   ban_by: string;
+  /** Long random token for the public, no-login journal-only page (see
+   * ensureJournalShareToken below and apps/game/web/journals). Null until
+   * lazily generated, the first time this project is pushed to Airtable. */
+  journal_share_token: string | null;
   reviewing_by: string;
   reviewing_at: string | null;
   first_pass_by: string;
@@ -479,6 +484,38 @@ export async function getGrowthSeries(days = 30) {
 
 export interface ProjectWithUser extends ProjectRow {
   users?: Pick<UserRow, "id" | "display_name" | "real_name" | "slack_id" | "birthday"> | null;
+}
+
+// Lazily generates (or returns the existing) public journal-share token for a
+// project - see journal_share_token on ProjectRow and apps/game/web/journals
+// for the page it powers. Called from pushProjectToAirtable (both the
+// automatic push on approval and the manual "Re-send to Airtable" button) so
+// every approved project ends up with a stable token the first time it's
+// pushed, without needing a separate migration step for new approvals.
+// 192 random bits, base64url-encoded (~32 chars) - long enough that guessing
+// one isn't practical, short enough to paste into a URL.
+export async function ensureJournalShareToken(projectId: number): Promise<string | null> {
+  const { data: existing, error: readError } = await db
+    .from("projects")
+    .select("journal_share_token")
+    .eq("id", projectId)
+    .maybeSingle();
+  if (readError) {
+    console.error("ensureJournalShareToken (read)", readError.message);
+    return null;
+  }
+  if (existing?.journal_share_token) return existing.journal_share_token as string;
+
+  const token = randomBytes(24).toString("base64url");
+  const { error: writeError } = await db
+    .from("projects")
+    .update({ journal_share_token: token })
+    .eq("id", projectId);
+  if (writeError) {
+    console.error("ensureJournalShareToken (write)", writeError.message);
+    return null;
+  }
+  return token;
 }
 
 export interface ShippedProject extends ProjectWithUser {
