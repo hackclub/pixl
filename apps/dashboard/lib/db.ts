@@ -630,6 +630,12 @@ export async function listSecondReviewProjects(
     .from("projects")
     .select("*, users(id, display_name, real_name, slack_id)")
     .eq("status", "second_review")
+    // A first-pass "ban" verdict is only a proposal (see reviewProject) -
+    // it belongs in the dedicated Proposed bans tab (listProposedBanProjects),
+    // not mixed into the general second-pass queue where a final reviewer
+    // could accidentally approve/reject it as an ordinary review instead of
+    // confirming or overturning the ban through the proper flow.
+    .neq("first_pass_verdict", "banned")
     .is("archived_at", null)
     .is("rejected_at", null)
     .is("banned_at", null);
@@ -797,6 +803,9 @@ export async function countSecondPassReviews(): Promise<number> {
     .from("projects")
     .select("id", { count: "exact", head: true })
     .eq("status", "second_review")
+    // Kept in sync with listSecondReviewProjects - a proposed ban belongs in
+    // the Proposed bans tab/count, not this one.
+    .neq("first_pass_verdict", "banned")
     .is("archived_at", null)
     .is("rejected_at", null)
     .is("banned_at", null);
