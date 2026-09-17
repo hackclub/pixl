@@ -9,6 +9,7 @@
 // system prompt, so ordinary messages don't pay the doc token cost.
 
 import { aiPost } from "./client.js";
+import { sanitizeAIOutput } from "./outputFilter.js";
 import { getDocsCorpus } from "./docs.js";
 import { programMemory } from "../memory/program.js";
 import { db } from "../db/client.js";
@@ -136,6 +137,8 @@ export async function answerQuestion(rawQuestion: string): Promise<DocsAnswer | 
   }
 
   if (!content || content.toUpperCase().includes(NO_ANSWER)) return null;
+  content = sanitizeAIOutput(content);
+  if (!content) return null;
 
   await storeAnswer(question, norm, content);
   return { answer: content, source: "docs" };

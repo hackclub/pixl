@@ -7,6 +7,7 @@ import { checkAiRateLimit, AI_RATE_LIMIT_MESSAGE } from "../ai/rateLimit.js";
 import { userMemory, parseFacts } from "../memory/users.js";
 import { botStats } from "../stats.js";
 import { escapeMrkdwn } from "../slack/escape.js";
+import { hasBannedLanguage } from "../ai/outputFilter.js";
 
 app.command("/pixl-joke", async ({ command, ack, respond }) => {
   await ack();
@@ -101,7 +102,7 @@ app.command("/pixl-urban", async ({ command, ack, respond }) => {
     });
 
     const picked = aiRes.data.choices?.[0]?.message?.content?.trim();
-    if (!picked || picked.toUpperCase() === "TOO_SPICY") {
+    if (!picked || picked.toUpperCase() === "TOO_SPICY" || hasBannedLanguage(picked)) {
       await respond({ text: `too spicy for this server ngl` });
     } else {
       await respond({ text: `*${escapeMrkdwn(term)}*\n${escapeMrkdwn(picked)}` });

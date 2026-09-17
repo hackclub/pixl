@@ -25,7 +25,6 @@ export const CUSTOM_EMOJIS = [
   "blobhaj_party",
   "shocked",
   "upvote",
-  "lets-fucking-gooo",
   "stuck_out_tongue_closed_eyes",
   "huh3d",
   "thumbs-up",
