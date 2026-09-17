@@ -1227,7 +1227,8 @@
       ].map(([name, blurb], i) => [name, `${blurb} ${RE_RATES[i]} RE per hour.`]);
       const ERRORS = {
         name_required: "Give it a name first.",
-        repo_not_github: "The repo link must be a GitHub repository.",
+        repo_not_git: "The repo link must point to a Git repository.",
+        repo_not_github: "The repo link must point to a Git repository.",
         ai_notes_required: "Describe how you used AI (at least 10 characters).",
         repo_required: "Add a GitHub repo link before shipping.",
         demo_required: "Add a demo / playable link before shipping.",

@@ -9,6 +9,7 @@ import { buildDoubleDip, type TeamMember } from "../ysws/doubleDip.js";
 import { fetchHackatimeStats, fetchTrackedSecondsSince } from "../hackatime/api.js";
 import { postShipToSlack } from "../shipNotify.js";
 import { normalizeProjectUrl } from "./projectUrlSafety.js";
+import { isGitRepoUrl } from "./gitRepoUrl.js";
 
 const router = Router();
 
@@ -169,18 +170,6 @@ router.get("/api/projects", async (req, res) => {
     })),
   });
 });
-
-function isGithubRepoUrl(url: string): boolean {
-  let u: URL;
-  try {
-    u = new URL(url);
-  } catch {
-    return false;
-  }
-  if (u.protocol !== "https:" && u.protocol !== "http:") return false;
-  if (u.hostname !== "github.com" && u.hostname !== "www.github.com") return false;
-  return u.pathname.split("/").filter(Boolean).length >= 2;
-}
 
 // A hardware "design" ship (project_type "cad") never got built, so a
 // schematic/PCB viewer link stands in for a demo. KiCanvas is the one
@@ -581,8 +570,8 @@ router.post("/api/projects/:id/ship", async (req, res) => {
   if (req.body?.eligibilityAttested !== true)
     return res.status(400).json({ ok: false, error: "eligibility_attestation_required" });
   // URLs are only validated here, at ship time (save accepts anything).
-  if (!isGithubRepoUrl(project.repo_url as string))
-    return res.status(400).json({ ok: false, error: "repo_not_github" });
+  if (!(await isGitRepoUrl(project.repo_url as string, { hostIsPublic })))
+    return res.status(400).json({ ok: false, error: "repo_not_git" });
   const demoCheck = normalizeDemoUrl(project.demo_url as string);
   if ("error" in demoCheck)
     return res.status(400).json({ ok: false, error: demoCheck.error });

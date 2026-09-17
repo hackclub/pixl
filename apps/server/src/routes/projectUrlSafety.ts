@@ -13,8 +13,9 @@
 // javascript: (or vbscript:/file:/data:) URL from executing when a visitor
 // clicks the link - HTML-escaping a value doesn't validate what scheme it
 // is. So a draft's repo_url/demo_url must never be allowed to keep a
-// dangerous scheme, even though real ship-time validation (isGithubRepoUrl /
-// normalizeDemoUrl further down projects.ts) only ever runs once a project
+// dangerous scheme, even though real ship-time validation (isGitRepoUrl in
+// gitRepoUrl.ts / normalizeDemoUrl further down projects.ts) only ever runs
+// once a project
 // is actually shipped.
 //
 // The previous implementation only checked for a "scheme://" shape before
