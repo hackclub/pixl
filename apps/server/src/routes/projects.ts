@@ -147,10 +147,49 @@ router.get("/api/projects", async (req, res) => {
       );
     }
   }
+  // Internal-only moderation/reviewer-identity/fraud-detection fields a raw
+  // `select("*")` above would otherwise hand straight to the player (or any
+  // accepted collaborator) that owns this response - a reason a player is
+  // meant to see (review_note, reject_reason) stays; who did it, and Joe's
+  // fraud read on them, never should. Destructured out rather than an
+  // allow-list, matching the redaction already done below for
+  // approved_hours/first_pass_hours on this same object.
+  const redactStaffFields = (p: Record<string, unknown>) => {
+    const {
+      ban_by,
+      ban_reason,
+      reviewing_by,
+      first_pass_by,
+      first_pass_note,
+      first_pass_verdict,
+      system_note,
+      review_note_by,
+      reject_by,
+      hold_by,
+      hold_reason,
+      spot_checked_by,
+      spot_checked_at,
+      review_draft,
+      review_draft_by,
+      review_draft_at,
+      airtable_record_id,
+      joe_project_id,
+      joe_submitted_at,
+      joe_trust_score,
+      joe_outcome,
+      joe_reason,
+      joe_reviewed_at,
+      joe_reviewer,
+      joe_error,
+      ...safe
+    } = p;
+    return safe;
+  };
+
   res.json({
     ok: true,
     projects: projects.map((p) => ({
-      ...p,
+      ...redactStaffFields(p),
       pixels_earned: earned.get(p.id as number) ?? 0,
       journal_seconds: journalSeconds.get(p.id as number) ?? 0,
       sidequest_name: p.sidequest_id
