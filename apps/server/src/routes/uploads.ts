@@ -36,8 +36,14 @@ async function uploadToCdn(form: FormData, key: string): Promise<CdnOutcome> {
   }
 
   if (!r.ok) {
-    console.error("[uploads] cdn rejected", r.status, await r.text().catch(() => ""));
-    return { ok: false, ambiguous: false };
+    const body = await r.text().catch(() => "");
+    console.error("[uploads] cdn rejected", r.status, body);
+    // 4xx is the CDN definitively refusing the request (bad auth, bad
+    // payload) before ever storing anything - safe to release. 5xx means
+    // the CDN's own request handling failed after who knows what state
+    // change, so the object may still have been stored - keep the
+    // reservation, same as a network error or a malformed 2xx.
+    return { ok: false, ambiguous: r.status >= 500 };
   }
 
   let json: { url?: string };

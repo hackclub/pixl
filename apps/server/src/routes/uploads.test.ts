@@ -165,10 +165,15 @@ const cdnSuccess = () =>
     new Response(JSON.stringify({ url: "https://cdn.hackclub.com/fixture.png" }), { status: 200 }),
   );
 
-// A definite rejection - the CDN completed a response and said no.
+// A definite rejection - the CDN completed a response and said no before
+// ever touching storage.
 const cdnRejected = () => Promise.resolve(new Response("nope", { status: 400 }));
 
-// The two ambiguous outcomes: the object may already be stored.
+// A 5xx means the CDN's own handling failed after who knows what state
+// change - unlike a 4xx, this is ambiguous, same as a network error.
+const cdnServerError = () => Promise.resolve(new Response("boom", { status: 503 }));
+
+// The other ambiguous outcomes: the object may already be stored.
 const cdnNetworkError = () => Promise.reject(new Error("ECONNRESET"));
 const cdnMalformedSuccess = () => Promise.resolve(new Response("not json", { status: 200 }));
 
@@ -356,6 +361,31 @@ describe("POST /api/uploads", () => {
       expect(res.status).toBe(502);
       expect(body.error).toBe("cdn_failed");
       expect(quota.wasReleased()).toBe(true);
+    } finally {
+      await app.close();
+      mock.restore();
+      quota.restore();
+    }
+  });
+
+  test("a CDN 5xx does not release the quota reservation - the object may already be stored", async () => {
+    process.env.HACKCLUB_CDN_KEY = "test-cdn-key";
+    process.env.OPENROUTER_API_KEY = "test-openrouter-key";
+    const mock = mockExternalFetch({ openrouter: safeVerdict, cdn: cdnServerError });
+    const quota = mockQuotaRpc("grant");
+    const app = await startTestApp();
+    try {
+      const token = issueSessionToken({ userId: "upload-test-cdn-server-error", displayName: "x" });
+      const res = await fetch(`${app.baseUrl}/api/uploads?token=${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "image/png" },
+        body: await realPngBytes(),
+      });
+      const body = (await res.json()) as { ok: boolean; error?: string };
+
+      expect(res.status).toBe(502);
+      expect(body.error).toBe("cdn_failed");
+      expect(quota.wasReleased()).toBe(false);
     } finally {
       await app.close();
       mock.restore();
