@@ -2,11 +2,17 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import express from "express";
+import sharp from "sharp";
 import { issueSessionToken } from "../auth/session.js";
 import { consumeRateLimit } from "../rateLimit.js";
 import { validateBomCsv, sanitizeBomCsv } from "./bomCsv.js";
 import { CDN_UPLOAD_QUOTA, reserveCdnUploadQuota } from "./cdnQuota.js";
 import uploadsRouter from "./uploads.js";
+
+const realPngBytes = () =>
+  sharp({ create: { width: 2, height: 2, channels: 3 as const, background: { r: 1, g: 2, b: 3 } } })
+    .png()
+    .toBuffer();
 
 test("accepts a structured BOM CSV", () => {
   const result = validateBomCsv(Buffer.from("Part,Quantity\nResistor,4\n"));
@@ -84,9 +90,13 @@ function mockExternalFetch(handlers: {
 }) {
   const realFetch = globalThis.fetch;
   let cdnCalled = false;
+  let openrouterCalled = false;
   globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
     const href = typeof url === "string" ? url : url.toString();
-    if (href.includes("openrouter.ai") && handlers.openrouter) return handlers.openrouter();
+    if (href.includes("openrouter.ai") && handlers.openrouter) {
+      openrouterCalled = true;
+      return handlers.openrouter();
+    }
     if (href.includes("cdn.hackclub.com") && handlers.cdn) {
       cdnCalled = true;
       return handlers.cdn();
@@ -95,6 +105,7 @@ function mockExternalFetch(handlers: {
   }) as typeof fetch;
   return {
     wasCdnCalled: () => cdnCalled,
+    wasOpenRouterCalled: () => openrouterCalled,
     restore: () => {
       globalThis.fetch = realFetch;
     },
@@ -143,7 +154,7 @@ describe("POST /api/uploads", () => {
       const res = await fetch(`${app.baseUrl}/api/uploads?token=${token}`, {
         method: "POST",
         headers: { "Content-Type": "image/png" },
-        body: new Uint8Array([1, 2, 3, 4]),
+        body: await realPngBytes(),
       });
       const body = (await res.json()) as { ok: boolean; error?: string };
 
@@ -170,7 +181,7 @@ describe("POST /api/uploads", () => {
       const res = await fetch(`${app.baseUrl}/api/uploads?token=${token}`, {
         method: "POST",
         headers: { "Content-Type": "image/png" },
-        body: new Uint8Array([1, 2, 3, 4]),
+        body: await realPngBytes(),
       });
       const body = (await res.json()) as { ok: boolean; error?: string };
 
@@ -194,7 +205,7 @@ describe("POST /api/uploads", () => {
       const res = await fetch(`${app.baseUrl}/api/uploads?token=${token}`, {
         method: "POST",
         headers: { "Content-Type": "image/png" },
-        body: new Uint8Array([1, 2, 3, 4]),
+        body: await realPngBytes(),
       });
       const body = (await res.json()) as { ok: boolean; url?: string };
 
@@ -202,6 +213,30 @@ describe("POST /api/uploads", () => {
       expect(body.ok).toBe(true);
       expect(body.url).toBe("https://cdn.hackclub.com/fixture.png");
       expect(mock.wasCdnCalled()).toBe(true);
+    } finally {
+      await app.close();
+      mock.restore();
+    }
+  });
+
+  test("random bytes claiming to be a PNG are rejected before moderation or the CDN", async () => {
+    process.env.HACKCLUB_CDN_KEY = "test-cdn-key";
+    process.env.OPENROUTER_API_KEY = "test-openrouter-key";
+    const mock = mockExternalFetch({ openrouter: safeVerdict, cdn: cdnSuccess });
+    const app = await startTestApp();
+    try {
+      const token = issueSessionToken({ userId: "upload-test-fake-bytes", displayName: "x" });
+      const res = await fetch(`${app.baseUrl}/api/uploads?token=${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "image/png" },
+        body: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]),
+      });
+      const body = (await res.json()) as { ok: boolean; error?: string };
+
+      expect(res.status).toBe(400);
+      expect(body.error).toBe("invalid_image");
+      expect(mock.wasOpenRouterCalled()).toBe(false);
+      expect(mock.wasCdnCalled()).toBe(false);
     } finally {
       await app.close();
       mock.restore();
@@ -222,7 +257,7 @@ describe("POST /api/uploads", () => {
       const res = await fetch(`${app.baseUrl}/api/uploads?token=${token}`, {
         method: "POST",
         headers: { "Content-Type": "image/png" },
-        body: new Uint8Array([1, 2, 3, 4]),
+        body: await realPngBytes(),
       });
       const body = (await res.json()) as { ok: boolean; error?: string };
 

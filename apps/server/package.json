@@ -19,6 +19,7 @@
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.2",
     "postgres": "^3.4.9",
+    "sharp": "^0.35.3",
     "ws": "^8.18.0"
   },
   "devDependencies": {

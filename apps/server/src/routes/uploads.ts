@@ -2,6 +2,7 @@ import express, { Router } from "express";
 import { verifySessionToken } from "../auth/session.js";
 import { supabase } from "../db/client.js";
 import { checkImageSafe, MAX_MODERATE_BYTES } from "../imageModeration.js";
+import { isRealImage } from "../imageValidation.js";
 import { consumeRateLimit, type RateLimitOptions } from "../rateLimit.js";
 import { validateBomCsv, sanitizeBomCsv } from "./bomCsv.js";
 import { CDN_UPLOAD_QUOTA, reserveCdnUploadQuota, releaseCdnUploadQuota } from "./cdnQuota.js";
@@ -47,6 +48,10 @@ router.post(
     }
 
     const type = String(req.headers["content-type"] ?? "image/png");
+
+    if (!(await isRealImage(buf, type))) {
+      return res.status(400).json({ ok: false, error: "invalid_image" });
+    }
 
     // Moderation must finish, and pass, before the bytes ever reach the CDN -
     // an image cdn.hackclub.com has stored is public and durable, so a
