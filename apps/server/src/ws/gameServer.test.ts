@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { consumeRateLimit } from "../rateLimit.js";
-import { lobbyJoinError, LOBBY_JOIN_ATTEMPT_LIMIT } from "./gameServer.js";
+import { lobbyJoinError, LOBBY_JOIN_ATTEMPT_LIMIT, NPC_SAVE_LIMIT } from "./gameServer.js";
 import type { Lobby } from "./lobbies.js";
 
 function makeLobby(overrides: Partial<Lobby> = {}): Lobby {
@@ -66,5 +66,20 @@ describe("lobby join brute-force limiting", () => {
   test("attempts against one lobby/user don't exhaust another user's budget", () => {
     const retryAfter = consumeRateLimit(LOBBY_JOIN_ATTEMPT_LIMIT, `fresh-user-${Date.now()}`);
     expect(retryAfter).toBeNull();
+  });
+});
+
+describe("NPC save flooding limit", () => {
+  test("a burst of save_npcs beyond the cooldown is throttled", () => {
+    const userId = `npc-flood-test-${Date.now()}`;
+    expect(consumeRateLimit(NPC_SAVE_LIMIT, userId)).toBeNull();
+    expect(consumeRateLimit(NPC_SAVE_LIMIT, userId)).toBeGreaterThan(0);
+  });
+
+  test("one user's saves don't throttle another user's", () => {
+    const a = `npc-a-${Date.now()}`;
+    const b = `npc-b-${Date.now()}`;
+    expect(consumeRateLimit(NPC_SAVE_LIMIT, a)).toBeNull();
+    expect(consumeRateLimit(NPC_SAVE_LIMIT, b)).toBeNull();
   });
 });

@@ -65,6 +65,17 @@ export const LOBBY_JOIN_ATTEMPT_LIMIT: RateLimitOptions = {
   name: "lobby_join_attempt",
 };
 
+// save_npcs is one batched upsert (up to 64 rows) per message, not per NPC,
+// but the generic 60/sec message throttle still lets that be 60 upserts/sec
+// sustained from a single connection. Legit play never needs sub-second NPC
+// persistence, so a per-user cooldown is a cheap backstop against DB write
+// amplification with no real cost to normal use.
+export const NPC_SAVE_LIMIT: RateLimitOptions = {
+  windowMs: 2000,
+  max: 1,
+  name: "npc_save",
+};
+
 const SKIN_RE = /^(cvc:[1-9]|cv1:b[1-3]h(\d|1[0-8])t([1-9]|1[0-8])o([1-9]|1[0-8]))$/;
 
 const EMOTE_KEYS = new Set([
@@ -1320,6 +1331,7 @@ export function attachWebSocketServer(httpServer: Server) {
         const scene = baseSceneName(String(msg.scene ?? ""));
         const list = Array.isArray(msg.npcs) ? msg.npcs : [];
         if (!scene || list.length === 0 || list.length > 64) return;
+        if (consumeRateLimit(NPC_SAVE_LIMIT, player.userId) !== null) return;
         persistNpcs(player.userId, scene, list).catch(console.error);
       }
     });
