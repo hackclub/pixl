@@ -87,9 +87,17 @@ export function isTrustedUnfetchableHost(hostname: string): boolean {
   return TRUSTED_UNFETCHABLE_HOSTS.has(hostname.replace(/^www\./, "").toLowerCase());
 }
 
-interface SafeResponse {
+export interface SafeResponse {
   status: number;
   location: string | null;
+  contentType: string | null;
+  bodyPrefix: string;
+}
+
+export interface SafeRequestOptions {
+  method: "HEAD" | "GET";
+  headers?: Record<string, string>;
+  readBodyPrefix?: boolean;
 }
 
 interface ResolvedDeps {
@@ -108,20 +116,47 @@ function resolveDeps(deps: UrlLivenessDeps): ResolvedDeps {
   };
 }
 
+const BODY_PREFIX_BYTES = 256;
+
+// first chunk only, then stop
+function readBodyPrefix(res: http.IncomingMessage): Promise<string> {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (text: string) => {
+      if (done) return;
+      done = true;
+      res.destroy();
+      resolve(text);
+    };
+    res.once("data", (chunk: Buffer) => finish(chunk.toString("utf8").slice(0, BODY_PREFIX_BYTES)));
+    res.once("end", () => finish(""));
+    res.once("error", () => finish(""));
+  });
+}
+
 // no fetch, can't pin its DNS
-function safeRequest(u: URL, method: "HEAD" | "GET", resolved: ResolvedDeps): Promise<SafeResponse> {
+export function safeRequest(u: URL, options: SafeRequestOptions, deps: UrlLivenessDeps = {}): Promise<SafeResponse> {
+  const resolved = resolveDeps(deps);
   return new Promise((resolve, reject) => {
     const mod = u.protocol === "https:" ? https : http;
-    const options: https.RequestOptions = {
-      method,
+    const reqOptions: https.RequestOptions = {
+      method: options.method,
+      headers: options.headers,
       lookup: makeSafeLookup(resolved.lookupImpl, resolved.isBlockedIp),
       signal: AbortSignal.timeout(resolved.timeoutMs),
       agent: false, // no pooling
     };
-    if (resolved.ca) options.ca = resolved.ca;
-    const req = mod.request(u, options, (res) => {
+    if (resolved.ca) reqOptions.ca = resolved.ca;
+    const req = mod.request(u, reqOptions, (res) => {
+      const status = res.statusCode ?? 0;
+      const location = res.headers.location ?? null;
+      const contentType = res.headers["content-type"] ?? null;
+      if (options.readBodyPrefix) {
+        readBodyPrefix(res).then((bodyPrefix) => resolve({ status, location, contentType, bodyPrefix }));
+        return;
+      }
       res.resume(); // discard body
-      resolve({ status: res.statusCode ?? 0, location: res.headers.location ?? null });
+      resolve({ status, location, contentType, bodyPrefix: "" });
     });
     req.on("error", reject);
     req.end();
@@ -143,8 +178,8 @@ export async function urlAlive(url: string, deps: UrlLivenessDeps = {}): Promise
     if (!(await hostIsPublic(u.hostname, resolved))) return false;
     if (isTrustedUnfetchableHost(u.hostname)) return true;
     try {
-      let r = await safeRequest(u, "HEAD", resolved);
-      if (r.status === 405 || r.status === 501) r = await safeRequest(u, "GET", resolved);
+      let r = await safeRequest(u, { method: "HEAD" }, resolved);
+      if (r.status === 405 || r.status === 501) r = await safeRequest(u, { method: "GET" }, resolved);
       if (r.status >= 300 && r.status < 400) {
         if (!r.location) return false;
         current = new URL(r.location, current).toString();
