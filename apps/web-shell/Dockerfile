@@ -17,7 +17,16 @@ COPY docs docs
 # Writes apps/web-shell/public/docs/<slug>/og.png before `next build` runs,
 # so the OG images end up as static files in the build output.
 RUN bun run packages/docs-engine/build.ts
-RUN cd apps/web-shell && bun run build
+
+# next build runs under Node, not Bun - Bun 1.3.13 crashes with SIGILL partway
+# through the build (same issue apps/dashboard hit). Everything above (bun
+# install, docs-engine) still runs fine under Bun; only the build step itself
+# moves to Node.
+FROM node:22-slim AS node-build
+WORKDIR /repo
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY --from=build /repo /repo
+RUN cd apps/web-shell && node node_modules/next/dist/bin/next build
 
 FROM node:22-slim AS runtime
 WORKDIR /repo
@@ -38,13 +47,13 @@ ENV PORT=3000
 # apps/web-shell/node_modules (symlinks back into that root node_modules,
 # relative to the standalone folder - both must be copied together,
 # preserving this structure, for the symlinks to resolve).
-COPY --from=build --chown=node:node /repo/apps/web-shell/.next/standalone ./
+COPY --from=node-build --chown=node:node /repo/apps/web-shell/.next/standalone ./
 
 # Standalone mode does not copy .next/static or public/ (Next's docs say
 # these are meant to be handled by a CDN) - both have to be added back
 # manually, at the paths server.js expects relative to its own directory.
-COPY --from=build --chown=node:node /repo/apps/web-shell/.next/static ./apps/web-shell/.next/static
-COPY --from=build --chown=node:node /repo/apps/web-shell/public ./apps/web-shell/public
+COPY --from=node-build --chown=node:node /repo/apps/web-shell/.next/static ./apps/web-shell/.next/static
+COPY --from=node-build --chown=node:node /repo/apps/web-shell/public ./apps/web-shell/public
 
 USER node
 EXPOSE 3000
