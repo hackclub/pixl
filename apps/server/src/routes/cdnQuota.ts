@@ -1,67 +1,54 @@
-interface QuotaBucket {
-  requests: number;
-  bytes: number;
-  resetAt: number;
-}
+import { db } from "../db/pgCompat.js";
 
 export interface CdnUploadQuotaOptions {
   readonly windowMs: number;
   readonly maxRequests: number;
   readonly maxBytes: number;
-  readonly name: string;
 }
 
 export const CDN_UPLOAD_QUOTA: CdnUploadQuotaOptions = {
   windowMs: 24 * 60 * 60 * 1000,
   maxRequests: 60,
   maxBytes: 100 * 1024 * 1024,
-  name: "cdn_upload",
 };
 
-const quotaBuckets = new Map<string, QuotaBucket>();
+export type CdnQuotaResult =
+  | { ok: true }
+  | { ok: false; reason: "quota_exceeded"; retryAfterSeconds: number }
+  | { ok: false; reason: "quota_unavailable" };
 
-setInterval(
-  () => {
-    const now = Date.now();
-    for (const [k, b] of quotaBuckets) if (b.resetAt <= now) quotaBuckets.delete(k);
-  },
-  60_000,
-).unref();
-
-function bucketFor(opts: CdnUploadQuotaOptions, userId: string): QuotaBucket {
-  const key = `${opts.name}:${userId}`;
-  const now = Date.now();
-  let bucket = quotaBuckets.get(key);
-  if (!bucket || bucket.resetAt <= now) {
-    bucket = { requests: 0, bytes: 0, resetAt: now + opts.windowMs };
-    quotaBuckets.set(key, bucket);
-  }
-  return bucket;
-}
-
-export type CdnQuotaResult = { ok: true } | { ok: false; retryAfterSeconds: number };
-
-export function reserveCdnUploadQuota(
+// row-locked in Postgres, fails closed on error
+export async function reserveCdnUploadQuota(
   opts: CdnUploadQuotaOptions,
   userId: string,
   bytes: number,
-): CdnQuotaResult {
-  const bucket = bucketFor(opts, userId);
-  if (bucket.requests + 1 > opts.maxRequests || bucket.bytes + bytes > opts.maxBytes) {
-    return { ok: false, retryAfterSeconds: Math.ceil((bucket.resetAt - Date.now()) / 1000) };
+): Promise<CdnQuotaResult> {
+  const { data, error } = await db.rpc<{ ok: boolean; retry_after_seconds?: number }>(
+    "reserve_cdn_upload_quota",
+    {
+      p_user_id: userId,
+      p_bytes: bytes,
+      p_max_requests: opts.maxRequests,
+      p_max_bytes: opts.maxBytes,
+      p_window_seconds: Math.round(opts.windowMs / 1000),
+    },
+  );
+  if (error || !data) {
+    console.error("[cdnQuota] reserve failed", error);
+    return { ok: false, reason: "quota_unavailable" };
   }
-  bucket.requests++;
-  bucket.bytes += bytes;
+  if (!data.ok) {
+    return { ok: false, reason: "quota_exceeded", retryAfterSeconds: data.retry_after_seconds ?? 60 };
+  }
   return { ok: true };
 }
 
-export function releaseCdnUploadQuota(
+// best-effort, not security critical
+export async function releaseCdnUploadQuota(
   opts: CdnUploadQuotaOptions,
   userId: string,
   bytes: number,
-): void {
-  const bucket = quotaBuckets.get(`${opts.name}:${userId}`);
-  if (!bucket) return;
-  bucket.requests = Math.max(0, bucket.requests - 1);
-  bucket.bytes = Math.max(0, bucket.bytes - bytes);
+): Promise<void> {
+  const { error } = await db.rpc("release_cdn_upload_quota", { p_user_id: userId, p_bytes: bytes });
+  if (error) console.error("[cdnQuota] release failed", error);
 }

@@ -4,9 +4,9 @@ import type { AddressInfo } from "node:net";
 import express from "express";
 import sharp from "sharp";
 import { issueSessionToken } from "../auth/session.js";
+import { db } from "../db/pgCompat.js";
 import { consumeRateLimit } from "../rateLimit.js";
 import { validateBomCsv, sanitizeBomCsv } from "./bomCsv.js";
-import { CDN_UPLOAD_QUOTA, reserveCdnUploadQuota } from "./cdnQuota.js";
 import uploadsRouter from "./uploads.js";
 
 const realPngBytes = () =>
@@ -133,6 +133,24 @@ const cdnSuccess = () =>
     new Response(JSON.stringify({ url: "https://cdn.hackclub.com/fixture.png" }), { status: 200 }),
   );
 
+// quota lives in Postgres now, see cdnQuota.test.ts
+function mockQuotaRpc(mode: "grant" | "deny") {
+  const realRpc = db.rpc;
+  db.rpc = (async (fn: string) => {
+    if (fn === "reserve_cdn_upload_quota") {
+      return mode === "grant"
+        ? { data: { ok: true }, error: null }
+        : { data: { ok: false, retry_after_seconds: 60 }, error: null };
+    }
+    return { data: null, error: null };
+  }) as typeof db.rpc;
+  return {
+    restore: () => {
+      db.rpc = realRpc;
+    },
+  };
+}
+
 describe("POST /api/uploads", () => {
   const originalCdnKey = process.env.HACKCLUB_CDN_KEY;
   const originalOpenRouterKey = process.env.OPENROUTER_API_KEY;
@@ -148,6 +166,7 @@ describe("POST /api/uploads", () => {
     process.env.HACKCLUB_CDN_KEY = "test-cdn-key";
     process.env.OPENROUTER_API_KEY = "test-openrouter-key";
     const mock = mockExternalFetch({ openrouter: unsafeVerdict, cdn: cdnSuccess });
+    const quota = mockQuotaRpc("grant");
     const app = await startTestApp();
     try {
       const token = issueSessionToken({ userId: "upload-test-rejected", displayName: "x" });
@@ -165,6 +184,7 @@ describe("POST /api/uploads", () => {
     } finally {
       await app.close();
       mock.restore();
+      quota.restore();
     }
   });
 
@@ -175,6 +195,7 @@ describe("POST /api/uploads", () => {
       openrouter: () => Promise.reject(new Error("network down")),
       cdn: cdnSuccess,
     });
+    const quota = mockQuotaRpc("grant");
     const app = await startTestApp();
     try {
       const token = issueSessionToken({ userId: "upload-test-error", displayName: "x" });
@@ -192,6 +213,7 @@ describe("POST /api/uploads", () => {
     } finally {
       await app.close();
       mock.restore();
+      quota.restore();
     }
   });
 
@@ -199,6 +221,7 @@ describe("POST /api/uploads", () => {
     process.env.HACKCLUB_CDN_KEY = "test-cdn-key";
     process.env.OPENROUTER_API_KEY = "test-openrouter-key";
     const mock = mockExternalFetch({ openrouter: safeVerdict, cdn: cdnSuccess });
+    const quota = mockQuotaRpc("grant");
     const app = await startTestApp();
     try {
       const token = issueSessionToken({ userId: "upload-test-safe", displayName: "x" });
@@ -216,6 +239,7 @@ describe("POST /api/uploads", () => {
     } finally {
       await app.close();
       mock.restore();
+      quota.restore();
     }
   });
 
@@ -223,6 +247,7 @@ describe("POST /api/uploads", () => {
     process.env.HACKCLUB_CDN_KEY = "test-cdn-key";
     process.env.OPENROUTER_API_KEY = "test-openrouter-key";
     const mock = mockExternalFetch({ openrouter: safeVerdict, cdn: cdnSuccess });
+    const quota = mockQuotaRpc("grant");
     const app = await startTestApp();
     try {
       const token = issueSessionToken({ userId: "upload-test-fake-bytes", displayName: "x" });
@@ -240,20 +265,18 @@ describe("POST /api/uploads", () => {
     } finally {
       await app.close();
       mock.restore();
+      quota.restore();
     }
   });
 
-  test("an exhausted CDN quota blocks the upload before the CDN call", async () => {
+  test("an exhausted CDN quota blocks the upload before moderation or the CDN call", async () => {
     process.env.HACKCLUB_CDN_KEY = "test-cdn-key";
     process.env.OPENROUTER_API_KEY = "test-openrouter-key";
-    const userId = `upload-test-quota-${Date.now()}`;
-    for (let i = 0; i < CDN_UPLOAD_QUOTA.maxRequests; i++) {
-      reserveCdnUploadQuota(CDN_UPLOAD_QUOTA, userId, 1);
-    }
     const mock = mockExternalFetch({ openrouter: safeVerdict, cdn: cdnSuccess });
+    const quota = mockQuotaRpc("deny");
     const app = await startTestApp();
     try {
-      const token = issueSessionToken({ userId, displayName: "x" });
+      const token = issueSessionToken({ userId: "upload-test-quota", displayName: "x" });
       const res = await fetch(`${app.baseUrl}/api/uploads?token=${token}`, {
         method: "POST",
         headers: { "Content-Type": "image/png" },
@@ -263,10 +286,39 @@ describe("POST /api/uploads", () => {
 
       expect(res.status).toBe(429);
       expect(body.error).toBe("quota_exceeded");
+      expect(mock.wasOpenRouterCalled()).toBe(false);
       expect(mock.wasCdnCalled()).toBe(false);
     } finally {
       await app.close();
       mock.restore();
+      quota.restore();
+    }
+  });
+
+  test("a quota check that errors fails closed instead of allowing the upload", async () => {
+    process.env.HACKCLUB_CDN_KEY = "test-cdn-key";
+    process.env.OPENROUTER_API_KEY = "test-openrouter-key";
+    const mock = mockExternalFetch({ openrouter: safeVerdict, cdn: cdnSuccess });
+    const realRpc = db.rpc;
+    db.rpc = (async () => ({ data: null, error: { message: "connection refused" } })) as typeof db.rpc;
+    const app = await startTestApp();
+    try {
+      const token = issueSessionToken({ userId: "upload-test-quota-error", displayName: "x" });
+      const res = await fetch(`${app.baseUrl}/api/uploads?token=${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "image/png" },
+        body: await realPngBytes(),
+      });
+      const body = (await res.json()) as { ok: boolean; error?: string };
+
+      expect(res.status).toBe(503);
+      expect(body.error).toBe("quota_unavailable");
+      expect(mock.wasOpenRouterCalled()).toBe(false);
+      expect(mock.wasCdnCalled()).toBe(false);
+    } finally {
+      await app.close();
+      mock.restore();
+      db.rpc = realRpc;
     }
   });
 });

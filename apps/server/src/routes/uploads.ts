@@ -53,21 +53,25 @@ router.post(
       return res.status(400).json({ ok: false, error: "invalid_image" });
     }
 
+    const quota = await reserveCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, buf.length);
+    if (!quota.ok) {
+      if (quota.reason === "quota_exceeded") {
+        res.setHeader("Retry-After", quota.retryAfterSeconds);
+        return res.status(429).json({ ok: false, error: "quota_exceeded" });
+      }
+      return res.status(503).json({ ok: false, error: "quota_unavailable" });
+    }
+
     // Moderation must finish, and pass, before the bytes ever reach the CDN -
     // an image cdn.hackclub.com has stored is public and durable, so a
     // rejected image must never be uploaded at all, not just withheld from
     // the response.
     const safety = await checkImageSafe(buf, type);
     if (!safety.safe) {
+      await releaseCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, buf.length);
       return res
         .status(400)
         .json({ ok: false, error: "image_rejected", reason: safety.reason });
-    }
-
-    const quota = reserveCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, buf.length);
-    if (!quota.ok) {
-      res.setHeader("Retry-After", quota.retryAfterSeconds);
-      return res.status(429).json({ ok: false, error: "quota_exceeded" });
     }
 
     const ext = type === "image/jpeg" ? "jpg" : (type.split("/")[1] ?? "png");
@@ -99,7 +103,7 @@ router.post(
     }
 
     if (!cdnUrl) {
-      releaseCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, buf.length);
+      await releaseCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, buf.length);
       return res.status(502).json({ ok: false, error: "cdn_failed" });
     }
     res.json({ ok: true, url: cdnUrl });
@@ -169,10 +173,13 @@ router.post(
     if (!validation.ok) return res.status(400).json({ ok: false, error: validation.error });
     const safeBuf = sanitizeBomCsv(buf);
 
-    const quota = reserveCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, safeBuf.length);
+    const quota = await reserveCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, safeBuf.length);
     if (!quota.ok) {
-      res.setHeader("Retry-After", quota.retryAfterSeconds);
-      return res.status(429).json({ ok: false, error: "quota_exceeded" });
+      if (quota.reason === "quota_exceeded") {
+        res.setHeader("Retry-After", quota.retryAfterSeconds);
+        return res.status(429).json({ ok: false, error: "quota_exceeded" });
+      }
+      return res.status(503).json({ ok: false, error: "quota_unavailable" });
     }
 
     const form = new FormData();
@@ -186,13 +193,13 @@ router.post(
       });
       if (!r.ok) {
         console.error("[uploads] bom cdn rejected", r.status, await r.text());
-        releaseCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, safeBuf.length);
+        await releaseCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, safeBuf.length);
         return res.status(502).json({ ok: false, error: "cdn_failed" });
       }
       const json = (await r.json()) as { url?: string };
       if (!json.url) {
         console.error("[uploads] bom cdn response missing url", json);
-        releaseCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, safeBuf.length);
+        await releaseCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, safeBuf.length);
         return res.status(502).json({ ok: false, error: "cdn_failed" });
       }
       const { error: updateError } = await supabase
@@ -207,7 +214,7 @@ router.post(
       res.json({ ok: true, url: json.url });
     } catch (e) {
       console.error("[uploads] bom upload failed", e);
-      releaseCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, safeBuf.length);
+      await releaseCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, safeBuf.length);
       res.status(502).json({ ok: false, error: "cdn_failed" });
     }
   },
