@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { db } from "../db/pgCompat.js";
 import { PUBLIC_PROJECT_COLUMNS } from "./explore.js";
 
-// Same catalog projects.ts's redactStaffFields keeps off player-facing
+// Same catalog projects.ts's toPlayerProject keeps off player-facing
 // responses - reviewer identity/notes, ban/hold, Joe/fraud, internal IDs,
 // review drafts. This is the actual "sensitive field" list for the
 // projects table, not a list invented for this test.

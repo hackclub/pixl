@@ -12,45 +12,63 @@ import { urlAlive } from "./urlLiveness.js";
 
 const router = Router();
 
-// Internal-only moderation/reviewer-identity/fraud-detection fields a raw
-// `select("*")`/`.select().single()` would otherwise hand straight to the
-// player (or any accepted collaborator) that owns this response - a reason a
-// player is meant to see (review_note, reject_reason) stays; who did it, and
-// Joe's fraud read on them, never should. Destructured out rather than an
-// allow-list, matching the redaction already done for approved_hours/
-// first_pass_hours elsewhere. Every response that hands a project row back
-// to its own owner (list, create, update, ship, unship) must go through
-// this - the fields can already be populated from an earlier review cycle,
-// not just written by the current request.
-export function redactStaffFields(p: Record<string, unknown>): Record<string, unknown> {
-  const {
-    ban_by,
-    ban_reason,
-    reviewing_by,
-    first_pass_by,
-    first_pass_note,
-    first_pass_verdict,
-    system_note,
-    review_note_by,
-    reject_by,
-    hold_by,
-    hold_reason,
-    spot_checked_by,
-    spot_checked_at,
-    review_draft,
-    review_draft_by,
-    review_draft_at,
-    airtable_record_id,
-    joe_project_id,
-    joe_submitted_at,
-    joe_trust_score,
-    joe_outcome,
-    joe_reason,
-    joe_reviewed_at,
-    joe_reviewer,
-    joe_error,
-    ...safe
-  } = p;
+// Explicit allowlist of what a raw `projects` row hands back to its own
+// owner (or an accepted collaborator) - list/create/update/ship/unship all
+// go through this. A denylist here kept missing new staff/admin columns as
+// migrations added them (reviewing_at, the ai_review_* block, hours_extended_*,
+// journal_share_token, ...) - an unlisted column is dropped by default instead,
+// so a new migration can't silently start leaking. approved_hours/
+// first_pass_hours are proposals until a project is actually approved, so
+// they're gated here rather than left to each call site to remember.
+const PLAYER_PROJECT_FIELDS = [
+  "id",
+  "name",
+  "description",
+  "repo_url",
+  "demo_url",
+  "image_url",
+  "project_type",
+  "kind",
+  "used_ai",
+  "ai_notes",
+  "hackatime_projects",
+  "hackatime_seconds",
+  "level",
+  "needs_funding",
+  "funding_usd",
+  "bom_url",
+  "cart_screenshot_urls",
+  "finished_build",
+  "other_ysws",
+  "other_ysws_notes",
+  "status",
+  "created_at",
+  "shipped_at",
+  "rejected_at",
+  "reject_reason",
+  "review_note",
+  "banned_at",
+  "is_update",
+  "update_notes",
+  "ship_note",
+  "eligibility_attested",
+  "sidequest_id",
+  "trial_reward_choice",
+  "trial_held_px",
+  "trial_prize_px",
+  "join_code",
+  "is_peak",
+] as const;
+
+export function toPlayerProject(p: Record<string, unknown>): Record<string, unknown> {
+  const safe: Record<string, unknown> = {};
+  for (const field of PLAYER_PROJECT_FIELDS) safe[field] = p[field] ?? null;
+  // Credited (possibly deflated) hours only become real once a project is
+  // actually approved - a stale value from an earlier review cycle must not
+  // leak back out on the very next save/ship/unship.
+  const approved = p.status === "approved";
+  safe.approved_hours = approved ? (p.approved_hours ?? null) : null;
+  safe.first_pass_hours = approved ? (p.first_pass_hours ?? null) : null;
   return safe;
 }
 
@@ -191,7 +209,8 @@ router.get("/api/projects", async (req, res) => {
   res.json({
     ok: true,
     projects: projects.map((p) => ({
-      ...redactStaffFields(p),
+      ...toPlayerProject(p),
+      is_owner: p.is_owner,
       pixels_earned: earned.get(p.id as number) ?? 0,
       journal_seconds: journalSeconds.get(p.id as number) ?? 0,
       sidequest_name: p.sidequest_id
@@ -200,14 +219,6 @@ router.get("/api/projects", async (req, res) => {
       trial_prize_name: p.sidequest_id
         ? (trialPrize.get(p.sidequest_id as number) ?? null)
         : null,
-      // Credited (possibly deflated) hours only become real once a project
-      // is actually approved , a raw `select("*")` above would otherwise
-      // leak whatever a first-pass reviewer proposed (or a needs_changes
-      // pass entered) straight into this list response, before the final
-      // pass that's allowed to change it. See the matching redaction on
-      // /api/projects/:id/timeline.
-      approved_hours: p.status === "approved" ? p.approved_hours : null,
-      first_pass_hours: p.status === "approved" ? p.first_pass_hours : null,
     })),
   });
 });
@@ -426,7 +437,7 @@ router.post("/api/projects", async (req, res) => {
     return res.status(500).json({ ok: false });
   }
   void addNotification(session.userId, "Project logged", `You logged "${parsed.fields.name}".`);
-  res.json({ ok: true, project: redactStaffFields(data) });
+  res.json({ ok: true, project: toPlayerProject(data) });
 });
 
 // Update one of the user's own projects.
@@ -479,7 +490,7 @@ router.put("/api/projects/:id", async (req, res) => {
     console.error("[projects] update failed", error);
     return res.status(500).json({ ok: false });
   }
-  res.json({ ok: true, project: redactStaffFields(data) });
+  res.json({ ok: true, project: toPlayerProject(data) });
 });
 
 // Ship a project for review: draft/needs_changes -> shipped, or approved ->
@@ -812,7 +823,7 @@ router.post("/api/projects/:id/ship", async (req, res) => {
     `"${project.name}" is in the review queue. You'll hear back here once it's reviewed.`,
   );
   void postShipToSlack(data, ownerSlackId, trackedSeconds, isUpdate);
-  res.json({ ok: true, project: redactStaffFields(data) });
+  res.json({ ok: true, project: toPlayerProject(data) });
 });
 
 // Withdraw a project from the review queue back to a draft so the owner can
@@ -860,7 +871,7 @@ router.post("/api/projects/:id/unship", async (req, res) => {
     console.error("[projects] unship failed", error);
     return res.status(500).json({ ok: false });
   }
-  res.json({ ok: true, project: redactStaffFields(data) });
+  res.json({ ok: true, project: toPlayerProject(data) });
 });
 
 // Settle an approved Trial ship: the prize, or the pixels the payout math held
