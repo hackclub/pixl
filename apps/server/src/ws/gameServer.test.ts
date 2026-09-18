@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { consumeRateLimit } from "../rateLimit.js";
-import { lobbyJoinError, LOBBY_JOIN_ATTEMPT_LIMIT, NPC_SAVE_LIMIT } from "./gameServer.js";
+import {
+  lobbyJoinError,
+  lobbyJoinDenialReason,
+  LOBBY_JOIN_ATTEMPT_LIMIT,
+  NPC_SAVE_LIMIT,
+} from "./gameServer.js";
 import type { Lobby } from "./lobbies.js";
 
 function makeLobby(overrides: Partial<Lobby> = {}): Lobby {
@@ -66,6 +71,32 @@ describe("lobby join brute-force limiting", () => {
   test("attempts against one lobby/user don't exhaust another user's budget", () => {
     const retryAfter = consumeRateLimit(LOBBY_JOIN_ATTEMPT_LIMIT, `fresh-user-${Date.now()}`);
     expect(retryAfter).toBeNull();
+  });
+
+  test("once locked out, the correct password is denied too, not just wrong guesses", () => {
+    const lobby = makeLobby({ password: "9999" });
+    const userId = `lockout-test-${Date.now()}`;
+
+    for (let i = 0; i < LOBBY_JOIN_ATTEMPT_LIMIT.max; i++) {
+      lobbyJoinDenialReason(lobby, userId, "0000");
+    }
+
+    expect(lobbyJoinDenialReason(lobby, userId, "9999")).toBe(
+      "Too many attempts. Wait a bit and try again.",
+    );
+  });
+
+  test("the lockout clears once the rate-limit window resets", async () => {
+    // short window, same primitive as LOBBY_JOIN_ATTEMPT_LIMIT
+    const opts = { windowMs: 50, max: 1, name: `lobby-reset-test-${Date.now()}` };
+    const userId = "reset-user";
+
+    expect(consumeRateLimit(opts, userId)).toBeNull();
+    expect(consumeRateLimit(opts, userId)).not.toBeNull();
+
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
+    expect(consumeRateLimit(opts, userId)).toBeNull();
   });
 });
 

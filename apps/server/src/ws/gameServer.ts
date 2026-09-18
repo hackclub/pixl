@@ -121,6 +121,20 @@ export function lobbyJoinError(
   return null;
 }
 
+// checked before the password, every attempt
+export function lobbyJoinDenialReason(
+  l: Lobby | undefined,
+  userId: string,
+  password: string,
+): string | null {
+  if (l && !l.isPublic && l.ownerId !== userId) {
+    if (consumeRateLimit(LOBBY_JOIN_ATTEMPT_LIMIT, userId) !== null) {
+      return "Too many attempts. Wait a bit and try again.";
+    }
+  }
+  return lobbyJoinError(l, userId, password);
+}
+
 function pickPublicLobby(): Lobby | null {
   let best: Lobby | null = null;
   let bestCount = -1;
@@ -1175,22 +1189,7 @@ export function attachWebSocketServer(httpServer: Server) {
         const id = String(msg.id ?? "").trim().toUpperCase();
         const password = String(msg.password ?? "").trim();
         const lobby = lobbies.get(id);
-        if (
-          lobby &&
-          !lobby.isPublic &&
-          lobby.ownerId !== player.userId &&
-          password !== lobby.password &&
-          consumeRateLimit(LOBBY_JOIN_ATTEMPT_LIMIT, player.userId) !== null
-        ) {
-          ws.send(
-            JSON.stringify({
-              type: "lobby_denied",
-              reason: "Too many attempts. Wait a bit and try again.",
-            }),
-          );
-          return;
-        }
-        const err = lobbyJoinError(lobby, player.userId, password);
+        const err = lobbyJoinDenialReason(lobby, player.userId, password);
         if (err || !lobby) {
           ws.send(
             JSON.stringify({
