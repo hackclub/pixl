@@ -94,6 +94,12 @@ function JournalHoursForm({
   approvedHours: number | null;
 }) {
   const [value, setValue] = useState(String(approvedHours ?? claimed));
+  // Uncontrolled fields inside a `<form action={...}>` get wiped by React's
+  // automatic post-submit form reset (it fires even on success), same as the
+  // "Credit" input above would if it weren't controlled via `value` - keep
+  // this one controlled too, or a correctly-filled-in reason vanishes right
+  // after the reviewer hits Set.
+  const [reason, setReason] = useState("");
   const numeric = Number(value);
   const willDeflate = value.trim() !== "" && Number.isFinite(numeric) && numeric < claimed;
 
@@ -125,6 +131,8 @@ function JournalHoursForm({
           rows={2}
           placeholder="Why lower this entry's hours? (required)"
           className="text-xs max-w-md"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
         />
       )}
     </form>
