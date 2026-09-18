@@ -62,20 +62,38 @@ router.get("/auth/demo", async (req, res) => {
       .single();
 
     if (insertError || !created) {
-      console.error("Supabase insert failed", insertError);
-      return res.status(500).json({ error: "Database error" });
-    }
+      // Same race as /auth/hackclub/callback , see
+      // drizzle/0177_users_oauth_unique.sql.
+      if (insertError?.code === "23505") {
+        const { data: racedUser, error: racedLookupError } = await supabase
+          .from("users")
+          .select("*")
+          .eq("oauth_provider", "demo")
+          .eq("oauth_id", demoOauthId)
+          .single();
+        if (racedLookupError || !racedUser) {
+          console.error("Post-race user lookup failed", racedLookupError);
+          return res.status(500).json({ error: "Database error" });
+        }
+        const row = racedUser as UserRow;
+        userId = row.id;
+        displayName = row.display_name;
+      } else {
+        console.error("Supabase insert failed", insertError);
+        return res.status(500).json({ error: "Database error" });
+      }
+    } else {
+      const row = created as UserRow;
+      userId = row.id;
+      displayName = row.display_name;
 
-    const row = created as UserRow;
-    userId = row.id;
-    displayName = row.display_name;
+      const { error: stateError } = await supabase
+        .from("player_state")
+        .insert({ user_id: userId });
 
-    const { error: stateError } = await supabase
-      .from("player_state")
-      .insert({ user_id: userId });
-
-    if (stateError) {
-      console.error("Failed to seed player_state", stateError);
+      if (stateError) {
+        console.error("Failed to seed player_state", stateError);
+      }
     }
   }
 
@@ -491,7 +509,6 @@ router.get("/auth/hackclub/callback", async (req, res) => {
     if (identity.slack_id && !(existing as { avatar_url?: string | null }).avatar_url)
       void saveSlackAvatar(userId, identity.slack_id);
   } else {
-    isNewUser = true;
     const { data: created, error: insertError } = await supabase
       .from("users")
       .insert({
@@ -519,21 +536,43 @@ router.get("/auth/hackclub/callback", async (req, res) => {
       .single();
 
     if (insertError || !created) {
-      console.error("Supabase insert failed", insertError);
-      return res.status(500).send("Database error");
-    }
+      // 23505 = unique_violation on users(oauth_provider, oauth_id) (see
+      // drizzle/0177_users_oauth_unique.sql) , two concurrent logins for the
+      // same HCA identity both missed the select above and raced to insert;
+      // the DB constraint is the actual guard. The loser just re-fetches the
+      // row the winner created and logs into that account instead of erroring.
+      if (insertError?.code === "23505") {
+        const { data: racedUser, error: racedLookupError } = await supabase
+          .from("users")
+          .select("*")
+          .eq("oauth_provider", "hackclub")
+          .eq("oauth_id", identity.id)
+          .single();
+        if (racedLookupError || !racedUser) {
+          console.error("Post-race user lookup failed", racedLookupError);
+          return res.status(500).send("Database error");
+        }
+        const row = racedUser as UserRow;
+        userId = row.id;
+        displayName = row.display_name;
+      } else {
+        console.error("Supabase insert failed", insertError);
+        return res.status(500).send("Database error");
+      }
+    } else {
+      isNewUser = true;
+      const row = created as UserRow;
+      userId = row.id;
+      displayName = row.display_name;
+      if (identity.slack_id) void saveSlackAvatar(userId, identity.slack_id);
 
-    const row = created as UserRow;
-    userId = row.id;
-    displayName = row.display_name;
-    if (identity.slack_id) void saveSlackAvatar(userId, identity.slack_id);
+      const { error: stateError } = await supabase
+        .from("player_state")
+        .insert({ user_id: userId });
 
-    const { error: stateError } = await supabase
-      .from("player_state")
-      .insert({ user_id: userId });
-
-    if (stateError) {
-      console.error("Failed to seed player_state", stateError);
+      if (stateError) {
+        console.error("Failed to seed player_state", stateError);
+      }
     }
   }
 
