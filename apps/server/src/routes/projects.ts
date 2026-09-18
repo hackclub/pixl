@@ -1,6 +1,4 @@
 import { Router } from "express";
-import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
 import { verifySessionToken } from "../auth/session.js";
 import { supabase } from "../db/client.js";
 import { addNotification } from "./notifications.js";
@@ -10,6 +8,7 @@ import { fetchHackatimeStats, fetchTrackedSecondsSince } from "../hackatime/api.
 import { postShipToSlack } from "../shipNotify.js";
 import { normalizeProjectUrl } from "./projectUrlSafety.js";
 import { isGitRepoUrl } from "./gitRepoUrl.js";
+import { hostIsPublic, urlAlive } from "./urlLiveness.js";
 
 const router = Router();
 
@@ -266,97 +265,6 @@ function normalizeDemoUrl(raw: string): { error: string } | { url: string } {
   if (host === "github.com" && !/\/releases(\/|$)/.test(u.pathname))
     return { error: "demo_is_repo" };
   return { url: u.toString() };
-}
-
-// SSRF guard for the ship-time liveness checks. A player fully controls demo_url
-// (any host is accepted by normalizeDemoUrl) and a repo link can redirect
-// anywhere, so before we ever fetch() a player-supplied URL we make sure the
-// host doesn't resolve to a loopback / private / link-local address , otherwise
-// urlAlive becomes a probe for internal services and the cloud metadata IP.
-function isBlockedIp(ip: string): boolean {
-  const v = isIP(ip);
-  if (v === 4) {
-    const [a, b] = ip.split(".").map(Number);
-    if (a === 0 || a === 10 || a === 127) return true; // this-network, private, loopback
-    if (a === 169 && b === 254) return true; // link-local + cloud metadata (169.254.169.254)
-    if (a === 172 && b >= 16 && b <= 31) return true; // private
-    if (a === 192 && b === 168) return true; // private
-    if (a === 100 && b >= 64 && b <= 127) return true; // carrier-grade NAT
-    return false;
-  }
-  if (v === 6) {
-    const s = ip.toLowerCase();
-    if (s === "::1" || s === "::") return true; // loopback / unspecified
-    if (s.startsWith("::ffff:")) return isBlockedIp(s.slice(7)); // IPv4-mapped
-    if (s.startsWith("fc") || s.startsWith("fd")) return true; // unique local
-    if (s.startsWith("fe80")) return true; // link-local
-    return false;
-  }
-  return true; // not a parseable IP - refuse rather than guess
-}
-
-async function hostIsPublic(hostname: string): Promise<boolean> {
-  if (isIP(hostname)) return !isBlockedIp(hostname);
-  try {
-    const addrs = await lookup(hostname, { all: true });
-    // Reject if it doesn't resolve, or if ANY resolved address is internal.
-    return addrs.length > 0 && addrs.every((a) => !isBlockedIp(a.address));
-  } catch {
-    return false;
-  }
-}
-
-// Roblox's WAF blocks the bot-shaped HEAD/GET requests urlAlive sends (no browser
-// UA, no cookies) even for a game that's genuinely live and playable , every
-// roblox.com demo link was getting rejected as "unreachable". Skip the fetch for
-// these hosts once the SSRF guard clears them; still no bypass of hostIsPublic.
-const TRUSTED_UNFETCHABLE_HOSTS = new Set(["roblox.com"]);
-
-function isTrustedUnfetchableHost(hostname: string): boolean {
-  return TRUSTED_UNFETCHABLE_HOSTS.has(hostname.replace(/^www\./, "").toLowerCase());
-}
-
-async function urlAlive(url: string): Promise<boolean> {
-  // Follow redirects by hand so we can re-validate the host at every hop , a
-  // public URL that 302s to http://169.254.169.254 must not slip through.
-  // (Note: this does not close DNS-rebinding between the check and fetch's own
-  // resolution; blocking literal internal targets and redirect chains is the
-  // proportionate guard here.)
-  let current = url;
-  for (let hop = 0; hop < 5; hop++) {
-    let u: URL;
-    try {
-      u = new URL(current);
-    } catch {
-      return false;
-    }
-    if (u.protocol !== "https:" && u.protocol !== "http:") return false;
-    if (!(await hostIsPublic(u.hostname))) return false;
-    if (isTrustedUnfetchableHost(u.hostname)) return true;
-    try {
-      let r = await fetch(current, {
-        method: "HEAD",
-        redirect: "manual",
-        signal: AbortSignal.timeout(8000),
-      });
-      if (r.status === 405 || r.status === 501)
-        r = await fetch(current, {
-          method: "GET",
-          redirect: "manual",
-          signal: AbortSignal.timeout(8000),
-        });
-      if (r.status >= 300 && r.status < 400) {
-        const loc = r.headers.get("location");
-        if (!loc) return false;
-        current = new URL(loc, current).toString();
-        continue;
-      }
-      return r.ok || r.status === 401 || r.status === 403;
-    } catch {
-      return false;
-    }
-  }
-  return false; // too many redirects
 }
 
 interface ProjectFields {
