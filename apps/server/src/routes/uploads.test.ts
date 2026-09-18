@@ -1,6 +1,18 @@
-import { expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import express from "express";
+import sharp from "sharp";
+import { issueSessionToken } from "../auth/session.js";
+import { db } from "../db/pgCompat.js";
 import { consumeRateLimit } from "../rateLimit.js";
-import { validateBomCsv } from "./bomCsv.js";
+import { validateBomCsv, sanitizeBomCsv } from "./bomCsv.js";
+import uploadsRouter from "./uploads.js";
+
+const realPngBytes = () =>
+  sharp({ create: { width: 2, height: 2, channels: 3 as const, background: { r: 1, g: 2, b: 3 } } })
+    .png()
+    .toBuffer();
 
 test("accepts a structured BOM CSV", () => {
   const result = validateBomCsv(Buffer.from("Part,Quantity\nResistor,4\n"));
@@ -20,10 +32,441 @@ test("rejects unstructured CSV data", () => {
   expect(result).toEqual({ ok: false, error: "invalid_csv" });
 });
 
+test("rejects a stray quote inside an unquoted cell instead of letting the sanitizer silently drop it", () => {
+  const result = validateBomCsv(Buffer.from('Part,Quantity\n12" wire,4\n'));
+
+  expect(result).toEqual({ ok: false, error: "invalid_csv" });
+});
+
+test("rejects a quoted field with trailing junk before its comma", () => {
+  const result = validateBomCsv(Buffer.from('Part,Notes\nResistor,"note"extra\n'));
+
+  expect(result).toEqual({ ok: false, error: "invalid_csv" });
+});
+
+test("rejects an unterminated quoted field", () => {
+  const result = validateBomCsv(Buffer.from('Part,Notes\nResistor,"unterminated\n'));
+
+  expect(result).toEqual({ ok: false, error: "invalid_csv" });
+});
+
+test("accepts a properly escaped quote inside a quoted field", () => {
+  const result = validateBomCsv(Buffer.from('Part,Notes\nWire,"12"" length"\n'));
+
+  expect(result).toEqual({ ok: true });
+});
+
+test("round-trips an escaped quote inside a quoted field without corrupting it", () => {
+  const csv = Buffer.from('Part,Notes\nWire,"12"" length"\n');
+
+  const result = sanitizeBomCsv(csv);
+
+  expect(result.toString("utf-8")).toBe('Part,Notes\r\nWire,"12"" length"');
+});
+
 test("limits one authenticated account without limiting another", () => {
   const limit = { windowMs: 60_000, max: 1, name: `bom-test-${Date.now()}` };
 
   expect(consumeRateLimit(limit, "owner-a")).toBeNull();
   expect(consumeRateLimit(limit, "owner-a")).toBeGreaterThan(0);
   expect(consumeRateLimit(limit, "owner-b")).toBeNull();
+});
+
+test("neutralizes a formula-injection cell a reviewer would open in Excel/Sheets", () => {
+  const csv = Buffer.from("Part,Quantity\n=1+1*99,4\n");
+
+  const result = sanitizeBomCsv(csv);
+
+  expect(result.toString("utf-8")).toBe("Part,Quantity\r\n'=1+1*99,4");
+});
+
+test("every formula-triggering prefix gets neutralized", () => {
+  for (const prefix of ["=", "+", "-", "@"]) {
+    const csv = Buffer.from(`Part,Quantity\n${prefix}cmd,4\n`);
+    const rows = sanitizeBomCsv(csv).toString("utf-8").split("\r\n");
+    expect(rows[1]).toBe(`'${prefix}cmd,4`);
+  }
+});
+
+test("ordinary BOM data round-trips unchanged", () => {
+  const csv = Buffer.from("Part,Quantity,Notes\nResistor 10k,4,5% tolerance\n");
+
+  const result = sanitizeBomCsv(csv);
+
+  expect(result.toString("utf-8")).toBe("Part,Quantity,Notes\r\nResistor 10k,4,5% tolerance");
+});
+
+test("a cell needing quoting still round-trips its value", () => {
+  const csv = Buffer.from('Part,Notes\nResistor,"has, a comma"\n');
+
+  const result = sanitizeBomCsv(csv);
+
+  expect(result.toString("utf-8")).toBe('Part,Notes\r\nResistor,"has, a comma"');
+});
+
+async function startTestApp() {
+  const app = express();
+  app.use(uploadsRouter);
+  const server = createServer(app);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as AddressInfo;
+  return {
+    baseUrl: `http://127.0.0.1:${port}`,
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  };
+}
+
+function mockExternalFetch(handlers: {
+  openrouter?: () => Promise<Response>;
+  cdn?: () => Promise<Response>;
+}) {
+  const realFetch = globalThis.fetch;
+  let cdnCalled = false;
+  let openrouterCalled = false;
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    const href = typeof url === "string" ? url : url.toString();
+    if (href.includes("openrouter.ai") && handlers.openrouter) {
+      openrouterCalled = true;
+      return handlers.openrouter();
+    }
+    if (href.includes("cdn.hackclub.com") && handlers.cdn) {
+      cdnCalled = true;
+      return handlers.cdn();
+    }
+    return realFetch(url as string, init);
+  }) as typeof fetch;
+  return {
+    wasCdnCalled: () => cdnCalled,
+    wasOpenRouterCalled: () => openrouterCalled,
+    restore: () => {
+      globalThis.fetch = realFetch;
+    },
+  };
+}
+
+const safeVerdict = () =>
+  Promise.resolve(
+    new Response(
+      JSON.stringify({ choices: [{ message: { content: '{"safe": true}' } }] }),
+      { status: 200 },
+    ),
+  );
+
+const unsafeVerdict = () =>
+  Promise.resolve(
+    new Response(
+      JSON.stringify({ choices: [{ message: { content: '{"safe": false, "reason": "nudity"}' } }] }),
+      { status: 200 },
+    ),
+  );
+
+const cdnSuccess = () =>
+  Promise.resolve(
+    new Response(JSON.stringify({ url: "https://cdn.hackclub.com/fixture.png" }), { status: 200 }),
+  );
+
+// A definite rejection - the CDN completed a response and said no before
+// ever touching storage.
+const cdnRejected = () => Promise.resolve(new Response("nope", { status: 400 }));
+
+// A 5xx means the CDN's own handling failed after who knows what state
+// change - unlike a 4xx, this is ambiguous, same as a network error.
+const cdnServerError = () => Promise.resolve(new Response("boom", { status: 503 }));
+
+// The other ambiguous outcomes: the object may already be stored.
+const cdnNetworkError = () => Promise.reject(new Error("ECONNRESET"));
+const cdnMalformedSuccess = () => Promise.resolve(new Response("not json", { status: 200 }));
+
+// quota lives in Postgres now, see cdnQuota.test.ts
+function mockQuotaRpc(mode: "grant" | "deny") {
+  const realRpc = db.rpc;
+  const releaseCalls: Record<string, unknown>[] = [];
+  db.rpc = (async (fn: string, args: Record<string, unknown> = {}) => {
+    if (fn === "reserve_cdn_upload_quota") {
+      return mode === "grant"
+        ? { data: { ok: true, window_id: 1 }, error: null }
+        : { data: { ok: false, retry_after_seconds: 60 }, error: null };
+    }
+    if (fn === "release_cdn_upload_quota") releaseCalls.push(args);
+    return { data: null, error: null };
+  }) as typeof db.rpc;
+  return {
+    wasReleased: () => releaseCalls.length > 0,
+    restore: () => {
+      db.rpc = realRpc;
+    },
+  };
+}
+
+describe("POST /api/uploads", () => {
+  const originalCdnKey = process.env.HACKCLUB_CDN_KEY;
+  const originalOpenRouterKey = process.env.OPENROUTER_API_KEY;
+
+  afterEach(() => {
+    if (originalCdnKey === undefined) delete process.env.HACKCLUB_CDN_KEY;
+    else process.env.HACKCLUB_CDN_KEY = originalCdnKey;
+    if (originalOpenRouterKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = originalOpenRouterKey;
+  });
+
+  test("a rejected image never reaches the CDN", async () => {
+    process.env.HACKCLUB_CDN_KEY = "test-cdn-key";
+    process.env.OPENROUTER_API_KEY = "test-openrouter-key";
+    const mock = mockExternalFetch({ openrouter: unsafeVerdict, cdn: cdnSuccess });
+    const quota = mockQuotaRpc("grant");
+    const app = await startTestApp();
+    try {
+      const token = issueSessionToken({ userId: "upload-test-rejected", displayName: "x" });
+      const res = await fetch(`${app.baseUrl}/api/uploads?token=${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "image/png" },
+        body: await realPngBytes(),
+      });
+      const body = (await res.json()) as { ok: boolean; error?: string };
+
+      expect(res.status).toBe(400);
+      expect(body.ok).toBe(false);
+      expect(body.error).toBe("image_rejected");
+      expect(mock.wasCdnCalled()).toBe(false);
+      expect(quota.wasReleased()).toBe(true);
+    } finally {
+      await app.close();
+      mock.restore();
+      quota.restore();
+    }
+  });
+
+  test("a moderation call that fails outright never reaches the CDN either", async () => {
+    process.env.HACKCLUB_CDN_KEY = "test-cdn-key";
+    process.env.OPENROUTER_API_KEY = "test-openrouter-key";
+    const mock = mockExternalFetch({
+      openrouter: () => Promise.reject(new Error("network down")),
+      cdn: cdnSuccess,
+    });
+    const quota = mockQuotaRpc("grant");
+    const app = await startTestApp();
+    try {
+      const token = issueSessionToken({ userId: "upload-test-error", displayName: "x" });
+      const res = await fetch(`${app.baseUrl}/api/uploads?token=${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "image/png" },
+        body: await realPngBytes(),
+      });
+      const body = (await res.json()) as { ok: boolean; error?: string };
+
+      expect(res.status).toBe(400);
+      expect(body.ok).toBe(false);
+      expect(body.error).toBe("image_rejected");
+      expect(mock.wasCdnCalled()).toBe(false);
+    } finally {
+      await app.close();
+      mock.restore();
+      quota.restore();
+    }
+  });
+
+  test("a safe image does reach the CDN (control, proves the harness itself works)", async () => {
+    process.env.HACKCLUB_CDN_KEY = "test-cdn-key";
+    process.env.OPENROUTER_API_KEY = "test-openrouter-key";
+    const mock = mockExternalFetch({ openrouter: safeVerdict, cdn: cdnSuccess });
+    const quota = mockQuotaRpc("grant");
+    const app = await startTestApp();
+    try {
+      const token = issueSessionToken({ userId: "upload-test-safe", displayName: "x" });
+      const res = await fetch(`${app.baseUrl}/api/uploads?token=${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "image/png" },
+        body: await realPngBytes(),
+      });
+      const body = (await res.json()) as { ok: boolean; url?: string };
+
+      expect(res.status).toBe(200);
+      expect(body.ok).toBe(true);
+      expect(body.url).toBe("https://cdn.hackclub.com/fixture.png");
+      expect(mock.wasCdnCalled()).toBe(true);
+    } finally {
+      await app.close();
+      mock.restore();
+      quota.restore();
+    }
+  });
+
+  test("random bytes claiming to be a PNG are rejected before moderation or the CDN", async () => {
+    process.env.HACKCLUB_CDN_KEY = "test-cdn-key";
+    process.env.OPENROUTER_API_KEY = "test-openrouter-key";
+    const mock = mockExternalFetch({ openrouter: safeVerdict, cdn: cdnSuccess });
+    const quota = mockQuotaRpc("grant");
+    const app = await startTestApp();
+    try {
+      const token = issueSessionToken({ userId: "upload-test-fake-bytes", displayName: "x" });
+      const res = await fetch(`${app.baseUrl}/api/uploads?token=${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "image/png" },
+        body: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]),
+      });
+      const body = (await res.json()) as { ok: boolean; error?: string };
+
+      expect(res.status).toBe(400);
+      expect(body.error).toBe("invalid_image");
+      expect(mock.wasOpenRouterCalled()).toBe(false);
+      expect(mock.wasCdnCalled()).toBe(false);
+    } finally {
+      await app.close();
+      mock.restore();
+      quota.restore();
+    }
+  });
+
+  test("an exhausted CDN quota blocks the upload before moderation or the CDN call", async () => {
+    process.env.HACKCLUB_CDN_KEY = "test-cdn-key";
+    process.env.OPENROUTER_API_KEY = "test-openrouter-key";
+    const mock = mockExternalFetch({ openrouter: safeVerdict, cdn: cdnSuccess });
+    const quota = mockQuotaRpc("deny");
+    const app = await startTestApp();
+    try {
+      const token = issueSessionToken({ userId: "upload-test-quota", displayName: "x" });
+      const res = await fetch(`${app.baseUrl}/api/uploads?token=${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "image/png" },
+        body: await realPngBytes(),
+      });
+      const body = (await res.json()) as { ok: boolean; error?: string };
+
+      expect(res.status).toBe(429);
+      expect(body.error).toBe("quota_exceeded");
+      expect(mock.wasOpenRouterCalled()).toBe(false);
+      expect(mock.wasCdnCalled()).toBe(false);
+    } finally {
+      await app.close();
+      mock.restore();
+      quota.restore();
+    }
+  });
+
+  test("a clean CDN rejection releases the quota reservation", async () => {
+    process.env.HACKCLUB_CDN_KEY = "test-cdn-key";
+    process.env.OPENROUTER_API_KEY = "test-openrouter-key";
+    const mock = mockExternalFetch({ openrouter: safeVerdict, cdn: cdnRejected });
+    const quota = mockQuotaRpc("grant");
+    const app = await startTestApp();
+    try {
+      const token = issueSessionToken({ userId: "upload-test-cdn-rejected", displayName: "x" });
+      const res = await fetch(`${app.baseUrl}/api/uploads?token=${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "image/png" },
+        body: await realPngBytes(),
+      });
+      const body = (await res.json()) as { ok: boolean; error?: string };
+
+      expect(res.status).toBe(502);
+      expect(body.error).toBe("cdn_failed");
+      expect(quota.wasReleased()).toBe(true);
+    } finally {
+      await app.close();
+      mock.restore();
+      quota.restore();
+    }
+  });
+
+  test("a CDN 5xx does not release the quota reservation - the object may already be stored", async () => {
+    process.env.HACKCLUB_CDN_KEY = "test-cdn-key";
+    process.env.OPENROUTER_API_KEY = "test-openrouter-key";
+    const mock = mockExternalFetch({ openrouter: safeVerdict, cdn: cdnServerError });
+    const quota = mockQuotaRpc("grant");
+    const app = await startTestApp();
+    try {
+      const token = issueSessionToken({ userId: "upload-test-cdn-server-error", displayName: "x" });
+      const res = await fetch(`${app.baseUrl}/api/uploads?token=${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "image/png" },
+        body: await realPngBytes(),
+      });
+      const body = (await res.json()) as { ok: boolean; error?: string };
+
+      expect(res.status).toBe(502);
+      expect(body.error).toBe("cdn_failed");
+      expect(quota.wasReleased()).toBe(false);
+    } finally {
+      await app.close();
+      mock.restore();
+      quota.restore();
+    }
+  });
+
+  test("a CDN network error does not release the quota reservation - the object may already be stored", async () => {
+    process.env.HACKCLUB_CDN_KEY = "test-cdn-key";
+    process.env.OPENROUTER_API_KEY = "test-openrouter-key";
+    const mock = mockExternalFetch({ openrouter: safeVerdict, cdn: cdnNetworkError });
+    const quota = mockQuotaRpc("grant");
+    const app = await startTestApp();
+    try {
+      const token = issueSessionToken({ userId: "upload-test-cdn-network-error", displayName: "x" });
+      const res = await fetch(`${app.baseUrl}/api/uploads?token=${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "image/png" },
+        body: await realPngBytes(),
+      });
+      const body = (await res.json()) as { ok: boolean; error?: string };
+
+      expect(res.status).toBe(502);
+      expect(body.error).toBe("cdn_failed");
+      expect(quota.wasReleased()).toBe(false);
+    } finally {
+      await app.close();
+      mock.restore();
+      quota.restore();
+    }
+  });
+
+  test("a malformed 2xx CDN response does not release the quota reservation - the CDN said success", async () => {
+    process.env.HACKCLUB_CDN_KEY = "test-cdn-key";
+    process.env.OPENROUTER_API_KEY = "test-openrouter-key";
+    const mock = mockExternalFetch({ openrouter: safeVerdict, cdn: cdnMalformedSuccess });
+    const quota = mockQuotaRpc("grant");
+    const app = await startTestApp();
+    try {
+      const token = issueSessionToken({ userId: "upload-test-cdn-malformed", displayName: "x" });
+      const res = await fetch(`${app.baseUrl}/api/uploads?token=${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "image/png" },
+        body: await realPngBytes(),
+      });
+      const body = (await res.json()) as { ok: boolean; error?: string };
+
+      expect(res.status).toBe(502);
+      expect(body.error).toBe("cdn_failed");
+      expect(quota.wasReleased()).toBe(false);
+    } finally {
+      await app.close();
+      mock.restore();
+      quota.restore();
+    }
+  });
+
+  test("a quota check that errors fails closed instead of allowing the upload", async () => {
+    process.env.HACKCLUB_CDN_KEY = "test-cdn-key";
+    process.env.OPENROUTER_API_KEY = "test-openrouter-key";
+    const mock = mockExternalFetch({ openrouter: safeVerdict, cdn: cdnSuccess });
+    const realRpc = db.rpc;
+    db.rpc = (async () => ({ data: null, error: { message: "connection refused" } })) as typeof db.rpc;
+    const app = await startTestApp();
+    try {
+      const token = issueSessionToken({ userId: "upload-test-quota-error", displayName: "x" });
+      const res = await fetch(`${app.baseUrl}/api/uploads?token=${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "image/png" },
+        body: await realPngBytes(),
+      });
+      const body = (await res.json()) as { ok: boolean; error?: string };
+
+      expect(res.status).toBe(503);
+      expect(body.error).toBe("quota_unavailable");
+      expect(mock.wasOpenRouterCalled()).toBe(false);
+      expect(mock.wasCdnCalled()).toBe(false);
+    } finally {
+      await app.close();
+      mock.restore();
+      db.rpc = realRpc;
+    }
+  });
 });

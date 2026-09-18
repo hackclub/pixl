@@ -2,14 +2,63 @@ import express, { Router } from "express";
 import { verifySessionToken } from "../auth/session.js";
 import { supabase } from "../db/client.js";
 import { checkImageSafe, MAX_MODERATE_BYTES } from "../imageModeration.js";
+import { isRealImage } from "../imageValidation.js";
 import { consumeRateLimit, type RateLimitOptions } from "../rateLimit.js";
-import { validateBomCsv } from "./bomCsv.js";
+import { validateBomCsv, sanitizeBomCsv } from "./bomCsv.js";
+import { CDN_UPLOAD_QUOTA, reserveCdnUploadQuota, releaseCdnUploadQuota } from "./cdnQuota.js";
 
 const router = Router();
 
 // No image/gif: YSWS submission guidelines require screenshots to be static,
 // not animated or video.
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
+
+type CdnOutcome =
+  | { ok: true; url: string }
+  // Definite rejection: the CDN completed a response and said no, so the
+  // object was never stored - safe to release the quota reservation.
+  | { ok: false; ambiguous: false }
+  // Unknown: a network error, timeout, or a 2xx response we couldn't parse.
+  // The object may already be stored, so the reservation must stand.
+  | { ok: false; ambiguous: true };
+
+async function uploadToCdn(form: FormData, key: string): Promise<CdnOutcome> {
+  let r: Response;
+  try {
+    r = await fetch("https://cdn.hackclub.com/api/v4/upload", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}` },
+      body: form,
+    });
+  } catch (e) {
+    console.error("[uploads] cdn request failed", e);
+    return { ok: false, ambiguous: true };
+  }
+
+  if (!r.ok) {
+    const body = await r.text().catch(() => "");
+    console.error("[uploads] cdn rejected", r.status, body);
+    // 4xx is the CDN definitively refusing the request (bad auth, bad
+    // payload) before ever storing anything - safe to release. 5xx means
+    // the CDN's own request handling failed after who knows what state
+    // change, so the object may still have been stored - keep the
+    // reservation, same as a network error or a malformed 2xx.
+    return { ok: false, ambiguous: r.status >= 500 };
+  }
+
+  let json: { url?: string };
+  try {
+    json = (await r.json()) as { url?: string };
+  } catch (e) {
+    console.error("[uploads] cdn success response was not valid JSON", e);
+    return { ok: false, ambiguous: true };
+  }
+  if (!json.url) {
+    console.error("[uploads] cdn response missing url", json);
+    return { ok: false, ambiguous: true };
+  }
+  return { ok: true, url: json.url };
+}
 
 // Proxy image uploads to the Hack Club CDN so the key stays server-side.
 router.post(
@@ -47,6 +96,31 @@ router.post(
 
     const type = String(req.headers["content-type"] ?? "image/png");
 
+    if (!(await isRealImage(buf, type))) {
+      return res.status(400).json({ ok: false, error: "invalid_image" });
+    }
+
+    const quota = await reserveCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, buf.length);
+    if (!quota.ok) {
+      if (quota.reason === "quota_exceeded") {
+        res.setHeader("Retry-After", quota.retryAfterSeconds);
+        return res.status(429).json({ ok: false, error: "quota_exceeded" });
+      }
+      return res.status(503).json({ ok: false, error: "quota_unavailable" });
+    }
+
+    // Moderation must finish, and pass, before the bytes ever reach the CDN -
+    // an image cdn.hackclub.com has stored is public and durable, so a
+    // rejected image must never be uploaded at all, not just withheld from
+    // the response.
+    const safety = await checkImageSafe(buf, type);
+    if (!safety.safe) {
+      await releaseCdnUploadQuota(session.userId, buf.length, quota.windowId);
+      return res
+        .status(400)
+        .json({ ok: false, error: "image_rejected", reason: safety.reason });
+    }
+
     const ext = type === "image/jpeg" ? "jpg" : (type.split("/")[1] ?? "png");
     const form = new FormData();
     form.append(
@@ -55,36 +129,12 @@ router.post(
       `journal-${Date.now()}.${ext}`,
     );
 
-    // Moderation and the CDN upload don't depend on each other, so run them
-    // concurrently instead of back-to-back, halves the wait for the common case.
-    const cdnUpload = fetch("https://cdn.hackclub.com/api/v4/upload", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}` },
-      body: form,
-    })
-      .then(async (r) => {
-        if (!r.ok) {
-          console.error("[uploads] cdn rejected", r.status, await r.text());
-          return null;
-        }
-        const json = (await r.json()) as { url?: string };
-        if (!json.url) console.error("[uploads] cdn response missing url", json);
-        return json.url ?? null;
-      })
-      .catch((e) => {
-        console.error("[uploads] cdn upload failed", e);
-        return null;
-      });
-
-    const [safety, cdnUrl] = await Promise.all([checkImageSafe(buf, type), cdnUpload]);
-
-    if (!safety.safe) {
-      return res
-        .status(400)
-        .json({ ok: false, error: "image_rejected", reason: safety.reason });
+    const outcome = await uploadToCdn(form, key);
+    if (!outcome.ok) {
+      if (!outcome.ambiguous) await releaseCdnUploadQuota(session.userId, buf.length, quota.windowId);
+      return res.status(502).json({ ok: false, error: "cdn_failed" });
     }
-    if (!cdnUrl) return res.status(502).json({ ok: false, error: "cdn_failed" });
-    res.json({ ok: true, url: cdnUrl });
+    res.json({ ok: true, url: outcome.url });
   },
 );
 
@@ -149,39 +199,36 @@ router.post(
     }
     const validation = validateBomCsv(buf);
     if (!validation.ok) return res.status(400).json({ ok: false, error: validation.error });
+    const safeBuf = sanitizeBomCsv(buf);
+
+    const quota = await reserveCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, safeBuf.length);
+    if (!quota.ok) {
+      if (quota.reason === "quota_exceeded") {
+        res.setHeader("Retry-After", quota.retryAfterSeconds);
+        return res.status(429).json({ ok: false, error: "quota_exceeded" });
+      }
+      return res.status(503).json({ ok: false, error: "quota_unavailable" });
+    }
 
     const form = new FormData();
-    form.append("file", new Blob([new Uint8Array(buf)], { type: "text/csv" }), `bom-${Date.now()}.csv`);
+    form.append("file", new Blob([new Uint8Array(safeBuf)], { type: "text/csv" }), `bom-${Date.now()}.csv`);
 
-    try {
-      const r = await fetch("https://cdn.hackclub.com/api/v4/upload", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${key}` },
-        body: form,
-      });
-      if (!r.ok) {
-        console.error("[uploads] bom cdn rejected", r.status, await r.text());
-        return res.status(502).json({ ok: false, error: "cdn_failed" });
-      }
-      const json = (await r.json()) as { url?: string };
-      if (!json.url) {
-        console.error("[uploads] bom cdn response missing url", json);
-        return res.status(502).json({ ok: false, error: "cdn_failed" });
-      }
-      const { error: updateError } = await supabase
-        .from("projects")
-        .update({ bom_url: json.url })
-        .eq("id", projectId)
-        .eq("user_id", session.userId);
-      if (updateError) {
-        console.error("[uploads] bom project update failed", updateError);
-        return res.status(500).json({ ok: false });
-      }
-      res.json({ ok: true, url: json.url });
-    } catch (e) {
-      console.error("[uploads] bom upload failed", e);
-      res.status(502).json({ ok: false, error: "cdn_failed" });
+    const outcome = await uploadToCdn(form, key);
+    if (!outcome.ok) {
+      if (!outcome.ambiguous)
+        await releaseCdnUploadQuota(session.userId, safeBuf.length, quota.windowId);
+      return res.status(502).json({ ok: false, error: "cdn_failed" });
     }
+    const { error: updateError } = await supabase
+      .from("projects")
+      .update({ bom_url: outcome.url })
+      .eq("id", projectId)
+      .eq("user_id", session.userId);
+    if (updateError) {
+      console.error("[uploads] bom project update failed", updateError);
+      return res.status(500).json({ ok: false });
+    }
+    res.json({ ok: true, url: outcome.url });
   },
 );
 

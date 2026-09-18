@@ -15,16 +15,7 @@
 // The well-known forges keep a pure fast path, so the overwhelmingly common
 // case costs no network call at all and behaves exactly as it did before.
 
-export interface GitProbeDeps {
-  /**
-   * Same SSRF guard urlAlive uses in projects.ts (rejects anything that
-   * resolves to an internal address). Injected rather than imported so this
-   * module stays unit-testable with no DNS.
-   */
-  hostIsPublic: (hostname: string) => Promise<boolean>;
-  fetchImpl?: typeof fetch;
-  timeoutMs?: number;
-}
+import { hostIsPublic, safeRequest, type UrlLivenessDeps } from "./urlLiveness.js";
 
 const KNOWN_FORGE_HOSTS = new Set([
   "github.com",
@@ -76,29 +67,12 @@ export function looksLikeGitAdvertisement(contentType: string, bodyPrefix: strin
   return /^[0-9a-f]{40}\s+\S+/.test(bodyPrefix);
 }
 
-// Only ever pull the first chunk. The endpoint is small on a real repo, but
-// an arbitrary player-supplied host could stream forever.
-async function readBodyPrefix(res: Response, max = 256): Promise<string> {
-  const reader = res.body?.getReader();
-  if (!reader) return "";
-  try {
-    const { value } = await reader.read();
-    return new TextDecoder().decode(value ?? new Uint8Array()).slice(0, max);
-  } catch {
-    return "";
-  } finally {
-    reader.cancel().catch(() => {});
-  }
-}
-
-export async function isGitRepoUrl(raw: unknown, deps: GitProbeDeps): Promise<boolean> {
+export async function isGitRepoUrl(raw: unknown, deps: UrlLivenessDeps = {}): Promise<boolean> {
   const u = parseRepoUrl(raw);
   if (!u) return false;
 
   // github.com/<user>/<repo> and friends, unchanged from the old check.
   if (isKnownForgeHost(u.hostname)) return pathSegments(u) >= 2;
-
-  const { hostIsPublic, fetchImpl = fetch, timeoutMs = 8000 } = deps;
 
   // Redirects are followed by hand and the host re-validated at every hop,
   // exactly as urlAlive does: a public URL that 302s to 169.254.169.254 must
@@ -112,29 +86,26 @@ export async function isGitRepoUrl(raw: unknown, deps: GitProbeDeps): Promise<bo
       return false;
     }
     if (cu.protocol !== "https:" && cu.protocol !== "http:") return false;
-    if (!(await hostIsPublic(cu.hostname))) return false;
+    if (!(await hostIsPublic(cu.hostname, deps))) return false;
     try {
-      const res = await fetchImpl(current, {
-        method: "GET",
-        redirect: "manual",
-        signal: AbortSignal.timeout(timeoutMs),
-        // Some hosts only serve the advertisement to something that looks
-        // like git; none of them mind an honest UA.
-        headers: { "User-Agent": "git/2.43.0 (pixl ship check)" },
-      });
+      const res = await safeRequest(
+        cu,
+        {
+          method: "GET",
+          // Some hosts only serve the advertisement to something that looks
+          // like git; none of them mind an honest UA.
+          headers: { "User-Agent": "git/2.43.0 (pixl ship check)" },
+          readBodyPrefix: true,
+        },
+        deps,
+      );
       if (res.status >= 300 && res.status < 400) {
-        const loc = res.headers.get("location");
-        if (!loc) return false;
-        current = new URL(loc, current).toString();
+        if (!res.location) return false;
+        current = new URL(res.location, current).toString();
         continue;
       }
-      if (!res.ok) return false;
-      const contentType = res.headers.get("content-type") || "";
-      if (looksLikeGitAdvertisement(contentType, "")) {
-        res.body?.cancel().catch(() => {});
-        return true;
-      }
-      return looksLikeGitAdvertisement(contentType, await readBodyPrefix(res));
+      if (res.status < 200 || res.status >= 300) return false;
+      return looksLikeGitAdvertisement(res.contentType ?? "", res.bodyPrefix);
     } catch {
       return false;
     }

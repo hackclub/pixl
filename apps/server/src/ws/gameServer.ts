@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { Server, IncomingMessage } from "http";
 import { verifySessionToken } from "../auth/session.js";
+import { consumeRateLimit, type RateLimitOptions } from "../rateLimit.js";
 import { activeBan, censorChat, recordChatViolation } from "../moderation.js";
 import { areFriends } from "../social.js";
 import { getPixoChatReply } from "../pixoChat.js";
@@ -52,6 +53,29 @@ const MOVE_SLACK_PX = 200;
 const MSG_WINDOW_MS = 1000;
 const MSG_MAX_PER_WINDOW = 60;
 
+// A lobby password is a 4-digit code (10,000 possibilities), meant as
+// low-friction sharing between friends, not a real secret - but with no
+// per-attempt limit, the generic message throttle above still lets the full
+// keyspace be guessed in a few minutes over one connection. Keyed per user,
+// not per lobby, so guessing a mistyped digit against your own friend's
+// lobby doesn't burn attempts against everyone else's.
+export const LOBBY_JOIN_ATTEMPT_LIMIT: RateLimitOptions = {
+  windowMs: 60_000,
+  max: 10,
+  name: "lobby_join_attempt",
+};
+
+// save_npcs is one batched upsert (up to 64 rows) per message, not per NPC,
+// but the generic 60/sec message throttle still lets that be 60 upserts/sec
+// sustained from a single connection. Legit play never needs sub-second NPC
+// persistence, so a per-user cooldown is a cheap backstop against DB write
+// amplification with no real cost to normal use.
+export const NPC_SAVE_LIMIT: RateLimitOptions = {
+  windowMs: 2000,
+  max: 1,
+  name: "npc_save",
+};
+
 const SKIN_RE = /^(cvc:[1-9]|cv1:b[1-3]h(\d|1[0-8])t([1-9]|1[0-8])o([1-9]|1[0-8]))$/;
 
 const EMOTE_KEYS = new Set([
@@ -85,7 +109,7 @@ function lobbyMemberCount(id: string, exceptUserId?: string): number {
   return n;
 }
 
-function lobbyJoinError(
+export function lobbyJoinError(
   l: Lobby | undefined,
   userId: string,
   password: string,
@@ -95,6 +119,20 @@ function lobbyJoinError(
   if (!l.isPublic && l.ownerId !== userId && password !== l.password)
     return "Wrong password.";
   return null;
+}
+
+// checked before the password, every attempt
+export function lobbyJoinDenialReason(
+  l: Lobby | undefined,
+  userId: string,
+  password: string,
+): string | null {
+  if (l && !l.isPublic && l.ownerId !== userId) {
+    if (consumeRateLimit(LOBBY_JOIN_ATTEMPT_LIMIT, userId) !== null) {
+      return "Too many attempts. Wait a bit and try again.";
+    }
+  }
+  return lobbyJoinError(l, userId, password);
 }
 
 function pickPublicLobby(): Lobby | null {
@@ -1151,7 +1189,7 @@ export function attachWebSocketServer(httpServer: Server) {
         const id = String(msg.id ?? "").trim().toUpperCase();
         const password = String(msg.password ?? "").trim();
         const lobby = lobbies.get(id);
-        const err = lobbyJoinError(lobby, player.userId, password);
+        const err = lobbyJoinDenialReason(lobby, player.userId, password);
         if (err || !lobby) {
           ws.send(
             JSON.stringify({
@@ -1292,6 +1330,7 @@ export function attachWebSocketServer(httpServer: Server) {
         const scene = baseSceneName(String(msg.scene ?? ""));
         const list = Array.isArray(msg.npcs) ? msg.npcs : [];
         if (!scene || list.length === 0 || list.length > 64) return;
+        if (consumeRateLimit(NPC_SAVE_LIMIT, player.userId) !== null) return;
         persistNpcs(player.userId, scene, list).catch(console.error);
       }
     });

@@ -1,6 +1,4 @@
 import { Router } from "express";
-import { lookup } from "node:dns/promises";
-import { isIP } from "node:net";
 import { verifySessionToken } from "../auth/session.js";
 import { supabase } from "../db/client.js";
 import { addNotification } from "./notifications.js";
@@ -10,8 +8,69 @@ import { fetchHackatimeStats, fetchTrackedSecondsSince } from "../hackatime/api.
 import { postShipToSlack } from "../shipNotify.js";
 import { normalizeProjectUrl } from "./projectUrlSafety.js";
 import { isGitRepoUrl } from "./gitRepoUrl.js";
+import { urlAlive } from "./urlLiveness.js";
 
 const router = Router();
+
+// Explicit allowlist of what a raw `projects` row hands back to its own
+// owner (or an accepted collaborator) - list/create/update/ship/unship all
+// go through this. A denylist here kept missing new staff/admin columns as
+// migrations added them (reviewing_at, the ai_review_* block, hours_extended_*,
+// journal_share_token, ...) - an unlisted column is dropped by default instead,
+// so a new migration can't silently start leaking. approved_hours/
+// first_pass_hours are proposals until a project is actually approved, so
+// they're gated here rather than left to each call site to remember.
+const PLAYER_PROJECT_FIELDS = [
+  "id",
+  "name",
+  "description",
+  "repo_url",
+  "demo_url",
+  "image_url",
+  "project_type",
+  "kind",
+  "used_ai",
+  "ai_notes",
+  "hackatime_projects",
+  "hackatime_seconds",
+  "level",
+  "needs_funding",
+  "funding_usd",
+  "bom_url",
+  "cart_screenshot_urls",
+  "finished_build",
+  "other_ysws",
+  "other_ysws_notes",
+  "status",
+  "created_at",
+  "shipped_at",
+  "rejected_at",
+  "reject_reason",
+  "review_note",
+  "banned_at",
+  "is_update",
+  "update_notes",
+  "ship_note",
+  "eligibility_attested",
+  "sidequest_id",
+  "trial_reward_choice",
+  "trial_held_px",
+  "trial_prize_px",
+  "join_code",
+  "is_peak",
+] as const;
+
+export function toPlayerProject(p: Record<string, unknown>): Record<string, unknown> {
+  const safe: Record<string, unknown> = {};
+  for (const field of PLAYER_PROJECT_FIELDS) safe[field] = p[field] ?? null;
+  // Credited (possibly deflated) hours only become real once a project is
+  // actually approved - a stale value from an earlier review cycle must not
+  // leak back out on the very next save/ship/unship.
+  const approved = p.status === "approved";
+  safe.approved_hours = approved ? (p.approved_hours ?? null) : null;
+  safe.first_pass_hours = approved ? (p.first_pass_hours ?? null) : null;
+  return safe;
+}
 
 // What kind of thing the player shipped , shown to reviewers so they know how
 // to judge it (a web game vs a hardware build vs a CAD model are graded
@@ -147,49 +206,11 @@ router.get("/api/projects", async (req, res) => {
       );
     }
   }
-  // Internal-only moderation/reviewer-identity/fraud-detection fields a raw
-  // `select("*")` above would otherwise hand straight to the player (or any
-  // accepted collaborator) that owns this response - a reason a player is
-  // meant to see (review_note, reject_reason) stays; who did it, and Joe's
-  // fraud read on them, never should. Destructured out rather than an
-  // allow-list, matching the redaction already done below for
-  // approved_hours/first_pass_hours on this same object.
-  const redactStaffFields = (p: Record<string, unknown>) => {
-    const {
-      ban_by,
-      ban_reason,
-      reviewing_by,
-      first_pass_by,
-      first_pass_note,
-      first_pass_verdict,
-      system_note,
-      review_note_by,
-      reject_by,
-      hold_by,
-      hold_reason,
-      spot_checked_by,
-      spot_checked_at,
-      review_draft,
-      review_draft_by,
-      review_draft_at,
-      airtable_record_id,
-      joe_project_id,
-      joe_submitted_at,
-      joe_trust_score,
-      joe_outcome,
-      joe_reason,
-      joe_reviewed_at,
-      joe_reviewer,
-      joe_error,
-      ...safe
-    } = p;
-    return safe;
-  };
-
   res.json({
     ok: true,
     projects: projects.map((p) => ({
-      ...redactStaffFields(p),
+      ...toPlayerProject(p),
+      is_owner: p.is_owner,
       pixels_earned: earned.get(p.id as number) ?? 0,
       journal_seconds: journalSeconds.get(p.id as number) ?? 0,
       sidequest_name: p.sidequest_id
@@ -198,14 +219,6 @@ router.get("/api/projects", async (req, res) => {
       trial_prize_name: p.sidequest_id
         ? (trialPrize.get(p.sidequest_id as number) ?? null)
         : null,
-      // Credited (possibly deflated) hours only become real once a project
-      // is actually approved , a raw `select("*")` above would otherwise
-      // leak whatever a first-pass reviewer proposed (or a needs_changes
-      // pass entered) straight into this list response, before the final
-      // pass that's allowed to change it. See the matching redaction on
-      // /api/projects/:id/timeline.
-      approved_hours: p.status === "approved" ? p.approved_hours : null,
-      first_pass_hours: p.status === "approved" ? p.first_pass_hours : null,
     })),
   });
 });
@@ -266,97 +279,6 @@ function normalizeDemoUrl(raw: string): { error: string } | { url: string } {
   if (host === "github.com" && !/\/releases(\/|$)/.test(u.pathname))
     return { error: "demo_is_repo" };
   return { url: u.toString() };
-}
-
-// SSRF guard for the ship-time liveness checks. A player fully controls demo_url
-// (any host is accepted by normalizeDemoUrl) and a repo link can redirect
-// anywhere, so before we ever fetch() a player-supplied URL we make sure the
-// host doesn't resolve to a loopback / private / link-local address , otherwise
-// urlAlive becomes a probe for internal services and the cloud metadata IP.
-function isBlockedIp(ip: string): boolean {
-  const v = isIP(ip);
-  if (v === 4) {
-    const [a, b] = ip.split(".").map(Number);
-    if (a === 0 || a === 10 || a === 127) return true; // this-network, private, loopback
-    if (a === 169 && b === 254) return true; // link-local + cloud metadata (169.254.169.254)
-    if (a === 172 && b >= 16 && b <= 31) return true; // private
-    if (a === 192 && b === 168) return true; // private
-    if (a === 100 && b >= 64 && b <= 127) return true; // carrier-grade NAT
-    return false;
-  }
-  if (v === 6) {
-    const s = ip.toLowerCase();
-    if (s === "::1" || s === "::") return true; // loopback / unspecified
-    if (s.startsWith("::ffff:")) return isBlockedIp(s.slice(7)); // IPv4-mapped
-    if (s.startsWith("fc") || s.startsWith("fd")) return true; // unique local
-    if (s.startsWith("fe80")) return true; // link-local
-    return false;
-  }
-  return true; // not a parseable IP - refuse rather than guess
-}
-
-async function hostIsPublic(hostname: string): Promise<boolean> {
-  if (isIP(hostname)) return !isBlockedIp(hostname);
-  try {
-    const addrs = await lookup(hostname, { all: true });
-    // Reject if it doesn't resolve, or if ANY resolved address is internal.
-    return addrs.length > 0 && addrs.every((a) => !isBlockedIp(a.address));
-  } catch {
-    return false;
-  }
-}
-
-// Roblox's WAF blocks the bot-shaped HEAD/GET requests urlAlive sends (no browser
-// UA, no cookies) even for a game that's genuinely live and playable , every
-// roblox.com demo link was getting rejected as "unreachable". Skip the fetch for
-// these hosts once the SSRF guard clears them; still no bypass of hostIsPublic.
-const TRUSTED_UNFETCHABLE_HOSTS = new Set(["roblox.com"]);
-
-function isTrustedUnfetchableHost(hostname: string): boolean {
-  return TRUSTED_UNFETCHABLE_HOSTS.has(hostname.replace(/^www\./, "").toLowerCase());
-}
-
-async function urlAlive(url: string): Promise<boolean> {
-  // Follow redirects by hand so we can re-validate the host at every hop , a
-  // public URL that 302s to http://169.254.169.254 must not slip through.
-  // (Note: this does not close DNS-rebinding between the check and fetch's own
-  // resolution; blocking literal internal targets and redirect chains is the
-  // proportionate guard here.)
-  let current = url;
-  for (let hop = 0; hop < 5; hop++) {
-    let u: URL;
-    try {
-      u = new URL(current);
-    } catch {
-      return false;
-    }
-    if (u.protocol !== "https:" && u.protocol !== "http:") return false;
-    if (!(await hostIsPublic(u.hostname))) return false;
-    if (isTrustedUnfetchableHost(u.hostname)) return true;
-    try {
-      let r = await fetch(current, {
-        method: "HEAD",
-        redirect: "manual",
-        signal: AbortSignal.timeout(8000),
-      });
-      if (r.status === 405 || r.status === 501)
-        r = await fetch(current, {
-          method: "GET",
-          redirect: "manual",
-          signal: AbortSignal.timeout(8000),
-        });
-      if (r.status >= 300 && r.status < 400) {
-        const loc = r.headers.get("location");
-        if (!loc) return false;
-        current = new URL(loc, current).toString();
-        continue;
-      }
-      return r.ok || r.status === 401 || r.status === 403;
-    } catch {
-      return false;
-    }
-  }
-  return false; // too many redirects
 }
 
 interface ProjectFields {
@@ -515,7 +437,7 @@ router.post("/api/projects", async (req, res) => {
     return res.status(500).json({ ok: false });
   }
   void addNotification(session.userId, "Project logged", `You logged "${parsed.fields.name}".`);
-  res.json({ ok: true, project: data });
+  res.json({ ok: true, project: toPlayerProject(data) });
 });
 
 // Update one of the user's own projects.
@@ -568,7 +490,7 @@ router.put("/api/projects/:id", async (req, res) => {
     console.error("[projects] update failed", error);
     return res.status(500).json({ ok: false });
   }
-  res.json({ ok: true, project: data });
+  res.json({ ok: true, project: toPlayerProject(data) });
 });
 
 // Ship a project for review: draft/needs_changes -> shipped, or approved ->
@@ -609,7 +531,7 @@ router.post("/api/projects/:id/ship", async (req, res) => {
   if (req.body?.eligibilityAttested !== true)
     return res.status(400).json({ ok: false, error: "eligibility_attestation_required" });
   // URLs are only validated here, at ship time (save accepts anything).
-  if (!(await isGitRepoUrl(project.repo_url as string, { hostIsPublic })))
+  if (!(await isGitRepoUrl(project.repo_url as string)))
     return res.status(400).json({ ok: false, error: "repo_not_git" });
   const demoCheck = normalizeDemoUrl(project.demo_url as string);
   if ("error" in demoCheck)
@@ -901,7 +823,7 @@ router.post("/api/projects/:id/ship", async (req, res) => {
     `"${project.name}" is in the review queue. You'll hear back here once it's reviewed.`,
   );
   void postShipToSlack(data, ownerSlackId, trackedSeconds, isUpdate);
-  res.json({ ok: true, project: data });
+  res.json({ ok: true, project: toPlayerProject(data) });
 });
 
 // Withdraw a project from the review queue back to a draft so the owner can
@@ -949,7 +871,7 @@ router.post("/api/projects/:id/unship", async (req, res) => {
     console.error("[projects] unship failed", error);
     return res.status(500).json({ ok: false });
   }
-  res.json({ ok: true, project: data });
+  res.json({ ok: true, project: toPlayerProject(data) });
 });
 
 // Settle an approved Trial ship: the prize, or the pixels the payout math held
