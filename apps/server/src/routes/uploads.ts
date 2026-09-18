@@ -4,6 +4,7 @@ import { supabase } from "../db/client.js";
 import { checkImageSafe, MAX_MODERATE_BYTES } from "../imageModeration.js";
 import { consumeRateLimit, type RateLimitOptions } from "../rateLimit.js";
 import { validateBomCsv, sanitizeBomCsv } from "./bomCsv.js";
+import { CDN_UPLOAD_QUOTA, reserveCdnUploadQuota, releaseCdnUploadQuota } from "./cdnQuota.js";
 
 const router = Router();
 
@@ -58,6 +59,12 @@ router.post(
         .json({ ok: false, error: "image_rejected", reason: safety.reason });
     }
 
+    const quota = reserveCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, buf.length);
+    if (!quota.ok) {
+      res.setHeader("Retry-After", quota.retryAfterSeconds);
+      return res.status(429).json({ ok: false, error: "quota_exceeded" });
+    }
+
     const ext = type === "image/jpeg" ? "jpg" : (type.split("/")[1] ?? "png");
     const form = new FormData();
     form.append(
@@ -86,7 +93,10 @@ router.post(
       cdnUrl = null;
     }
 
-    if (!cdnUrl) return res.status(502).json({ ok: false, error: "cdn_failed" });
+    if (!cdnUrl) {
+      releaseCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, buf.length);
+      return res.status(502).json({ ok: false, error: "cdn_failed" });
+    }
     res.json({ ok: true, url: cdnUrl });
   },
 );
@@ -154,6 +164,12 @@ router.post(
     if (!validation.ok) return res.status(400).json({ ok: false, error: validation.error });
     const safeBuf = sanitizeBomCsv(buf);
 
+    const quota = reserveCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, safeBuf.length);
+    if (!quota.ok) {
+      res.setHeader("Retry-After", quota.retryAfterSeconds);
+      return res.status(429).json({ ok: false, error: "quota_exceeded" });
+    }
+
     const form = new FormData();
     form.append("file", new Blob([new Uint8Array(safeBuf)], { type: "text/csv" }), `bom-${Date.now()}.csv`);
 
@@ -165,11 +181,13 @@ router.post(
       });
       if (!r.ok) {
         console.error("[uploads] bom cdn rejected", r.status, await r.text());
+        releaseCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, safeBuf.length);
         return res.status(502).json({ ok: false, error: "cdn_failed" });
       }
       const json = (await r.json()) as { url?: string };
       if (!json.url) {
         console.error("[uploads] bom cdn response missing url", json);
+        releaseCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, safeBuf.length);
         return res.status(502).json({ ok: false, error: "cdn_failed" });
       }
       const { error: updateError } = await supabase
@@ -184,6 +202,7 @@ router.post(
       res.json({ ok: true, url: json.url });
     } catch (e) {
       console.error("[uploads] bom upload failed", e);
+      releaseCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, safeBuf.length);
       res.status(502).json({ ok: false, error: "cdn_failed" });
     }
   },

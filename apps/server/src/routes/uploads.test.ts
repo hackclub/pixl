@@ -5,6 +5,7 @@ import express from "express";
 import { issueSessionToken } from "../auth/session.js";
 import { consumeRateLimit } from "../rateLimit.js";
 import { validateBomCsv, sanitizeBomCsv } from "./bomCsv.js";
+import { CDN_UPLOAD_QUOTA, reserveCdnUploadQuota } from "./cdnQuota.js";
 import uploadsRouter from "./uploads.js";
 
 test("accepts a structured BOM CSV", () => {
@@ -201,6 +202,33 @@ describe("POST /api/uploads", () => {
       expect(body.ok).toBe(true);
       expect(body.url).toBe("https://cdn.hackclub.com/fixture.png");
       expect(mock.wasCdnCalled()).toBe(true);
+    } finally {
+      await app.close();
+      mock.restore();
+    }
+  });
+
+  test("an exhausted CDN quota blocks the upload before the CDN call", async () => {
+    process.env.HACKCLUB_CDN_KEY = "test-cdn-key";
+    process.env.OPENROUTER_API_KEY = "test-openrouter-key";
+    const userId = `upload-test-quota-${Date.now()}`;
+    for (let i = 0; i < CDN_UPLOAD_QUOTA.maxRequests; i++) {
+      reserveCdnUploadQuota(CDN_UPLOAD_QUOTA, userId, 1);
+    }
+    const mock = mockExternalFetch({ openrouter: safeVerdict, cdn: cdnSuccess });
+    const app = await startTestApp();
+    try {
+      const token = issueSessionToken({ userId, displayName: "x" });
+      const res = await fetch(`${app.baseUrl}/api/uploads?token=${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "image/png" },
+        body: new Uint8Array([1, 2, 3, 4]),
+      });
+      const body = (await res.json()) as { ok: boolean; error?: string };
+
+      expect(res.status).toBe(429);
+      expect(body.error).toBe("quota_exceeded");
+      expect(mock.wasCdnCalled()).toBe(false);
     } finally {
       await app.close();
       mock.restore();
