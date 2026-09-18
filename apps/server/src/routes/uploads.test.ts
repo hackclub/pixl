@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import express from "express";
 import { issueSessionToken } from "../auth/session.js";
 import { consumeRateLimit } from "../rateLimit.js";
-import { validateBomCsv } from "./bomCsv.js";
+import { validateBomCsv, sanitizeBomCsv } from "./bomCsv.js";
 import uploadsRouter from "./uploads.js";
 
 test("accepts a structured BOM CSV", () => {
@@ -31,6 +31,38 @@ test("limits one authenticated account without limiting another", () => {
   expect(consumeRateLimit(limit, "owner-a")).toBeNull();
   expect(consumeRateLimit(limit, "owner-a")).toBeGreaterThan(0);
   expect(consumeRateLimit(limit, "owner-b")).toBeNull();
+});
+
+test("neutralizes a formula-injection cell a reviewer would open in Excel/Sheets", () => {
+  const csv = Buffer.from("Part,Quantity\n=1+1*99,4\n");
+
+  const result = sanitizeBomCsv(csv);
+
+  expect(result.toString("utf-8")).toBe("Part,Quantity\r\n'=1+1*99,4");
+});
+
+test("every formula-triggering prefix gets neutralized", () => {
+  for (const prefix of ["=", "+", "-", "@"]) {
+    const csv = Buffer.from(`Part,Quantity\n${prefix}cmd,4\n`);
+    const rows = sanitizeBomCsv(csv).toString("utf-8").split("\r\n");
+    expect(rows[1]).toBe(`'${prefix}cmd,4`);
+  }
+});
+
+test("ordinary BOM data round-trips unchanged", () => {
+  const csv = Buffer.from("Part,Quantity,Notes\nResistor 10k,4,5% tolerance\n");
+
+  const result = sanitizeBomCsv(csv);
+
+  expect(result.toString("utf-8")).toBe("Part,Quantity,Notes\r\nResistor 10k,4,5% tolerance");
+});
+
+test("a cell needing quoting still round-trips its value", () => {
+  const csv = Buffer.from('Part,Notes\nResistor,"has, a comma"\n');
+
+  const result = sanitizeBomCsv(csv);
+
+  expect(result.toString("utf-8")).toBe('Part,Notes\r\nResistor,"has, a comma"');
 });
 
 async function startTestApp() {

@@ -3,7 +3,7 @@ import { verifySessionToken } from "../auth/session.js";
 import { supabase } from "../db/client.js";
 import { checkImageSafe, MAX_MODERATE_BYTES } from "../imageModeration.js";
 import { consumeRateLimit, type RateLimitOptions } from "../rateLimit.js";
-import { validateBomCsv } from "./bomCsv.js";
+import { validateBomCsv, sanitizeBomCsv } from "./bomCsv.js";
 
 const router = Router();
 
@@ -152,9 +152,10 @@ router.post(
     }
     const validation = validateBomCsv(buf);
     if (!validation.ok) return res.status(400).json({ ok: false, error: validation.error });
+    const safeBuf = sanitizeBomCsv(buf);
 
     const form = new FormData();
-    form.append("file", new Blob([new Uint8Array(buf)], { type: "text/csv" }), `bom-${Date.now()}.csv`);
+    form.append("file", new Blob([new Uint8Array(safeBuf)], { type: "text/csv" }), `bom-${Date.now()}.csv`);
 
     try {
       const r = await fetch("https://cdn.hackclub.com/api/v4/upload", {
