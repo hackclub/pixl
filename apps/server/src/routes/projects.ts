@@ -8,9 +8,51 @@ import { fetchHackatimeStats, fetchTrackedSecondsSince } from "../hackatime/api.
 import { postShipToSlack } from "../shipNotify.js";
 import { normalizeProjectUrl } from "./projectUrlSafety.js";
 import { isGitRepoUrl } from "./gitRepoUrl.js";
-import { hostIsPublic, urlAlive } from "./urlLiveness.js";
+import { urlAlive } from "./urlLiveness.js";
 
 const router = Router();
+
+// Internal-only moderation/reviewer-identity/fraud-detection fields a raw
+// `select("*")`/`.select().single()` would otherwise hand straight to the
+// player (or any accepted collaborator) that owns this response - a reason a
+// player is meant to see (review_note, reject_reason) stays; who did it, and
+// Joe's fraud read on them, never should. Destructured out rather than an
+// allow-list, matching the redaction already done for approved_hours/
+// first_pass_hours elsewhere. Every response that hands a project row back
+// to its own owner (list, create, update, ship, unship) must go through
+// this - the fields can already be populated from an earlier review cycle,
+// not just written by the current request.
+export function redactStaffFields(p: Record<string, unknown>): Record<string, unknown> {
+  const {
+    ban_by,
+    ban_reason,
+    reviewing_by,
+    first_pass_by,
+    first_pass_note,
+    first_pass_verdict,
+    system_note,
+    review_note_by,
+    reject_by,
+    hold_by,
+    hold_reason,
+    spot_checked_by,
+    spot_checked_at,
+    review_draft,
+    review_draft_by,
+    review_draft_at,
+    airtable_record_id,
+    joe_project_id,
+    joe_submitted_at,
+    joe_trust_score,
+    joe_outcome,
+    joe_reason,
+    joe_reviewed_at,
+    joe_reviewer,
+    joe_error,
+    ...safe
+  } = p;
+  return safe;
+}
 
 // What kind of thing the player shipped , shown to reviewers so they know how
 // to judge it (a web game vs a hardware build vs a CAD model are graded
@@ -146,45 +188,6 @@ router.get("/api/projects", async (req, res) => {
       );
     }
   }
-  // Internal-only moderation/reviewer-identity/fraud-detection fields a raw
-  // `select("*")` above would otherwise hand straight to the player (or any
-  // accepted collaborator) that owns this response - a reason a player is
-  // meant to see (review_note, reject_reason) stays; who did it, and Joe's
-  // fraud read on them, never should. Destructured out rather than an
-  // allow-list, matching the redaction already done below for
-  // approved_hours/first_pass_hours on this same object.
-  const redactStaffFields = (p: Record<string, unknown>) => {
-    const {
-      ban_by,
-      ban_reason,
-      reviewing_by,
-      first_pass_by,
-      first_pass_note,
-      first_pass_verdict,
-      system_note,
-      review_note_by,
-      reject_by,
-      hold_by,
-      hold_reason,
-      spot_checked_by,
-      spot_checked_at,
-      review_draft,
-      review_draft_by,
-      review_draft_at,
-      airtable_record_id,
-      joe_project_id,
-      joe_submitted_at,
-      joe_trust_score,
-      joe_outcome,
-      joe_reason,
-      joe_reviewed_at,
-      joe_reviewer,
-      joe_error,
-      ...safe
-    } = p;
-    return safe;
-  };
-
   res.json({
     ok: true,
     projects: projects.map((p) => ({
@@ -423,7 +426,7 @@ router.post("/api/projects", async (req, res) => {
     return res.status(500).json({ ok: false });
   }
   void addNotification(session.userId, "Project logged", `You logged "${parsed.fields.name}".`);
-  res.json({ ok: true, project: data });
+  res.json({ ok: true, project: redactStaffFields(data) });
 });
 
 // Update one of the user's own projects.
@@ -476,7 +479,7 @@ router.put("/api/projects/:id", async (req, res) => {
     console.error("[projects] update failed", error);
     return res.status(500).json({ ok: false });
   }
-  res.json({ ok: true, project: data });
+  res.json({ ok: true, project: redactStaffFields(data) });
 });
 
 // Ship a project for review: draft/needs_changes -> shipped, or approved ->
@@ -517,7 +520,7 @@ router.post("/api/projects/:id/ship", async (req, res) => {
   if (req.body?.eligibilityAttested !== true)
     return res.status(400).json({ ok: false, error: "eligibility_attestation_required" });
   // URLs are only validated here, at ship time (save accepts anything).
-  if (!(await isGitRepoUrl(project.repo_url as string, { hostIsPublic })))
+  if (!(await isGitRepoUrl(project.repo_url as string)))
     return res.status(400).json({ ok: false, error: "repo_not_git" });
   const demoCheck = normalizeDemoUrl(project.demo_url as string);
   if ("error" in demoCheck)
@@ -809,7 +812,7 @@ router.post("/api/projects/:id/ship", async (req, res) => {
     `"${project.name}" is in the review queue. You'll hear back here once it's reviewed.`,
   );
   void postShipToSlack(data, ownerSlackId, trackedSeconds, isUpdate);
-  res.json({ ok: true, project: data });
+  res.json({ ok: true, project: redactStaffFields(data) });
 });
 
 // Withdraw a project from the review queue back to a draft so the owner can
@@ -857,7 +860,7 @@ router.post("/api/projects/:id/unship", async (req, res) => {
     console.error("[projects] unship failed", error);
     return res.status(500).json({ ok: false });
   }
-  res.json({ ok: true, project: data });
+  res.json({ ok: true, project: redactStaffFields(data) });
 });
 
 // Settle an approved Trial ship: the prize, or the pixels the payout math held
