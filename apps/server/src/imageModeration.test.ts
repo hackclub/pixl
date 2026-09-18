@@ -85,3 +85,52 @@ test("rejects an image the model explicitly flags as unsafe", async () => {
   expect(result.safe).toBe(false);
   expect(result.reason).toBe("nudity");
 });
+
+test("allows an image the model explicitly marks safe", async () => {
+  process.env.OPENROUTER_API_KEY = "test-key";
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({ choices: [{ message: { content: '{"safe": true}' } }] }),
+      { status: 200 },
+    );
+
+  const result = await checkImageSafe(Buffer.from("test"), "image/png");
+
+  expect(result.safe).toBe(true);
+});
+
+function contentResponse(content: string): Response {
+  return new Response(
+    JSON.stringify({ choices: [{ message: { content } }] }),
+    { status: 200 },
+  );
+}
+
+const MALFORMED_SCHEMAS = [
+  ["empty object", "{}"],
+  ["safe as a string \"true\"", '{"safe":"true"}'],
+  ["safe as a string \"false\"", '{"safe":"false"}'],
+  ["safe as null", '{"safe":null}'],
+  ["safe as a number", '{"safe":1}'],
+  ["not JSON at all", "sure looks safe to me"],
+] as const;
+
+for (const [label, content] of MALFORMED_SCHEMAS) {
+  test(`rejects a moderation response with ${label} (fails closed, not just on explicit false)`, async () => {
+    process.env.OPENROUTER_API_KEY = "test-key";
+    globalThis.fetch = async () => contentResponse(content);
+
+    const result = await checkImageSafe(Buffer.from("test"), "image/png");
+
+    expect(result.safe).toBe(false);
+  });
+}
+
+test("rejects a response with no choices/content at all", async () => {
+  process.env.OPENROUTER_API_KEY = "test-key";
+  globalThis.fetch = async () => new Response(JSON.stringify({}), { status: 200 });
+
+  const result = await checkImageSafe(Buffer.from("test"), "image/png");
+
+  expect(result.safe).toBe(false);
+});

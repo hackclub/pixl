@@ -53,11 +53,16 @@ export async function checkImageSafe(
     const start = content.indexOf("{");
     const end = content.lastIndexOf("}");
     if (start !== -1 && end > start) content = content.slice(start, end + 1);
-    const parsed = JSON.parse(content) as { safe?: boolean; reason?: string };
+    const parsed = JSON.parse(content) as { safe?: unknown; reason?: unknown };
+    if (parsed.safe === true) return { safe: true, reason: "" };
     if (parsed.safe === false) {
-      return { safe: false, reason: String(parsed.reason ?? "flagged as inappropriate").slice(0, 200) };
+      return {
+        safe: false,
+        reason: typeof parsed.reason === "string" ? parsed.reason.slice(0, 200) : "flagged as inappropriate",
+      };
     }
-    return { safe: true, reason: "" };
+    // not a literal boolean, treat as unanswered
+    return { safe: false, reason: "moderation_unavailable" };
   } catch (e) {
     console.error("checkImageSafe failed", e);
     return { safe: false, reason: "moderation_unavailable" };
