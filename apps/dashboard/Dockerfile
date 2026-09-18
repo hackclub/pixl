@@ -5,9 +5,8 @@
 # time. Locally the app runs on 4900; in the container it follows PORT so it
 # lines up with the other three services.
 
-FROM oven/bun:1.3.13 AS build
+FROM oven/bun:1.3.13 AS deps
 WORKDIR /app
-ENV NEXT_TELEMETRY_DISABLED=1
 
 # Not --frozen-lockfile: this app's bun.lock predates sharp being added to
 # package.json, so a frozen install refuses to run. Regenerating the lockfile
@@ -15,8 +14,16 @@ ENV NEXT_TELEMETRY_DISABLED=1
 COPY package.json bun.lock ./
 RUN bun install
 
+# next build runs under Node, not Bun - Bun 1.3.13 crashes with SIGILL partway
+# through this app's build. Dependencies are still installed with Bun above;
+# only the build step itself moves to Node.
+FROM node:22-slim AS build
+WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
+
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN bun run build
+RUN node node_modules/next/dist/bin/next build
 
 FROM node:22-slim AS runtime
 WORKDIR /app
