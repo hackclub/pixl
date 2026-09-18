@@ -14,6 +14,8 @@
 // Forgejo/Gitea first (by far the most common thing to self-host), then
 // GitLab. Both are plain GETs, so a miss costs two requests and is cached.
 
+import { safeJsonGet, type SafeJsonResult, type SsrfGuardDeps } from "./ssrfGuard";
+
 export type GitProvider = "github" | "forgejo" | "gitlab";
 
 export interface Commit {
@@ -79,7 +81,12 @@ export function parseRepoRef(url: string | null | undefined): RepoRef | null {
     return null;
   }
   if (u.protocol !== "https:" && u.protocol !== "http:") return null;
-  const host = u.hostname.replace(/^www\./, "").toLowerCase();
+  const hostname = u.hostname.replace(/^www\./, "").toLowerCase();
+  // A self-hosted Forgejo/Gitea commonly runs on a non-default port (Gitea's
+  // own default is 3000) - dropping it here would silently point every
+  // request this file makes at the wrong port instead of the one the player
+  // actually gave.
+  const host = u.port ? `${hostname}:${u.port}` : hostname;
 
   // GitLab hangs everything after the project behind a literal "/-/" segment
   // (/-/tree/main, /-/issues), and allows nested subgroups before it.
@@ -89,7 +96,7 @@ export function parseRepoRef(url: string | null | undefined): RepoRef | null {
   if (projectParts.length < 2) return null;
   projectParts[projectParts.length - 1] = projectParts[projectParts.length - 1].replace(/\.git$/, "");
 
-  const provider = KNOWN_HOSTS[host] ?? (host.endsWith(".github.com") ? "github" : null);
+  const provider = KNOWN_HOSTS[hostname] ?? (hostname.endsWith(".github.com") ? "github" : null);
   const path = provider === "gitlab" ? projectParts.join("/") : projectParts.slice(0, 2).join("/");
   return { provider, host, path };
 }
@@ -135,16 +142,24 @@ async function ghFetch(url: string, init?: RequestInit): Promise<Response> {
 // Both optional. Public repos on Codeberg and gitlab.com read fine
 // unauthenticated; a token only matters for a private instance or a tighter
 // self-hosted rate limit.
-function forgejoFetch(url: string, init?: RequestInit): Promise<Response> {
+//
+// Unlike ghFetch (fixed api.github.com target), these two hit a
+// player-supplied host - see parseRepoRef's KNOWN_HOSTS fallback below, which
+// accepts any hostname. apps/server's ship-time isGitRepoUrl check validates
+// that host is public at ship time only; this fetch can run again on every
+// review page view, potentially long after, so it has to re-validate (and
+// pin DNS against rebinding to) the host itself, right before sending
+// FORGEJO_TOKEN/GITLAB_TOKEN - see lib/ssrfGuard.ts.
+function forgejoFetch(url: string, deps?: SsrfGuardDeps): Promise<SafeJsonResult | null> {
   const headers: Record<string, string> = { ...BASE_HEADERS, Accept: "application/json" };
   if (process.env.FORGEJO_TOKEN) headers.Authorization = `token ${process.env.FORGEJO_TOKEN}`;
-  return fetch(url, { signal: AbortSignal.timeout(8000), ...init, headers });
+  return safeJsonGet(url, headers, deps);
 }
 
-function gitlabFetch(url: string, init?: RequestInit): Promise<Response> {
+function gitlabFetch(url: string, deps?: SsrfGuardDeps): Promise<SafeJsonResult | null> {
   const headers: Record<string, string> = { ...BASE_HEADERS, Accept: "application/json" };
   if (process.env.GITLAB_TOKEN) headers["PRIVATE-TOKEN"] = process.env.GITLAB_TOKEN;
-  return fetch(url, { signal: AbortSignal.timeout(8000), ...init, headers });
+  return safeJsonGet(url, headers, deps);
 }
 
 function fail(ref: RepoRef, error: string, detail?: string): CommitResult {
@@ -186,20 +201,20 @@ async function fetchGithub(ref: RepoRef, limit: number): Promise<CommitResult> {
 
 // Gitea/Forgejo. `stat=true` inlines per-commit additions/deletions, so
 // unlike GitHub this needs no follow-up request per commit.
-async function fetchForgejo(ref: RepoRef, limit: number): Promise<CommitResult | null> {
+async function fetchForgejo(ref: RepoRef, limit: number, deps?: SsrfGuardDeps): Promise<CommitResult | null> {
   const r = await forgejoFetch(
     `https://${ref.host}/api/v1/repos/${ref.path}/commits?limit=${limit}&stat=true`,
-    { cache: "no-store" },
+    deps,
   );
+  // null means either the host failed the SSRF check (blocked/private target,
+  // or its DNS didn't resolve) or a genuine network error - either way there's
+  // nothing to retry with a different dialect for a *known* host, and an
+  // unknown host just moves on to the next probe below.
+  if (!r) return ref.provider ? fail(ref, "fetch_failed") : null;
   if (r.status === 404) return ref.provider ? fail(ref, "not_found") : null;
-  if (isRateLimit(r)) return fail(ref, "rate_limited");
-  if (!r.ok) return ref.provider ? fail(ref, `http_${r.status}`) : null;
-  let json: any;
-  try {
-    json = await r.json();
-  } catch {
-    return null;
-  }
+  if (r.status === 429) return fail(ref, "rate_limited");
+  if (r.status < 200 || r.status >= 300) return ref.provider ? fail(ref, `http_${r.status}`) : null;
+  const json = r.json;
   if (!Array.isArray(json)) return null;
   const commits = json.map((c) => {
     const fullMessage = String(c.commit?.message ?? "");
@@ -221,21 +236,21 @@ async function fetchForgejo(ref: RepoRef, limit: number): Promise<CommitResult |
 
 // GitLab wants the project path url-encoded into a single segment.
 // `with_stats=true` inlines additions/deletions, same as Forgejo.
-async function fetchGitlab(ref: RepoRef, limit: number): Promise<CommitResult | null> {
+async function fetchGitlab(ref: RepoRef, limit: number, deps?: SsrfGuardDeps): Promise<CommitResult | null> {
   const id = encodeURIComponent(ref.path);
   const r = await gitlabFetch(
     `https://${ref.host}/api/v4/projects/${id}/repository/commits?per_page=${limit}&with_stats=true`,
-    { cache: "no-store" },
+    deps,
   );
+  // null means either the host failed the SSRF check (blocked/private target,
+  // or its DNS didn't resolve) or a genuine network error - either way there's
+  // nothing to retry with a different dialect for a *known* host, and an
+  // unknown host just moves on to the next probe below.
+  if (!r) return ref.provider ? fail(ref, "fetch_failed") : null;
   if (r.status === 404) return ref.provider ? fail(ref, "not_found") : null;
-  if (isRateLimit(r)) return fail(ref, "rate_limited");
-  if (!r.ok) return ref.provider ? fail(ref, `http_${r.status}`) : null;
-  let json: any;
-  try {
-    json = await r.json();
-  } catch {
-    return null;
-  }
+  if (r.status === 429) return fail(ref, "rate_limited");
+  if (r.status < 200 || r.status >= 300) return ref.provider ? fail(ref, `http_${r.status}`) : null;
+  const json = r.json;
   if (!Array.isArray(json)) return null;
   const commits = json.map((c) => {
     const fullMessage = String(c.message ?? c.title ?? "");
@@ -255,7 +270,11 @@ async function fetchGitlab(ref: RepoRef, limit: number): Promise<CommitResult | 
   return { repo: ref.path, commits, error: null, provider: "gitlab", host: ref.host };
 }
 
-export async function fetchCommits(repoUrl: string | null, limit = 50): Promise<CommitResult> {
+export async function fetchCommits(
+  repoUrl: string | null,
+  limit = 50,
+  deps?: SsrfGuardDeps,
+): Promise<CommitResult> {
   if (!repoUrl) return { repo: null, commits: [], error: null };
   const ref = parseRepoRef(repoUrl);
   if (!ref) return { repo: null, commits: [], error: "unsupported_host" };
@@ -269,14 +288,14 @@ export async function fetchCommits(repoUrl: string | null, limit = 50): Promise<
     if (ref.provider === "github") {
       result = await fetchGithub(ref, limit);
     } else if (ref.provider === "gitlab") {
-      result = (await fetchGitlab(ref, limit)) ?? fail(ref, "fetch_failed");
+      result = (await fetchGitlab(ref, limit, deps)) ?? fail(ref, "fetch_failed");
     } else if (ref.provider === "forgejo") {
-      result = (await fetchForgejo(ref, limit)) ?? fail(ref, "fetch_failed");
+      result = (await fetchForgejo(ref, limit, deps)) ?? fail(ref, "fetch_failed");
     } else {
       // Unknown host: whichever dialect answers with a real commit array wins.
       result =
-        (await fetchForgejo(ref, limit)) ??
-        (await fetchGitlab(ref, limit)) ??
+        (await fetchForgejo(ref, limit, deps)) ??
+        (await fetchGitlab(ref, limit, deps)) ??
         fail(ref, "unsupported_host");
     }
   } catch {
