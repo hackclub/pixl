@@ -50,6 +50,19 @@
       .open-sign .dot { animation: open-blink 1.4s steps(2) infinite; }
       @keyframes open-blink { 50% { opacity: 0.3; } }
 
+      /* ── region price-feedback notice ── */
+      .price-notice {
+        margin-top: 14px;
+        padding: 10px 14px;
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--faint);
+      }
+      .price-notice a {
+        color: var(--teal);
+        font-weight: 700;
+      }
+
       /* ── toolbar + facet chips ── */
       .toolbar {
         display: flex;
@@ -362,6 +375,12 @@
           <a class="btn teal" id="guest-login-btn" href="#" hidden>LOG IN TO BUY</a>
         </div>
       </section>
+
+      <div class="price-notice hud">
+        Think a price is too high for your region? Find a trustable local reseller link and
+        <a href="https://slack.com/app_redirect?channel=U0A2SJ7B739" target="_blank" rel="noopener">DM @Gabin on Slack</a>
+        to get it changed.
+      </div>
 
       <div class="toolbar">
         <input
