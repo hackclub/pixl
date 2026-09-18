@@ -19,11 +19,11 @@ function mockRpc(response: { data?: unknown; error?: { message: string } | null 
 
 describe("reserveCdnUploadQuota (RPC wiring)", () => {
   test("calls reserve_cdn_upload_quota with the right args and grants on ok:true", async () => {
-    const calls = mockRpc({ data: { ok: true } });
+    const calls = mockRpc({ data: { ok: true, window_id: 7 } });
 
     const result = await reserveCdnUploadQuota(CDN_UPLOAD_QUOTA, "user-a", 12345);
 
-    expect(result).toEqual({ ok: true });
+    expect(result).toEqual({ ok: true, windowId: 7 });
     expect(calls).toEqual([
       {
         fn: "reserve_cdn_upload_quota",
@@ -64,20 +64,23 @@ describe("reserveCdnUploadQuota (RPC wiring)", () => {
 });
 
 describe("releaseCdnUploadQuota (RPC wiring)", () => {
-  test("calls release_cdn_upload_quota with the right args", async () => {
+  test("calls release_cdn_upload_quota with the user, bytes, and the exact window id", async () => {
     const calls = mockRpc({ data: null, error: null });
 
-    await releaseCdnUploadQuota(CDN_UPLOAD_QUOTA, "user-e", 500);
+    await releaseCdnUploadQuota("user-e", 500, 7);
 
     expect(calls).toEqual([
-      { fn: "release_cdn_upload_quota", args: { p_user_id: "user-e", p_bytes: 500 } },
+      {
+        fn: "release_cdn_upload_quota",
+        args: { p_user_id: "user-e", p_bytes: 500, p_window_id: 7 },
+      },
     ]);
   });
 
   test("does not throw when the release RPC errors (best-effort)", async () => {
     mockRpc({ error: { message: "connection refused" } });
 
-    await expect(releaseCdnUploadQuota(CDN_UPLOAD_QUOTA, "user-f", 500)).resolves.toBeUndefined();
+    await expect(releaseCdnUploadQuota("user-f", 500, 7)).resolves.toBeUndefined();
   });
 });
 
@@ -95,8 +98,8 @@ describe.skipIf(!process.env.DATABASE_URL)("reserveCdnUploadQuota (real Postgres
   test("grants requests under both caps, denies once either is exceeded", async () => {
     const opts = { windowMs: 60_000, maxRequests: 2, maxBytes: 1000 };
     const user = await uid();
-    expect(await reserveCdnUploadQuota(opts, user, 100)).toEqual({ ok: true });
-    expect(await reserveCdnUploadQuota(opts, user, 100)).toEqual({ ok: true });
+    expect((await reserveCdnUploadQuota(opts, user, 100)).ok).toBe(true);
+    expect((await reserveCdnUploadQuota(opts, user, 100)).ok).toBe(true);
     const third = await reserveCdnUploadQuota(opts, user, 100);
     expect(third.ok).toBe(false);
   });
@@ -104,36 +107,69 @@ describe.skipIf(!process.env.DATABASE_URL)("reserveCdnUploadQuota (real Postgres
   test("denies once the byte cap is hit, even under the request cap", async () => {
     const opts = { windowMs: 60_000, maxRequests: 1000, maxBytes: 500 };
     const user = await uid();
-    expect(await reserveCdnUploadQuota(opts, user, 400)).toEqual({ ok: true });
+    expect((await reserveCdnUploadQuota(opts, user, 400)).ok).toBe(true);
     const second = await reserveCdnUploadQuota(opts, user, 200);
     expect(second.ok).toBe(false);
   });
 
   test("one user's usage never counts against another user's quota", async () => {
     const opts = { windowMs: 60_000, maxRequests: 1, maxBytes: 1_000_000 };
-    expect(await reserveCdnUploadQuota(opts, await uid(), 1)).toEqual({ ok: true });
-    expect(await reserveCdnUploadQuota(opts, await uid(), 1)).toEqual({ ok: true });
+    expect((await reserveCdnUploadQuota(opts, await uid(), 1)).ok).toBe(true);
+    expect((await reserveCdnUploadQuota(opts, await uid(), 1)).ok).toBe(true);
   });
 
-  test("releasing a reservation frees both budgets back up", async () => {
+  test("releasing a reservation with its own window id frees both budgets back up", async () => {
     const opts = { windowMs: 60_000, maxRequests: 1, maxBytes: 100 };
     const user = await uid();
-    expect(await reserveCdnUploadQuota(opts, user, 100)).toEqual({ ok: true });
+    const first = await reserveCdnUploadQuota(opts, user, 100);
+    expect(first.ok).toBe(true);
     expect((await reserveCdnUploadQuota(opts, user, 100)).ok).toBe(false);
 
-    await releaseCdnUploadQuota(opts, user, 100);
+    if (first.ok) await releaseCdnUploadQuota(user, 100, first.windowId);
 
-    expect(await reserveCdnUploadQuota(opts, user, 100)).toEqual({ ok: true });
+    expect((await reserveCdnUploadQuota(opts, user, 100)).ok).toBe(true);
   });
 
   test("the window resets after windowMs elapses", async () => {
     const opts = { windowMs: 1, maxRequests: 1, maxBytes: 1_000_000 };
     const user = await uid();
-    expect(await reserveCdnUploadQuota(opts, user, 1)).toEqual({ ok: true });
+    expect((await reserveCdnUploadQuota(opts, user, 1)).ok).toBe(true);
 
     await new Promise((resolve) => setTimeout(resolve, 1100));
 
-    expect(await reserveCdnUploadQuota(opts, user, 1)).toEqual({ ok: true });
+    expect((await reserveCdnUploadQuota(opts, user, 1)).ok).toBe(true);
+  });
+
+  // The window-boundary bug this migration fixes: a release that arrives
+  // after its window has already rolled over must never decrement the NEW
+  // window's usage - that would let a caller free up budget a live
+  // reservation is still holding. Backdates window_resets_at directly
+  // instead of sleeping past a short window, so the rollover is exact and
+  // the test isn't racing its own real-time window.
+  test("a release against a rolled-over window never frees a newer window's budget", async () => {
+    const opts = { windowMs: 60_000, maxRequests: 1, maxBytes: 1_000_000 };
+    const user = await uid();
+
+    const first = await reserveCdnUploadQuota(opts, user, 1);
+    expect(first.ok).toBe(true);
+
+    await db
+      .from("cdn_upload_quota")
+      .update({ window_resets_at: new Date(Date.now() - 1000).toISOString() })
+      .eq("user_id", user);
+
+    // Take the one slot in the new window.
+    const second = await reserveCdnUploadQuota(opts, user, 1);
+    expect(second.ok).toBe(true);
+    if (!first.ok || !second.ok) throw new Error("unreachable");
+    expect(second.windowId).not.toBe(first.windowId);
+
+    // A late release for the first (now stale) reservation must not touch
+    // the second window's live usage.
+    await releaseCdnUploadQuota(user, 1, first.windowId);
+
+    const third = await reserveCdnUploadQuota(opts, user, 1);
+    expect(third.ok).toBe(false);
   });
 
   // the atomicity proof: must grant exactly 10, never more

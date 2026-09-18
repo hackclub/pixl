@@ -13,6 +13,47 @@ const router = Router();
 // not animated or video.
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
+type CdnOutcome =
+  | { ok: true; url: string }
+  // Definite rejection: the CDN completed a response and said no, so the
+  // object was never stored - safe to release the quota reservation.
+  | { ok: false; ambiguous: false }
+  // Unknown: a network error, timeout, or a 2xx response we couldn't parse.
+  // The object may already be stored, so the reservation must stand.
+  | { ok: false; ambiguous: true };
+
+async function uploadToCdn(form: FormData, key: string): Promise<CdnOutcome> {
+  let r: Response;
+  try {
+    r = await fetch("https://cdn.hackclub.com/api/v4/upload", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}` },
+      body: form,
+    });
+  } catch (e) {
+    console.error("[uploads] cdn request failed", e);
+    return { ok: false, ambiguous: true };
+  }
+
+  if (!r.ok) {
+    console.error("[uploads] cdn rejected", r.status, await r.text().catch(() => ""));
+    return { ok: false, ambiguous: false };
+  }
+
+  let json: { url?: string };
+  try {
+    json = (await r.json()) as { url?: string };
+  } catch (e) {
+    console.error("[uploads] cdn success response was not valid JSON", e);
+    return { ok: false, ambiguous: true };
+  }
+  if (!json.url) {
+    console.error("[uploads] cdn response missing url", json);
+    return { ok: false, ambiguous: true };
+  }
+  return { ok: true, url: json.url };
+}
+
 // Proxy image uploads to the Hack Club CDN so the key stays server-side.
 router.post(
   "/api/uploads",
@@ -68,7 +109,7 @@ router.post(
     // the response.
     const safety = await checkImageSafe(buf, type);
     if (!safety.safe) {
-      await releaseCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, buf.length);
+      await releaseCdnUploadQuota(session.userId, buf.length, quota.windowId);
       return res
         .status(400)
         .json({ ok: false, error: "image_rejected", reason: safety.reason });
@@ -82,31 +123,12 @@ router.post(
       `journal-${Date.now()}.${ext}`,
     );
 
-    let cdnUrl: string | null;
-    try {
-      const r = await fetch("https://cdn.hackclub.com/api/v4/upload", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${key}` },
-        body: form,
-      });
-      if (!r.ok) {
-        console.error("[uploads] cdn rejected", r.status, await r.text());
-        cdnUrl = null;
-      } else {
-        const json = (await r.json()) as { url?: string };
-        if (!json.url) console.error("[uploads] cdn response missing url", json);
-        cdnUrl = json.url ?? null;
-      }
-    } catch (e) {
-      console.error("[uploads] cdn upload failed", e);
-      cdnUrl = null;
-    }
-
-    if (!cdnUrl) {
-      await releaseCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, buf.length);
+    const outcome = await uploadToCdn(form, key);
+    if (!outcome.ok) {
+      if (!outcome.ambiguous) await releaseCdnUploadQuota(session.userId, buf.length, quota.windowId);
       return res.status(502).json({ ok: false, error: "cdn_failed" });
     }
-    res.json({ ok: true, url: cdnUrl });
+    res.json({ ok: true, url: outcome.url });
   },
 );
 
@@ -185,38 +207,22 @@ router.post(
     const form = new FormData();
     form.append("file", new Blob([new Uint8Array(safeBuf)], { type: "text/csv" }), `bom-${Date.now()}.csv`);
 
-    try {
-      const r = await fetch("https://cdn.hackclub.com/api/v4/upload", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${key}` },
-        body: form,
-      });
-      if (!r.ok) {
-        console.error("[uploads] bom cdn rejected", r.status, await r.text());
-        await releaseCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, safeBuf.length);
-        return res.status(502).json({ ok: false, error: "cdn_failed" });
-      }
-      const json = (await r.json()) as { url?: string };
-      if (!json.url) {
-        console.error("[uploads] bom cdn response missing url", json);
-        await releaseCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, safeBuf.length);
-        return res.status(502).json({ ok: false, error: "cdn_failed" });
-      }
-      const { error: updateError } = await supabase
-        .from("projects")
-        .update({ bom_url: json.url })
-        .eq("id", projectId)
-        .eq("user_id", session.userId);
-      if (updateError) {
-        console.error("[uploads] bom project update failed", updateError);
-        return res.status(500).json({ ok: false });
-      }
-      res.json({ ok: true, url: json.url });
-    } catch (e) {
-      console.error("[uploads] bom upload failed", e);
-      await releaseCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, safeBuf.length);
-      res.status(502).json({ ok: false, error: "cdn_failed" });
+    const outcome = await uploadToCdn(form, key);
+    if (!outcome.ok) {
+      if (!outcome.ambiguous)
+        await releaseCdnUploadQuota(session.userId, safeBuf.length, quota.windowId);
+      return res.status(502).json({ ok: false, error: "cdn_failed" });
     }
+    const { error: updateError } = await supabase
+      .from("projects")
+      .update({ bom_url: outcome.url })
+      .eq("id", projectId)
+      .eq("user_id", session.userId);
+    if (updateError) {
+      console.error("[uploads] bom project update failed", updateError);
+      return res.status(500).json({ ok: false });
+    }
+    res.json({ ok: true, url: outcome.url });
   },
 );
 

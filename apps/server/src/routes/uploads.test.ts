@@ -165,18 +165,28 @@ const cdnSuccess = () =>
     new Response(JSON.stringify({ url: "https://cdn.hackclub.com/fixture.png" }), { status: 200 }),
   );
 
+// A definite rejection - the CDN completed a response and said no.
+const cdnRejected = () => Promise.resolve(new Response("nope", { status: 400 }));
+
+// The two ambiguous outcomes: the object may already be stored.
+const cdnNetworkError = () => Promise.reject(new Error("ECONNRESET"));
+const cdnMalformedSuccess = () => Promise.resolve(new Response("not json", { status: 200 }));
+
 // quota lives in Postgres now, see cdnQuota.test.ts
 function mockQuotaRpc(mode: "grant" | "deny") {
   const realRpc = db.rpc;
-  db.rpc = (async (fn: string) => {
+  const releaseCalls: Record<string, unknown>[] = [];
+  db.rpc = (async (fn: string, args: Record<string, unknown> = {}) => {
     if (fn === "reserve_cdn_upload_quota") {
       return mode === "grant"
-        ? { data: { ok: true }, error: null }
+        ? { data: { ok: true, window_id: 1 }, error: null }
         : { data: { ok: false, retry_after_seconds: 60 }, error: null };
     }
+    if (fn === "release_cdn_upload_quota") releaseCalls.push(args);
     return { data: null, error: null };
   }) as typeof db.rpc;
   return {
+    wasReleased: () => releaseCalls.length > 0,
     restore: () => {
       db.rpc = realRpc;
     },
@@ -213,6 +223,7 @@ describe("POST /api/uploads", () => {
       expect(body.ok).toBe(false);
       expect(body.error).toBe("image_rejected");
       expect(mock.wasCdnCalled()).toBe(false);
+      expect(quota.wasReleased()).toBe(true);
     } finally {
       await app.close();
       mock.restore();
@@ -320,6 +331,81 @@ describe("POST /api/uploads", () => {
       expect(body.error).toBe("quota_exceeded");
       expect(mock.wasOpenRouterCalled()).toBe(false);
       expect(mock.wasCdnCalled()).toBe(false);
+    } finally {
+      await app.close();
+      mock.restore();
+      quota.restore();
+    }
+  });
+
+  test("a clean CDN rejection releases the quota reservation", async () => {
+    process.env.HACKCLUB_CDN_KEY = "test-cdn-key";
+    process.env.OPENROUTER_API_KEY = "test-openrouter-key";
+    const mock = mockExternalFetch({ openrouter: safeVerdict, cdn: cdnRejected });
+    const quota = mockQuotaRpc("grant");
+    const app = await startTestApp();
+    try {
+      const token = issueSessionToken({ userId: "upload-test-cdn-rejected", displayName: "x" });
+      const res = await fetch(`${app.baseUrl}/api/uploads?token=${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "image/png" },
+        body: await realPngBytes(),
+      });
+      const body = (await res.json()) as { ok: boolean; error?: string };
+
+      expect(res.status).toBe(502);
+      expect(body.error).toBe("cdn_failed");
+      expect(quota.wasReleased()).toBe(true);
+    } finally {
+      await app.close();
+      mock.restore();
+      quota.restore();
+    }
+  });
+
+  test("a CDN network error does not release the quota reservation - the object may already be stored", async () => {
+    process.env.HACKCLUB_CDN_KEY = "test-cdn-key";
+    process.env.OPENROUTER_API_KEY = "test-openrouter-key";
+    const mock = mockExternalFetch({ openrouter: safeVerdict, cdn: cdnNetworkError });
+    const quota = mockQuotaRpc("grant");
+    const app = await startTestApp();
+    try {
+      const token = issueSessionToken({ userId: "upload-test-cdn-network-error", displayName: "x" });
+      const res = await fetch(`${app.baseUrl}/api/uploads?token=${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "image/png" },
+        body: await realPngBytes(),
+      });
+      const body = (await res.json()) as { ok: boolean; error?: string };
+
+      expect(res.status).toBe(502);
+      expect(body.error).toBe("cdn_failed");
+      expect(quota.wasReleased()).toBe(false);
+    } finally {
+      await app.close();
+      mock.restore();
+      quota.restore();
+    }
+  });
+
+  test("a malformed 2xx CDN response does not release the quota reservation - the CDN said success", async () => {
+    process.env.HACKCLUB_CDN_KEY = "test-cdn-key";
+    process.env.OPENROUTER_API_KEY = "test-openrouter-key";
+    const mock = mockExternalFetch({ openrouter: safeVerdict, cdn: cdnMalformedSuccess });
+    const quota = mockQuotaRpc("grant");
+    const app = await startTestApp();
+    try {
+      const token = issueSessionToken({ userId: "upload-test-cdn-malformed", displayName: "x" });
+      const res = await fetch(`${app.baseUrl}/api/uploads?token=${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "image/png" },
+        body: await realPngBytes(),
+      });
+      const body = (await res.json()) as { ok: boolean; error?: string };
+
+      expect(res.status).toBe(502);
+      expect(body.error).toBe("cdn_failed");
+      expect(quota.wasReleased()).toBe(false);
     } finally {
       await app.close();
       mock.restore();
