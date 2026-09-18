@@ -48,6 +48,7 @@ const TEST_HOSTS = [
   "blog.example.test",
   "html.example.test",
   "codeberg.org",
+  "gitlab.com",
 ];
 let httpsFixture: { key: string; cert: string } | null = null;
 try {
@@ -315,6 +316,104 @@ describe("fetchCommits refuses a host that resolves to a blocked address (SSRF)"
       expect(r.error).toBe("unsupported_host");
     } finally {
       await close();
+    }
+  });
+});
+
+// FORGEJO_TOKEN/GITLAB_TOKEN are server-wide credentials. repo_url's host is
+// whatever the player typed, so they must only ever go to the known hosts
+// they're meant for - never to an arbitrary public host a player runs, and
+// never along a redirect to a different origin.
+describe("fetchCommits credential handling", () => {
+  const savedForgejo = process.env.FORGEJO_TOKEN;
+  const savedGitlab = process.env.GITLAB_TOKEN;
+  afterEach(() => {
+    if (savedForgejo === undefined) delete process.env.FORGEJO_TOKEN;
+    else process.env.FORGEJO_TOKEN = savedForgejo;
+    if (savedGitlab === undefined) delete process.env.GITLAB_TOKEN;
+    else process.env.GITLAB_TOKEN = savedGitlab;
+  });
+
+  const seen = () => {
+    const headers: Record<string, string | string[] | undefined>[] = [];
+    const handler: Handler = (req, res) => {
+      headers.push({ authorization: req.headers.authorization, "private-token": req.headers["private-token"] });
+      if (req.url?.startsWith("/api/v1/")) return jsonServer(FORGEJO_JSON)(req, res);
+      if (req.url?.startsWith("/api/v4/")) return jsonServer(GITLAB_JSON)(req, res);
+      res.writeHead(404).end();
+    };
+    return { headers, handler };
+  };
+  const deps = () => ({
+    lookupImpl: lookupOf({ address: "127.0.0.1", family: 4 }),
+    isBlockedIp: allowAll,
+    ca: httpsFixture!.cert,
+  });
+
+  httpsTest("an unrecognized host never receives either token, on any probe", async () => {
+    process.env.FORGEJO_TOKEN = "forgejo-secret";
+    process.env.GITLAB_TOKEN = "gitlab-secret";
+    const { headers, handler } = seen();
+    const { port, close } = await startServer(handler);
+    try {
+      await fetchCommits(`https://gitea.example.test:${port}/me/thing`, 50, deps());
+      await fetchCommits(`https://glab.example.test:${port}/me/thing`, 50, deps());
+      expect(headers.length).toBeGreaterThan(0);
+      for (const h of headers) {
+        expect(h.authorization).toBeUndefined();
+        expect(h["private-token"]).toBeUndefined();
+      }
+    } finally {
+      await close();
+    }
+  });
+
+  httpsTest("a known forgejo host still gets FORGEJO_TOKEN", async () => {
+    process.env.FORGEJO_TOKEN = "forgejo-secret";
+    const { headers, handler } = seen();
+    const { port, close } = await startServer(handler);
+    try {
+      const r = await fetchCommits(`https://codeberg.org:${port}/brandt/thing`, 50, deps());
+      expect(r.error).toBeNull();
+      expect(headers[0]?.authorization).toBe("token forgejo-secret");
+    } finally {
+      await close();
+    }
+  });
+
+  httpsTest("gitlab.com still gets GITLAB_TOKEN", async () => {
+    process.env.GITLAB_TOKEN = "gitlab-secret";
+    const { headers, handler } = seen();
+    const { port, close } = await startServer(handler);
+    try {
+      const r = await fetchCommits(`https://gitlab.com:${port}/group/proj`, 50, deps());
+      expect(r.error).toBeNull();
+      expect(headers[0]?.["private-token"]).toBe("gitlab-secret");
+    } finally {
+      await close();
+    }
+  });
+
+  httpsTest("a redirect from a known host to a different origin does not carry the token along", async () => {
+    process.env.FORGEJO_TOKEN = "forgejo-secret";
+    const target = seen();
+    const targetServer = await startServer(target.handler);
+    const first = seen();
+    const firstServer = await startServer((req, res) => {
+      first.headers.push({ authorization: req.headers.authorization });
+      res
+        .writeHead(302, { location: `https://gitea.example.test:${targetServer.port}${req.url}` })
+        .end();
+    });
+    try {
+      const r = await fetchCommits(`https://codeberg.org:${firstServer.port}/brandt/thing`, 50, deps());
+      expect(r.error).toBeNull();
+      expect(first.headers[0]?.authorization).toBe("token forgejo-secret");
+      expect(target.headers.length).toBeGreaterThan(0);
+      for (const h of target.headers) expect(h.authorization).toBeUndefined();
+    } finally {
+      await firstServer.close();
+      await targetServer.close();
     }
   });
 });

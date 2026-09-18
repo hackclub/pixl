@@ -154,13 +154,28 @@ function requestOnce(
 // every redirect hop (a 200 from a public host that then 302s to
 // 169.254.169.254 must not be followed blindly, same as urlAlive in
 // apps/server/src/routes/urlLiveness.ts).
+const CREDENTIAL_HEADERS = new Set(["authorization", "private-token", "cookie"]);
+
+function withoutCredentials(headers: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(headers).filter(([name]) => !CREDENTIAL_HEADERS.has(name.toLowerCase())),
+  );
+}
+
 export async function safeJsonGet(
   url: string,
   headers: Record<string, string>,
   deps: SsrfGuardDeps = {},
 ): Promise<SafeJsonResult | null> {
   const resolved = resolveDeps(deps);
+  let originOfRequest: string;
+  try {
+    originOfRequest = new URL(url).origin;
+  } catch {
+    return null;
+  }
   let current = url;
+  let currentHeaders = headers;
   for (let hop = 0; hop < 5; hop++) {
     let u: URL;
     try {
@@ -169,10 +184,15 @@ export async function safeJsonGet(
       return null;
     }
     if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+    // A redirect to a different origin (host, port or scheme) must not carry
+    // the caller's credentials along - same rule browsers and fetch() apply.
+    // Sticky: once stripped, a later hop back to the original origin doesn't
+    // get them back.
+    if (u.origin !== originOfRequest) currentHeaders = withoutCredentials(headers);
     if (!(await hostIsPublic(u.hostname, resolved))) return null;
     let r: { status: number; location: string | null; body: string };
     try {
-      r = await requestOnce(u, headers, resolved);
+      r = await requestOnce(u, currentHeaders, resolved);
     } catch {
       return null;
     }

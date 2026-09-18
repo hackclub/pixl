@@ -150,15 +150,20 @@ async function ghFetch(url: string, init?: RequestInit): Promise<Response> {
 // review page view, potentially long after, so it has to re-validate (and
 // pin DNS against rebinding to) the host itself, right before sending
 // FORGEJO_TOKEN/GITLAB_TOKEN - see lib/ssrfGuard.ts.
-function forgejoFetch(url: string, deps?: SsrfGuardDeps): Promise<SafeJsonResult | null> {
+//
+// The token is only ever sent when sendToken is true, i.e. the host is one of
+// KNOWN_HOSTS (codeberg.org, gitea.com, gitlab.com). An unrecognized host is
+// whatever the player typed into repo_url - sending a server-wide credential
+// to it would hand it to anyone who points a repo at a server they run.
+function forgejoFetch(url: string, sendToken: boolean, deps?: SsrfGuardDeps): Promise<SafeJsonResult | null> {
   const headers: Record<string, string> = { ...BASE_HEADERS, Accept: "application/json" };
-  if (process.env.FORGEJO_TOKEN) headers.Authorization = `token ${process.env.FORGEJO_TOKEN}`;
+  if (sendToken && process.env.FORGEJO_TOKEN) headers.Authorization = `token ${process.env.FORGEJO_TOKEN}`;
   return safeJsonGet(url, headers, deps);
 }
 
-function gitlabFetch(url: string, deps?: SsrfGuardDeps): Promise<SafeJsonResult | null> {
+function gitlabFetch(url: string, sendToken: boolean, deps?: SsrfGuardDeps): Promise<SafeJsonResult | null> {
   const headers: Record<string, string> = { ...BASE_HEADERS, Accept: "application/json" };
-  if (process.env.GITLAB_TOKEN) headers["PRIVATE-TOKEN"] = process.env.GITLAB_TOKEN;
+  if (sendToken && process.env.GITLAB_TOKEN) headers["PRIVATE-TOKEN"] = process.env.GITLAB_TOKEN;
   return safeJsonGet(url, headers, deps);
 }
 
@@ -204,6 +209,7 @@ async function fetchGithub(ref: RepoRef, limit: number): Promise<CommitResult> {
 async function fetchForgejo(ref: RepoRef, limit: number, deps?: SsrfGuardDeps): Promise<CommitResult | null> {
   const r = await forgejoFetch(
     `https://${ref.host}/api/v1/repos/${ref.path}/commits?limit=${limit}&stat=true`,
+    ref.provider === "forgejo",
     deps,
   );
   // null means either the host failed the SSRF check (blocked/private target,
@@ -240,6 +246,7 @@ async function fetchGitlab(ref: RepoRef, limit: number, deps?: SsrfGuardDeps): P
   const id = encodeURIComponent(ref.path);
   const r = await gitlabFetch(
     `https://${ref.host}/api/v4/projects/${id}/repository/commits?per_page=${limit}&with_stats=true`,
+    ref.provider === "gitlab",
     deps,
   );
   // null means either the host failed the SSRF check (blocked/private target,
