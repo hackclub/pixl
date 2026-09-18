@@ -1,6 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { supabase, type UserRow } from "../db/client.js";
+import type { PgError } from "../db/pgCompat.js";
 import { issueSessionToken, verifySessionToken } from "../auth/session.js";
 import { activeBan } from "../moderation.js";
 import { fetchSlackAvatar, fetchSlackDisplayName } from "../slackAvatar.js";
@@ -9,6 +10,16 @@ import { config } from "../config.generated.js";
 import { encryptPII } from "../crypto.js";
 
 const router = Router();
+
+// See drizzle/0177_users_oauth_unique.sql. A 23505 alone isn't enough to
+// identify this race - `users` can grow other unique constraints later (it
+// already has one, on referral_code), so pin the check to the specific
+// constraint the signup race actually trips over.
+const USERS_OAUTH_UNIQUE_CONSTRAINT = "users_oauth_provider_oauth_id_key";
+
+function isOauthIdentityRace(error: PgError | null | undefined): boolean {
+  return error?.code === "23505" && error?.constraintName === USERS_OAUTH_UNIQUE_CONSTRAINT;
+}
 
 async function saveSlackAvatar(userId: string, slackId: string): Promise<void> {
   const url = await fetchSlackAvatar(slackId);
@@ -64,7 +75,7 @@ router.get("/auth/demo", async (req, res) => {
     if (insertError || !created) {
       // Same race as /auth/hackclub/callback , see
       // drizzle/0177_users_oauth_unique.sql.
-      if (insertError?.code === "23505") {
+      if (isOauthIdentityRace(insertError)) {
         const { data: racedUser, error: racedLookupError } = await supabase
           .from("users")
           .select("*")
@@ -536,12 +547,12 @@ router.get("/auth/hackclub/callback", async (req, res) => {
       .single();
 
     if (insertError || !created) {
-      // 23505 = unique_violation on users(oauth_provider, oauth_id) (see
+      // unique_violation on users(oauth_provider, oauth_id) (see
       // drizzle/0177_users_oauth_unique.sql) , two concurrent logins for the
       // same HCA identity both missed the select above and raced to insert;
       // the DB constraint is the actual guard. The loser just re-fetches the
       // row the winner created and logs into that account instead of erroring.
-      if (insertError?.code === "23505") {
+      if (isOauthIdentityRace(insertError)) {
         const { data: racedUser, error: racedLookupError } = await supabase
           .from("users")
           .select("*")
