@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { Server, IncomingMessage } from "http";
 import { verifySessionToken } from "../auth/session.js";
+import { consumeRateLimit, type RateLimitOptions } from "../rateLimit.js";
 import { activeBan, censorChat, recordChatViolation } from "../moderation.js";
 import { areFriends } from "../social.js";
 import { getPixoChatReply } from "../pixoChat.js";
@@ -52,6 +53,18 @@ const MOVE_SLACK_PX = 200;
 const MSG_WINDOW_MS = 1000;
 const MSG_MAX_PER_WINDOW = 60;
 
+// A lobby password is a 4-digit code (10,000 possibilities), meant as
+// low-friction sharing between friends, not a real secret - but with no
+// per-attempt limit, the generic message throttle above still lets the full
+// keyspace be guessed in a few minutes over one connection. Keyed per user,
+// not per lobby, so guessing a mistyped digit against your own friend's
+// lobby doesn't burn attempts against everyone else's.
+export const LOBBY_JOIN_ATTEMPT_LIMIT: RateLimitOptions = {
+  windowMs: 60_000,
+  max: 10,
+  name: "lobby_join_attempt",
+};
+
 const SKIN_RE = /^(cvc:[1-9]|cv1:b[1-3]h(\d|1[0-8])t([1-9]|1[0-8])o([1-9]|1[0-8]))$/;
 
 const EMOTE_KEYS = new Set([
@@ -85,7 +98,7 @@ function lobbyMemberCount(id: string, exceptUserId?: string): number {
   return n;
 }
 
-function lobbyJoinError(
+export function lobbyJoinError(
   l: Lobby | undefined,
   userId: string,
   password: string,
@@ -1151,6 +1164,21 @@ export function attachWebSocketServer(httpServer: Server) {
         const id = String(msg.id ?? "").trim().toUpperCase();
         const password = String(msg.password ?? "").trim();
         const lobby = lobbies.get(id);
+        if (
+          lobby &&
+          !lobby.isPublic &&
+          lobby.ownerId !== player.userId &&
+          password !== lobby.password &&
+          consumeRateLimit(LOBBY_JOIN_ATTEMPT_LIMIT, player.userId) !== null
+        ) {
+          ws.send(
+            JSON.stringify({
+              type: "lobby_denied",
+              reason: "Too many attempts. Wait a bit and try again.",
+            }),
+          );
+          return;
+        }
         const err = lobbyJoinError(lobby, player.userId, password);
         if (err || !lobby) {
           ws.send(
