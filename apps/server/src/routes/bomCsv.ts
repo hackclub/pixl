@@ -3,19 +3,44 @@ const MAX_CSV_CELL_BYTES = 4_096;
 
 export type BomCsvValidation = { readonly ok: true } | { readonly ok: false; readonly error: "invalid_csv" };
 
+// RFC4180 quote placement, not just balanced-quote counting: a `"` is only
+// legal as the very first character of a field (opening a quoted field), or
+// doubled inside one (an escaped literal quote). A bare quote anywhere else
+// - mid unquoted field, or trailing content after a field's closing quote -
+// is malformed and must be rejected here, not silently unwound by
+// sanitizeBomCsv's parser (which would otherwise just drop the stray quote
+// characters and merge the field around them).
 function isCsvRow(row: string): boolean {
-  let quoted = false;
+  const n = row.length;
   let columns = 1;
-  for (let index = 0; index < row.length; index++) {
-    const character = row[index];
-    if (character === '"') {
-      if (quoted && row[index + 1] === '"') index++;
-      else quoted = !quoted;
-    } else if (character === "," && !quoted) {
-      columns++;
+  let i = 0;
+  for (;;) {
+    if (row[i] === '"') {
+      i++;
+      for (;;) {
+        if (i >= n) return false; // unterminated quoted field
+        if (row[i] === '"') {
+          if (row[i + 1] === '"') {
+            i += 2;
+            continue;
+          }
+          i++;
+          break;
+        }
+        i++;
+      }
+      if (i < n && row[i] !== ",") return false; // junk after the closing quote
+    } else {
+      while (i < n && row[i] !== ",") {
+        if (row[i] === '"') return false; // quote not at the start of a field
+        i++;
+      }
     }
+    if (i >= n) break;
+    columns++;
+    i++;
   }
-  return !quoted && columns >= 2;
+  return columns >= 2;
 }
 
 export function validateBomCsv(buffer: Buffer): BomCsvValidation {

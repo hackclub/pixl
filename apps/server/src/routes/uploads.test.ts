@@ -32,6 +32,38 @@ test("rejects unstructured CSV data", () => {
   expect(result).toEqual({ ok: false, error: "invalid_csv" });
 });
 
+test("rejects a stray quote inside an unquoted cell instead of letting the sanitizer silently drop it", () => {
+  const result = validateBomCsv(Buffer.from('Part,Quantity\n12" wire,4\n'));
+
+  expect(result).toEqual({ ok: false, error: "invalid_csv" });
+});
+
+test("rejects a quoted field with trailing junk before its comma", () => {
+  const result = validateBomCsv(Buffer.from('Part,Notes\nResistor,"note"extra\n'));
+
+  expect(result).toEqual({ ok: false, error: "invalid_csv" });
+});
+
+test("rejects an unterminated quoted field", () => {
+  const result = validateBomCsv(Buffer.from('Part,Notes\nResistor,"unterminated\n'));
+
+  expect(result).toEqual({ ok: false, error: "invalid_csv" });
+});
+
+test("accepts a properly escaped quote inside a quoted field", () => {
+  const result = validateBomCsv(Buffer.from('Part,Notes\nWire,"12"" length"\n'));
+
+  expect(result).toEqual({ ok: true });
+});
+
+test("round-trips an escaped quote inside a quoted field without corrupting it", () => {
+  const csv = Buffer.from('Part,Notes\nWire,"12"" length"\n');
+
+  const result = sanitizeBomCsv(csv);
+
+  expect(result.toString("utf-8")).toBe('Part,Notes\r\nWire,"12"" length"');
+});
+
 test("limits one authenticated account without limiting another", () => {
   const limit = { windowMs: 60_000, max: 1, name: `bom-test-${Date.now()}` };
 
