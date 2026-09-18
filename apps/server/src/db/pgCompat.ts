@@ -41,12 +41,16 @@ export const sql: ReturnType<typeof postgres> = new Proxy(
 // Mirrors the shape of a supabase-js error closely enough for the call sites
 // that branch on it. `code` is the Postgres SQLSTATE (e.g. "23505" for a
 // unique violation), which several routes use to turn a duplicate insert into
-// a friendly response instead of a 500.
+// a friendly response instead of a 500. `constraintName` is the specific
+// constraint that fired (postgres.js maps error field 'n' to
+// `constraint_name`) - a table can have more than one unique constraint, so a
+// bare 23505 check isn't enough to know which one tripped.
 export interface PgError {
   message: string;
   code?: string;
   details?: string | null;
   hint?: string | null;
+  constraintName?: string | null;
 }
 
 export interface PgResult<T> {
@@ -228,12 +232,19 @@ function foreignKey(table: string): string {
 }
 
 function toPgError(e: unknown): PgError {
-  const err = e as { message?: string; code?: string; detail?: string; hint?: string };
+  const err = e as {
+    message?: string;
+    code?: string;
+    detail?: string;
+    hint?: string;
+    constraint_name?: string;
+  };
   return {
     message: err?.message ?? String(e),
     code: err?.code,
     details: err?.detail ?? null,
     hint: err?.hint ?? null,
+    constraintName: err?.constraint_name ?? null,
   };
 }
 
