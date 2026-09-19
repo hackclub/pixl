@@ -101,8 +101,8 @@ export default async function handler(req: MinimalReq, res: MinimalRes): Promise
             CLOSE,
           ].join("\n    ");
 
-          html = html.replace(new RegExp(`${OPEN}[\\s\\S]*?${CLOSE}`), block);
-          html = html.replace(/<title>[\s\S]*?<\/title>/, `<title>${esc(title)}</title>`);
+          html = html.replace(new RegExp(`${OPEN}[\\s\\S]*?${CLOSE}`), () => block);
+          html = html.replace(/<title>[\s\S]*?<\/title>/, () => `<title>${esc(title)}</title>`);
         }
       }
     } catch (err) {

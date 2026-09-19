@@ -89,10 +89,10 @@ export default async function handler(req: MinimalReq, res: MinimalRes): Promise
             CLOSE,
           ].join("\n    ");
 
-          html = html.replace(new RegExp(`${OPEN}[\\s\\S]*?${CLOSE}`), block);
+          html = html.replace(new RegExp(`${OPEN}[\\s\\S]*?${CLOSE}`), () => block);
           // The <title> is what a Slack unfurl falls back to and what the tab
           // shows while the page boots, so it tracks the item too.
-          html = html.replace(/<title>[\s\S]*?<\/title>/, `<title>${esc(title)}</title>`);
+          html = html.replace(/<title>[\s\S]*?<\/title>/, () => `<title>${esc(title)}</title>`);
         }
       }
     } catch (err) {
