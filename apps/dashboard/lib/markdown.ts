@@ -16,10 +16,10 @@ function safeUrl(u: string): boolean {
 function inline(raw: string): string {
   return esc(raw)
     .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/!\[([^\[\]]*)\]\((https?:\/\/[^)\s\[\]]+)\)/g, (_m, a, u) =>
+    .replace(/!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g, (_m, a, u) =>
       safeUrl(u) ? `<img class="md-img" src="${u}" alt="${a}" loading="lazy" />` : "",
     )
-    .replace(/\[([^\[\]]+)\]\((https?:\/\/[^)\s\[\]]+)\)/g, (_m, t, u) =>
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (_m, t, u) =>
       safeUrl(u) ? `<a href="${u}" target="_blank" rel="noreferrer">${t}</a>` : t,
     )
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
