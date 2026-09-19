@@ -3809,6 +3809,55 @@ export async function updateShopItemPrices(formData: FormData): Promise<void> {
 // Framework laptops/Huawei tablets) the config_options base price + reference
 // URL, all in one submit. Mirrors updateShopItemPrices's match-by-name
 // pattern; a region with no existing row for this item is a no-op.
+interface ParsedConfigChoice {
+  label: string;
+  price: number;
+}
+interface ParsedConfigGroup {
+  name: string;
+  type: "single" | "multi";
+  choices: ParsedConfigChoice[];
+}
+
+// The dashboard's config-options editor (ShopConfigEditor) submits its whole
+// edited groups list as one JSON blob (config_groups_<region>) rather than
+// named fields per choice, since the list is dynamic. Re-validate everything
+// here rather than trusting the client shape: buy_shop_item charges by exact
+// label match against whatever ends up in this column, so a malformed entry
+// here would either silently never be chargeable or corrupt the catalog.
+// A group left with no valid choices (e.g. still mid-edit when saved) is
+// just dropped, not an error.
+function parseConfigGroups(raw: FormDataEntryValue | null): ParsedConfigGroup[] | null {
+  if (typeof raw !== "string") return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed)) return null;
+  const groups: ParsedConfigGroup[] = [];
+  for (const g of parsed.slice(0, 20)) {
+    if (!g || typeof g !== "object") continue;
+    const gr = g as Record<string, unknown>;
+    const name = String(gr.name ?? "").trim().slice(0, 60);
+    const type: "single" | "multi" = gr.type === "multi" ? "multi" : "single";
+    const rawChoices = Array.isArray(gr.choices) ? gr.choices : [];
+    const choices: ParsedConfigChoice[] = [];
+    for (const c of rawChoices.slice(0, 40)) {
+      if (!c || typeof c !== "object") continue;
+      const cr = c as Record<string, unknown>;
+      const label = String(cr.label ?? "").trim().slice(0, 120);
+      if (!label) continue;
+      const price = Math.max(0, Math.min(999_999, Math.round(Number(cr.price) || 0)));
+      choices.push({ label, price });
+    }
+    if (choices.length === 0) continue;
+    groups.push({ name, type, choices });
+  }
+  return groups;
+}
+
 export async function updateShopItemRegionDetails(formData: FormData): Promise<void> {
   await requirePerm("shop");
   const name = String(formData.get("item_name") ?? "").trim();
@@ -3826,25 +3875,38 @@ export async function updateShopItemRegionDetails(formData: FormData): Promise<v
     const sourceRaw = formData.get(`source_${r}`);
     if (priceRaw === null && sourceRaw === null) continue;
     const row = (before ?? []).find((b) => (b as { region: string }).region === r) as
-      | { config_options: unknown }
+      | { config_options: unknown; price: number }
       | undefined;
     const patch: Record<string, unknown> = {};
     if (priceRaw !== null) patch.price = Math.max(0, Math.round(Number(priceRaw) || 0));
     if (sourceRaw !== null) patch.price_source_url = String(sourceRaw).trim().slice(0, 500);
-    if (row?.config_options && typeof row.config_options === "object") {
+
+    const disableRaw = formData.get(`config_disable_${r}`);
+    const enableRaw = formData.get(`config_enable_${r}`);
+    if (disableRaw === "1") {
+      // The editor's checkbox was unchecked for an item that had one -
+      // remove the configurator entirely, back to a plain fixed-price item.
+      patch.config_options = null;
+    } else if (enableRaw === "1" || (row?.config_options && typeof row.config_options === "object")) {
+      const existing =
+        row?.config_options && typeof row.config_options === "object"
+          ? (row.config_options as Record<string, unknown>)
+          : {};
       const basePriceRaw = formData.get(`config_base_price_${r}`);
       const refUrlRaw = formData.get(`config_reference_url_${r}`);
-      if (basePriceRaw !== null || refUrlRaw !== null) {
-        patch.config_options = {
-          ...(row.config_options as Record<string, unknown>),
-          ...(basePriceRaw !== null
-            ? { base_price: Math.max(0, Math.round(Number(basePriceRaw) || 0)) }
-            : {}),
-          ...(refUrlRaw !== null
-            ? { reference_url: String(refUrlRaw).trim().slice(0, 500) }
-            : {}),
-        };
-      }
+      const groups = parseConfigGroups(formData.get(`config_groups_${r}`));
+      patch.config_options = {
+        ...existing,
+        base_price:
+          basePriceRaw !== null
+            ? Math.max(0, Math.round(Number(basePriceRaw) || 0))
+            : (existing.base_price ?? patch.price ?? row?.price ?? 0),
+        reference_url:
+          refUrlRaw !== null
+            ? String(refUrlRaw).trim().slice(0, 500)
+            : (existing.reference_url ?? ""),
+        groups: groups ?? (existing.groups as unknown[] | undefined) ?? [],
+      };
     }
     if (Object.keys(patch).length === 0) continue;
     const { error } = await db

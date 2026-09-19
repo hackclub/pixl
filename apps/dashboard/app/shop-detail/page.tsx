@@ -3,12 +3,12 @@ import { listShopItems, SHOP_REGIONS, SHOP_REGION_LABELS, SHOP_CATEGORY_LABELS, 
 import { updateShopItemRegionDetails } from "@/app/actions";
 import { PendingButton } from "@/app/_components/PendingButton";
 import { PriceUsdInput } from "@/app/_components/PriceUsdInput";
+import { ShopConfiguratorPanel } from "@/app/_components/ShopConfiguratorPanel";
 import { parseOptionGroups } from "@/lib/shopOptions";
 import { config } from "@/app/_generated/config";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
 export const dynamic = "force-dynamic";
 
@@ -161,45 +161,19 @@ export default async function ShopDetailPage({
                                     </a>
                                   )}
                                 </div>
-                                {row?.config_options && (
-                                  <div className="mt-2 rounded-md border border-border p-2 space-y-2 bg-muted/30">
-                                    <div className="text-[11px] font-medium text-muted-foreground">
-                                      Configurator base price + reference (groups/choice pricing
-                                      still need a migration to change)
-                                    </div>
-                                    <div className="flex gap-2 items-center flex-wrap">
-                                      <Label className="flex items-center gap-1.5 font-normal text-xs text-muted-foreground">
-                                        Base price
-                                        <Input
-                                          name={`config_base_price_${r}`}
-                                          type="number"
-                                          min={0}
-                                          defaultValue={row.config_options.base_price ?? 0}
-                                          className="w-24 text-sm"
-                                        />
-                                      </Label>
-                                    </div>
-                                    <Input
-                                      name={`config_reference_url_${r}`}
-                                      type="url"
-                                      placeholder="https://…"
-                                      defaultValue={row.config_options.reference_url ?? ""}
-                                      className="w-full text-sm"
-                                    />
-                                    {(row.config_options.groups ?? []).map((g, gi) => (
-                                      <div key={gi} className="text-xs">
-                                        <span className="font-medium text-muted-foreground">
-                                          {g.name}:
-                                        </span>{" "}
-                                        {g.choices.map((c, ci) => (
-                                          <span key={ci} className="text-muted-foreground">
-                                            {c.label} (+{c.price}px)
-                                            {ci < g.choices.length - 1 ? ", " : ""}
-                                          </span>
-                                        ))}
-                                      </div>
-                                    ))}
-                                  </div>
+                                {row && (
+                                  <ShopConfiguratorPanel
+                                    region={r}
+                                    hasConfig={!!row.config_options}
+                                    basePrice={row.config_options?.base_price ?? row.price}
+                                    referenceUrl={row.config_options?.reference_url ?? ""}
+                                    groups={(row.config_options?.groups ?? []).map((g) => ({
+                                      name: g.name,
+                                      type: g.type === "multi" ? "multi" : "single",
+                                      choices: g.choices,
+                                    }))}
+                                    pixelValueUsd={config.economy.pixelValueUsd}
+                                  />
                                 )}
                               </td>
                             </tr>
