@@ -449,6 +449,10 @@ func _tx_reason(reason: String) -> String:
 			return "Project approved"
 		"review_reverted":
 			return "Verdict reverted"
+		"operation_blackout":
+			return "Operation Blackout"
+		"operation_blackout_reverted":
+			return "Blackout reverted"
 		"manual_deduction":
 			return "Adjusted by the Pixl team"
 		"manual_grant":

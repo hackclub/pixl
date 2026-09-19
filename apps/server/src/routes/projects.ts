@@ -10,6 +10,7 @@ import { shipEligibilityBlock, type HcaStateRow } from "../hcaEligibility.js";
 import { normalizeProjectUrl } from "./projectUrlSafety.js";
 import { isGitRepoUrl } from "./gitRepoUrl.js";
 import { urlAlive } from "./urlLiveness.js";
+import { recordShipForOperations } from "../operations/service.js";
 
 const router = Router();
 
@@ -833,6 +834,11 @@ router.post("/api/projects/:id/ship", async (req, res) => {
   if (updateError) {
     console.error("[projects] ship failed", updateError);
     return res.status(500).json({ ok: false });
+  }
+  try {
+    await recordShipForOperations(id, session.userId);
+  } catch (e) {
+    console.error("[projects] operation ship record failed", (e as Error)?.message ?? e);
   }
   void addNotification(
     session.userId,

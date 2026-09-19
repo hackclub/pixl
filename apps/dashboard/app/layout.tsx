@@ -74,6 +74,7 @@ export default async function RootLayout({
         online: canView(access, ["warn", "ban"]),
         shop: canView(access, ["shop"]),
         events: canView(access, ["events"]),
+        operations: canView(access, ["operations"]),
         sidequests: canView(access, ["sidequests"]),
         story: canView(access, ["story"]),
         goals: canView(access, ["goals"]),

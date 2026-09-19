@@ -21,6 +21,11 @@ import { renderMarkdown } from "@/lib/markdown";
 import { isSafeUrl } from "@/lib/safeUrl";
 import { db } from "@/lib/db";
 import { ReviewForm, type BountyOption } from "@/app/_components/ReviewForm";
+import { BlackoutBadge } from "@/app/_components/BlackoutBadge";
+import { BlackoutSummary } from "@/app/_components/BlackoutSummary";
+import type { BlackoutReviewData } from "@/app/_components/BlackoutReviewSection";
+import { getBlackoutEntry } from "@/lib/operations";
+import { isBlackoutReviewable } from "@/lib/operationsReview";
 import {
   banProject,
   setProjectLevel,
@@ -115,9 +120,10 @@ export default async function ReviewDetail({
   // getProject and listCollaboratorsForProject don't depend on each other
   // (the latter only needs projectId), so they run together instead of one
   // after the other.
-  const [data, allCollaborators] = await Promise.all([
+  const [data, allCollaborators, blackoutEntry] = await Promise.all([
     getProject(projectId),
     listCollaboratorsForProject(projectId),
+    getBlackoutEntry(projectId),
   ]);
   if (!data) notFound();
   const { project: p, journals, reviewAudits } = data;
@@ -237,6 +243,46 @@ export default async function ReviewDetail({
       claimedHours: cHackatimeHours > 0 ? cHackatimeHours : cJournalHours,
     };
   });
+  const blackoutForReview: BlackoutReviewData | null =
+    isBlackoutReviewable(blackoutEntry) && blackoutEntry.firstQualifiedShipAt
+      ? {
+          operationName: blackoutEntry.operation.name,
+          rateUsd: blackoutEntry.rateUsdSnapshot,
+          operationStartsAt: blackoutEntry.operation.startsAt,
+          operationEndsAt: blackoutEntry.operation.endsAt,
+          joinedAt: blackoutEntry.joinedAt,
+          windowStart: blackoutEntry.windowStart,
+          firstShipAt: blackoutEntry.firstQualifiedShipAt,
+          reshipCount: blackoutEntry.reshipCount,
+          changesRequestedAt: blackoutEntry.changesRequestedAt,
+          graceDeadline: blackoutEntry.graceDeadline,
+          fixWindowEnd: blackoutEntry.fixWindowEnd,
+          decision: blackoutEntry.decision,
+          decisionNote: blackoutEntry.decisionNote,
+          decisionBy: blackoutEntry.decidedBy,
+          decisionStage: blackoutEntry.decisionStage,
+          trialHold:
+            trial?.name && String((p as { trial_reward_choice?: string }).trial_reward_choice ?? "") !== "pixels"
+              ? { name: trial.name }
+              : null,
+          people: blackoutEntry.contributors.map((c) => ({
+            userId: c.userId,
+            name: c.name,
+            role: c.role,
+            hackatimeBaseSeconds: c.hackatimeBaseSeconds,
+            journalBaseSeconds: c.journalBaseSeconds,
+            fixTrackedSeconds: c.fixTrackedSeconds,
+            eligibleTrackedSeconds: c.eligibleTrackedSeconds,
+            evidenceOk: c.evidenceOk,
+            proposedHours: c.approvedHours,
+            claimedHours:
+              c.role === "owner"
+                ? payoutHours
+                : (collaboratorHours.find((h) => h.userId === c.userId)?.claimedHours ?? null),
+          })),
+        }
+      : null;
+
   // The owner's own journal hours only. `journalHours` above pools every
   // contributor's entries into one number, which is exactly what made a
   // collaborator's own time invisible on a multi-person ship.
@@ -375,6 +421,7 @@ export default async function ReviewDetail({
               <ShipBadges project={p} />
               <FundingBadge needsFunding={p.needs_funding} fundingUsd={p.funding_usd} />
               {p.is_peak && <BeaconBadge />}
+              {blackoutEntry && blackoutEntry.status !== "entered" && <BlackoutBadge />}
               {trial?.name && (
                 <Badge variant="secondary" className="font-bold">
                   Trial: {trial.name}
@@ -1046,6 +1093,9 @@ export default async function ReviewDetail({
                   </details>
                 )}
 
+                {blackoutEntry && !blackoutForReview && blackoutEntry.status !== "entered" && (
+                  <BlackoutSummary entry={blackoutEntry} />
+                )}
                 {canReview ? (
                   <>
                     <Card className="p-5 gap-0">
@@ -1074,6 +1124,7 @@ export default async function ReviewDetail({
                         hackatimeSeconds={p.hackatime_seconds ?? 0}
                         ageFlag={ageFlag}
                         collaborators={collaboratorHours}
+                        blackout={blackoutForReview}
                         tier={Number(p.level) || 1}
                         playerReBefore={playerReBefore}
                         fundingUsd={p.needs_funding ? Number(p.funding_usd ?? 0) : 0}

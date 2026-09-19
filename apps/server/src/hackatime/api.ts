@@ -32,16 +32,16 @@ const DISCONNECTED: HackatimeStats = { connected: false, projects: [], totalSeco
 // which mirrors this date; change both together).
 export const HACKATIME_CUTOFF = hackatimeCutoffUnix;
 
-interface HackatimeSpan {
+export interface HackatimeSpan {
   start: number;
   end: number;
 }
 
-async function fetchProjectSpans(
+export async function fetchProjectSpansChecked(
   slackId: string,
   token: string | null,
   projectName: string,
-): Promise<HackatimeSpan[]> {
+): Promise<{ ok: boolean; spans: HackatimeSpan[] }> {
   const headers: Record<string, string> = { Accept: "application/json" };
   if (token) headers.Authorization = `Bearer ${token}`;
   const url =
@@ -49,26 +49,66 @@ async function fetchProjectSpans(
     `?filter_by_project=${encodeURIComponent(projectName)}`;
   try {
     const res = await fetch(url, { headers, signal: AbortSignal.timeout(10000) });
-    if (!res.ok) return [];
+    if (!res.ok) return { ok: false, spans: [] };
     const json = (await res.json()) as {
       spans?: { start_time?: number; end_time?: number }[];
     };
-    return (json.spans ?? [])
-      .map((s) => ({ start: Number(s.start_time) || 0, end: Number(s.end_time) || 0 }))
-      .filter((s) => s.end > s.start);
+    return {
+      ok: true,
+      spans: (json.spans ?? [])
+        .map((s) => ({ start: Number(s.start_time) || 0, end: Number(s.end_time) || 0 }))
+        .filter((s) => s.end > s.start),
+    };
   } catch (e) {
     console.error("[hackatime] spans fetch failed:", (e as Error)?.message ?? e);
-    return [];
+    return { ok: false, spans: [] };
   }
 }
 
-function secondsSince(spans: HackatimeSpan[], sinceUnix: number): number {
+async function fetchProjectSpans(
+  slackId: string,
+  token: string | null,
+  projectName: string,
+): Promise<HackatimeSpan[]> {
+  return (await fetchProjectSpansChecked(slackId, token, projectName)).spans;
+}
+
+/** Seconds of `spans` that fall inside [startUnix, endUnix], clipped on both ends. */
+export function secondsBetween(
+  spans: HackatimeSpan[],
+  startUnix: number,
+  endUnix: number = Number.POSITIVE_INFINITY,
+): number {
   let sum = 0;
   for (const s of spans) {
-    if (s.end <= sinceUnix) continue;
-    sum += s.end - Math.max(s.start, sinceUnix);
+    const lo = Math.max(s.start, startUnix);
+    const hi = Math.min(s.end, endUnix);
+    if (hi > lo) sum += hi - lo;
   }
   return Math.max(0, Math.round(sum));
+}
+
+function secondsSince(spans: HackatimeSpan[], sinceUnix: number): number {
+  return secondsBetween(spans, sinceUnix);
+}
+
+export async function fetchTrackedSecondsBetween(
+  slackId: string | null,
+  token: string | null,
+  projectNames: string[],
+  windows: { startUnix: number; endUnix: number }[],
+): Promise<{ ok: boolean; seconds: number[] }> {
+  const zeros = windows.map(() => 0);
+  if (!slackId || projectNames.length === 0) return { ok: true, seconds: zeros };
+  const fetched = await Promise.all(
+    projectNames.map((name) => fetchProjectSpansChecked(slackId, token, name)),
+  );
+  return {
+    ok: fetched.every((f) => f.ok),
+    seconds: windows.map((w) =>
+      fetched.reduce((sum, f) => sum + secondsBetween(f.spans, w.startUnix, w.endUnix), 0),
+    ),
+  };
 }
 
 // Sum of tracked seconds across the given project names, clipped to only the

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { ShippedProject } from "@/lib/db";
 import { LevelBadge, StatusBadge, FundingBadge } from "@/app/_components/ProjectBadges";
 import { Badge } from "@/components/ui/badge";
+import { BlackoutBadge } from "@/app/_components/BlackoutBadge";
 import { Card } from "@/components/ui/card";
 import {
   Table,
@@ -47,6 +48,7 @@ export function ReviewTable({
   handles,
   hackatimeUserIds,
   emptyLabel = "Nothing here.",
+  blackoutIds = [],
 }: {
   rows: ShippedProject[];
   handles: Map<string, string>;
@@ -56,7 +58,10 @@ export function ReviewTable({
    * column renders at all, so a plain first-pass queue never shows it. */
   hackatimeUserIds?: Map<number, string>;
   emptyLabel?: string;
+  /** Project ids that are Operation Blackout entries, shown with a badge. */
+  blackoutIds?: number[];
 }) {
+  const blackoutSet = new Set(blackoutIds);
   const router = useRouter();
   if (rows.length === 0) {
     return (
@@ -146,7 +151,10 @@ export function ReviewTable({
                       <span className="w-10 h-10 rounded-lg bg-muted border border-border shrink-0" />
                     )}
                     <div className="min-w-0">
-                      <div className="font-semibold truncate">{p.name}</div>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-semibold truncate">{p.name}</span>
+                        {blackoutSet.has(Number(p.id)) && <BlackoutBadge className="shrink-0" />}
+                      </div>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="text-xs text-muted-foreground font-mono">
                           #{p.id}
