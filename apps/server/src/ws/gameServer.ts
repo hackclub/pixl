@@ -95,8 +95,16 @@ const pixoCooldowns = new Map<string, number>();
 // "village", but each player gets their own room so they don't share it.
 // Other scenes (openworld, house_interior) stay shared. Lobby scenes
 // ("lobby:<CODE>") are shared rooms scoped to one lobby instance.
-function roomFor(userId: string, scene: string): string {
-  return scene === "village" ? `village:${userId}` : scene;
+//
+// A client only ever legitimately sends the bare "village" - the room string
+// "village:<userId>" is a server-internal detail (used for broadcast/lookup
+// keys, see baseSceneName below). Matching only the exact "village" literal
+// used to mean a client sending "village:<someone else's id>" directly as
+// `scene` fell through unchanged and was accepted as-is, joining another
+// player's private village outright. Every village-shaped request now
+// resolves to the CALLER's own room regardless of what id (if any) it named.
+export function roomFor(userId: string, scene: string): string {
+  return scene === "village" || scene.startsWith("village:") ? `village:${userId}` : scene;
 }
 
 function lobbyMemberCount(id: string, exceptUserId?: string): number {
@@ -749,7 +757,10 @@ export function attachWebSocketServer(httpServer: Server) {
         const leaving = player;
         leaving.changingScene = true;
         const oldScene = leaving.scene;
-        let requested = String(msg.scene ?? "");
+        // Every real scene name is short (open_world, house_interior,
+        // village, lobby:<6-char code>) - cap well above that rather than
+        // letting an arbitrary-length string flow into room lookups/broadcasts.
+        let requested = String(msg.scene ?? "").slice(0, 64);
 
         const targetLobbyId = lobbyIdFromScene(requested);
         if (targetLobbyId) {
