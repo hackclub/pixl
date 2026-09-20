@@ -87,19 +87,23 @@ function JournalHoursForm({
   projectId,
   claimed,
   approvedHours,
+  deflationReason,
 }: {
   journalId: number;
   projectId: number;
   claimed: number;
   approvedHours: number | null;
+  deflationReason: string | null;
 }) {
   const [value, setValue] = useState(String(approvedHours ?? claimed));
   // Uncontrolled fields inside a `<form action={...}>` get wiped by React's
   // automatic post-submit form reset (it fires even on success), same as the
   // "Credit" input above would if it weren't controlled via `value` - keep
   // this one controlled too, or a correctly-filled-in reason vanishes right
-  // after the reviewer hits Set.
-  const [reason, setReason] = useState("");
+  // after the reviewer hits Set. Seeded from the persisted reason (see
+  // 0178_journal_deflation_reason.sql) so reopening this tab shows what was
+  // written before instead of an always-blank box.
+  const [reason, setReason] = useState(deflationReason ?? "");
   const numeric = Number(value);
   const willDeflate = value.trim() !== "" && Number.isFinite(numeric) && numeric < claimed;
 
@@ -285,6 +289,7 @@ export function ReviewDetailTabs({
                     projectId={projectId}
                     claimed={claimed}
                     approvedHours={j.approved_hours}
+                    deflationReason={j.deflation_reason}
                   />
                 </div>
               );

@@ -2540,6 +2540,10 @@ export interface JournalRow {
   // A reviewer's override for this one entry, set from the Journals tab -
   // null means "use the player's own claimed `hours` above, unchanged".
   approved_hours: number | null;
+  // Why approved_hours is currently lower than hours - required whenever
+  // approved_hours deflates, cleared back to null whenever it doesn't (see
+  // 0178_journal_deflation_reason.sql).
+  deflation_reason: string | null;
   created_at: string;
   edited_at: string | null;
 }

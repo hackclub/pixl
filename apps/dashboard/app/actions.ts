@@ -531,7 +531,14 @@ export async function setJournalHours(formData: FormData): Promise<void> {
   if (deflating && !deflationReason) return;
   const { error } = await db
     .from("project_journals")
-    .update({ approved_hours: approvedHours })
+    .update({
+      approved_hours: approvedHours,
+      // Only a deflating value has a reason to show - clearing the override
+      // or raising it back to (or above) the claimed hours clears the old
+      // reason too, rather than leaving a stale explanation for a number
+      // that's no longer in effect.
+      deflation_reason: deflating ? deflationReason : null,
+    })
     .eq("id", journalId);
   if (error) throw new Error(error.message);
 
