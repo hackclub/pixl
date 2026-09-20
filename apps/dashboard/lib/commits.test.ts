@@ -270,6 +270,147 @@ describe("fetchCommits (forgejo/gitlab, via a local server standing in for the r
   });
 });
 
+// FORGEJO_TOKEN/GITLAB_TOKEN must only ever reach the one host each is
+// configured for (FORGEJO_HOST/GITLAB_HOST) - the SSRF guard above only
+// blocks *internal* targets, so without this a project's repo_url pointed at
+// any public host the attacker controls would receive the token outright.
+// Canary values only, never a real token.
+describe("forgejo/gitlab tokens are scoped to an explicitly configured host", () => {
+  const savedEnv = {
+    FORGEJO_TOKEN: process.env.FORGEJO_TOKEN,
+    FORGEJO_HOST: process.env.FORGEJO_HOST,
+    GITLAB_TOKEN: process.env.GITLAB_TOKEN,
+    GITLAB_HOST: process.env.GITLAB_HOST,
+  };
+  afterEach(() => {
+    for (const [k, v] of Object.entries(savedEnv)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  });
+
+  function captureAuthHeader(body: unknown): { handler: Handler; seen: () => string[] } {
+    const headers: string[] = [];
+    return {
+      seen: () => headers,
+      handler: (req, res) => {
+        headers.push(req.headers.authorization ?? (req.headers["private-token"] as string | undefined) ?? "");
+        res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(body));
+      },
+    };
+  }
+
+  httpsTest("an arbitrary host never receives FORGEJO_TOKEN, even with no FORGEJO_HOST configured", async () => {
+    process.env.FORGEJO_TOKEN = "canary-forgejo-token";
+    delete process.env.FORGEJO_HOST;
+    const { handler, seen } = captureAuthHeader(FORGEJO_JSON);
+    const { port, close } = await startServer((req, res) => {
+      if (req.url === "/api/v1/repos/me/thing/commits?limit=50&stat=true") return handler(req, res);
+      res.writeHead(404).end();
+    });
+    try {
+      const lookupImpl = lookupOf({ address: "127.0.0.1", family: 4 });
+      const r = await fetchCommits(`https://gitea.example.test:${port}/me/thing`, 50, {
+        lookupImpl,
+        isBlockedIp: allowAll,
+        ca: httpsFixture!.cert,
+      });
+      expect(r.error).toBeNull();
+      expect(seen().every((h) => !h.includes("canary-forgejo-token"))).toBe(true);
+    } finally {
+      await close();
+    }
+  });
+
+  httpsTest("a host that isn't the configured FORGEJO_HOST never receives the token", async () => {
+    process.env.FORGEJO_TOKEN = "canary-forgejo-token";
+    process.env.FORGEJO_HOST = "our-actual-forgejo.example.test";
+    const { handler, seen } = captureAuthHeader(FORGEJO_JSON);
+    const { port, close } = await startServer((req, res) => {
+      if (req.url === "/api/v1/repos/me/thing/commits?limit=50&stat=true") return handler(req, res);
+      res.writeHead(404).end();
+    });
+    try {
+      const lookupImpl = lookupOf({ address: "127.0.0.1", family: 4 });
+      await fetchCommits(`https://gitea.example.test:${port}/me/thing`, 50, {
+        lookupImpl,
+        isBlockedIp: allowAll,
+        ca: httpsFixture!.cert,
+      });
+      expect(seen().every((h) => !h.includes("canary-forgejo-token"))).toBe(true);
+    } finally {
+      await close();
+    }
+  });
+
+  httpsTest("the explicitly configured FORGEJO_HOST does receive the token", async () => {
+    process.env.FORGEJO_TOKEN = "canary-forgejo-token";
+    process.env.FORGEJO_HOST = "gitea.example.test";
+    const { handler, seen } = captureAuthHeader(FORGEJO_JSON);
+    const { port, close } = await startServer((req, res) => {
+      if (req.url === "/api/v1/repos/me/thing/commits?limit=50&stat=true") return handler(req, res);
+      res.writeHead(404).end();
+    });
+    try {
+      const lookupImpl = lookupOf({ address: "127.0.0.1", family: 4 });
+      await fetchCommits(`https://gitea.example.test:${port}/me/thing`, 50, {
+        lookupImpl,
+        isBlockedIp: allowAll,
+        ca: httpsFixture!.cert,
+      });
+      expect(seen()).toContain("token canary-forgejo-token");
+    } finally {
+      await close();
+    }
+  });
+
+  httpsTest("gitlab: an arbitrary host never receives GITLAB_TOKEN", async () => {
+    process.env.GITLAB_TOKEN = "canary-gitlab-token";
+    delete process.env.GITLAB_HOST;
+    const { handler, seen } = captureAuthHeader(GITLAB_JSON);
+    const { port, close } = await startServer((req, res) => {
+      if (req.url === "/api/v4/projects/me%2Fthing/repository/commits?per_page=50&with_stats=true") {
+        return handler(req, res);
+      }
+      res.writeHead(404).end();
+    });
+    try {
+      const lookupImpl = lookupOf({ address: "127.0.0.1", family: 4 });
+      await fetchCommits(`https://glab.example.test:${port}/me/thing`, 50, {
+        lookupImpl,
+        isBlockedIp: allowAll,
+        ca: httpsFixture!.cert,
+      });
+      expect(seen().every((h) => !h.includes("canary-gitlab-token"))).toBe(true);
+    } finally {
+      await close();
+    }
+  });
+
+  httpsTest("gitlab: the explicitly configured GITLAB_HOST does receive the token", async () => {
+    process.env.GITLAB_TOKEN = "canary-gitlab-token";
+    process.env.GITLAB_HOST = "glab.example.test";
+    const { handler, seen } = captureAuthHeader(GITLAB_JSON);
+    const { port, close } = await startServer((req, res) => {
+      if (req.url === "/api/v4/projects/me%2Fthing/repository/commits?per_page=50&with_stats=true") {
+        return handler(req, res);
+      }
+      res.writeHead(404).end();
+    });
+    try {
+      const lookupImpl = lookupOf({ address: "127.0.0.1", family: 4 });
+      await fetchCommits(`https://glab.example.test:${port}/me/thing`, 50, {
+        lookupImpl,
+        isBlockedIp: allowAll,
+        ca: httpsFixture!.cert,
+      });
+      expect(seen()).toContain("canary-gitlab-token");
+    } finally {
+      await close();
+    }
+  });
+});
+
 // The actual vulnerability this fixes: a player-controlled repo_url host
 // that resolves (now, or later via DNS rebind - apps/server's ship-time
 // check only ever saw the host once) to a private/internal/cloud-metadata
