@@ -226,6 +226,13 @@ interface HcaAddress {
   primary?: boolean;
 }
 
+// HCA's own YSWS verification state (auth.hackclub.com's public API docs,
+// app/views/docs/api.md.erb in hackclub/auth). Delivered as part of the
+// "basic_info" scope response ("Email, name, verification status, birthday,
+// phone") , PIXL already requests basic_info for birthdate, so no scope
+// change is needed to read this field.
+type HcaVerificationStatus = "needs_submission" | "pending" | "verified" | "ineligible";
+
 interface HackClubMeResponse {
   identity: {
     id: string;
@@ -240,6 +247,7 @@ interface HackClubMeResponse {
     // `addresses` ARRAY (one entry per address on file), not a single object.
     birthday?: string;
     addresses?: HcaAddress[];
+    verification_status?: HcaVerificationStatus;
     [key: string]: unknown;
   };
   scopes: string[];
@@ -535,6 +543,28 @@ router.get("/auth/hackclub/callback", async (req, res) => {
     if (identity.slack_id && !(existing as { avatar_url?: string | null }).avatar_url)
       void saveSlackAvatar(userId, identity.slack_id);
   } else {
+    // Only gates brand-new accounts. HCA's own verification review already
+    // rejected this identity for YSWS ("ineligible" is HCA's explicit
+    // negative outcome, see HcaVerificationStatus above) , handing out a
+    // fresh Pixl account anyway would let a rejected identity back in
+    // through the side door. Every other status (verified/pending/
+    // needs_submission), and a missing field entirely, still signs up as
+    // before , HCA verification is a separate, often slower, opt-in process
+    // most new players haven't finished yet, and PIXL has never gated
+    // account creation on it. Existing accounts are untouched either way,
+    // this whole branch only runs when no users row matched above.
+    if (identity.verification_status === "ineligible") {
+      return res
+        .status(403)
+        .send(
+          loginErrorPage(
+            "This Hack Club account isn't eligible for Pixl.",
+            "Hack Club Auth marked this identity as ineligible, so a new Pixl account can't be created. If you think this is a mistake, reach out to the Pixl team.",
+            "/auth/hackclub",
+          ),
+        );
+    }
+
     const { data: created, error: insertError } = await supabase
       .from("users")
       .insert({

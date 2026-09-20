@@ -269,6 +269,144 @@ describe("GET /auth/hackclub/callback", () => {
   });
 });
 
+// HCA's own YSWS verification review (auth/routes/auth.ts's
+// HcaVerificationStatus) gates brand-new signups only: "ineligible" is HCA's
+// explicit rejection, every other status (or a missing field) still signs up
+// as before.
+describe("GET /auth/hackclub/callback -> HCA verification_status admission", () => {
+  test("verified creates a new account", async () => {
+    const users = mockUsersTable([]);
+    const hca = mockHcaFetch({
+      id: "hca-verified",
+      first_name: "Verified",
+      last_name: "Player",
+      verification_status: "verified",
+    });
+    const app = await startTestApp();
+    try {
+      const callbackRes = await driveHcaCallback(app.baseUrl);
+      expect(callbackRes.status).toBe(302);
+      expect(users.insertedRows()).toHaveLength(1);
+      expect(users.insertedRows()[0]?.oauth_id).toBe("hca-verified");
+    } finally {
+      users.restore();
+      hca.restore();
+      await app.close();
+    }
+  });
+
+  test("pending still creates a new account", async () => {
+    const users = mockUsersTable([]);
+    const hca = mockHcaFetch({
+      id: "hca-pending",
+      first_name: "Pending",
+      last_name: "Player",
+      verification_status: "pending",
+    });
+    const app = await startTestApp();
+    try {
+      const callbackRes = await driveHcaCallback(app.baseUrl);
+      expect(callbackRes.status).toBe(302);
+      expect(users.insertedRows()).toHaveLength(1);
+      expect(users.insertedRows()[0]?.oauth_id).toBe("hca-pending");
+    } finally {
+      users.restore();
+      hca.restore();
+      await app.close();
+    }
+  });
+
+  test("needs_submission still creates a new account", async () => {
+    const users = mockUsersTable([]);
+    const hca = mockHcaFetch({
+      id: "hca-needs-submission",
+      first_name: "New",
+      last_name: "Player",
+      verification_status: "needs_submission",
+    });
+    const app = await startTestApp();
+    try {
+      const callbackRes = await driveHcaCallback(app.baseUrl);
+      expect(callbackRes.status).toBe(302);
+      expect(users.insertedRows()).toHaveLength(1);
+      expect(users.insertedRows()[0]?.oauth_id).toBe("hca-needs-submission");
+    } finally {
+      users.restore();
+      hca.restore();
+      await app.close();
+    }
+  });
+
+  test("ineligible is rejected and never creates an account", async () => {
+    const users = mockUsersTable([]);
+    const hca = mockHcaFetch({
+      id: "hca-ineligible",
+      first_name: "Rejected",
+      last_name: "Identity",
+      verification_status: "ineligible",
+    });
+    const app = await startTestApp();
+    try {
+      const callbackRes = await driveHcaCallback(app.baseUrl);
+      expect(callbackRes.status).toBe(403);
+      const body = await callbackRes.text();
+      expect(body).toContain("isn't eligible");
+      expect(users.insertedRows()).toHaveLength(0);
+    } finally {
+      users.restore();
+      hca.restore();
+      await app.close();
+    }
+  });
+
+  test("a missing verification_status field still creates a new account (fails open)", async () => {
+    const users = mockUsersTable([]);
+    const hca = mockHcaFetch({ id: "hca-no-status", first_name: "No", last_name: "Status" });
+    const app = await startTestApp();
+    try {
+      const callbackRes = await driveHcaCallback(app.baseUrl);
+      expect(callbackRes.status).toBe(302);
+      expect(users.insertedRows()).toHaveLength(1);
+    } finally {
+      users.restore();
+      hca.restore();
+      await app.close();
+    }
+  });
+
+  test("an ineligible status on an already-registered identity does not block login", async () => {
+    const users = mockUsersTable([
+      {
+        id: "existing-ineligible-user-id",
+        oauth_provider: "hackclub",
+        oauth_id: "hca-existing-ineligible",
+        display_name: "Returning Player",
+        real_name: "Returning Player",
+      },
+    ]);
+    const hca = mockHcaFetch({
+      id: "hca-existing-ineligible",
+      first_name: "Returning",
+      last_name: "Player",
+      verification_status: "ineligible",
+    });
+    const app = await startTestApp();
+    try {
+      const callbackRes = await driveHcaCallback(app.baseUrl);
+      expect(callbackRes.status).toBe(302);
+      const redirectTarget = new URL(callbackRes.headers.get("location")!);
+      const token = redirectTarget.searchParams.get("token")!;
+      const session = verifySessionToken(token);
+      expect(session?.userId).toBe("existing-ineligible-user-id");
+      expect(users.insertedRows()).toHaveLength(0);
+    } finally {
+      users.restore();
+      hca.restore();
+      await app.close();
+    }
+  });
+});
+
 // The initial display_name on signup comes from HCA/Slack, sources the
 // player doesn't control the character set of. A later rename rejects a
 // bad name via nameProblem() (routes/profile.ts) , signup must run the
