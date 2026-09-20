@@ -45,6 +45,7 @@ var current_lobby_id: String = ""
 var current_lobby_theme: String = ""
 var _socket: WebSocketPeer = WebSocketPeer.new()
 var _connected: bool = false
+const WebLogin := preload("res://scripts/web_login.gd")
 const TOKEN_SAVE_PATH = "user://session.dat"
 const LOCAL_CALLBACK_PORT = 7777
 var _tcp_server: TCPServer = TCPServer.new()
@@ -159,29 +160,27 @@ func _start_login_desktop() -> void:
 	OS.shell_open(SERVER_HTTP_URL + "/auth/hackclub")
 
 func _start_login_web() -> void:
+	var nonce := WebLogin.begin()
+	if nonce == "":
+		push_error("Could not start a secure web login")
+		return
 	var current_url = JavaScriptBridge.eval(
 		"window.location.origin + window.location.pathname", true
 	)
-	var redirect_target = SERVER_HTTP_URL + "/auth/hackclub?web_redirect=" + String(current_url).uri_encode()
+	var redirect_target = SERVER_HTTP_URL + "/auth/hackclub?web_redirect=" + String(current_url).uri_encode() + "&nonce=" + nonce
 	JavaScriptBridge.eval("window.location.href = '%s';" % redirect_target, true)
 
 func _check_web_login_callback() -> void:
-	var query = JavaScriptBridge.eval("window.location.search", true)
-	if query == null or String(query) == "":
+	var login := WebLogin.take()
+	if login.is_empty():
 		return
-	var query_str: String = String(query).lstrip("?")
-	var token = _extract_query_param_from_string(query_str, "token")
-	var name = _extract_query_param_from_string(query_str, "name")
-	if token != "":
-		session_token = token
-		display_name = name
-		is_new_account = _extract_query_param_from_string(query_str, "new") == "1"
-		_save_session()
-		emit_signal("logged_in", display_name)
-		_connect_to_server()
-		JavaScriptBridge.eval(
-			"window.history.replaceState({}, document.title, window.location.pathname);", true
-		)
+	session_token = String(login.get("token", ""))
+	display_name = String(login.get("name", ""))
+	is_new_account = bool(login.get("isNew", false))
+	_save_session()
+	emit_signal("logged_in", display_name)
+	_connect_to_server()
+
 func _process_login_listener() -> void:
 	if not _tcp_server.is_connection_available():
 		return

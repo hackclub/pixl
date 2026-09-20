@@ -1,12 +1,11 @@
 extends Node
 
 const GAMEPLAY_SCENES := ["village", "open_world", "house_interior"]
-# Companion web pages (shop/projects/docs/…) are served at the site root. Open
-# them on whatever origin the game is running on, canonicalizing the play.*
-# subdomain onto the apex so links never bounce users off to play.pixl.rsvp.
-const CANONICAL_BASE := "https://pixl.rsvp"
-
-const _open_js := """(function(u){
+# same-origin only
+const _open_js := """(function(u, t){
+	try {
+		if (t && new URL(u, location.href).origin === location.origin) localStorage.setItem('pixl_token', t);
+	} catch (e) {}
 	var w = window.open(u, 'pixl_web');
 	if (w) { window.__pixlWeb = w; return; }
 	var id = 'pixl-popup-fallback';
@@ -29,7 +28,7 @@ const _open_js := """(function(u){
 	document.addEventListener('keydown', onKey);
 	card.appendChild(msg); card.appendChild(btn); wrap.appendChild(card);
 	document.body.appendChild(wrap);
-})(%s);"""
+})(%s, %s);"""
 
 # The companion pages keep their own copy of the session in localStorage, so a
 # logout in the game has to knock it out too or the dashboard stays signed in.
@@ -49,7 +48,7 @@ const _sign_out_js := """(function(){
 func open(path: String) -> void:
 	var url := _build_url(path)
 	if OS.has_feature("web"):
-		JavaScriptBridge.eval(_open_js % JSON.stringify(url), true)
+		JavaScriptBridge.eval(_open_js % [JSON.stringify(url), JSON.stringify(NetworkManager.session_token)], true)
 	else:
 		OS.shell_open(url)
 
@@ -60,7 +59,7 @@ func sign_out() -> void:
 func _build_url(path: String) -> String:
 	# path may carry its own query and/or fragment, e.g.
 	# "projects?from=game&trial=101#foo". Split both off so the base stays a clean
-	# path segment and the caller's query is merged after token/embed (rather than
+	# path segment and the caller's query is merged after embed (rather than
 	# jammed into the path before the trailing slash).
 	var base := path
 	var fragment := ""
@@ -73,12 +72,7 @@ func _build_url(path: String) -> String:
 	if q_pos != -1:
 		query = base.substr(q_pos + 1)
 		base = base.substr(0, q_pos)
-	var url := _web_base() + "/" + base + "/"
-	var sep := "?"
-	if NetworkManager.session_token != "":
-		url += sep + "token=" + NetworkManager.session_token.uri_encode()
-		sep = "&"
-	url += sep + "embed=1"
+	var url := _web_base() + "/" + base + "/?embed=1"
 	if query != "":
 		url += "&" + query
 	url += fragment
@@ -86,13 +80,13 @@ func _build_url(path: String) -> String:
 
 # Base origin for the companion pages. In a web build this is the origin the
 # game is loaded from (so pixl.rsvp/play → pixl.rsvp), with the play.* subdomain
-# folded onto the apex. Native builds fall back to the canonical site.
+# folded onto the apex. Native builds fall back to the configured site.
 func _web_base() -> String:
 	if OS.has_feature("web"):
 		var origin = JavaScriptBridge.eval("location.origin", true)
 		if typeof(origin) == TYPE_STRING and String(origin).begins_with("http"):
 			return String(origin).replace("//play.pixl.rsvp", "//pixl.rsvp")
-	return CANONICAL_BASE
+	return PixlConfig.url("site", "https://pixl.hackclub.com")
 
 func _in_gameplay() -> bool:
 	var cur := get_tree().current_scene
