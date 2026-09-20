@@ -175,24 +175,53 @@ const Pixl = (() => {
   // "back to game" link pointing at the right place without a redirect.
   const GAME = location.hostname.startsWith("play.") ? "/" : "/play";
 
-  // Same Hack Club Auth flow the game itself uses for a web login
-  // (NetworkManager._start_login_web in the Godot client) - the server hands
-  // the finished session back to whatever web_redirect points at, and the
-  // token bootstrap above already picks up a ?token= on any page load, so a
-  // signed-out visitor can log in right here without ever opening the game.
-  function loginUrl() {
-    return API + "/auth/hackclub?web_redirect=" + encodeURIComponent(location.origin + location.pathname);
+  // <login-intake>
+  const LOGIN_NONCE_KEY = "pixl_login_nonce";
+  const LOGIN_NONCE_TTL_MS = 10 * 60 * 1000;
+
+  function readLoginNonce() {
+    try {
+      const [nonce, expires] = (localStorage.getItem(LOGIN_NONCE_KEY) || "").split(".");
+      if (nonce && Number(expires) > Date.now()) return nonce;
+    } catch {}
+    return "";
   }
 
+  function loginNonce() {
+    const existing = readLoginNonce();
+    if (existing) return existing;
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    const nonce = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+    try { localStorage.setItem(LOGIN_NONCE_KEY, nonce + "." + (Date.now() + LOGIN_NONCE_TTL_MS)); } catch {}
+    return nonce;
+  }
+
+  function loginUrl() {
+    return API + "/auth/hackclub?web_redirect=" + encodeURIComponent(location.origin + location.pathname) + "&nonce=" + loginNonce();
+  }
+
+  function takeReturnedToken(params) {
+    const returned = params.get("token") || "";
+    const expected = readLoginNonce();
+    if (!returned || !expected || params.get("ln") !== expected) return "";
+    try { localStorage.removeItem(LOGIN_NONCE_KEY); } catch {}
+    return returned;
+  }
+  // </login-intake>
+
   const params = new URLSearchParams(location.search);
-  let token = params.get("token") || "";
-  if (token) {
-    try { localStorage.setItem("pixl_token", token); } catch {}
+  let token = takeReturnedToken(params);
+  if (params.has("token")) {
     params.delete("token");
     params.delete("name");
     params.delete("embed");
+    params.delete("ln");
     const qs = params.toString();
     history.replaceState({}, "", location.pathname + (qs ? "?" + qs : "") + location.hash);
+  }
+  if (token) {
+    try { localStorage.setItem("pixl_token", token); } catch {}
   } else {
     try { token = localStorage.getItem("pixl_token") || ""; } catch {}
   }

@@ -399,9 +399,10 @@ router.get("/auth/hackclub/callback", async (req, res) => {
     // out a few times in a row. The code is spent either way, so the only way
     // through is a fresh login once their window clears.
     const throttled = tokenRes.status === 429 || body.includes("slow your roll");
-    const retry =
-      "/auth/hackclub" +
-      (webRedirect ? `?web_redirect=${encodeURIComponent(webRedirect)}` : "");
+    const retryParams = new URLSearchParams();
+    if (webRedirect) retryParams.set("web_redirect", webRedirect);
+    if (pending.loginNonce) retryParams.set("nonce", pending.loginNonce);
+    const retry = "/auth/hackclub" + (retryParams.size ? `?${retryParams}` : "");
     return res
       .status(throttled ? 429 : 502)
       .send(

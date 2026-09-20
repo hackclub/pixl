@@ -310,6 +310,48 @@ describe("GET /auth/hackclub -> callback (F-8 login nonce round-trip)", () => {
   });
 });
 
+describe("GET /auth/hackclub/callback retry link keeps the login nonce", () => {
+  test("a throttled token exchange offers a retry that still carries the nonce", async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url).includes("/oauth/token")) return new Response("slow your roll!", { status: 429 });
+      return realFetch(url as string, init);
+    }) as typeof fetch;
+    const app = await startTestApp();
+    try {
+      const redirect = encodeURIComponent("https://pixl.hackclub.com/shop/");
+      const res = await driveHcaCallback(app.baseUrl, `?web_redirect=${redirect}&nonce=abc123def456`);
+      expect(res.status).toBe(429);
+      const html = await res.text();
+      const href = /href="([^"]+)"/.exec(html)![1];
+      const retry = new URL(href, "http://x");
+      expect(retry.pathname).toBe("/auth/hackclub");
+      expect(retry.searchParams.get("web_redirect")).toBe("https://pixl.hackclub.com/shop/");
+      expect(retry.searchParams.get("nonce")).toBe("abc123def456");
+    } finally {
+      globalThis.fetch = realFetch;
+      await app.close();
+    }
+  });
+
+  test("without a nonce the retry link has none", async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url).includes("/oauth/token")) return new Response("boom", { status: 500 });
+      return realFetch(url as string, init);
+    }) as typeof fetch;
+    const app = await startTestApp();
+    try {
+      const res = await driveHcaCallback(app.baseUrl);
+      const href = /href="([^"]+)"/.exec(await res.text())![1];
+      expect(href).toBe("/auth/hackclub");
+    } finally {
+      globalThis.fetch = realFetch;
+      await app.close();
+    }
+  });
+});
+
 describe("GET /auth/demo", () => {
   const originalAllowDemo = process.env.ALLOW_DEMO_LOGIN;
   afterEach(() => {
