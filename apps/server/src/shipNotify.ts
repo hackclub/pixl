@@ -1,4 +1,5 @@
 import { DASH_URL } from "./reports.js";
+import { escapeMrkdwn } from "./slackEscape.js";
 
 // Pings the team's ship-alerts channel with a rich preview whenever a project
 // lands in the review queue , both a first ship and a re-ship of an approved
@@ -35,6 +36,12 @@ export async function postShipToSlack(
   const hours = (trackedSeconds / 3600).toFixed(2);
   const reviewUrl = `${DASH_URL}/review/${project.id}`;
 
+  // project.name/description are typed by the shipping player, not staff -
+  // escaped so a project can't mass-ping this channel via <!channel>/<!here>
+  // in its own name/description or render a forged link under the bot.
+  const safeName = escapeMrkdwn(project.name);
+  const safeDescription = escapeMrkdwn(project.description || "_No description._");
+
   const blocks: Record<string, unknown>[] = [
     { type: "section", text: { type: "mrkdwn", text: `*${headline}*\n${status}` } },
   ];
@@ -44,7 +51,7 @@ export async function postShipToSlack(
     type: "section",
     text: {
       type: "mrkdwn",
-      text: `*${project.name}*\n${(project.description || "_No description._").slice(0, 2500)}`,
+      text: `*${safeName}*\n${safeDescription.slice(0, 2500)}`,
     },
   });
   blocks.push({
@@ -83,7 +90,8 @@ export async function postShipToSlack(
       },
       body: JSON.stringify({
         channel,
-        text: `${headline}: ${project.name}`,
+        // Fallback/notification text - also mrkdwn-parsed by Slack, so also escaped.
+        text: `${headline}: ${safeName}`,
         blocks,
         unfurl_links: false,
       }),

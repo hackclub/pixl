@@ -1,5 +1,15 @@
 import { db } from "@/lib/db";
 
+// Mirrors apps/pixorpheus/src/slack/escape.ts's escapeMrkdwn exactly - kept
+// as a separate copy since this app builds/deploys independently and
+// doesn't share code with pixorpheus. A ticket's title/description are
+// typed by the player who opened it, not staff, so they must be escaped
+// before landing in this staff-facing card's mrkdwn text, or a player could
+// mass-ping via <!channel>/<!here> or render a forged link under the bot.
+function escapeMrkdwn(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 export interface TicketStats {
   total: number;
   open: number;
@@ -15,7 +25,7 @@ export interface Ticket {
   permalink: string | null;
 }
 
-interface FullTicketRow {
+export interface FullTicketRow {
   msg_ts: string;
   description: string | null;
   title: string | null;
@@ -247,12 +257,13 @@ export interface ResolveResult {
 
 // Mirrors Pixorpheus's own `ticketBlocks(ticket)` so the ticket-channel card
 // looks and behaves identically no matter which side resolved it.
-function ticketBlocks(ticket: FullTicketRow) {
+export function ticketBlocks(ticket: FullTicketRow) {
   const { description, title, opened_by_slack_id, status, claimed_by_slack_id, closed_by_slack_id, ticket_number, permalink } = ticket;
   const msg_ts = ticket.msg_ts == null ? "" : String(ticket.msg_ts);
-  const safeDescription = description || "";
-  const displayTitle =
-    title || (safeDescription.length > 80 ? safeDescription.substring(0, 80) + "..." : safeDescription) || "(no description)";
+  const rawDescription = description || "";
+  const safeDescription = escapeMrkdwn(rawDescription);
+  const truncatedDescription = rawDescription.length > 80 ? rawDescription.substring(0, 80) + "..." : rawDescription;
+  const displayTitle = escapeMrkdwn(title || truncatedDescription || "(no description)");
 
   let statusText: string;
   if (status === "closed") statusText = closed_by_slack_id ? `✅ Resolved by <@${closed_by_slack_id}>` : "✅ Resolved";
@@ -295,7 +306,7 @@ function ticketBlocks(ticket: FullTicketRow) {
     },
     {
       type: "section",
-      text: { type: "mrkdwn", text: `>${(description || "").slice(0, 2900).replace(/\n/g, "\n>")}` },
+      text: { type: "mrkdwn", text: `>${safeDescription.slice(0, 2900).replace(/\n/g, "\n>")}` },
     },
   ];
 

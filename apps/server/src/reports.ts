@@ -1,4 +1,5 @@
 import { supabase } from "./db/client.js";
+import { escapeMrkdwn } from "./slackEscape.js";
 
 const MODEL = "google/gemini-2.5-flash-lite";
 const LOOKBACK_HOURS = 10;
@@ -170,13 +171,21 @@ export async function postReportToSlack(
   if (!token || !channel) return;
   const url = `${DASH_URL}/reports/${reportId}`;
   const severe = ai != null && ai.verdict.toLowerCase() === "severe" && ai.score >= 80;
+  // targetName (the reported player's own display name) and reason (the
+  // reporter's free text) are both player-controlled - escaped so neither
+  // can mass-ping this staff channel via <!channel>/<!here> or render a
+  // forged link under the bot's identity. ai.summary is model output, not
+  // directly player-authored, but escaped too since the model's own prompt
+  // (reports.ts's analyzeReport) explicitly quotes player text back into it.
+  const safeTargetName = escapeMrkdwn(targetName);
+  const safeReason = escapeMrkdwn(reason);
   const aiLine = ai
-    ? `\n:robot_face: AI: *${ai.verdict}* (${ai.score}/100): ${ai.summary}`
+    ? `\n:robot_face: AI: *${escapeMrkdwn(ai.verdict)}* (${ai.score}/100): ${escapeMrkdwn(ai.summary)}`
     : "";
   const head = severe
-    ? `<!here> :rotating_light: *SEVERE* report against *${targetName}* (auto-warned, needs review)`
-    : `:rotating_light: New report against *${targetName}*`;
-  const text = `${head}\nReason: ${reason || "_none given_"}${aiLine}\n<${url}|Open in dashboard>`;
+    ? `<!here> :rotating_light: *SEVERE* report against *${safeTargetName}* (auto-warned, needs review)`
+    : `:rotating_light: New report against *${safeTargetName}*`;
+  const text = `${head}\nReason: ${safeReason || "_none given_"}${aiLine}\n<${url}|Open in dashboard>`;
   try {
     await fetch("https://slack.com/api/chat.postMessage", {
       method: "POST",
