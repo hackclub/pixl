@@ -396,7 +396,6 @@ export async function activeBan(userId: string): Promise<BanRow | null> {
 // A short in-memory cache keeps this from adding a DB round-trip to every
 // single request; a newly-banned player can make a few more requests within
 // the cache window, same trade-off sweepBans already makes on the WS side.
-// A failed lookup is never cached as "not banned".
 const BAN_CACHE_TTL_MS = 30_000;
 const BAN_CACHE_MAX = 50_000;
 

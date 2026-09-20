@@ -167,8 +167,7 @@ function originOf(u: URL): string {
 // GET only - every caller in commits.ts is a read. Re-validates the host on
 // every redirect hop (a 200 from a public host that then 302s to
 // 169.254.169.254 must not be followed blindly, same as urlAlive in
-// apps/server/src/routes/urlLiveness.ts). Credential headers only ever go to
-// the first URL's origin, over https; any other origin gets them stripped.
+// apps/server/src/routes/urlLiveness.ts).
 export async function safeJsonGet(
   url: string,
   headers: Record<string, string>,

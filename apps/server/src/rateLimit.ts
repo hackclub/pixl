@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { requestIpKey } from "./clientIp.js";
 
-// Fixed-window in-memory rate limiter keyed by IP (see clientIp.ts).
+// fixed window, per IP
 interface Bucket {
   count: number;
   resetAt: number;

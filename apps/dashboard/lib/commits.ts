@@ -158,9 +158,7 @@ async function ghFetch(url: string, init?: RequestInit): Promise<Response> {
 // pin DNS against rebinding to) the host itself, right before sending
 // FORGEJO_TOKEN/GITLAB_TOKEN - see lib/ssrfGuard.ts.
 //
-// The SSRF guard alone isn't enough to protect these tokens: it only blocks
-// internal targets, and a repo_url can name any public host. So the token only
-// goes to the exact authority (host and port) the operator configured.
+// exact authority only
 const CONFIGURED_HOST_RX = /^[a-z0-9.-]+(:\d{1,5})?$/i;
 
 function authorityOf(host: string): string | null {
