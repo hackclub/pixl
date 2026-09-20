@@ -14,8 +14,8 @@ const en: BriefingCopy = {
       body: "Operation Blackout runs from {start} to {end}. Times are shown in your local time.",
     },
     {
-      title: "A minimum rate",
-      body: "Hours approved for Blackout are paid at least ${rate}/hr. If your normal rate is already higher, you keep it: nobody goes down.",
+      title: "A rate bonus",
+      body: "Hours approved for Blackout earn an extra ${rate}/hr on top of your own normal rate. Everyone gets the same bonus, whatever your normal rate already is.",
     },
     {
       title: "Only work during Blackout counts",
@@ -53,7 +53,7 @@ const es: BriefingCopy = {
     "Algo cortó la energía en el Distrito Industrial. Lo que sea que se entregue durante esta Operación tiene que funcionar sin ella. Así funciona la Operación Blackout.",
   rules: [
     { title: "La ventana", body: "La Operación Blackout va del {start} al {end}. Las horas se muestran en tu hora local." },
-    { title: "Una tarifa mínima", body: "Las horas aprobadas para Blackout se pagan al menos a ${rate}/h. Si tu tarifa normal ya es mayor, la conservas: nadie baja." },
+    { title: "Un bono de tarifa", body: "Las horas aprobadas para Blackout reciben ${rate}/h extra sobre tu propia tarifa normal. Todos reciben el mismo bono, sea cual sea tu tarifa normal." },
     { title: "Solo cuenta el trabajo durante Blackout", body: "El tiempo cuenta desde que inscribes un proyecto hasta que lo envías, y nunca desde antes de que empezara la operación. El trabajo previo a inscribirte nunca recibe la tarifa Blackout." },
     { title: "Los proyectos existentes pueden unirse", body: "No hace falta empezar algo nuevo. Inscribe un proyecto que ya estás construyendo y solo el trabajo desde ese momento es elegible." },
     { title: "Inscribirse no es aprobación", body: "Marcar la casilla mete tu proyecto en la carrera. Un revisor decide si cuenta y cuántas horas se aprueban." },
@@ -69,7 +69,7 @@ const fr: BriefingCopy = {
     "Quelque chose a coupé le courant dans le District Industriel. Tout ce qui sera livré pendant cette Opération doit fonctionner sans lui. Voici comment fonctionne l'Opération Blackout.",
   rules: [
     { title: "La fenêtre", body: "L'Opération Blackout va du {start} au {end}. Les heures sont affichées dans ton fuseau local." },
-    { title: "Un taux minimum", body: "Les heures approuvées pour Blackout sont payées au moins ${rate}/h. Si ton taux habituel est déjà plus élevé, tu le gardes : personne ne perd." },
+    { title: "Un bonus de taux", body: "Les heures approuvées pour Blackout gagnent un bonus de ${rate}/h en plus de ton propre taux habituel. Tout le monde reçoit le même bonus, quel que soit ton taux habituel." },
     { title: "Seul le travail pendant Blackout compte", body: "Le temps compte depuis l'inscription d'un projet jusqu'à son envoi, jamais avant le début de l'opération. Le travail fait avant l'inscription n'obtient jamais le taux Blackout." },
     { title: "Les projets existants peuvent participer", body: "Pas besoin de partir de zéro. Inscris un projet en cours et seul le travail à partir de ce moment est éligible." },
     { title: "S'inscrire n'est pas être approuvé", body: "Cocher la case met ton projet dans la course. Un relecteur décide s'il compte et combien d'heures sont approuvées." },
@@ -85,7 +85,7 @@ const pt: BriefingCopy = {
     "Alguma coisa cortou a energia do Distrito Industrial. O que for lançado durante essa Operação precisa funcionar sem ela. Veja como funciona a Operação Blackout.",
   rules: [
     { title: "A janela", body: "A Operação Blackout vai de {start} a {end}. Os horários aparecem no seu horário local." },
-    { title: "Uma taxa mínima", body: "As horas aprovadas para o Blackout são pagas a pelo menos ${rate}/h. Se a sua taxa normal já for maior, você a mantém: ninguém perde." },
+    { title: "Um bônus na taxa", body: "As horas aprovadas para o Blackout ganham um bônus de ${rate}/h além da sua própria taxa normal. Todo mundo recebe o mesmo bônus, seja qual for a sua taxa normal." },
     { title: "Só conta o trabalho durante o Blackout", body: "O tempo conta desde que você inscreve um projeto até o envio, e nunca de antes do início da operação. O trabalho feito antes de se inscrever nunca recebe a taxa Blackout." },
     { title: "Projetos existentes podem entrar", body: "Não precisa começar algo novo. Inscreva um projeto que você já está construindo e só o trabalho a partir daí é elegível." },
     { title: "Inscrever-se não é aprovação", body: "Marcar a caixa coloca seu projeto na disputa. Um revisor decide se ele conta e quantas horas são aprovadas." },
@@ -101,7 +101,7 @@ const hi: BriefingCopy = {
     "किसी चीज़ ने इंडस्ट्रियल डिस्ट्रिक्ट की बिजली गुल कर दी। इस ऑपरेशन के दौरान जो भी शिप होगा, उसे बिना बिजली के चलना होगा। ऑपरेशन ब्लैकआउट ऐसे काम करता है।",
   rules: [
     { title: "समय-सीमा", body: "ऑपरेशन ब्लैकआउट {start} से {end} तक चलता है। समय आपके स्थानीय समय में दिखाया गया है।" },
-    { title: "न्यूनतम दर", body: "ब्लैकआउट के लिए मंज़ूर घंटों का भुगतान कम से कम ${rate}/घंटा होगा। अगर आपकी सामान्य दर पहले से ज़्यादा है तो वही रहेगी: किसी की दर नहीं घटती।" },
+    { title: "दर बोनस", body: "ब्लैकआउट के लिए मंज़ूर घंटों पर आपकी अपनी सामान्य दर के ऊपर अतिरिक्त ${rate}/घंटा मिलता है। आपकी सामान्य दर चाहे जो हो, सबको एक जैसा बोनस मिलता है।" },
     { title: "सिर्फ़ ब्लैकआउट के दौरान का काम गिना जाता है", body: "समय प्रोजेक्ट में शामिल होने से शिप करने तक गिना जाता है, ऑपरेशन शुरू होने से पहले का कभी नहीं। शामिल होने से पहले किए काम पर ब्लैकआउट दर नहीं मिलती।" },
     { title: "मौजूदा प्रोजेक्ट भी शामिल हो सकते हैं", body: "कुछ नया शुरू करना ज़रूरी नहीं। जो प्रोजेक्ट आप बना रहे हैं उसे शामिल करें, तब से किया गया काम ही पात्र होगा।" },
     { title: "शामिल होना मंज़ूरी नहीं है", body: "बॉक्स टिक करने से आपका प्रोजेक्ट दौड़ में आता है। रिव्यूअर तय करता है कि वह गिना जाएगा या नहीं और कितने घंटे मंज़ूर होंगे।" },

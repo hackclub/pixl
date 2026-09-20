@@ -112,44 +112,107 @@ describe("grace fix cap", () => {
   });
 });
 
-describe("blackoutPayout: effectiveRate = max(normalRate, 5)", () => {
-  const base = { approvedHours: 10, eligibleHours: 10, creditHours: 10, minUsdRate: 5, pxValueUsd: 0.07 };
-  test("9. normal $4 becomes $5 for the Blackout hours", () => {
-    const p = blackoutPayout({ ...base, normalUsdRate: 4 });
+// Blackout's actual rule: a flat +$1/hr bonus on top of EVERY contributor's
+// own normal rate, never a floor. A $6/hr player still gets +$1 (a floor
+// gave them nothing); a $5/hr player still gets +$1 too (a floor also gave
+// them nothing, since 5 already met the old "minimum"). rateUsd=1 IS the
+// bonus amount here, not a minimum - see domain.ts's RateMode doc comment.
+describe("blackoutPayout: additive mode, effectiveRate = normalRate + 1", () => {
+  const base = {
+    approvedHours: 10,
+    eligibleHours: 10,
+    creditHours: 10,
+    rateUsd: 1,
+    rateMode: "additive" as const,
+    pxValueUsd: 0.07,
+  };
+
+  test("$4.00/hr -> $5.00/hr effective, 1h", () => {
+    const p = blackoutPayout({ ...base, approvedHours: 1, eligibleHours: 1, creditHours: 1, normalUsdRate: 4 });
     expect(p.effectiveUsdRate).toBe(5);
-    expect(p.grossPx).toBe(714); // 10h * $5 / $0.07
-    expect(p.upliftPx).toBe(143); // 714 - what $4/hr already paid (571)
-    expect((p.grossPx * 0.07)).toBeCloseTo(50, 1);
+    expect(p.grossPx).toBe(71); // round(1h * $5 / $0.07)
+    expect(p.upliftPx).toBe(14); // 71 - round(1h * $4 / $0.07) = 71 - 57
   });
-  test("10. normal $6 stays $6, nothing is added", () => {
-    const p = blackoutPayout({ ...base, normalUsdRate: 6 });
+
+  test("$4.31/hr -> $5.31/hr effective, 1h", () => {
+    const p = blackoutPayout({ ...base, approvedHours: 1, eligibleHours: 1, creditHours: 1, normalUsdRate: 4.31 });
+    expect(p.effectiveUsdRate).toBe(5.31);
+    expect(p.grossPx).toBe(76);
+    expect(p.upliftPx).toBe(14);
+  });
+
+  test("$5.00/hr -> $6.00/hr effective, 1h (a floor would have paid this nothing)", () => {
+    const p = blackoutPayout({ ...base, approvedHours: 1, eligibleHours: 1, creditHours: 1, normalUsdRate: 5 });
     expect(p.effectiveUsdRate).toBe(6);
-    expect(p.upliftPx).toBe(0);
+    // 15, not 14 - rounding each side independently (round(6/0.07)=86,
+    // round(5/0.07)=71) doesn't land on exactly +1/0.07=14.28 every time.
+    // This is the same rounding strategy the normal payout path already
+    // uses; it is not a bug.
+    expect(p.upliftPx).toBe(15);
+    expect(p.grossPx - p.upliftPx).toBe(71); // still exactly the normal payout
   });
-  test("exactly $5 adds nothing", () => {
-    expect(blackoutPayout({ ...base, normalUsdRate: 5 }).upliftPx).toBe(0);
+
+  test("$6.00/hr -> $7.00/hr effective, 1h (a floor would have paid this nothing)", () => {
+    const p = blackoutPayout({ ...base, approvedHours: 1, eligibleHours: 1, creditHours: 1, normalUsdRate: 6 });
+    expect(p.effectiveUsdRate).toBe(7);
+    expect(p.grossPx).toBe(100);
+    expect(p.upliftPx).toBe(14);
   });
-  test("7. approved hours can never exceed the trusted ceiling or the normal credit", () => {
-    expect(blackoutPayout({ ...base, approvedHours: 99, eligibleHours: 4 }).hours).toBe(4);
-    expect(blackoutPayout({ ...base, approvedHours: 99, creditHours: 3 }).hours).toBe(3);
+
+  test("$4.31/hr, 10h: uplift scales with hours, ~$10 of bonus value", () => {
+    const p = blackoutPayout({ ...base, normalUsdRate: 4.31 });
+    expect(p.effectiveUsdRate).toBe(5.31);
+    expect(p.upliftPx).toBe(143);
+    expect(p.upliftPx * 0.07).toBeCloseTo(10.01, 2);
+  });
+
+  test("$6.00/hr, 10h: uplift scales with hours, ~$10 of bonus value", () => {
+    const p = blackoutPayout({ ...base, normalUsdRate: 6 });
+    expect(p.effectiveUsdRate).toBe(7);
+    expect(p.upliftPx).toBe(143);
+  });
+
+  test("approved hours can never exceed the trusted ceiling or the normal credit", () => {
+    expect(blackoutPayout({ ...base, approvedHours: 99, eligibleHours: 4, normalUsdRate: 4 }).hours).toBe(4);
+    expect(blackoutPayout({ ...base, approvedHours: 99, creditHours: 3, normalUsdRate: 4 }).hours).toBe(3);
     expect(blackoutPayout({ ...base, approvedHours: -3, normalUsdRate: 4 }).upliftPx).toBe(0);
   });
+
   test("zero approved hours pays nothing", () => {
     expect(blackoutPayout({ ...base, approvedHours: 0, normalUsdRate: 4 }).upliftPx).toBe(0);
   });
-  test("11. team members are independent: totals are the sum of each person's own", () => {
+
+  test("team members are independent: each gets their own +$1/hr, not a shared floor", () => {
     const people = [
       { hours: 6, rate: 4 },
       { hours: 3, rate: 4.5 },
       { hours: 5, rate: 6 },
     ].map((x) =>
-      blackoutPayout({ ...base, approvedHours: x.hours, eligibleHours: x.hours, creditHours: x.hours, normalUsdRate: x.rate }),
+      blackoutPayout({
+        ...base,
+        approvedHours: x.hours,
+        eligibleHours: x.hours,
+        creditHours: x.hours,
+        normalUsdRate: x.rate,
+      }),
     );
     expect(people.map((p) => p.hours)).toEqual([6, 3, 5]);
-    expect(people.map((p) => p.effectiveUsdRate)).toEqual([5, 5, 6]);
-    expect(people[2].upliftPx).toBe(0);
-    expect(people[0].upliftPx).toBeGreaterThan(0);
-    expect(people[1].upliftPx).toBeGreaterThan(0);
+    expect(people.map((p) => p.effectiveUsdRate)).toEqual([5, 5.5, 7]);
+    // Every one of them gets a positive uplift now, including the $6/hr
+    // earner who a floor model would have paid nothing.
+    expect(people.every((p) => p.upliftPx > 0)).toBe(true);
+  });
+});
+
+describe("blackoutPayout: floor mode (kept generic for a future operation, not used by Blackout)", () => {
+  const base = { approvedHours: 10, eligibleHours: 10, creditHours: 10, rateUsd: 5, rateMode: "floor" as const, pxValueUsd: 0.07 };
+  test("normal $4 becomes $5 for the hours", () => {
+    const p = blackoutPayout({ ...base, normalUsdRate: 4 });
+    expect(p.effectiveUsdRate).toBe(5);
+    expect(p.upliftPx).toBe(143);
+  });
+  test("normal $6 stays $6, nothing is added", () => {
+    expect(blackoutPayout({ ...base, normalUsdRate: 6 }).upliftPx).toBe(0);
   });
 });
 

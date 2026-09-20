@@ -87,12 +87,25 @@ export function eligibleTrackedSeconds(
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+// How operation.rateUsd is applied on top of a contributor's own normal
+// rate. "floor" (the old, wrong Blackout behavior) means nobody drops below
+// a fixed rate regardless of how high their own rate already is - a $6/hr
+// player got no uplift at all under a $5 floor. "additive" means everyone
+// gets the same flat bonus on top of their own rate, which is what Blackout
+// is actually supposed to be: rateUsd IS the bonus (e.g. 1 for +$1/hr), not
+// a minimum. Kept generic (not hardcoded to Blackout) so a future operation
+// can still use a floor if that's ever the right shape for it.
+export type RateMode = "floor" | "additive";
+
 export interface BlackoutPayoutInput {
   approvedHours: number;
   eligibleHours: number;
   creditHours: number;
   normalUsdRate: number;
-  minUsdRate: number;
+  /** Meaning depends on rateMode: the floor value ("floor") or the flat
+   * bonus added on top of normalUsdRate ("additive"). */
+  rateUsd: number;
+  rateMode: RateMode;
   pxValueUsd: number;
 }
 
@@ -103,15 +116,21 @@ export interface BlackoutPayout {
   upliftPx: number;
 }
 
+export function effectiveUsdRate(normalUsdRate: number, rateUsd: number, rateMode: RateMode): number {
+  const normal = Math.max(normalUsdRate, 0);
+  const rate = Math.max(rateUsd, 0);
+  return rateMode === "additive" ? normal + rate : Math.max(normal, rate);
+}
+
 export function blackoutPayout(input: BlackoutPayoutInput): BlackoutPayout {
   const hours = round2(
     Math.max(Math.min(input.approvedHours, input.eligibleHours, input.creditHours), 0),
   );
   const normal = Math.max(input.normalUsdRate, 0);
-  const effectiveUsdRate = Math.max(normal, input.minUsdRate);
-  const grossPx = Math.round((hours * effectiveUsdRate) / input.pxValueUsd);
+  const effRate = effectiveUsdRate(normal, input.rateUsd, input.rateMode);
+  const grossPx = Math.round((hours * effRate) / input.pxValueUsd);
   const normalPx = Math.round((hours * normal) / input.pxValueUsd);
-  return { hours, effectiveUsdRate, grossPx, upliftPx: Math.max(grossPx - normalPx, 0) };
+  return { hours, effectiveUsdRate: effRate, grossPx, upliftPx: Math.max(grossPx - normalPx, 0) };
 }
 
 export type PlayerBlackoutLabel =

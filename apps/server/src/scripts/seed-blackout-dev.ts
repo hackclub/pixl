@@ -25,11 +25,14 @@ const [existing] = await sql`select id, status, starts_at, ends_at from operatio
 if (existing) {
   console.log("operation-blackout already exists:", existing);
 } else {
+  // rate=1, mode=additive: a flat +$1/hr bonus on top of each contributor's
+  // own rate, Blackout's real config - not a $5 minimum. See domain.ts's
+  // RateMode doc comment.
   const [res] = await sql`select operation_create(
     'operation-blackout', 'Operation Blackout',
     ${new Date(now + startHours * H).toISOString()}::timestamptz,
     ${new Date(now + endHours * H).toISOString()}::timestamptz,
-    5, 72, 'seed-blackout-dev') as r`;
+    1, 72, 'seed-blackout-dev', 'additive') as r`;
   console.log("created:", res.r);
 }
 await sql.end();

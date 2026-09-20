@@ -53,9 +53,9 @@ const settle = (
 const revert = (pid: number) => rpc("select operation_revert_entry($1,$2) as r", [pid, "admin"]);
 const adminUpdate = (action: string, extra: Record<string, unknown> = {}) =>
   rpc(
-    "select operation_admin_update($1,$2,$3,$4::timestamptz,$5::timestamptz,$6,$7,$8,$9) as r",
+    "select operation_admin_update($1,$2,$3,$4::timestamptz,$5::timestamptz,$6,$7,$8,$9,$10) as r",
     [SLUG, action, "admin", extra.endsAt ?? null, extra.startsAt ?? null, extra.name ?? null,
-      extra.rate ?? null, extra.grace ?? null, ""],
+      extra.rate ?? null, extra.grace ?? null, "", extra.mode ?? null],
   );
 const stats = () => rpc("select operation_stats($1,$2,$3) as r", [SLUG, PX, 4]);
 
@@ -67,11 +67,18 @@ async function mkProject(userId: string, status = "draft"): Promise<number> {
   const [p] = await sql`insert into projects (user_id, status) values (${userId}, ${status}) returning id`;
   return Number(p.id);
 }
-async function setOp(startH: number, endH: number, opts: { rate?: number; grace?: number; status?: string } = {}) {
+async function setOp(
+  startH: number,
+  endH: number,
+  opts: { rate?: number; mode?: "floor" | "additive"; grace?: number; status?: string } = {},
+) {
   await sql`truncate operations restart identity cascade`;
-  await sql`insert into operations (slug, name, starts_at, ends_at, rate_usd, grace_period_hours, status)
+  // Defaults match Blackout's real config: a flat +$1/hr bonus, never a
+  // floor - see domain.ts's RateMode doc comment.
+  await sql`insert into operations (slug, name, starts_at, ends_at, rate_usd, rate_mode, grace_period_hours, status)
     values (${SLUG}, 'Operation Blackout', now() + ${startH + " hours"}::interval,
-            now() + ${endH + " hours"}::interval, ${opts.rate ?? 5}, ${opts.grace ?? 72}, ${opts.status ?? "active"})`;
+            now() + ${endH + " hours"}::interval, ${opts.rate ?? 1}, ${opts.mode ?? "additive"},
+            ${opts.grace ?? 72}, ${opts.status ?? "active"})`;
 }
 const entryOf = async (pid: number) =>
   (await sql`select * from operation_entries where project_id = ${pid}`)[0];
@@ -126,7 +133,8 @@ d("operations (real Postgres)", () => {
     const e = await entryOf(pid);
     const [{ delta }] = await sql`select abs(extract(epoch from (now() - ${e.joined_at}::timestamptz))) as delta`;
     expect(Number(delta)).toBeLessThan(5);
-    expect(e.rate_usd_snapshot).toBe("5.00");
+    expect(e.rate_usd_snapshot).toBe("1.00");
+    expect(e.rate_mode_snapshot).toBe("additive");
     expect(e.grace_period_hours_snapshot).toBe(72);
     expect(e.status).toBe("entered");
   });
@@ -267,7 +275,7 @@ d("operations (real Postgres)", () => {
     expect((await decide(pid, "eligible", [{ user_id: await mkUser(), hours: 1 }])).error).toBe("unknown_contributor");
   });
 
-  test("8+9. normal $4 -> $5 for Blackout hours; permanent user fields and the normal payout are untouched", async () => {
+  test("8+9. normal $4 -> $5 effective (+$1 bonus); permanent user fields and the normal payout are untouched", async () => {
     await setOp(-2, 24);
     const { uid, pid } = await shippedProject({ hours: 10 });
     await sql`insert into pixel_transactions (user_id, project_id, amount, hours, reason) values (${uid}, ${pid}, 5714, 10, 'project_approved')`;
@@ -276,8 +284,8 @@ d("operations (real Postgres)", () => {
     await decide(pid, "eligible", [{ user_id: uid, hours: 10 }]);
     await sql`update projects set status = 'approved' where id = ${pid}`;
     const r = await settle(pid, [{ user_id: uid, normal_usd_rate: 4, credit_hours: 10 }]);
-    const ts = blackoutPayout({ approvedHours: 10, eligibleHours: 10, creditHours: 10, normalUsdRate: 4, minUsdRate: 5, pxValueUsd: PX });
-    expect(ts.effectiveUsdRate).toBe(5);
+    const ts = blackoutPayout({ approvedHours: 10, eligibleHours: 10, creditHours: 10, normalUsdRate: 4, rateUsd: 1, rateMode: "additive", pxValueUsd: PX });
+    expect(ts.effectiveUsdRate).toBe(5); // 4 + 1 bonus
     expect(r.contributors[0].effective_usd_rate).toBe(5);
     expect(Number(r.contributors[0].uplift_px)).toBe(ts.upliftPx);
     expect(Number(r.contributors[0].gross_px)).toBe(ts.grossPx);
@@ -297,20 +305,24 @@ d("operations (real Postgres)", () => {
     expect(rows[0].meta).toMatchObject({ hours: 10, normal_usd_rate: 4, effective_usd_rate: 5 });
   });
 
-  test("10. a user already above $5 keeps their rate: nothing is added", async () => {
+  // The old "floor" model paid a $6/hr earner nothing (6 already met the
+  // $5 minimum). The corrected additive model pays every eligible
+  // contributor the same +$1/hr bonus regardless of their own rate - a
+  // $6/hr earner still gets +$1, same as everyone else.
+  test("10. a $6/hr earner still gets the +$1/hr bonus (no floor semantics)", async () => {
     await setOp(-2, 24);
     const { uid, pid } = await shippedProject({ hours: 10 });
     await decide(pid, "eligible", [{ user_id: uid, hours: 10 }]);
     await sql`update projects set status = 'approved' where id = ${pid}`;
     const r = await settle(pid, [{ user_id: uid, normal_usd_rate: 6, credit_hours: 10 }]);
     expect(r.ok).toBe(true);
-    expect(r.contributors[0]).toMatchObject({ effective_usd_rate: 6, uplift_px: 0 });
-    expect(await ledger(uid)).toHaveLength(0);
-    expect(await pixelsOf(uid)).toBe(0);
+    expect(r.contributors[0]).toMatchObject({ effective_usd_rate: 7, uplift_px: 143 });
+    expect(await ledger(uid)).toHaveLength(1);
+    expect(await pixelsOf(uid)).toBe(143);
     expect((await entryOf(pid)).status).toBe("approved");
   });
 
-  test("11. team members are paid separately from their own hours and rates", async () => {
+  test("11. team members are paid separately from their own hours and rates - each gets their own +$1/hr", async () => {
     await setOp(-2, 24);
     const a = await mkUser(), b = await mkUser(), c = await mkUser();
     const pid = await mkProject(a);
@@ -332,11 +344,16 @@ d("operations (real Postgres)", () => {
     expect(Number(byUser.get(a).paid_hours)).toBe(6);
     expect(Number(byUser.get(b).paid_hours)).toBe(3);
     expect(Number(byUser.get(c).paid_hours)).toBe(5);
-    expect(Number(byUser.get(a).uplift_px)).toBe(blackoutPayout({ approvedHours: 6, eligibleHours: 6, creditHours: 6, normalUsdRate: 4, minUsdRate: 5, pxValueUsd: PX }).upliftPx);
-    expect(Number(byUser.get(b).uplift_px)).toBe(blackoutPayout({ approvedHours: 3, eligibleHours: 3, creditHours: 3, normalUsdRate: 4.5, minUsdRate: 5, pxValueUsd: PX }).upliftPx);
-    expect(Number(byUser.get(c).uplift_px)).toBe(0);
+    expect(Number(byUser.get(a).uplift_px)).toBe(blackoutPayout({ approvedHours: 6, eligibleHours: 6, creditHours: 6, normalUsdRate: 4, rateUsd: 1, rateMode: "additive", pxValueUsd: PX }).upliftPx);
+    expect(Number(byUser.get(b).uplift_px)).toBe(blackoutPayout({ approvedHours: 3, eligibleHours: 3, creditHours: 3, normalUsdRate: 4.5, rateUsd: 1, rateMode: "additive", pxValueUsd: PX }).upliftPx);
+    // Under a floor, c (already at $6, above the old $5 minimum) got
+    // nothing. Under the corrected additive +$1/hr bonus, c gets one too.
+    expect(Number(byUser.get(c).uplift_px)).toBe(
+      blackoutPayout({ approvedHours: 5, eligibleHours: 5, creditHours: 5, normalUsdRate: 6, rateUsd: 1, rateMode: "additive", pxValueUsd: PX }).upliftPx,
+    );
+    expect(Number(byUser.get(c).uplift_px)).toBeGreaterThan(0);
     expect((await stats()).contributors.approved_hours).toBe(14);
-    expect(await ledger(c)).toHaveLength(0);
+    expect(await ledger(c)).toHaveLength(1);
     expect(await ledger(a)).toHaveLength(1);
     expect(await ledger(b)).toHaveLength(1);
   });
@@ -624,7 +641,12 @@ d("operations (real Postgres)", () => {
   });
 
   test("20. projected/actual cost stats match the underlying transactions", async () => {
-    await setOp(-2, 24, { rate: 5 });
+    // rate:1 (additive) is Blackout's real config. With an assumed $4
+    // baseline (p_base_payout_usd), pending.gross_usd (3h * (4+1)=15) and
+    // pending.uplift_max_usd (3h * 1=3) below land on the same numbers a
+    // $5 floor happened to produce here - additive's estimate is exact
+    // (no assumption needed for the bonus itself), unlike floor's.
+    await setOp(-2, 24, { rate: 1, mode: "additive" });
     const paid = await shippedProject({ hours: 10 });
     await decide(paid.pid, "eligible", [{ user_id: paid.uid, hours: 10 }]);
     await sql`update projects set status = 'approved' where id = ${paid.pid}`;
@@ -653,15 +675,34 @@ d("operations (real Postgres)", () => {
     void pending;
   });
 
-  test("payout math in SQL and TS agree across a matrix of rates and hours", async () => {
+  test("payout math in SQL and TS agree across a matrix of rates and hours (additive mode)", async () => {
     await setOp(-2, 24);
+    // Explicitly includes every rate the user's spec called out ($4, $4.31,
+    // $5, $6) plus a wider spread, and both single-hour and 10h cases.
+    for (const normal of [4, 4.31, 4.37, 4.99, 5, 5.01, 5.5, 6]) {
+      for (const hours of [0.25, 1, 2.75, 7.33, 10, 12]) {
+        const { uid, pid } = await shippedProject({ hours: 20 });
+        await decide(pid, "eligible", [{ user_id: uid, hours }]);
+        await sql`update projects set status = 'approved' where id = ${pid}`;
+        const r = await settle(pid, [{ user_id: uid, normal_usd_rate: normal, credit_hours: hours }]);
+        const ts = blackoutPayout({ approvedHours: hours, eligibleHours: 20, creditHours: hours, normalUsdRate: normal, rateUsd: 1, rateMode: "additive", pxValueUsd: PX });
+        expect(ts.effectiveUsdRate).toBeCloseTo(normal + 1, 10); // exactly +$1/hr before rounding
+        expect(Number(r.contributors[0].uplift_px)).toBe(ts.upliftPx);
+        expect(Number(r.contributors[0].gross_px)).toBe(ts.grossPx);
+        expect(Number(r.contributors[0].effective_usd_rate)).toBeCloseTo(ts.effectiveUsdRate, 4);
+      }
+    }
+  });
+
+  test("payout math in SQL and TS agree across a matrix of rates and hours (floor mode, kept generic)", async () => {
+    await setOp(-2, 24, { rate: 5, mode: "floor" });
     for (const normal of [4, 4.37, 4.99, 5, 5.01, 5.5, 6]) {
       for (const hours of [0.25, 1, 2.75, 7.33, 12]) {
         const { uid, pid } = await shippedProject({ hours: 20 });
         await decide(pid, "eligible", [{ user_id: uid, hours }]);
         await sql`update projects set status = 'approved' where id = ${pid}`;
         const r = await settle(pid, [{ user_id: uid, normal_usd_rate: normal, credit_hours: hours }]);
-        const ts = blackoutPayout({ approvedHours: hours, eligibleHours: 20, creditHours: hours, normalUsdRate: normal, minUsdRate: 5, pxValueUsd: PX });
+        const ts = blackoutPayout({ approvedHours: hours, eligibleHours: 20, creditHours: hours, normalUsdRate: normal, rateUsd: 5, rateMode: "floor", pxValueUsd: PX });
         expect(Number(r.contributors[0].uplift_px)).toBe(ts.upliftPx);
         expect(Number(r.contributors[0].gross_px)).toBe(ts.grossPx);
         expect(Number(r.contributors[0].effective_usd_rate)).toBeCloseTo(ts.effectiveUsdRate, 4);
@@ -732,7 +773,8 @@ describe("operations HTTP routes (real router, real Postgres)", () => {
     });
     expect(res.status).toBe(200);
     const [e] = await db2`select * from operation_entries where project_id = ${pid}`;
-    expect(e.rate_usd_snapshot).toBe("5.00");
+    expect(e.rate_usd_snapshot).toBe("1.00");
+    expect(e.rate_mode_snapshot).toBe("additive");
     expect(e.status).toBe("entered");
     expect(e.first_qualified_ship_at).toBeNull();
     expect(new Date(e.joined_at).getTime()).toBeGreaterThan(Date.now() - 60_000);
@@ -750,7 +792,7 @@ describe("operations HTTP routes (real router, real Postgres)", () => {
     expect(later.entries).toBeUndefined();
 
     const live = await (await fetch(`${base}/api/operations/${SLUG}`)).json();
-    expect(live.operation).toMatchObject({ status: "active", briefingUnlocked: true, rateUsd: 5, gracePeriodHours: 72 });
+    expect(live.operation).toMatchObject({ status: "active", briefingUnlocked: true, rateUsd: 1, rateMode: "additive", gracePeriodHours: 72 });
     expect(live.operation.power).toBeDefined();
     expect(live.entries).toBeUndefined();
 

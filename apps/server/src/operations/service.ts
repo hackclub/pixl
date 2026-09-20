@@ -8,6 +8,7 @@ import {
   type EntryStatus,
   type OperationStatus,
   type PlayerBlackoutLabel,
+  type RateMode,
 } from "./domain.js";
 
 export interface RpcResult {
@@ -33,6 +34,7 @@ interface OperationRow {
   ends_at: string;
   status: OperationStatus;
   rate_usd: string | number;
+  rate_mode: RateMode;
   grace_period_hours: number;
 }
 
@@ -177,6 +179,7 @@ export interface PublicOperationView {
   briefingUnlocked: boolean;
   endsAt?: string;
   rateUsd?: number;
+  rateMode?: RateMode;
   gracePeriodHours?: number;
   power?: { approvedHours: number; approvedProjects: number; participants: number; powerUnits: number };
 }
@@ -212,6 +215,7 @@ export async function getPublicOperation(slug: string): Promise<PublicOperationV
     ...base,
     endsAt: new Date(op.ends_at).toISOString(),
     rateUsd: Number(op.rate_usd),
+    rateMode: op.rate_mode,
     gracePeriodHours: op.grace_period_hours,
     power: stats
       ? {

@@ -19,6 +19,7 @@ export interface BlackoutReviewPerson {
 export interface BlackoutReviewData {
   operationName: string;
   rateUsd: number;
+  rateMode: "floor" | "additive";
   operationStartsAt: string;
   operationEndsAt: string;
   joinedAt: string;
@@ -57,7 +58,11 @@ export function BlackoutReviewSection({ data }: { data: BlackoutReviewData }) {
 
       <p className="text-xs text-muted-foreground">
         Rule on whether this counts for Blackout, and how many tracked hours inside the window are approved. You never
-        set a rate: Pixl pays each person max(their own rate, ${data.rateUsd.toFixed(2)}/hr) on the approved hours, once.
+        set a rate: Pixl pays each person{" "}
+        {data.rateMode === "additive"
+          ? <>their own rate + ${data.rateUsd.toFixed(2)}/hr</>
+          : <>max(their own rate, ${data.rateUsd.toFixed(2)}/hr)</>}
+        {" "}on the approved hours, once.
       </p>
 
       <ul className="text-xs text-muted-foreground list-disc pl-4 grid gap-0.5">

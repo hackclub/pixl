@@ -3,6 +3,14 @@ import { config } from "@/app/_generated/config";
 
 export const BLACKOUT_SLUG = "operation-blackout";
 
+// How rateUsd is applied on top of a contributor's own normal rate.
+// "additive" (Blackout's real config) means everyone gets the same flat
+// bonus - rateUsd IS the bonus (1 = +$1/hr), never a minimum. "floor" means
+// nobody drops below rateUsd regardless of how high their own rate already
+// is; kept only so a future operation can still use that shape if it's ever
+// the right one. See apps/server/src/operations/domain.ts's RateMode.
+export type RateMode = "floor" | "additive";
+
 export type OperationStatus = "upcoming" | "active" | "ended" | "paused";
 export type EntryStatus =
   | "entered"
@@ -30,6 +38,7 @@ export interface OperationRow {
   status: OperationStatus;
   effectiveStatus: OperationStatus;
   rateUsd: number;
+  rateMode: RateMode;
   gracePeriodHours: number;
 }
 
@@ -63,6 +72,7 @@ export interface BlackoutEntry {
   latestShipAt: string | null;
   reshipCount: number;
   rateUsdSnapshot: number;
+  rateModeSnapshot: RateMode;
   gracePeriodHoursSnapshot: number;
   decision: "eligible" | "ineligible" | null;
   decisionNote: string;
@@ -109,6 +119,7 @@ function toOperation(r: Record<string, unknown>): OperationRow {
     status,
     effectiveStatus: effectiveStatusOf(status, startsAt, endsAt),
     rateUsd: num(r.rate_usd),
+    rateMode: (r.rate_mode as RateMode) ?? "additive",
     gracePeriodHours: num(r.grace_period_hours),
   };
 }
@@ -197,6 +208,7 @@ export async function getBlackoutEntry(
     latestShipAt: iso(row.latest_ship_at),
     reshipCount: num(row.reship_count),
     rateUsdSnapshot: num(row.rate_usd_snapshot),
+    rateModeSnapshot: (row.rate_mode_snapshot as RateMode) ?? "additive",
     gracePeriodHoursSnapshot: num(row.grace_period_hours_snapshot),
     decision: (row.eligibility_decision as "eligible" | "ineligible" | null) ?? null,
     decisionNote: String(row.decision_note ?? ""),
@@ -386,6 +398,7 @@ export const operationRpc = {
     startsAt: string;
     endsAt: string;
     rateUsd: number;
+    rateMode: RateMode;
     graceHours: number;
     by: string;
   }) =>
@@ -395,6 +408,7 @@ export const operationRpc = {
       p_starts_at: a.startsAt,
       p_ends_at: a.endsAt,
       p_rate_usd: a.rateUsd,
+      p_rate_mode: a.rateMode,
       p_grace_hours: a.graceHours,
       p_actor: a.by,
     }),
@@ -406,6 +420,7 @@ export const operationRpc = {
     startsAt?: string | null;
     name?: string | null;
     rateUsd?: number | null;
+    rateMode?: RateMode | null;
     graceHours?: number | null;
     note?: string;
   }) =>
@@ -419,6 +434,7 @@ export const operationRpc = {
       p_rate_usd: a.rateUsd ?? null,
       p_grace_hours: a.graceHours ?? null,
       p_note: a.note ?? "",
+      p_rate_mode: a.rateMode ?? null,
     }),
 };
 

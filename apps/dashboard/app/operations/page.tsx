@@ -77,8 +77,19 @@ function CreateForm() {
           <Input name="slug" defaultValue={BLACKOUT_SLUG} required pattern="[a-z0-9][a-z0-9\-]{0,63}" />
         </label>
         <label className="grid gap-1 text-sm">
-          Minimum rate ($/hr)
-          <Input name="rateUsd" type="number" step="0.01" min="0" defaultValue="5" required />
+          Bonus ($/hr)
+          <Input name="rateUsd" type="number" step="0.01" min="0" defaultValue="1" required />
+        </label>
+        <label className="grid gap-1 text-sm">
+          <span>Rate mode</span>
+          <select
+            name="rateMode"
+            defaultValue="additive"
+            className="w-full text-sm h-9 rounded-md border border-border bg-background px-3"
+          >
+            <option value="additive">Additive - flat bonus on top of each player&apos;s own rate</option>
+            <option value="floor">Floor - nobody drops below this rate</option>
+          </select>
         </label>
         <label className="grid gap-1 text-sm">
           Starts (UTC)
@@ -191,8 +202,10 @@ export default async function OperationsPage({
               {fmt(op.startsAt)} → {fmt(op.endsAt)} UTC
             </div>
             <div className="text-sm text-muted-foreground">
-              Floor rate {usd(op.rateUsd)}/hr, effective rate = max(player&apos;s own rate, {usd(op.rateUsd)}) · grace{" "}
-              {op.gracePeriodHours}h
+              {op.rateMode === "additive"
+                ? <>+{usd(op.rateUsd)}/hr bonus, effective rate = player&apos;s own rate + {usd(op.rateUsd)}</>
+                : <>Floor rate {usd(op.rateUsd)}/hr, effective rate = max(player&apos;s own rate, {usd(op.rateUsd)})</>}
+              {" "}· grace {op.gracePeriodHours}h
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -256,16 +269,27 @@ export default async function OperationsPage({
               <Input name="name" defaultValue={op.name} maxLength={80} />
             </label>
             <label className="grid gap-1 text-sm">
-              Floor rate ($/hr)
+              Bonus ($/hr)
               <Input name="rateUsd" type="number" step="0.01" min="0" defaultValue={op.rateUsd} />
+            </label>
+            <label className="grid gap-1 text-sm">
+              <span>Rate mode</span>
+              <select
+                name="rateMode"
+                defaultValue={op.rateMode}
+                className="w-full text-sm h-9 rounded-md border border-border bg-background px-3"
+              >
+                <option value="additive">Additive - flat bonus</option>
+                <option value="floor">Floor - minimum rate</option>
+              </select>
             </label>
             <label className="grid gap-1 text-sm">
               Grace (hours)
               <Input name="graceHours" type="number" min="0" defaultValue={op.gracePeriodHours} />
             </label>
             <p className="text-xs text-muted-foreground sm:col-span-3">
-              Rate and grace apply only to entries created after this save; each entry snapshots them when it joins.
-              The start can only move before anything has joined.
+              Rate, rate mode, and grace apply only to entries created after this save; each entry snapshots them
+              when it joins. The start can only move before anything has joined.
             </p>
             <div className="sm:col-span-3"><PendingButton size="sm" pendingText="Saving…">Save</PendingButton></div>
           </form>
@@ -304,10 +328,15 @@ export default async function OperationsPage({
               <Stat label="Pending work value" value={usd(Number(stats.pending.gross_usd))} hint="if every pending hour is approved" />
             </div>
             <p className="text-xs text-muted-foreground mt-3 max-w-3xl">
-              Blackout cost means only the top-up. Each person&apos;s normal project payout already pays their hours at their
-              own rate, so the operation adds just the difference up to the floor (a $4 player gets +$1/hr, $5 and $6 players
-              get nothing extra). Work value is the total those hours are worth at the effective rate, for context. Pending
-              figures are ceilings from tracked time inside each entry&apos;s window, not forecasts.
+              Blackout cost means only the top-up. Each person&apos;s normal project payout already pays their hours at
+              their own rate, so the operation adds just the difference on top.{" "}
+              {op.rateMode === "additive"
+                ? <>Every eligible contributor gets the same flat +{usd(Number(op.rateUsd))}/hr, whether their own rate
+                    is $4, $5, or $6/hr - nobody is left out for already being above some minimum.</>
+                : <>Below the {usd(Number(op.rateUsd))}/hr floor, the difference is added; at or above it, nothing extra.</>}
+              {" "}Work value is the total those hours are worth at the effective rate, for context. Pending hours are a
+              ceiling from tracked time inside each entry&apos;s window, not yet approved
+              {op.rateMode === "additive" && "; the pending cost figure itself is exact for the bonus (it doesn't depend on anyone's real rate), not an estimate"}.
             </p>
           </div>
         </>

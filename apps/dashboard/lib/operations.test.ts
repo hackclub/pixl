@@ -38,7 +38,8 @@ const entry = (over: Partial<BlackoutEntry> = {}): BlackoutEntry => ({
   firstQualifiedShipAt: at(-1),
   latestShipAt: at(-1),
   reshipCount: 0,
-  rateUsdSnapshot: 5,
+  rateUsdSnapshot: 1,
+  rateModeSnapshot: "additive",
   gracePeriodHoursSnapshot: 72,
   decision: null,
   decisionNote: "",
@@ -52,7 +53,7 @@ const entry = (over: Partial<BlackoutEntry> = {}): BlackoutEntry => ({
   operation: {
     id: 1, slug: "operation-blackout", name: "Operation Blackout",
     startsAt: at(-10), endsAt: at(24), status: "active", effectiveStatus: "active",
-    rateUsd: 5, gracePeriodHours: 72,
+    rateUsd: 1, rateMode: "additive", gracePeriodHours: 72,
   },
   ...over,
 });

@@ -12,7 +12,12 @@
 --     is eligible; the first qualifying ship is stamped once and never reset
 --     by unship/reship
 --   * a reviewer decides eligibility + approved hours, never a dollar rate;
---     the rate is max(the contributor's normal rate, operation.rate_usd)
+--     operation.rate_usd is applied on top of the contributor's own normal
+--     rate according to operation.rate_mode - 'additive' means everyone gets
+--     the same flat bonus (rate_usd IS the bonus, e.g. 1 for +$1/hr, not a
+--     minimum); 'floor' means nobody drops below rate_usd regardless of how
+--     high their own rate already is. Blackout uses 'additive': +$1/hr for
+--     every eligible contributor, never a floor.
 --   * pay is a per-contributor top-up over the normal project payout (the
 --     normal payout already pays the hours at the player's own rate), booked
 --     as its own pixel_transactions rows (reason 'operation_blackout') so it
@@ -35,7 +40,11 @@ CREATE TABLE IF NOT EXISTS operations (
   -- clock", see operation_effective_status().
   status text NOT NULL DEFAULT 'upcoming'
     CHECK (status IN ('upcoming', 'active', 'ended', 'paused')),
-  rate_usd numeric(6, 2) NOT NULL DEFAULT 5 CHECK (rate_usd >= 0),
+  -- Meaning depends on rate_mode: the floor value ('floor') or the flat
+  -- bonus added on top of a contributor's own rate ('additive'). Blackout:
+  -- rate_mode='additive', rate_usd=1 (a flat +$1/hr, not a $1 minimum).
+  rate_usd numeric(6, 2) NOT NULL DEFAULT 1 CHECK (rate_usd >= 0),
+  rate_mode text NOT NULL DEFAULT 'additive' CHECK (rate_mode IN ('floor', 'additive')),
   grace_period_hours integer NOT NULL DEFAULT 72 CHECK (grace_period_hours >= 0),
   config jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at timestamptz NOT NULL DEFAULT now(),
@@ -62,6 +71,7 @@ CREATE TABLE IF NOT EXISTS operation_entries (
   -- Snapshots so an admin editing the operation later can't retroactively
   -- change an entry that is already in flight.
   rate_usd_snapshot numeric(6, 2) NOT NULL,
+  rate_mode_snapshot text NOT NULL CHECK (rate_mode_snapshot IN ('floor', 'additive')),
   grace_period_hours_snapshot integer NOT NULL,
   -- Reviewer decision (human, explicit). NULL = undecided.
   eligibility_decision text CHECK (eligibility_decision IN ('eligible', 'ineligible')),
@@ -193,10 +203,10 @@ BEGIN
 
   INSERT INTO operation_entries (
     operation_id, project_id, user_id, joined_at, window_start,
-    rate_usd_snapshot, grace_period_hours_snapshot
+    rate_usd_snapshot, rate_mode_snapshot, grace_period_hours_snapshot
   ) VALUES (
     op.id, p_project_id, p_user_id, v_now, greatest(op.starts_at, v_now),
-    op.rate_usd, op.grace_period_hours
+    op.rate_usd, op.rate_mode, op.grace_period_hours
   )
   ON CONFLICT (operation_id, project_id) DO NOTHING
   RETURNING * INTO ent;
@@ -467,7 +477,9 @@ END $$;
 -- rate/hours each person was *normally* paid on this ship, supplied by the
 -- payout code that just credited them. Everything else is computed here.
 --   hours   = least(approved_blackout_hours, eligible tracked hours, credit_hours)
---   eff     = greatest(normal_usd_rate, entry.rate_usd_snapshot)
+--   eff     = entry.rate_mode_snapshot = 'additive'
+--               ? normal_usd_rate + entry.rate_usd_snapshot   (Blackout: +$1/hr)
+--               : greatest(normal_usd_rate, entry.rate_usd_snapshot)
 --   gross   = round(hours * eff / px_value)          (the Blackout value)
 --   uplift  = greatest(gross - round(hours * normal / px_value), 0)   (the top-up)
 CREATE OR REPLACE FUNCTION operation_settle_entry(
@@ -548,7 +560,10 @@ BEGIN
       c.eligible_tracked_seconds / 3600.0,
       coalesce(x.credit_hours, 0)), 0), 2);
     v_normal := greatest(coalesce(x.normal_usd_rate, 0), 0);
-    v_eff := greatest(v_normal, ent.rate_usd_snapshot);
+    v_eff := CASE ent.rate_mode_snapshot
+      WHEN 'additive' THEN v_normal + ent.rate_usd_snapshot
+      ELSE greatest(v_normal, ent.rate_usd_snapshot)
+    END;
     v_gross := round(v_hours * v_eff / p_px_value_usd);
     v_normal_px := round(v_hours * v_normal / p_px_value_usd);
     v_uplift := greatest(v_gross - v_normal_px, 0);
@@ -664,7 +679,8 @@ END $$;
 
 CREATE OR REPLACE FUNCTION operation_create(
   p_slug text, p_name text, p_starts_at timestamptz, p_ends_at timestamptz,
-  p_rate_usd numeric, p_grace_hours integer, p_actor text
+  p_rate_usd numeric, p_grace_hours integer, p_actor text,
+  p_rate_mode text DEFAULT 'additive'
 ) RETURNS json LANGUAGE plpgsql AS $$
 DECLARE
   op operations%ROWTYPE;
@@ -675,8 +691,11 @@ BEGIN
   IF p_rate_usd IS NULL OR p_rate_usd < 0 OR p_grace_hours IS NULL OR p_grace_hours < 0 THEN
     RETURN json_build_object('ok', false, 'error', 'invalid_settings');
   END IF;
-  INSERT INTO operations (slug, name, starts_at, ends_at, rate_usd, grace_period_hours)
-  VALUES (p_slug, p_name, p_starts_at, p_ends_at, p_rate_usd, p_grace_hours)
+  IF p_rate_mode NOT IN ('floor', 'additive') THEN
+    RETURN json_build_object('ok', false, 'error', 'invalid_settings');
+  END IF;
+  INSERT INTO operations (slug, name, starts_at, ends_at, rate_usd, rate_mode, grace_period_hours)
+  VALUES (p_slug, p_name, p_starts_at, p_ends_at, p_rate_usd, p_rate_mode, p_grace_hours)
   ON CONFLICT (slug) DO NOTHING RETURNING * INTO op;
   IF op.id IS NULL THEN
     RETURN json_build_object('ok', false, 'error', 'slug_taken');
@@ -694,7 +713,8 @@ CREATE OR REPLACE FUNCTION operation_admin_update(
   p_slug text, p_action text, p_actor text,
   p_ends_at timestamptz DEFAULT NULL, p_starts_at timestamptz DEFAULT NULL,
   p_name text DEFAULT NULL, p_rate_usd numeric DEFAULT NULL,
-  p_grace_hours integer DEFAULT NULL, p_note text DEFAULT ''
+  p_grace_hours integer DEFAULT NULL, p_note text DEFAULT '',
+  p_rate_mode text DEFAULT NULL
 ) RETURNS json LANGUAGE plpgsql AS $$
 DECLARE
   op operations%ROWTYPE;
@@ -753,11 +773,15 @@ BEGIN
     IF (p_rate_usd IS NOT NULL AND p_rate_usd < 0) OR (p_grace_hours IS NOT NULL AND p_grace_hours < 0) THEN
       RETURN json_build_object('ok', false, 'error', 'invalid_settings');
     END IF;
+    IF p_rate_mode IS NOT NULL AND p_rate_mode NOT IN ('floor', 'additive') THEN
+      RETURN json_build_object('ok', false, 'error', 'invalid_settings');
+    END IF;
     UPDATE operations
        SET name = coalesce(nullif(btrim(p_name), ''), name),
            starts_at = coalesce(p_starts_at, starts_at),
            ends_at = coalesce(p_ends_at, ends_at),
            rate_usd = coalesce(p_rate_usd, rate_usd),
+           rate_mode = coalesce(p_rate_mode, rate_mode),
            grace_period_hours = coalesce(p_grace_hours, grace_period_hours),
            updated_at = v_now
      WHERE id = op.id;
@@ -819,17 +843,29 @@ BEGIN
   FROM pixel_transactions
   WHERE operation_id = op.id AND reason IN ('operation_blackout', 'operation_blackout_reverted');
 
+  -- p_base_payout_usd stands in for each in-flight contributor's real normal
+  -- rate, which isn't known until settlement (see operation_settle_entry) -
+  -- an assumption either way, kept only as the "gross"/work-value estimate.
+  -- The additive uplift estimate needs no such assumption: the bonus is the
+  -- same $ amount regardless of the contributor's real rate, so it's exact,
+  -- not an upper bound, unlike the floor case (still an approximation, since
+  -- a real rate already above the assumed baseline would floor to nothing).
   SELECT json_build_object(
     'hours', coalesce(sum(h), 0),
-    'gross_usd', coalesce(sum(h * en_rate), 0),
-    'uplift_max_usd', coalesce(sum(h * greatest(en_rate - p_base_payout_usd, 0)), 0)
+    'gross_usd', coalesce(sum(h * CASE en_mode
+      WHEN 'additive' THEN p_base_payout_usd + en_rate
+      ELSE greatest(p_base_payout_usd, en_rate) END), 0),
+    'uplift_max_usd', coalesce(sum(h * CASE en_mode
+      WHEN 'additive' THEN en_rate
+      ELSE greatest(en_rate - p_base_payout_usd, 0) END), 0)
   ) INTO pend
   FROM (
     SELECT
       CASE WHEN en.status = 'eligible' AND c.approved_blackout_hours IS NOT NULL
            THEN least(c.approved_blackout_hours, c.eligible_tracked_seconds / 3600.0)
            ELSE c.eligible_tracked_seconds / 3600.0 END AS h,
-      en.rate_usd_snapshot AS en_rate
+      en.rate_usd_snapshot AS en_rate,
+      en.rate_mode_snapshot AS en_mode
     FROM operation_entry_contributors c JOIN operation_entries en ON en.id = c.entry_id
     WHERE en.operation_id = op.id AND c.settled_at IS NULL
       AND en.status IN ('shipped', 'eligible', 'needs_changes')
@@ -874,7 +910,7 @@ REVOKE EXECUTE ON FUNCTION operation_review_decision(text, bigint, text, text, t
 REVOKE EXECUTE ON FUNCTION operation_settle_entry(text, bigint, text, numeric, jsonb) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION operation_revert_entry(bigint, text) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION operation_on_project_ban(bigint) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION operation_create(text, text, timestamptz, timestamptz, numeric, integer, text) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION operation_admin_update(text, text, text, timestamptz, timestamptz, text, numeric, integer, text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION operation_create(text, text, timestamptz, timestamptz, numeric, integer, text, text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION operation_admin_update(text, text, text, timestamptz, timestamptz, text, numeric, integer, text, text) FROM PUBLIC;
 
 COMMIT;

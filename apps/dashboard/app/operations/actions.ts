@@ -3,7 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePerm } from "@/lib/guard";
-import { BLACKOUT_SLUG, operationRpc } from "@/lib/operations";
+import { BLACKOUT_SLUG, operationRpc, type RateMode } from "@/lib/operations";
+
+function parseRateMode(raw: FormDataEntryValue | null): RateMode | null {
+  const s = String(raw ?? "").trim();
+  return s === "floor" || s === "additive" ? s : null;
+}
 
 const ERRORS: Record<string, string> = {
   operation_not_found: "That operation doesn't exist.",
@@ -47,7 +52,10 @@ export async function createOperation(formData: FormData): Promise<void> {
   const name = String(formData.get("name") ?? "").trim();
   const startsAt = parseUtc(formData.get("startsAt"));
   const endsAt = parseUtc(formData.get("endsAt"));
-  const rateUsd = Number(formData.get("rateUsd") ?? 5);
+  // Additive default: a flat bonus on top of each contributor's own rate
+  // (Blackout: +$1/hr), not a minimum. See lib/operations.ts's RateMode.
+  const rateUsd = Number(formData.get("rateUsd") ?? 1);
+  const rateMode = parseRateMode(formData.get("rateMode")) ?? "additive";
   const graceHours = Math.trunc(Number(formData.get("graceHours") ?? 72));
   if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(slug)) back(slug, { error: "Slug must be lowercase letters, numbers and dashes." });
   if (!name) back(slug, { error: "Give the operation a name." });
@@ -55,7 +63,7 @@ export async function createOperation(formData: FormData): Promise<void> {
   if (!Number.isFinite(rateUsd) || !Number.isFinite(graceHours))
     back(slug, { error: ERRORS.invalid_settings });
   const res = await operationRpc.create({
-    slug, name, startsAt: startsAt!, endsAt: endsAt!, rateUsd, graceHours, by: actor(access),
+    slug, name, startsAt: startsAt!, endsAt: endsAt!, rateUsd, rateMode, graceHours, by: actor(access),
   });
   if (!res.ok) back(slug, { error: ERRORS[String(res.error)] ?? "Couldn't create it." });
   revalidatePath("/operations");
@@ -85,6 +93,7 @@ export async function operationControl(formData: FormData): Promise<void> {
     startsAt: action === "edit" ? parseUtc(formData.get("startsAt")) : null,
     name: action === "edit" ? String(formData.get("name") ?? "").trim() || null : null,
     rateUsd: action === "edit" && rate !== "" ? Number(rate) : null,
+    rateMode: action === "edit" ? parseRateMode(formData.get("rateMode")) : null,
     graceHours: action === "edit" && grace !== "" ? Math.trunc(Number(grace)) : null,
     note: String(formData.get("note") ?? "").trim(),
   });

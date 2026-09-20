@@ -248,6 +248,7 @@ export default async function ReviewDetail({
       ? {
           operationName: blackoutEntry.operation.name,
           rateUsd: blackoutEntry.rateUsdSnapshot,
+          rateMode: blackoutEntry.rateModeSnapshot,
           operationStartsAt: blackoutEntry.operation.startsAt,
           operationEndsAt: blackoutEntry.operation.endsAt,
           joinedAt: blackoutEntry.joinedAt,
