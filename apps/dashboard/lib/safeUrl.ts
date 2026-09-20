@@ -24,3 +24,24 @@ export function isSafeUrl(url: string | null | undefined): url is string {
     return false;
   }
 }
+
+// Guard for server-action "go back" targets (returnTo/back/backTo hidden form
+// fields in apps/dashboard/app/actions.ts). Those values are fully
+// caller-controlled - redirect() follows absolute URLs, so passing one
+// through unchecked is an open redirect. Only a same-app path is ever a
+// legitimate value here; anything else (absolute URL, protocol-relative
+// "//evil", backslashes, CR/LF) falls back instead of redirecting outward.
+export function safeRedirectPath(raw: unknown, fallback: string): string {
+  const s = String(raw ?? "").trim();
+  if (!s.startsWith("/") || s.startsWith("//")) return fallback;
+  if (/[\\]/.test(s)) return fallback;
+  if (/[\r\n\u2028\u2029]/.test(s)) return fallback;
+  try {
+    const u = new URL(s, "https://pixl.invalid");
+    // A scheme/host smuggled in any form resolves off the base origin.
+    if (u.origin !== "https://pixl.invalid") return fallback;
+    return u.pathname + u.search + u.hash;
+  } catch {
+    return fallback;
+  }
+}

@@ -269,6 +269,146 @@ describe("GET /auth/hackclub/callback", () => {
   });
 });
 
+// The initial display_name on signup comes from HCA/Slack, sources the
+// player doesn't control the character set of. A later rename rejects a
+// bad name via nameProblem() (routes/profile.ts) , signup must run the
+// same check or a nasty/malformed name slips in before any rename ever
+// happens.
+describe("GET /auth/hackclub/callback -> new signup display_name validation", () => {
+  const FALLBACK_PATTERN = /^user_[a-zA-Z0-9]{1,8}$/;
+
+  test("a normal HCA name is stored as-is", async () => {
+    const users = mockUsersTable([]);
+    const hca = mockHcaFetch({ id: "hca-name-ok", first_name: "Ada", last_name: "Lovelace" });
+    const app = await startTestApp();
+    try {
+      await driveHcaCallback(app.baseUrl);
+      expect(users.insertedRows()[0]?.display_name).toBe("Ada Lovelace");
+    } finally {
+      users.restore();
+      hca.restore();
+      await app.close();
+    }
+  });
+
+  test("a <script> tag in the HCA name never reaches display_name", async () => {
+    const users = mockUsersTable([]);
+    const hca = mockHcaFetch({ id: "hca-name-xss", first_name: "<script>alert(1)</script>" });
+    const app = await startTestApp();
+    try {
+      await driveHcaCallback(app.baseUrl);
+      const stored = users.insertedRows()[0]?.display_name as string;
+      expect(stored).not.toContain("<script>");
+      expect(stored).toMatch(FALLBACK_PATTERN);
+    } finally {
+      users.restore();
+      hca.restore();
+      await app.close();
+    }
+  });
+
+  test("a nasty Slack fallback name never reaches display_name", async () => {
+    const users = mockUsersTable([]);
+    const originalToken = process.env.SLACK_BOT_TOKEN;
+    process.env.SLACK_BOT_TOKEN = "fake-token";
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      const href = typeof url === "string" ? url : url.toString();
+      if (href.includes("/oauth/token")) {
+        return new Response(
+          JSON.stringify({
+            access_token: "fake-token",
+            token_type: "bearer",
+            expires_in: 3600,
+            refresh_token: "r",
+            scope: "",
+          }),
+          { status: 200 },
+        );
+      }
+      if (href.includes("/api/v1/me")) {
+        return new Response(
+          JSON.stringify({
+            identity: { id: "hca-slack-nasty", slack_id: "U999NASTY" },
+            scopes: [],
+          }),
+          { status: 200 },
+        );
+      }
+      if (href.includes("slack.com/api/users.info")) {
+        return new Response(
+          JSON.stringify({ ok: true, user: { real_name: "<img src=x onerror=alert(1)>" } }),
+          { status: 200 },
+        );
+      }
+      return realFetch(url as string, init);
+    }) as typeof fetch;
+    const app = await startTestApp();
+    try {
+      await driveHcaCallback(app.baseUrl);
+      const stored = users.insertedRows()[0]?.display_name as string;
+      expect(stored).not.toContain("<img");
+      expect(stored).toMatch(FALLBACK_PATTERN);
+    } finally {
+      globalThis.fetch = realFetch;
+      if (originalToken === undefined) delete process.env.SLACK_BOT_TOKEN;
+      else process.env.SLACK_BOT_TOKEN = originalToken;
+      users.restore();
+      await app.close();
+    }
+  });
+
+  test("a name over 24 characters falls back to the generated placeholder", async () => {
+    const users = mockUsersTable([]);
+    const hca = mockHcaFetch({
+      id: "hca-name-long",
+      first_name: "Reallylongfirstnamehere",
+      last_name: "AndAnEvenLongerLastName",
+    });
+    const app = await startTestApp();
+    try {
+      await driveHcaCallback(app.baseUrl);
+      const stored = users.insertedRows()[0]?.display_name as string;
+      expect(stored.length).toBeLessThanOrEqual(24);
+      expect(stored).toMatch(FALLBACK_PATTERN);
+    } finally {
+      users.restore();
+      hca.restore();
+      await app.close();
+    }
+  });
+
+  test("a valid Unicode name is stored as-is", async () => {
+    const users = mockUsersTable([]);
+    const hca = mockHcaFetch({ id: "hca-name-unicode", first_name: "José", last_name: "García" });
+    const app = await startTestApp();
+    try {
+      await driveHcaCallback(app.baseUrl);
+      expect(users.insertedRows()[0]?.display_name).toBe("José García");
+    } finally {
+      users.restore();
+      hca.restore();
+      await app.close();
+    }
+  });
+
+  test("a blocked word in the HCA name falls back to the generated placeholder", async () => {
+    const users = mockUsersTable([]);
+    const hca = mockHcaFetch({ id: "hca-name-blocked", first_name: "idiot" });
+    const app = await startTestApp();
+    try {
+      await driveHcaCallback(app.baseUrl);
+      const stored = users.insertedRows()[0]?.display_name as string;
+      expect(stored).not.toBe("idiot");
+      expect(stored).toMatch(FALLBACK_PATTERN);
+    } finally {
+      users.restore();
+      hca.restore();
+      await app.close();
+    }
+  });
+});
+
 // F-8: apps/web-shell's proxy.ts must be able to tell a genuine login
 // round trip apart from an arbitrary ?token= on a link. It does that by
 // requiring ?ln= to match a cookie it set itself before the browser ever

@@ -76,6 +76,7 @@ import { SHOP_CATEGORIES, type ShopCategory } from "@/lib/shopCategories";
 import { kickOnlinePlayer } from "@/lib/gameServer";
 import { dmOrEmail } from "@/lib/notify";
 import { assertSafeExternalUrl } from "@/lib/urlSafety";
+import { safeRedirectPath } from "@/lib/safeUrl";
 import {
   requirePerm,
   requireSuper,
@@ -2130,7 +2131,7 @@ export async function rejectProject(formData: FormData): Promise<void> {
   const by = actorName(access);
   const projectId = Number(formData.get("projectId") ?? 0);
   const reason = String(formData.get("reason") ?? "").trim().slice(0, 1000);
-  const returnTo = String(formData.get("returnTo") ?? "") || `/projects/${projectId}`;
+  const returnTo = safeRedirectPath(formData.get("returnTo"), `/projects/${projectId}`);
   if (!projectId) return;
   if (!reason)
     redirect(`${returnTo}${returnTo.includes("?") ? "&" : "?"}error=${encodeURIComponent("A reason is required to reject a project.")}`);
@@ -2199,7 +2200,7 @@ export async function banProject(formData: FormData): Promise<void> {
   const by = actorName(access);
   const projectId = Number(formData.get("projectId") ?? 0);
   const reason = String(formData.get("reason") ?? "").trim().slice(0, 1000);
-  const returnTo = String(formData.get("returnTo") ?? "") || `/projects/${projectId}`;
+  const returnTo = safeRedirectPath(formData.get("returnTo"), `/projects/${projectId}`);
   if (!projectId) return;
   if (!reason)
     redirect(`${returnTo}${returnTo.includes("?") ? "&" : "?"}error=${encodeURIComponent("A reason is required to ban a project.")}`);
@@ -2276,7 +2277,7 @@ export async function holdReview(formData: FormData): Promise<void> {
   const by = actorName(access);
   const projectId = Number(formData.get("projectId") ?? 0);
   const reason = String(formData.get("reason") ?? "").trim().slice(0, 500);
-  const returnTo = String(formData.get("returnTo") ?? "") || `/review/${projectId}`;
+  const returnTo = safeRedirectPath(formData.get("returnTo"), `/review/${projectId}`);
   if (!projectId) return;
   if (!reason)
     redirect(`${returnTo}${returnTo.includes("?") ? "&" : "?"}error=${encodeURIComponent("A reason is required to hold a review.")}`);
@@ -2310,7 +2311,7 @@ export async function releaseReviewHold(formData: FormData): Promise<void> {
   const access = await requirePerm("review");
   const by = actorName(access);
   const projectId = Number(formData.get("projectId") ?? 0);
-  const returnTo = String(formData.get("returnTo") ?? "") || `/review/${projectId}`;
+  const returnTo = safeRedirectPath(formData.get("returnTo"), `/review/${projectId}`);
   if (!projectId) return;
 
   const { data: current } = await db
@@ -2557,7 +2558,7 @@ export async function banIdea(formData: FormData): Promise<void> {
   const by = actorName(access);
   const ideaId = Number(formData.get("ideaId") ?? 0);
   const reason = String(formData.get("reason") ?? "").trim().slice(0, 1000);
-  const returnTo = String(formData.get("returnTo") ?? "") || "/ideas";
+  const returnTo = safeRedirectPath(formData.get("returnTo"), "/ideas");
   if (!ideaId) return;
   if (!reason)
     redirect(`${returnTo}${returnTo.includes("?") ? "&" : "?"}error=${encodeURIComponent("A reason is required to ban an idea.")}`);
@@ -2788,7 +2789,7 @@ export async function massPlayerAction(formData: FormData): Promise<void> {
   const access = await requirePerm(perm);
   const by = actorName(access);
 
-  const back = String(formData.get("back") ?? "/players") || "/players";
+  const back = safeRedirectPath(formData.get("back"), "/players");
   const fail = (msg: string) => redirect(`${back}${back.includes("?") ? "&" : "?"}error=${encodeURIComponent(msg)}`);
   const ids = [...new Set(formData.getAll("userIds").map(String).filter(Boolean))];
   const message = String(formData.get("message") ?? "").trim().slice(0, 1000);
@@ -2894,7 +2895,10 @@ export async function sendNotification(formData: FormData): Promise<void> {
   const body = String(formData.get("body") ?? "").trim().slice(0, 500);
   const userId = String(formData.get("userId") ?? "").trim();
   const playerName = String(formData.get("playerName") ?? "").trim();
-  const backTo = String(formData.get("backTo") ?? "");
+  // Empty stays empty (no redirect on success without a page to return to);
+  // a non-empty but off-app value falls back to /notify instead of following it.
+  const rawBackTo = String(formData.get("backTo") ?? "");
+  const backTo = rawBackTo ? safeRedirectPath(rawBackTo, "/notify") : "";
   if (!title || !body) {
     if (backTo) redirect(`${backTo}?error=${encodeURIComponent("Title and message are required.")}`);
     return;

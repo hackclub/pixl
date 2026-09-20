@@ -240,9 +240,32 @@ const Pixl = (() => {
   window.addEventListener("storage", (e) => {
     if (e.key === "pixl_token" && !e.newValue) signedOut();
   });
+  // <logout-sync>
+  // The game knocks this window's session out on sign-out (see web_pages.gd's
+  // _sign_out_js). e.source === window.opener alone is not proof the knock
+  // came from the game: any page that opened this one (a popup the visitor
+  // was tricked into opening, a malicious link target) passes that check and
+  // could force-sign-out the visitor (logout CSRF). Only accept it from an
+  // origin we actually serve the game from: this page's own origin
+  // (apex-hosted game, and http://localhost shell dev), the configured play
+  // origin, and the play.* side of whichever deploy pair we are on.
+  function logoutSenderAllowed(origin) {
+    if (typeof origin !== "string" || origin === "") return false;
+    if (origin === location.origin) return true;
+    if (!origin.startsWith("https://")) return false;
+    try {
+      if (origin === new URL(config.urls.play).origin) return true;
+    } catch {}
+    const playSide = location.origin.replace("//pixl.", "//play.pixl.");
+    if (playSide !== location.origin && origin === playSide) return true;
+    const apexSide = location.origin.replace("//play.pixl.", "//pixl.");
+    if (apexSide !== location.origin && origin === apexSide) return true;
+    return false;
+  }
   window.addEventListener("message", (e) => {
-    if (e.source === window.opener && e.data && e.data.pixl === "logout") signedOut();
+    if (e.source === window.opener && e.data && e.data.pixl === "logout" && logoutSenderAllowed(e.origin)) signedOut();
   });
+  // </logout-sync>
 
   // The in-game First Project guide opens the Builder Terminal with
   // ?onboard=first-project to launch its own project-creation walkthrough. Grab

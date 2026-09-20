@@ -8,6 +8,7 @@ import { fetchSlackAvatar, fetchSlackDisplayName } from "../slackAvatar.js";
 import { enrollSlackPlayerInPixl } from "../pixlSlack.js";
 import { config } from "../config.generated.js";
 import { encryptPII } from "../crypto.js";
+import { nameProblem } from "./profile.js";
 
 const router = Router();
 
@@ -474,10 +475,11 @@ router.get("/auth/hackclub/callback", async (req, res) => {
     const slackName = await fetchSlackDisplayName(identity.slack_id);
     if (slackName) fullName = slackName;
   }
-  const displayNameFromHca =
-    fullName ||
-    identity.primary_email ||
-    `user_${identity.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8)}`;
+  const fallbackName = `user_${identity.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8)}`;
+  const candidateName = fullName || identity.primary_email || fallbackName;
+  // A rename later rejects a nasty/malformed name via nameProblem() , the
+  // initial name from HCA/Slack must pass the same check or it never would.
+  const displayNameFromHca = nameProblem(candidateName) ? fallbackName : candidateName;
 
   const { data: existingUsers, error: lookupError } = await supabase
     .from("users")

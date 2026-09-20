@@ -1,3 +1,4 @@
+import { randomInt } from "crypto";
 import { Router } from "express";
 import { verifySessionToken } from "../auth/session.js";
 import { supabase } from "../db/client.js";
@@ -324,9 +325,12 @@ router.put("/api/collaborators/:id/hackatime", async (req, res) => {
 });
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I - easy to read aloud
-function randomCode(): string {
+// CSPRNG, not Math.random: the code is an unguessable bearer credential for
+// joining a project (see redeem below), so its entropy has to come from the
+// OS, same as referral.ts's randomCode.
+export function randomCode(): string {
   let s = "";
-  for (let i = 0; i < 6; i++) s += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
+  for (let i = 0; i < 6; i++) s += CODE_CHARS[randomInt(CODE_CHARS.length)];
   return `${s.slice(0, 3)}-${s.slice(3)}`;
 }
 
