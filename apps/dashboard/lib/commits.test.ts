@@ -1,12 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import https from "node:https";
-import type { AddressInfo } from "node:net";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { fetchCommits, parseRepoRef } from "./commits";
 import type { LookupImpl } from "./ssrfGuard";
+import { startHttpServer, startHttpsServer, tlsFixture, type Handler } from "./testTls";
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -39,49 +34,8 @@ function lookupOf(...addrs: { address: string; family: number }[]): LookupImpl {
 
 const allowAll = () => false;
 
-// commits.ts always builds an https:// request, so the local stand-in server
-// needs real TLS - a throwaway self-signed cert covering every hostname used
-// below (skips if openssl isn't available in this environment).
-const TEST_HOSTS = [
-  "gitea.example.test",
-  "glab.example.test",
-  "blog.example.test",
-  "html.example.test",
-  "codeberg.org",
-];
-let httpsFixture: { key: string; cert: string } | null = null;
-try {
-  const dir = mkdtempSync(path.join(os.tmpdir(), "commits-cert-"));
-  const keyPath = path.join(dir, "key.pem");
-  const certPath = path.join(dir, "cert.pem");
-  execFileSync(
-    "openssl",
-    [
-      "req", "-x509", "-newkey", "rsa:2048", "-keyout", keyPath, "-out", certPath,
-      "-days", "1", "-nodes", "-subj", "/CN=gitea.example.test",
-      "-addext", `subjectAltName=${TEST_HOSTS.map((h) => `DNS:${h}`).join(",")}`,
-    ],
-    { stdio: "ignore" },
-  );
-  httpsFixture = { key: readFileSync(keyPath, "utf8"), cert: readFileSync(certPath, "utf8") };
-  rmSync(dir, { recursive: true, force: true });
-} catch {
-  httpsFixture = null;
-}
-const httpsTest = httpsFixture ? test : test.skip;
-
-type Handler = (req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse) => void;
-
-function startServer(handler: Handler): Promise<{ port: number; close: () => Promise<void> }> {
-  const server = https.createServer({ key: httpsFixture!.key, cert: httpsFixture!.cert }, handler);
-  return new Promise((resolve, reject) => {
-    server.on("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const { port } = server.address() as AddressInfo;
-      resolve({ port, close: () => new Promise((r) => server.close(() => r())) });
-    });
-  });
-}
+const httpsFixture = tlsFixture;
+const startServer = startHttpsServer;
 
 function jsonServer(body: unknown, status = 200): Handler {
   return (_req, res) => {
@@ -154,7 +108,7 @@ describe("fetchCommits (github, unaffected by the SSRF guard - fixed api.github.
 // relaxed to allow the loopback server - production still uses the real
 // isBlockedIp, which blocks it.
 describe("fetchCommits (forgejo/gitlab, via a local server standing in for the real host)", () => {
-  httpsTest("a self-hosted forgejo answers with commits", async () => {
+  test("a self-hosted forgejo answers with commits", async () => {
     const { port, close } = await startServer((req, res) => {
       if (req.url === "/api/v1/repos/me/thing/commits?limit=50&stat=true") return jsonServer(FORGEJO_JSON)(req, res);
       res.writeHead(404).end();
@@ -164,7 +118,7 @@ describe("fetchCommits (forgejo/gitlab, via a local server standing in for the r
       const r = await fetchCommits(`https://gitea.example.test:${port}/me/thing`, 50, {
         lookupImpl,
         isBlockedIp: allowAll,
-        ca: httpsFixture!.cert,
+        ca: httpsFixture.cert,
       });
       expect(r.error).toBeNull();
       expect(r.provider).toBe("forgejo");
@@ -175,7 +129,7 @@ describe("fetchCommits (forgejo/gitlab, via a local server standing in for the r
     }
   });
 
-  httpsTest("a self-hosted gitlab is found after forgejo's api answers 404", async () => {
+  test("a self-hosted gitlab is found after forgejo's api answers 404", async () => {
     const { port, close } = await startServer((req, res) => {
       if (req.url === "/api/v4/projects/me%2Fthing/repository/commits?per_page=50&with_stats=true") {
         return jsonServer(GITLAB_JSON)(req, res);
@@ -187,7 +141,7 @@ describe("fetchCommits (forgejo/gitlab, via a local server standing in for the r
       const r = await fetchCommits(`https://glab.example.test:${port}/me/thing`, 50, {
         lookupImpl,
         isBlockedIp: allowAll,
-        ca: httpsFixture!.cert,
+        ca: httpsFixture.cert,
       });
       expect(r.provider).toBe("gitlab");
       expect(r.commits[0]).toMatchObject({ sha: "def5678", message: "fix the thing", author: "Someone" });
@@ -196,14 +150,14 @@ describe("fetchCommits (forgejo/gitlab, via a local server standing in for the r
     }
   });
 
-  httpsTest("a host answering neither api reports unsupported_host", async () => {
+  test("a host answering neither api reports unsupported_host", async () => {
     const { port, close } = await startServer((_req, res) => res.writeHead(404).end());
     try {
       const lookupImpl = lookupOf({ address: "127.0.0.1", family: 4 });
       const r = await fetchCommits(`https://blog.example.test:${port}/some/post`, 50, {
         lookupImpl,
         isBlockedIp: allowAll,
-        ca: httpsFixture!.cert,
+        ca: httpsFixture.cert,
       });
       expect(r.error).toBe("unsupported_host");
       expect(r.commits).toEqual([]);
@@ -212,7 +166,7 @@ describe("fetchCommits (forgejo/gitlab, via a local server standing in for the r
     }
   });
 
-  httpsTest("a host serving html instead of json is not mistaken for a repo", async () => {
+  test("a host serving html instead of json is not mistaken for a repo", async () => {
     const { port, close } = await startServer((_req, res) => {
       res.writeHead(200, { "content-type": "text/html" }).end("<!doctype html><html></html>");
     });
@@ -221,7 +175,7 @@ describe("fetchCommits (forgejo/gitlab, via a local server standing in for the r
       const r = await fetchCommits(`https://html.example.test:${port}/me/thing`, 50, {
         lookupImpl,
         isBlockedIp: allowAll,
-        ca: httpsFixture!.cert,
+        ca: httpsFixture.cert,
       });
       expect(r.error).toBe("unsupported_host");
     } finally {
@@ -229,7 +183,7 @@ describe("fetchCommits (forgejo/gitlab, via a local server standing in for the r
     }
   });
 
-  httpsTest("a known-provider host's 404 is not_found, not a silent probe miss", async () => {
+  test("a known-provider host's 404 is not_found, not a silent probe miss", async () => {
     const { port, close } = await startServer((_req, res) => res.writeHead(404).end());
     try {
       const lookupImpl = lookupOf({ address: "127.0.0.1", family: 4 });
@@ -238,7 +192,7 @@ describe("fetchCommits (forgejo/gitlab, via a local server standing in for the r
       const r = await fetchCommits(`https://codeberg.org:${port}/nobody/nothing`, 50, {
         lookupImpl,
         isBlockedIp: allowAll,
-        ca: httpsFixture!.cert,
+        ca: httpsFixture.cert,
       });
       expect(r.error).toBe("not_found");
       expect(r.provider).toBe("forgejo");
@@ -247,7 +201,7 @@ describe("fetchCommits (forgejo/gitlab, via a local server standing in for the r
     }
   });
 
-  httpsTest("flags an AI co-author trailer on a self-hosted forgejo", async () => {
+  test("flags an AI co-author trailer on a self-hosted forgejo", async () => {
     const { port, close } = await startServer(
       jsonServer([
         {
@@ -261,7 +215,7 @@ describe("fetchCommits (forgejo/gitlab, via a local server standing in for the r
       const r = await fetchCommits(`https://gitea.example.test:${port}/a/b`, 50, {
         lookupImpl,
         isBlockedIp: allowAll,
-        ca: httpsFixture!.cert,
+        ca: httpsFixture.cert,
       });
       expect(r.commits[0]?.ai).toBe(true);
     } finally {
@@ -300,7 +254,7 @@ describe("forgejo/gitlab tokens are scoped to an explicitly configured host", ()
     };
   }
 
-  httpsTest("an arbitrary host never receives FORGEJO_TOKEN, even with no FORGEJO_HOST configured", async () => {
+  test("an arbitrary host never receives FORGEJO_TOKEN, even with no FORGEJO_HOST configured", async () => {
     process.env.FORGEJO_TOKEN = "canary-forgejo-token";
     delete process.env.FORGEJO_HOST;
     const { handler, seen } = captureAuthHeader(FORGEJO_JSON);
@@ -313,7 +267,7 @@ describe("forgejo/gitlab tokens are scoped to an explicitly configured host", ()
       const r = await fetchCommits(`https://gitea.example.test:${port}/me/thing`, 50, {
         lookupImpl,
         isBlockedIp: allowAll,
-        ca: httpsFixture!.cert,
+        ca: httpsFixture.cert,
       });
       expect(r.error).toBeNull();
       expect(seen().every((h) => !h.includes("canary-forgejo-token"))).toBe(true);
@@ -322,7 +276,7 @@ describe("forgejo/gitlab tokens are scoped to an explicitly configured host", ()
     }
   });
 
-  httpsTest("a host that isn't the configured FORGEJO_HOST never receives the token", async () => {
+  test("a host that isn't the configured FORGEJO_HOST never receives the token", async () => {
     process.env.FORGEJO_TOKEN = "canary-forgejo-token";
     process.env.FORGEJO_HOST = "our-actual-forgejo.example.test";
     const { handler, seen } = captureAuthHeader(FORGEJO_JSON);
@@ -335,7 +289,7 @@ describe("forgejo/gitlab tokens are scoped to an explicitly configured host", ()
       await fetchCommits(`https://gitea.example.test:${port}/me/thing`, 50, {
         lookupImpl,
         isBlockedIp: allowAll,
-        ca: httpsFixture!.cert,
+        ca: httpsFixture.cert,
       });
       expect(seen().every((h) => !h.includes("canary-forgejo-token"))).toBe(true);
     } finally {
@@ -343,20 +297,20 @@ describe("forgejo/gitlab tokens are scoped to an explicitly configured host", ()
     }
   });
 
-  httpsTest("the explicitly configured FORGEJO_HOST does receive the token", async () => {
+  test("the explicitly configured FORGEJO_HOST does receive the token", async () => {
     process.env.FORGEJO_TOKEN = "canary-forgejo-token";
-    process.env.FORGEJO_HOST = "gitea.example.test";
     const { handler, seen } = captureAuthHeader(FORGEJO_JSON);
     const { port, close } = await startServer((req, res) => {
       if (req.url === "/api/v1/repos/me/thing/commits?limit=50&stat=true") return handler(req, res);
       res.writeHead(404).end();
     });
+    process.env.FORGEJO_HOST = `gitea.example.test:${port}`;
     try {
       const lookupImpl = lookupOf({ address: "127.0.0.1", family: 4 });
       await fetchCommits(`https://gitea.example.test:${port}/me/thing`, 50, {
         lookupImpl,
         isBlockedIp: allowAll,
-        ca: httpsFixture!.cert,
+        ca: httpsFixture.cert,
       });
       expect(seen()).toContain("token canary-forgejo-token");
     } finally {
@@ -364,7 +318,7 @@ describe("forgejo/gitlab tokens are scoped to an explicitly configured host", ()
     }
   });
 
-  httpsTest("gitlab: an arbitrary host never receives GITLAB_TOKEN", async () => {
+  test("gitlab: an arbitrary host never receives GITLAB_TOKEN", async () => {
     process.env.GITLAB_TOKEN = "canary-gitlab-token";
     delete process.env.GITLAB_HOST;
     const { handler, seen } = captureAuthHeader(GITLAB_JSON);
@@ -379,7 +333,7 @@ describe("forgejo/gitlab tokens are scoped to an explicitly configured host", ()
       await fetchCommits(`https://glab.example.test:${port}/me/thing`, 50, {
         lookupImpl,
         isBlockedIp: allowAll,
-        ca: httpsFixture!.cert,
+        ca: httpsFixture.cert,
       });
       expect(seen().every((h) => !h.includes("canary-gitlab-token"))).toBe(true);
     } finally {
@@ -387,9 +341,8 @@ describe("forgejo/gitlab tokens are scoped to an explicitly configured host", ()
     }
   });
 
-  httpsTest("gitlab: the explicitly configured GITLAB_HOST does receive the token", async () => {
+  test("gitlab: the explicitly configured GITLAB_HOST does receive the token", async () => {
     process.env.GITLAB_TOKEN = "canary-gitlab-token";
-    process.env.GITLAB_HOST = "glab.example.test";
     const { handler, seen } = captureAuthHeader(GITLAB_JSON);
     const { port, close } = await startServer((req, res) => {
       if (req.url === "/api/v4/projects/me%2Fthing/repository/commits?per_page=50&with_stats=true") {
@@ -397,12 +350,13 @@ describe("forgejo/gitlab tokens are scoped to an explicitly configured host", ()
       }
       res.writeHead(404).end();
     });
+    process.env.GITLAB_HOST = `glab.example.test:${port}`;
     try {
       const lookupImpl = lookupOf({ address: "127.0.0.1", family: 4 });
       await fetchCommits(`https://glab.example.test:${port}/me/thing`, 50, {
         lookupImpl,
         isBlockedIp: allowAll,
-        ca: httpsFixture!.cert,
+        ca: httpsFixture.cert,
       });
       expect(seen()).toContain("canary-gitlab-token");
     } finally {
@@ -435,7 +389,7 @@ describe("fetchCommits refuses a host that resolves to a blocked address (SSRF)"
     expect(r.commits).toEqual([]);
   });
 
-  httpsTest("a redirect to a blocked address is not followed, even after the first hop passed", async () => {
+  test("a redirect to a blocked address is not followed, even after the first hop passed", async () => {
     const { port, close } = await startServer((_req, res) => {
       res.writeHead(302, { location: "http://internal-redirect-target.example.test/x" }).end();
     });
@@ -451,11 +405,222 @@ describe("fetchCommits refuses a host that resolves to a blocked address (SSRF)"
       const r = await fetchCommits(`https://gitea.example.test:${port}/me/thing`, 50, {
         lookupImpl,
         isBlockedIp,
-        ca: httpsFixture!.cert,
+        ca: httpsFixture.cert,
       });
       expect(r.error).toBe("unsupported_host");
     } finally {
       await close();
     }
+  });
+});
+
+describe("credentials never leave the configured origin", () => {
+  const savedEnv = {
+    FORGEJO_TOKEN: process.env.FORGEJO_TOKEN,
+    FORGEJO_HOST: process.env.FORGEJO_HOST,
+    GITLAB_TOKEN: process.env.GITLAB_TOKEN,
+    GITLAB_HOST: process.env.GITLAB_HOST,
+  };
+  afterEach(() => {
+    for (const [k, v] of Object.entries(savedEnv)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  });
+
+  const CANARY = "token canary-forgejo-token";
+  const LISTING = "/api/v1/repos/me/thing/commits?limit=50&stat=true";
+  const lookupImpl = lookupOf({ address: "127.0.0.1", family: 4 });
+  const guard = { lookupImpl, isBlockedIp: allowAll, ca: tlsFixture.cert };
+
+  function recorder() {
+    const seen: { url: string; auth: string }[] = [];
+    return {
+      seen,
+      note: (req: import("node:http").IncomingMessage) =>
+        seen.push({ url: req.url ?? "", auth: String(req.headers.authorization ?? "") }),
+    };
+  }
+
+  const sendJson: Handler = (_req, res) => {
+    res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(FORGEJO_JSON));
+  };
+
+  test("a redirect from the trusted host to another host carries no token", async () => {
+    process.env.FORGEJO_TOKEN = "canary-forgejo-token";
+    const other = recorder();
+    const b = await startServer((req, res) => {
+      other.note(req);
+      sendJson(req, res);
+    });
+    const trusted = recorder();
+    const a = await startServer((req, res) => {
+      trusted.note(req);
+      if (req.url === LISTING) return res.writeHead(302, { location: `https://blog.example.test:${b.port}${LISTING}` }).end();
+      res.writeHead(404).end();
+    });
+    process.env.FORGEJO_HOST = `gitea.example.test:${a.port}`;
+    try {
+      const r = await fetchCommits(`https://gitea.example.test:${a.port}/me/thing`, 50, guard);
+      expect(r.error).toBeNull();
+      expect(trusted.seen[0].auth).toBe(CANARY);
+      expect(other.seen.length).toBeGreaterThan(0);
+      expect(other.seen.every((h) => h.auth === "")).toBe(true);
+    } finally {
+      await a.close();
+      await b.close();
+    }
+  });
+
+  test("a redirect to another port on the same host carries no token", async () => {
+    process.env.FORGEJO_TOKEN = "canary-forgejo-token";
+    const other = recorder();
+    const b = await startServer((req, res) => {
+      other.note(req);
+      sendJson(req, res);
+    });
+    const a = await startServer((req, res) => {
+      if (req.url === LISTING) return res.writeHead(302, { location: `https://gitea.example.test:${b.port}${LISTING}` }).end();
+      res.writeHead(404).end();
+    });
+    process.env.FORGEJO_HOST = `gitea.example.test:${a.port}`;
+    try {
+      await fetchCommits(`https://gitea.example.test:${a.port}/me/thing`, 50, guard);
+      expect(other.seen.length).toBeGreaterThan(0);
+      expect(other.seen.every((h) => h.auth === "")).toBe(true);
+    } finally {
+      await a.close();
+      await b.close();
+    }
+  });
+
+  test("an https to http redirect on an authenticated request is refused", async () => {
+    process.env.FORGEJO_TOKEN = "canary-forgejo-token";
+    const plain = recorder();
+    const b = await startHttpServer((req, res) => {
+      plain.note(req);
+      sendJson(req, res);
+    });
+    const a = await startServer((req, res) => {
+      res.writeHead(302, { location: `http://gitea.example.test:${b.port}${req.url}` }).end();
+    });
+    process.env.FORGEJO_HOST = `gitea.example.test:${a.port}`;
+    try {
+      await fetchCommits(`https://gitea.example.test:${a.port}/me/thing`, 50, guard);
+      expect(plain.seen.every((h) => h.auth === "")).toBe(true);
+    } finally {
+      await a.close();
+      await b.close();
+    }
+  });
+
+  test("a redirect within the same origin keeps the token", async () => {
+    process.env.FORGEJO_TOKEN = "canary-forgejo-token";
+    const hits = recorder();
+    const a = await startServer((req, res) => {
+      hits.note(req);
+      if (req.url === LISTING) return res.writeHead(302, { location: `${LISTING}&page=1` }).end();
+      if (req.url === `${LISTING}&page=1`) return sendJson(req, res);
+      res.writeHead(404).end();
+    });
+    process.env.FORGEJO_HOST = `gitea.example.test:${a.port}`;
+    try {
+      const r = await fetchCommits(`https://gitea.example.test:${a.port}/me/thing`, 50, guard);
+      expect(r.error).toBeNull();
+      expect(hits.seen.map((h) => h.auth)).toEqual([CANARY, CANARY]);
+    } finally {
+      await a.close();
+    }
+  });
+
+  test("the same hostname on a different port than configured never gets the token", async () => {
+    process.env.FORGEJO_TOKEN = "canary-forgejo-token";
+    process.env.FORGEJO_HOST = "gitea.example.test";
+    const hits = recorder();
+    const a = await startServer((req, res) => {
+      hits.note(req);
+      if (req.url === LISTING) return sendJson(req, res);
+      res.writeHead(404).end();
+    });
+    try {
+      const r = await fetchCommits(`https://gitea.example.test:${a.port}/me/thing`, 50, guard);
+      expect(r.error).toBeNull();
+      expect(hits.seen.length).toBeGreaterThan(0);
+      expect(hits.seen.every((h) => h.auth === "")).toBe(true);
+    } finally {
+      await a.close();
+    }
+  });
+
+  test("a configured host with an explicit port only matches that port", async () => {
+    process.env.FORGEJO_TOKEN = "canary-forgejo-token";
+    process.env.FORGEJO_HOST = "gitea.example.test:1";
+    const hits = recorder();
+    const a = await startServer((req, res) => {
+      hits.note(req);
+      sendJson(req, res);
+    });
+    try {
+      await fetchCommits(`https://gitea.example.test:${a.port}/me/thing`, 50, guard);
+      expect(hits.seen.every((h) => h.auth === "")).toBe(true);
+    } finally {
+      await a.close();
+    }
+  });
+
+  test("a redirect to an internal address is still refused while authenticated", async () => {
+    process.env.FORGEJO_TOKEN = "canary-forgejo-token";
+    const a = await startServer((_req, res) => {
+      res.writeHead(302, { location: "https://internal.example.test/x" }).end();
+    });
+    process.env.FORGEJO_HOST = `gitea.example.test:${a.port}`;
+    try {
+      const r = await fetchCommits(`https://gitea.example.test:${a.port}/me/thing`, 50, {
+        ca: tlsFixture.cert,
+        lookupImpl: async (hostname) => [
+          hostname === "internal.example.test"
+            ? { address: "169.254.169.254", family: 4 }
+            : { address: "127.0.0.1", family: 4 },
+        ],
+        isBlockedIp: (ip) => ip !== "127.0.0.1",
+      });
+      expect(r.error).not.toBeNull();
+    } finally {
+      await a.close();
+    }
+  });
+
+  test("encoded dot-segments and separators in the repo path are rejected before any request", async () => {
+    process.env.FORGEJO_TOKEN = "canary-forgejo-token";
+    const hits = recorder();
+    const a = await startServer((req, res) => {
+      hits.note(req);
+      sendJson(req, res);
+    });
+    process.env.FORGEJO_HOST = `gitea.example.test:${a.port}`;
+    const origin = `https://gitea.example.test:${a.port}`;
+    try {
+      for (const bad of [
+        `${origin}/me/thing%2f..%2f..%2fadmin`,
+        `${origin}/me/%2e%2e%2fadmin`,
+        `${origin}/%252e%252e/thing`,
+        `${origin}/me/th%00ing`,
+        `${origin}/me/a%20b`,
+        `${origin}/me/thing%5c..`,
+      ]) {
+        expect(parseRepoRef(bad)).toBeNull();
+        const r = await fetchCommits(bad, 50, guard);
+        expect(r.error).toBe("unsupported_host");
+      }
+      expect(hits.seen).toHaveLength(0);
+    } finally {
+      await a.close();
+    }
+  });
+
+  test("ordinary repo names still parse", () => {
+    expect(parseRepoRef("https://codeberg.org/brandt/my-thing_2.0")?.path).toBe("brandt/my-thing_2.0");
+    expect(parseRepoRef("https://gitlab.com/group/sub.group/proj")?.path).toBe("group/sub.group/proj");
+    expect(parseRepoRef("https://github.com/a/b/tree/main/src/some%20file")?.path).toBe("a/b");
   });
 });

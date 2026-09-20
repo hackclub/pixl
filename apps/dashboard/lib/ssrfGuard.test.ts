@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { hostIsPublic, isBlockedIp, type LookupImpl } from "./ssrfGuard";
+import { hostIsPublic, isBlockedIp, safeJsonGet, type LookupImpl } from "./ssrfGuard";
+import { startHttpServer, startHttpsServer, tlsFixture, type Handler } from "./testTls";
 
 function lookupOf(...addrs: { address: string; family: number }[]): LookupImpl {
   return async () => addrs.map((a) => ({ ...a }));
@@ -55,5 +56,165 @@ describe("hostIsPublic", () => {
       throw new Error("ENOTFOUND");
     };
     expect(await hostIsPublic("nonexistent.example.test", { lookupImpl })).toBe(false);
+  });
+});
+
+describe("safeJsonGet credential handling", () => {
+  const lookupImpl = lookupOf({ address: "127.0.0.1", family: 4 });
+  const guard = { lookupImpl, isBlockedIp: () => false, ca: tlsFixture.cert };
+  const CANARY = "token canary-secret";
+
+  function recorder() {
+    const seen: Record<string, string | undefined>[] = [];
+    const handler: Handler = (req, res) => {
+      seen.push({ authorization: req.headers.authorization, privateToken: req.headers["private-token"] as string | undefined });
+      res.writeHead(200, { "content-type": "application/json" }).end("[]");
+    };
+    return { seen, handler };
+  }
+
+  const redirectTo = (location: (req: import("node:http").IncomingMessage) => string): Handler => (req, res) => {
+    res.writeHead(302, { location: location(req) }).end();
+  };
+
+  test("sends credentials to the first origin over https", async () => {
+    const r = recorder();
+    const a = await startHttpsServer(r.handler);
+    try {
+      const out = await safeJsonGet(`https://gitea.example.test:${a.port}/x`, { Authorization: CANARY }, guard);
+      expect(out?.status).toBe(200);
+      expect(r.seen[0].authorization).toBe(CANARY);
+    } finally {
+      await a.close();
+    }
+  });
+
+  test("drops Authorization and PRIVATE-TOKEN when a redirect changes host", async () => {
+    const r = recorder();
+    const b = await startHttpsServer(r.handler);
+    const a = await startHttpsServer(redirectTo(() => `https://blog.example.test:${b.port}/y`));
+    try {
+      const out = await safeJsonGet(
+        `https://gitea.example.test:${a.port}/x`,
+        { Authorization: CANARY, "PRIVATE-TOKEN": "glpat-canary", Accept: "application/json" },
+        guard,
+      );
+      expect(out?.status).toBe(200);
+      expect(r.seen).toHaveLength(1);
+      expect(r.seen[0].authorization).toBeUndefined();
+      expect(r.seen[0].privateToken).toBeUndefined();
+    } finally {
+      await a.close();
+      await b.close();
+    }
+  });
+
+  test("drops credentials when only the port changes", async () => {
+    const r = recorder();
+    const b = await startHttpsServer(r.handler);
+    const a = await startHttpsServer(redirectTo(() => `https://gitea.example.test:${b.port}/y`));
+    try {
+      await safeJsonGet(`https://gitea.example.test:${a.port}/x`, { authorization: CANARY }, guard);
+      expect(r.seen[0].authorization).toBeUndefined();
+    } finally {
+      await a.close();
+      await b.close();
+    }
+  });
+
+  test("keeps credentials on a same-origin redirect", async () => {
+    const r = recorder();
+    let hits = 0;
+    const a = await startHttpsServer((req, res) => {
+      hits++;
+      if (req.url === "/x") return res.writeHead(302, { location: "/y" }).end();
+      r.handler(req, res);
+    });
+    try {
+      await safeJsonGet(`https://gitea.example.test:${a.port}/x`, { Authorization: CANARY }, guard);
+      expect(hits).toBe(2);
+      expect(r.seen[0].authorization).toBe(CANARY);
+    } finally {
+      await a.close();
+    }
+  });
+
+  test("does not hand credentials back when a redirect chain returns to the first origin", async () => {
+    const r = recorder();
+    let a!: Awaited<ReturnType<typeof startHttpsServer>>;
+    const b = await startHttpsServer((req, res) => {
+      res.writeHead(302, { location: `https://gitea.example.test:${a.port}/back` }).end();
+    });
+    a = await startHttpsServer((req, res) => {
+      if (req.url === "/back") return r.handler(req, res);
+      res.writeHead(302, { location: `https://blog.example.test:${b.port}/hop` }).end();
+    });
+    try {
+      await safeJsonGet(`https://gitea.example.test:${a.port}/x`, { Authorization: CANARY }, guard);
+      expect(r.seen).toHaveLength(1);
+      expect(r.seen[0].authorization).toBeUndefined();
+    } finally {
+      await a.close();
+      await b.close();
+    }
+  });
+
+  test("refuses an https to http redirect for an authenticated request", async () => {
+    const r = recorder();
+    const b = await startHttpServer(r.handler);
+    const a = await startHttpsServer(redirectTo(() => `http://gitea.example.test:${b.port}/y`));
+    try {
+      const out = await safeJsonGet(`https://gitea.example.test:${a.port}/x`, { Authorization: CANARY }, guard);
+      expect(out).toBeNull();
+      expect(r.seen).toHaveLength(0);
+    } finally {
+      await a.close();
+      await b.close();
+    }
+  });
+
+  test("refuses to send credentials over plain http at all", async () => {
+    const r = recorder();
+    const a = await startHttpServer(r.handler);
+    try {
+      const out = await safeJsonGet(`http://gitea.example.test:${a.port}/x`, { Authorization: CANARY }, guard);
+      expect(out).toBeNull();
+      expect(r.seen).toHaveLength(0);
+    } finally {
+      await a.close();
+    }
+  });
+
+  test("an unauthenticated request may still follow https to http", async () => {
+    const r = recorder();
+    const b = await startHttpServer(r.handler);
+    const a = await startHttpsServer(redirectTo(() => `http://gitea.example.test:${b.port}/y`));
+    try {
+      const out = await safeJsonGet(`https://gitea.example.test:${a.port}/x`, { Accept: "application/json" }, guard);
+      expect(out?.status).toBe(200);
+    } finally {
+      await a.close();
+      await b.close();
+    }
+  });
+
+  test("still refuses a redirect into a blocked address", async () => {
+    const a = await startHttpsServer(redirectTo(() => "https://internal.example.test/y"));
+    try {
+      const out = await safeJsonGet(
+        `https://gitea.example.test:${a.port}/x`,
+        { Authorization: CANARY },
+        {
+          ca: tlsFixture.cert,
+          lookupImpl: async (host) => [
+            host === "internal.example.test" ? { address: "10.0.0.5", family: 4 } : { address: "127.0.0.1", family: 4 },
+          ],
+          isBlockedIp: (ip) => ip !== "127.0.0.1",
+        },
+      );
+      expect(out).toBeNull();
+    } finally {
+      await a.close();
+    }
   });
 });

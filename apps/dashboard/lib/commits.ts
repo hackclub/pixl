@@ -72,6 +72,12 @@ const KNOWN_HOSTS: Record<string, GitProvider> = {
   "gitlab.com": "gitlab",
 };
 
+const SEGMENT_RX = /^[A-Za-z0-9._-]{1,100}$/;
+
+function isSafeSegment(segment: string): boolean {
+  return SEGMENT_RX.test(segment) && segment !== "." && segment !== "..";
+}
+
 export function parseRepoRef(url: string | null | undefined): RepoRef | null {
   if (!url) return null;
   let u: URL;
@@ -97,8 +103,9 @@ export function parseRepoRef(url: string | null | undefined): RepoRef | null {
   projectParts[projectParts.length - 1] = projectParts[projectParts.length - 1].replace(/\.git$/, "");
 
   const provider = KNOWN_HOSTS[hostname] ?? (hostname.endsWith(".github.com") ? "github" : null);
-  const path = provider === "gitlab" ? projectParts.join("/") : projectParts.slice(0, 2).join("/");
-  return { provider, host, path };
+  const pathParts = provider === "gitlab" ? projectParts : projectParts.slice(0, 2);
+  if (!pathParts.every(isSafeSegment)) return null;
+  return { provider, host, path: pathParts.join("/") };
 }
 
 const COMMITS_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -152,20 +159,24 @@ async function ghFetch(url: string, init?: RequestInit): Promise<Response> {
 // FORGEJO_TOKEN/GITLAB_TOKEN - see lib/ssrfGuard.ts.
 //
 // The SSRF guard alone isn't enough to protect these tokens: it only blocks
-// *internal* targets, but a self-hosted Forgejo/GitLab is, by design, some
-// arbitrary player-chosen public host - the SSRF check happily clears
-// attacker.example.com as long as it isn't a private IP. Without a separate
-// allowlist here, shipping a project with repo_url pointed at a host the
-// attacker controls would hand them FORGEJO_TOKEN/GITLAB_TOKEN outright.
-// So the token only ever leaves for the one host each var names, configured
-// once by an operator - never for whatever host a project happens to name.
+// internal targets, and a repo_url can name any public host. So the token only
+// goes to the exact authority (host and port) the operator configured.
+const CONFIGURED_HOST_RX = /^[a-z0-9.-]+(:\d{1,5})?$/i;
+
+function authorityOf(host: string): string | null {
+  try {
+    const u = new URL(`https://${host}`);
+    return `${u.hostname}:${u.port || "443"}`;
+  } catch {
+    return null;
+  }
+}
+
 function trustedTokenHost(host: string, envVar: string): boolean {
-  const configured = process.env[envVar];
-  if (!configured) return false;
-  // ref.host may carry a :port (self-hosted forges are often not on 443);
-  // the configured value is a bare hostname, so compare that part only.
-  const hostname = host.split(":")[0].toLowerCase();
-  return hostname === configured.trim().toLowerCase();
+  const configured = process.env[envVar]?.trim();
+  if (!configured || !CONFIGURED_HOST_RX.test(configured)) return false;
+  const want = authorityOf(configured);
+  return want !== null && want === authorityOf(host);
 }
 
 function forgejoFetch(url: string, host: string, deps?: SsrfGuardDeps): Promise<SafeJsonResult | null> {

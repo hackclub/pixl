@@ -150,10 +150,25 @@ function requestOnce(
   });
 }
 
+const CREDENTIAL_HEADERS = new Set(["authorization", "proxy-authorization", "private-token", "cookie"]);
+
+function hasCredentials(headers: Record<string, string>): boolean {
+  return Object.keys(headers).some((k) => CREDENTIAL_HEADERS.has(k.toLowerCase()));
+}
+
+function withoutCredentials(headers: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(headers).filter(([k]) => !CREDENTIAL_HEADERS.has(k.toLowerCase())));
+}
+
+function originOf(u: URL): string {
+  return `${u.protocol}//${u.hostname.toLowerCase()}:${u.port || (u.protocol === "https:" ? "443" : "80")}`;
+}
+
 // GET only - every caller in commits.ts is a read. Re-validates the host on
 // every redirect hop (a 200 from a public host that then 302s to
 // 169.254.169.254 must not be followed blindly, same as urlAlive in
-// apps/server/src/routes/urlLiveness.ts).
+// apps/server/src/routes/urlLiveness.ts). Credential headers only ever go to
+// the first URL's origin, over https; any other origin gets them stripped.
 export async function safeJsonGet(
   url: string,
   headers: Record<string, string>,
@@ -161,6 +176,8 @@ export async function safeJsonGet(
 ): Promise<SafeJsonResult | null> {
   const resolved = resolveDeps(deps);
   let current = url;
+  let credentialed = hasCredentials(headers);
+  let firstOrigin = "";
   for (let hop = 0; hop < 5; hop++) {
     let u: URL;
     try {
@@ -170,9 +187,15 @@ export async function safeJsonGet(
     }
     if (u.protocol !== "https:" && u.protocol !== "http:") return null;
     if (!(await hostIsPublic(u.hostname, resolved))) return null;
+    const origin = originOf(u);
+    if (hop === 0) firstOrigin = origin;
+    if (credentialed) {
+      if (u.protocol !== "https:") return null;
+      if (origin !== firstOrigin) credentialed = false;
+    }
     let r: { status: number; location: string | null; body: string };
     try {
-      r = await requestOnce(u, headers, resolved);
+      r = await requestOnce(u, credentialed ? headers : withoutCredentials(headers), resolved);
     } catch {
       return null;
     }
