@@ -25,7 +25,7 @@ if (!adminUrl) {
   let server: Server;
   let base = "";
   let db: postgres.Sql;
-  let sqlProxy: { end: () => Promise<void> };
+  const setEnv: string[] = [];
   let issueToken: (userId: string) => string;
   let encrypt: (s: string) => string;
 
@@ -84,16 +84,22 @@ if (!adminUrl) {
       await db.unsafe(readFileSync(join(dir, file), "utf8"));
     }
 
-    process.env.DATABASE_URL = testUrl.toString();
-    process.env.JWT_SECRET = randomBytes(16).toString("hex");
-    process.env.PII_ENCRYPTION_KEY = randomBytes(32).toString("hex");
+    for (const [key, value] of [
+      ["JWT_SECRET", randomBytes(16).toString("hex")],
+      ["PII_ENCRYPTION_KEY", randomBytes(32).toString("hex")],
+    ] as const) {
+      if (process.env[key] === undefined) {
+        process.env[key] = value;
+        setEnv.push(key);
+      }
+    }
     const { default: shopRouter } = await import("./shop.js");
     const { issueSessionToken } = await import("../auth/session.js");
     const { encryptPII } = await import("../crypto.js");
-    const { sql } = await import("../db/pgCompat.js");
-    const [{ name }] = await sql.unsafe("select current_database() as name");
+    const pgCompat = await import("../db/pgCompat.js");
+    await pgCompat.connectForTests(testUrl.toString());
+    const [{ name }] = await pgCompat.sql.unsafe("select current_database() as name");
     if (name !== dbName) throw new Error(`refusing to run against ${name}`);
-    sqlProxy = sql;
     issueToken = (userId) => issueSessionToken({ userId, displayName: "tester" });
     encrypt = encryptPII;
 
@@ -112,7 +118,9 @@ if (!adminUrl) {
 
   afterAll(async () => {
     await new Promise<void>((resolve) => (server ? server.close(() => resolve()) : resolve()));
-    await sqlProxy?.end();
+    const { connectForTests } = await import("../db/pgCompat.js");
+    await connectForTests(null);
+    for (const key of setEnv) delete process.env[key];
     await db?.end();
     await admin.unsafe(`drop database if exists ${dbName} with (force)`);
     await admin.end();

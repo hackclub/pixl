@@ -25,7 +25,8 @@ if (!adminUrl) {
   let db: postgres.Sql;
   let server: Server;
   let base = "";
-  let sqlProxy: { end: () => Promise<void> };
+  const setEnv: string[] = [];
+  let previousSlackToken: string | undefined;
   const realFetch = globalThis.fetch;
   const dms: { channel: string; text: string }[] = [];
   const knownSlackIds = new Set<string>();
@@ -62,14 +63,21 @@ if (!adminUrl) {
       values (${FORM}, 'Review', ${db.json([{ key: "why", label: "Why?" }])}, null)
       on conflict (form_key) do update set questions = excluded.questions, close_at = null`;
 
-    process.env.DATABASE_URL = testUrl.toString();
-    process.env.JWT_SECRET = randomBytes(16).toString("hex");
+    for (const [key, value] of [
+      ["JWT_SECRET", randomBytes(16).toString("hex")],
+    ] as const) {
+      if (process.env[key] === undefined) {
+        process.env[key] = value;
+        setEnv.push(key);
+      }
+    }
+    previousSlackToken = process.env.SLACK_BOT_TOKEN;
     process.env.SLACK_BOT_TOKEN = "xoxb-test";
     const { default: formsRouter } = await import("./forms.js");
-    const { sql } = await import("../db/pgCompat.js");
-    const [{ name }] = await sql.unsafe("select current_database() as name");
+    const pgCompat = await import("../db/pgCompat.js");
+    await pgCompat.connectForTests(testUrl.toString());
+    const [{ name }] = await pgCompat.sql.unsafe("select current_database() as name");
     if (name !== dbName) throw new Error(`refusing to run against ${name}`);
-    sqlProxy = sql;
 
     globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
       const href = String(url);
@@ -97,7 +105,11 @@ if (!adminUrl) {
   afterAll(async () => {
     globalThis.fetch = realFetch;
     await new Promise<void>((resolve) => (server ? server.close(() => resolve()) : resolve()));
-    await sqlProxy?.end();
+    const { connectForTests } = await import("../db/pgCompat.js");
+    await connectForTests(null);
+    for (const key of setEnv) delete process.env[key];
+    if (previousSlackToken === undefined) delete process.env.SLACK_BOT_TOKEN;
+    else process.env.SLACK_BOT_TOKEN = previousSlackToken;
     await db?.end();
     await admin.unsafe(`drop database if exists ${dbName} with (force)`);
     await admin.end();
