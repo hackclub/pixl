@@ -2,7 +2,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import type { Server, IncomingMessage } from "http";
 import { verifySessionToken } from "../auth/session.js";
 import { consumeRateLimit, type RateLimitOptions } from "../rateLimit.js";
-import { realIpFromHeaders, rateLimitIpKey } from "../clientIp.js";
+import { requestIpKey } from "../clientIp.js";
 import { activeBan, censorChat, recordChatViolation } from "../moderation.js";
 import { areFriends } from "../social.js";
 import { getPixoChatReply } from "../pixoChat.js";
@@ -454,26 +454,6 @@ const UPGRADE_WINDOW_MS = 60_000;
 const UPGRADE_MAX_PER_WINDOW = 30;
 const upgradeAttempts = new Map<string, number[]>();
 
-// This handler runs on the raw http.Server 'upgrade' event, outside
-// Express, so req.ip isn't available - see clientIp.ts for why
-// CF-Connecting-IP (checked first) doesn't need to know or guess how many
-// internal hops sit behind Cloudflare. The X-Forwarded-For fallback below
-// only matters for traffic that somehow reaches the origin without going
-// through Cloudflare at all (local dev, direct origin access).
-function upgradeClientIp(req: IncomingMessage): string {
-  const fallback = (() => {
-    const fwd = req.headers["x-forwarded-for"];
-    const raw = Array.isArray(fwd) ? fwd[0] : fwd;
-    if (raw) {
-      const parts = raw.split(",").map((p) => p.trim());
-      const last = parts[parts.length - 1];
-      if (last) return last;
-    }
-    return req.socket.remoteAddress ?? "unknown";
-  })();
-  return rateLimitIpKey(realIpFromHeaders(req.headers as Record<string, string | string[] | undefined>, fallback));
-}
-
 function upgradeRateLimited(ip: string): boolean {
   const now = Date.now();
   const arr = (upgradeAttempts.get(ip) ?? []).filter(
@@ -505,7 +485,7 @@ export function attachWebSocketServer(httpServer: Server) {
       socket.destroy();
       return;
     }
-    const ip = upgradeClientIp(req);
+    const ip = requestIpKey(req);
     if (upgradeRateLimited(ip)) {
       socket.destroy();
       return;

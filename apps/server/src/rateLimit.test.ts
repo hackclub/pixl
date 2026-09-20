@@ -4,8 +4,6 @@ import type { AddressInfo } from "node:net";
 import express from "express";
 import { rateLimit } from "./rateLimit.js";
 
-// Mirrors index.ts's trust proxy setting - these tests exercise the same
-// header-precedence behavior the real app has, not a simplified stand-in.
 async function startTestApp(max: number) {
   const app = express();
   app.set("trust proxy", 1);
@@ -14,53 +12,81 @@ async function startTestApp(max: number) {
   const server = createServer(app);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address() as AddressInfo;
+  const get = async (headers: Record<string, string> = {}) =>
+    (await fetch(`http://127.0.0.1:${port}/thing`, { headers })).status;
   return {
-    baseUrl: `http://127.0.0.1:${port}`,
+    get,
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
 }
 
-describe("rateLimit (Express middleware, CF-Connecting-IP precedence)", () => {
+const CF_PEER = "162.158.10.20";
+
+describe("rateLimit (Express middleware, trusted client IP)", () => {
   test("the same client is limited across repeated requests", async () => {
-    const { baseUrl, close } = await startTestApp(2);
+    const { get, close } = await startTestApp(2);
     try {
-      const headers = { "cf-connecting-ip": "203.0.113.1" };
-      expect((await fetch(`${baseUrl}/thing`, { headers })).status).toBe(200);
-      expect((await fetch(`${baseUrl}/thing`, { headers })).status).toBe(200);
-      expect((await fetch(`${baseUrl}/thing`, { headers })).status).toBe(429);
+      expect(await get()).toBe(200);
+      expect(await get()).toBe(200);
+      expect(await get()).toBe(429);
     } finally {
       await close();
     }
   });
 
-  test("two different CF-Connecting-IP values get separate buckets, even from the same connecting socket", async () => {
-    const { baseUrl, close } = await startTestApp(1);
+  test("rotating a forged CF-Connecting-IP from a direct peer cannot select a fresh bucket", async () => {
+    const { get, close } = await startTestApp(1);
     try {
-      const a = await fetch(`${baseUrl}/thing`, { headers: { "cf-connecting-ip": "203.0.113.1" } });
-      const b = await fetch(`${baseUrl}/thing`, { headers: { "cf-connecting-ip": "203.0.113.2" } });
-      // Both requests came from this same test process/socket - if the
-      // bucket key were the raw connecting IP instead of CF-Connecting-IP,
-      // the second request would already be over the max-1 limit.
-      expect(a.status).toBe(200);
-      expect(b.status).toBe(200);
+      expect(await get({ "x-forwarded-for": "198.51.100.7", "cf-connecting-ip": "203.0.113.1" })).toBe(200);
+      expect(await get({ "x-forwarded-for": "198.51.100.7", "cf-connecting-ip": "203.0.113.2" })).toBe(429);
+      expect(await get({ "cf-connecting-ip": "203.0.113.3" })).toBe(200);
+      expect(await get({ "cf-connecting-ip": "203.0.113.4" })).toBe(429);
+      expect(await get({ "cf-connecting-ip": "aaaa" })).toBe(429);
     } finally {
       await close();
     }
   });
 
-  test("a client can't spoof a different identity via X-Forwarded-For once CF-Connecting-IP is set", async () => {
-    const { baseUrl, close } = await startTestApp(1);
+  test("rotating a spoofed X-Forwarded-For prefix cannot select a fresh bucket", async () => {
+    const { get, close } = await startTestApp(1);
     try {
-      const first = await fetch(`${baseUrl}/thing`, {
-        headers: { "cf-connecting-ip": "203.0.113.1", "x-forwarded-for": "9.9.9.9" },
-      });
-      const second = await fetch(`${baseUrl}/thing`, {
-        // Same real client (same CF-Connecting-IP), forged XFF changed -
-        // must still hit the same bucket as the first request.
-        headers: { "cf-connecting-ip": "203.0.113.1", "x-forwarded-for": "1.1.1.1" },
-      });
-      expect(first.status).toBe(200);
-      expect(second.status).toBe(429);
+      expect(await get({ "x-forwarded-for": "1.1.1.1, 198.51.100.7" })).toBe(200);
+      expect(await get({ "x-forwarded-for": "2.2.2.2, 198.51.100.7" })).toBe(429);
+      expect(await get({ "x-forwarded-for": `${CF_PEER}, 198.51.100.7`, "cf-connecting-ip": "203.0.113.9" })).toBe(429);
+    } finally {
+      await close();
+    }
+  });
+
+  test("distinct ingress-observed peers keep separate buckets", async () => {
+    const { get, close } = await startTestApp(1);
+    try {
+      expect(await get({ "x-forwarded-for": "198.51.100.1" })).toBe(200);
+      expect(await get({ "x-forwarded-for": "198.51.100.2" })).toBe(200);
+      expect(await get({ "x-forwarded-for": "198.51.100.1" })).toBe(429);
+    } finally {
+      await close();
+    }
+  });
+
+  test("distinct IPv4-mapped IPv6 peers keep separate buckets", async () => {
+    const { get, close } = await startTestApp(1);
+    try {
+      expect(await get({ "x-forwarded-for": "::ffff:1.2.3.4" })).toBe(200);
+      expect(await get({ "x-forwarded-for": "::ffff:9.9.9.9" })).toBe(200);
+      expect(await get({ "x-forwarded-for": "::ffff:1.2.3.4" })).toBe(429);
+    } finally {
+      await close();
+    }
+  });
+
+  test("behind Cloudflare each real client gets its own bucket", async () => {
+    const { get, close } = await startTestApp(1);
+    try {
+      expect(await get({ "x-forwarded-for": CF_PEER, "cf-connecting-ip": "203.0.113.1" })).toBe(200);
+      expect(await get({ "x-forwarded-for": CF_PEER, "cf-connecting-ip": "203.0.113.2" })).toBe(200);
+      expect(await get({ "x-forwarded-for": CF_PEER, "cf-connecting-ip": "203.0.113.1" })).toBe(429);
+      expect(await get({ "x-forwarded-for": `9.9.9.9, ${CF_PEER}`, "cf-connecting-ip": "203.0.113.1" })).toBe(429);
     } finally {
       await close();
     }

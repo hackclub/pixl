@@ -1,36 +1,46 @@
+import { clientIpFrom, rateLimitIpKey } from "../../../lib/clientIp";
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// Fixed-window in-memory limiter, same shape as apps/server's rateLimit.ts
-// but self-contained - this is the only route in this app that needs one.
-// Served through Cloudflare (pixl.hackclub.com), so CF-Connecting-IP is
-// authoritative regardless of any internal hop count - see apps/server's
-// clientIp.ts for the fuller reasoning, same logic, smaller scope here.
 const WINDOW_MS = 60 * 60 * 1000;
 const MAX_PER_WINDOW = 5;
+const SWEEP_MS = 60 * 1000;
+const MAX_BUCKETS = 20_000;
 const buckets = new Map<string, { count: number; resetAt: number }>();
+let lastSweep = 0;
 
-function rateLimited(ip: string): boolean {
-  const now = Date.now();
+function sweep(now: number) {
+  lastSweep = now;
   for (const [k, b] of buckets) if (b.resetAt <= now) buckets.delete(k);
-  let bucket = buckets.get(ip);
+}
+
+function rateLimited(key: string): boolean {
+  const now = Date.now();
+  if (now - lastSweep >= SWEEP_MS) sweep(now);
+  let bucket = buckets.get(key);
   if (!bucket || bucket.resetAt <= now) {
+    if (buckets.size >= MAX_BUCKETS) {
+      const oldest = buckets.keys().next().value;
+      if (oldest !== undefined) buckets.delete(oldest);
+    }
     bucket = { count: 0, resetAt: now + WINDOW_MS };
-    buckets.set(ip, bucket);
+    buckets.set(key, bucket);
   }
   bucket.count++;
   return bucket.count > MAX_PER_WINDOW;
 }
 
-function clientIp(req: Request): string {
-  const cf = req.headers.get("cf-connecting-ip");
-  if (cf) return cf.trim();
-  const fwd = req.headers.get("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0].trim();
-  return "unknown";
+function clientKey(req: Request): string {
+  return rateLimitIpKey(
+    clientIpFrom({
+      xForwardedFor: req.headers.get("x-forwarded-for"),
+      cfConnectingIp: req.headers.get("cf-connecting-ip"),
+    }),
+  );
 }
 
 export async function POST(req: Request) {
-  if (rateLimited(clientIp(req))) {
+  if (rateLimited(clientKey(req))) {
     return Response.json({ ok: false, error: "rate_limited" }, { status: 429 });
   }
 
