@@ -3,6 +3,13 @@
 import { useState } from "react";
 
 const SLACK_ID_RE = /^[UW][A-Z0-9]{6,}$/;
+const CODE_RE = /^\d{6}$/;
+
+// Two-step flow: request-code proves the submitter actually controls the
+// Slack account they typed (F-12) before /submit is ever called. Answers
+// are filled in during "form" and carried through to the final /submit call
+// once the code from "code" is entered - only one write of them either way.
+type Step = "form" | "code" | "done";
 
 export function FormClient({
   formKey,
@@ -14,45 +21,78 @@ export function FormClient({
   const [slackId, setSlackId] = useState("");
   const [values, setValues] = useState<Record<string, string>>({});
   const [website, setWebsite] = useState(""); // honeypot - real users never see/fill this
-  const [status, setStatus] = useState<"idle" | "submitting" | "done" | "error">("idle");
+  const [code, setCode] = useState("");
+  const [step, setStep] = useState<Step>("form");
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const submit = async (e: React.FormEvent) => {
+  const requestCode = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!SLACK_ID_RE.test(slackId.trim())) {
       setError("That doesn't look like a valid Slack member ID (starts with U or W).");
-      setStatus("error");
       return;
     }
-    setStatus("submitting");
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/forms/${encodeURIComponent(formKey)}/request-code`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ slackId: slackId.trim() }),
+      });
+      // The response is intentionally the same whether or not that Slack ID
+      // is real - it never tells us which happened.
+      if (!res.ok) throw new Error("request failed");
+      setStep("code");
+      setNotice("If that's a real Slack member, we just sent them a 6-digit code. Enter it below.");
+    } catch {
+      setError("Something went wrong sending that code. Try again in a bit.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!CODE_RE.test(code.trim())) {
+      setError("Enter the 6-digit code we sent you on Slack.");
+      return;
+    }
+    setBusy(true);
     setError(null);
     try {
       const res = await fetch(`/api/forms/${encodeURIComponent(formKey)}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ slackId: slackId.trim(), answers: values, website }),
+        body: JSON.stringify({ slackId: slackId.trim(), code: code.trim(), answers: values, website }),
       });
       const json = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
       if (!res.ok || !json.ok) {
         setError(
           json.error === "already_pending"
             ? "You've already got a submission pending review - hang tight, we'll DM you."
-            : json.error === "slack_id_not_found"
-              ? "We couldn't find that Slack member ID in the workspace - double check it."
-              : "Something went wrong submitting that. Try again in a bit.",
+            : json.error === "invalid_code"
+              ? "That code's wrong. Double check the DM we sent, or resend a new one."
+              : json.error === "code_expired_or_missing"
+                ? "That code's expired or was never requested for this Slack ID. Resend one below."
+                : json.error === "too_many_attempts"
+                  ? "Too many wrong codes - resend a new one below."
+                  : "Something went wrong submitting that. Try again in a bit.",
         );
-        setStatus("error");
         return;
       }
-      setStatus("done");
+      setStep("done");
     } catch {
       setError("Something went wrong submitting that. Try again in a bit.");
-      setStatus("error");
+    } finally {
+      setBusy(false);
     }
   };
 
-  if (status === "done") {
+  if (step === "done") {
     return (
       <div style={{ background: "#efe", border: "1px solid #9c9", borderRadius: 8, padding: 16 }}>
         Thanks - your submission was received. We&apos;ll DM you on Slack once it&apos;s been
@@ -61,14 +101,72 @@ export function FormClient({
     );
   }
 
+  if (step === "code") {
+    return (
+      <form onSubmit={submit}>
+        {notice && <p style={{ color: "#333", marginBottom: 12 }}>{notice}</p>}
+        <label style={{ display: "block", marginBottom: 16 }}>
+          <span style={{ display: "block", fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
+            Verification code
+          </span>
+          <input
+            required
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="123456"
+            style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #ccc", fontFamily: "inherit" }}
+          />
+        </label>
+        {error && <p style={{ color: "#c00", marginBottom: 12 }}>{error}</p>}
+        <button
+          type="submit"
+          disabled={busy}
+          style={{
+            background: "#4A154B",
+            color: "#fff",
+            padding: "10px 20px",
+            borderRadius: 8,
+            border: "none",
+            fontWeight: 600,
+            cursor: busy ? "default" : "pointer",
+            opacity: busy ? 0.6 : 1,
+            marginRight: 12,
+          }}
+        >
+          {busy ? "Submitting…" : "Verify & submit"}
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={(e) => requestCode(e)}
+          style={{
+            background: "none",
+            color: "#4A154B",
+            padding: "10px 4px",
+            border: "none",
+            fontWeight: 600,
+            cursor: busy ? "default" : "pointer",
+            textDecoration: "underline",
+          }}
+        >
+          Resend code
+        </button>
+      </form>
+    );
+  }
+
   return (
-    <form onSubmit={submit}>
+    <form onSubmit={requestCode}>
       <label style={{ display: "block", marginBottom: 16 }}>
         <span style={{ display: "block", fontSize: 14, fontWeight: 600, marginBottom: 6 }}>
           Your Slack member ID
         </span>
         <span style={{ display: "block", fontSize: 12, color: "#666", marginBottom: 6 }}>
           In Slack: click your profile photo → More → Copy member ID. It starts with U or W.
+          We&apos;ll DM you a code there to confirm it&apos;s really you.
         </span>
         <input
           required
@@ -110,7 +208,7 @@ export function FormClient({
       {error && <p style={{ color: "#c00", marginBottom: 12 }}>{error}</p>}
       <button
         type="submit"
-        disabled={status === "submitting"}
+        disabled={busy}
         style={{
           background: "#4A154B",
           color: "#fff",
@@ -118,11 +216,11 @@ export function FormClient({
           borderRadius: 8,
           border: "none",
           fontWeight: 600,
-          cursor: status === "submitting" ? "default" : "pointer",
-          opacity: status === "submitting" ? 0.6 : 1,
+          cursor: busy ? "default" : "pointer",
+          opacity: busy ? 0.6 : 1,
         }}
       >
-        {status === "submitting" ? "Submitting…" : "Submit"}
+        {busy ? "Sending code…" : "Send verification code"}
       </button>
     </form>
   );

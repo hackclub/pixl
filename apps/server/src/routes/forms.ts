@@ -2,6 +2,7 @@ import { Router } from "express";
 import crypto from "crypto";
 import { supabase } from "../db/client.js";
 import { rateLimit } from "../rateLimit.js";
+import { createVerificationStore } from "./formVerification.js";
 
 // Public, no-account forms (e.g. pixl.hackclub.com/form/review). A submitter
 // never gets a Pixl player account.
@@ -9,18 +10,21 @@ import { rateLimit } from "../rateLimit.js";
 // This originally verified the submitter's real Slack identity via Hack Club
 // Auth (OAuth), so nobody could type someone else's Slack id and get them
 // DMed a fake application receipt/decision. That needed a new redirect URI
-// registered on the HCA app, which wasn't available - dropped in favor of a
-// plain slackId field instead. The one check that's still possible without
-// OAuth: confirming the id resolves to a real member of this Slack
-// workspace (via users.info), which catches typos/garbage but does NOT
-// prove the submitter actually IS that person - spoofing someone else's id
-// is possible again with this approach.
+// registered on the HCA app, which wasn't available - dropped for a plain
+// slackId field with no proof of ownership at all: typing any real member's
+// id and submitting worked, since the only check was that the id resolved to
+// a real workspace member (a typo check, not an identity check).
+//
+// Restored as a DM-a-code flow instead of OAuth: request-code sends a short
+// numeric code to the named Slack account, submit now requires that exact
+// code back - knowing someone's Slack id is no longer enough on its own.
 
 const router = Router();
 
 const MAX_ANSWER_LEN = 4000;
 const MAX_ANSWERS = 30;
 const SLACK_ID_RE = /^[UW][A-Z0-9]{6,}$/;
+const CODE_RE = /^\d{6}$/;
 
 interface FormQuestion {
   key: string;
@@ -98,6 +102,46 @@ function isTrustedOrigin(req: import("express").Request): boolean {
   }
 }
 
+// One entry per (form, slackId) - a code is only ever good for the form it
+// was requested for. See formVerification.ts for the single-use/expiry/
+// attempt-cap/resend-cooldown logic itself.
+const verificationStore = createVerificationStore();
+
+// Keyed by IP, separate from the per-slackId resend cooldown below - stops
+// one IP from cycling through many different victims' ids just as much as
+// it stops flooding a single one.
+const codeRequestLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, name: "form_request_code" });
+
+router.post("/api/forms/:formKey/request-code", codeRequestLimiter, async (req, res) => {
+  const formKey = String(req.params.formKey);
+  if (!isTrustedOrigin(req)) return res.status(403).json({ ok: false, error: "bad_origin" });
+
+  const config = await loadFormConfig(formKey);
+  if (!config) return res.status(404).json({ ok: false, error: "form_not_found" });
+  if (config.close_at && new Date(config.close_at).getTime() <= Date.now())
+    return res.status(403).json({ ok: false, error: "form_closed" });
+
+  const slackId = String(req.body?.slackId ?? "").trim();
+  if (!SLACK_ID_RE.test(slackId))
+    return res.status(400).json({ ok: false, error: "invalid_slack_id" });
+
+  const key = `${formKey}:${slackId}`;
+  // Whether or not this id resolves to a real Slack member never changes the
+  // response below - only a successful lookup, on a key not already in its
+  // resend cooldown, actually issues a code and sends a DM.
+  const slackUser = await lookupSlackUser(slackId);
+  if (slackUser) {
+    const code = verificationStore.issue(key, slackUser.name);
+    if (code) {
+      void dmSlackUser(
+        slackId,
+        `Your PIXL verification code for "${formKey}" is *${code}*. It expires in 10 minutes , if you didn't request this, ignore it.`,
+      );
+    }
+  }
+  res.json({ ok: true });
+});
+
 // Tighter than the app-wide write limiter (60/min) - this is a public,
 // unauthenticated endpoint, worth its own low ceiling.
 const submitLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, name: "form_submit" });
@@ -106,7 +150,7 @@ router.post("/api/forms/:formKey/submit", submitLimiter, async (req, res) => {
   const formKey = String(req.params.formKey);
   if (!isTrustedOrigin(req)) return res.status(403).json({ ok: false, error: "bad_origin" });
 
-  const body = req.body as { answers?: unknown; website?: unknown; slackId?: unknown };
+  const body = req.body as { answers?: unknown; website?: unknown; slackId?: unknown; code?: unknown };
   // Honeypot: a real user never fills this (CSS-hidden field). A bot filling
   // every input on the page will. Pretend success so a bot doesn't learn to
   // avoid it, but never actually store or notify on it.
@@ -122,8 +166,20 @@ router.post("/api/forms/:formKey/submit", submitLimiter, async (req, res) => {
   const slackId = String(body.slackId ?? "").trim();
   if (!SLACK_ID_RE.test(slackId))
     return res.status(400).json({ ok: false, error: "invalid_slack_id" });
-  const slackUser = await lookupSlackUser(slackId);
-  if (!slackUser) return res.status(400).json({ ok: false, error: "slack_id_not_found" });
+
+  const code = String(body.code ?? "").trim();
+  if (!CODE_RE.test(code)) return res.status(400).json({ ok: false, error: "invalid_code" });
+
+  const key = `${formKey}:${slackId}`;
+  // Captured before verify() - a successful verify consumes (deletes) the
+  // pending entry, so the name has to be read off it first.
+  const name = verificationStore.peekName(key) ?? slackId;
+  const result = verificationStore.verify(key, code);
+  if (result === "expired_or_missing")
+    return res.status(400).json({ ok: false, error: "code_expired_or_missing" });
+  if (result === "too_many_attempts")
+    return res.status(429).json({ ok: false, error: "too_many_attempts" });
+  if (result === "wrong_code") return res.status(400).json({ ok: false, error: "invalid_code" });
 
   const rawAnswers = body.answers;
   if (typeof rawAnswers !== "object" || rawAnswers === null || Array.isArray(rawAnswers))
@@ -136,9 +192,9 @@ router.post("/api/forms/:formKey/submit", submitLimiter, async (req, res) => {
   // removed/renamed on the dashboard.
   const validKeys = new Set(config.questions.map((q) => q.key));
   const answers: Record<string, string> = {};
-  for (const [key, value] of entries) {
-    if (typeof key !== "string" || key.length > 100 || !validKeys.has(key)) continue;
-    answers[key] = String(value ?? "").slice(0, MAX_ANSWER_LEN);
+  for (const [k, value] of entries) {
+    if (typeof k !== "string" || k.length > 100 || !validKeys.has(k)) continue;
+    answers[k] = String(value ?? "").slice(0, MAX_ANSWER_LEN);
   }
   if (Object.keys(answers).length === 0)
     return res.status(400).json({ ok: false, error: "invalid_answers" });
@@ -146,14 +202,14 @@ router.post("/api/forms/:formKey/submit", submitLimiter, async (req, res) => {
   // One pending submission per person per form at a time - resubmitting
   // while still pending would just spam the reviewer queue and the "received"
   // DM; once a decision is made they're free to submit again.
-  const { data: existing } = await supabase
+  const { data: existingSubmission } = await supabase
     .from("form_submissions")
     .select("id")
     .eq("form_key", formKey)
     .eq("slack_id", slackId)
     .eq("status", "pending")
     .maybeSingle();
-  if (existing) return res.status(409).json({ ok: false, error: "already_pending" });
+  if (existingSubmission) return res.status(409).json({ ok: false, error: "already_pending" });
 
   const ip = req.ip ?? "";
   const ipHash = ip ? crypto.createHash("sha256").update(ip).digest("hex") : "";
@@ -163,7 +219,7 @@ router.post("/api/forms/:formKey/submit", submitLimiter, async (req, res) => {
     .insert({
       form_key: formKey,
       slack_id: slackId,
-      name: slackUser.name,
+      name,
       answers,
       ip_hash: ipHash,
     })
