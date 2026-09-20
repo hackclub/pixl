@@ -23,6 +23,12 @@ function conn(): ReturnType<typeof postgres> {
   return _sql;
 }
 
+export async function connectForTests(url: string | null): Promise<void> {
+  const previous = _sql;
+  _sql = url ? postgres(url, { max: 4, onnotice: () => {} }) : null;
+  await previous?.end();
+}
+
 export const sql: ReturnType<typeof postgres> = new Proxy(
   {} as ReturnType<typeof postgres>,
   {

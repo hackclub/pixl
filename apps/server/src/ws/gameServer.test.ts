@@ -3,6 +3,7 @@ import { consumeRateLimit } from "../rateLimit.js";
 import {
   lobbyJoinError,
   lobbyJoinDenialReason,
+  roomFor,
   LOBBY_JOIN_ATTEMPT_LIMIT,
   NPC_SAVE_LIMIT,
 } from "./gameServer.js";
@@ -97,6 +98,47 @@ describe("lobby join brute-force limiting", () => {
     await new Promise((resolve) => setTimeout(resolve, 80));
 
     expect(consumeRateLimit(opts, userId)).toBeNull();
+  });
+});
+
+describe("roomFor (village authorization)", () => {
+  // change_scene's "requested" is the client's raw msg.scene string, passed
+  // straight into roomFor - this is the one and only place a scene request
+  // turns into an actual room, so these cases are exactly what a malicious
+  // client can and can't do by sending an arbitrary scene string.
+  test("village:<self> resolves to the caller's own room", () => {
+    expect(roomFor("me", "village")).toBe("village:me");
+    expect(roomFor("me", "village:me")).toBe("village:me");
+  });
+
+  test("village:<other user> cannot be entered - always redirected to caller's own village", () => {
+    expect(roomFor("attacker", "village:victim")).toBe("village:attacker");
+    expect(roomFor("attacker", "village:")).toBe("village:attacker");
+  });
+
+  test("public/open-world scene passes through untouched", () => {
+    expect(roomFor("me", "open_world")).toBe("open_world");
+    expect(roomFor("me", "house_interior")).toBe("house_interior");
+  });
+
+  test("an authorized lobby scene passes through untouched (lobby membership is gated separately)", () => {
+    expect(roomFor("me", "lobby:ABCDE")).toBe("lobby:ABCDE");
+  });
+
+  test("malformed/arbitrary village-shaped scene strings never resolve to someone else's village", () => {
+    for (const s of ["village:../../etc", "village:", "village:village:victim"]) {
+      // Every one of these starts with "village:" or is exactly "village" -
+      // the only way "victim" could appear in the result is if some other
+      // user's id leaked into the room string instead of the caller's own.
+      expect(roomFor("attacker", s)).toBe("village:attacker");
+    }
+  });
+
+  test("a non-village scene string passes through unchanged, whatever it contains", () => {
+    // Not a village-authorization concern - an opaque scene name that isn't
+    // shaped like "village"/"village:*" was never routed through the
+    // per-player village room, so there's no other user's room to leak here.
+    expect(roomFor("attacker", "villagevictim")).toBe("villagevictim");
   });
 });
 

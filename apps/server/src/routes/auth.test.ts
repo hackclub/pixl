@@ -151,8 +151,8 @@ function mockHcaFetch(identity: Record<string, unknown>) {
   };
 }
 
-async function driveHcaCallback(baseUrl: string) {
-  const startRes = await fetch(`${baseUrl}/auth/hackclub`, { redirect: "manual" });
+async function driveHcaCallback(baseUrl: string, startQuery = "") {
+  const startRes = await fetch(`${baseUrl}/auth/hackclub${startQuery}`, { redirect: "manual" });
   const location = startRes.headers.get("location")!;
   const state = new URL(location).searchParams.get("state")!;
   return fetch(`${baseUrl}/auth/hackclub/callback?code=fake-code&state=${state}`, {
@@ -264,6 +264,89 @@ describe("GET /auth/hackclub/callback", () => {
     } finally {
       users.restore();
       hca.restore();
+      await app.close();
+    }
+  });
+});
+
+// F-8: apps/web-shell's proxy.ts must be able to tell a genuine login
+// round trip apart from an arbitrary ?token= on a link. It does that by
+// requiring ?ln= to match a cookie it set itself before the browser ever
+// left for this flow - this only proves this server's half: a nonce handed
+// to /auth/hackclub comes back unchanged on the callback's final redirect.
+describe("GET /auth/hackclub -> callback (F-8 login nonce round-trip)", () => {
+  test("a nonce passed to /auth/hackclub comes back as ln= on the final redirect", async () => {
+    const users = mockUsersTable([]);
+    const hca = mockHcaFetch({ id: "hca-nonce-identity", first_name: "Nonce", last_name: "Tester" });
+    const app = await startTestApp();
+    try {
+      const callbackRes = await driveHcaCallback(app.baseUrl, "?nonce=abc123def456");
+
+      expect(callbackRes.status).toBe(302);
+      const redirectTarget = new URL(callbackRes.headers.get("location")!);
+      expect(redirectTarget.searchParams.get("ln")).toBe("abc123def456");
+    } finally {
+      users.restore();
+      hca.restore();
+      await app.close();
+    }
+  });
+
+  test("no nonce means no ln= on the final redirect (the Godot client's flow, unaffected)", async () => {
+    const users = mockUsersTable([]);
+    const hca = mockHcaFetch({ id: "hca-no-nonce-identity", first_name: "No", last_name: "Nonce" });
+    const app = await startTestApp();
+    try {
+      const callbackRes = await driveHcaCallback(app.baseUrl);
+
+      expect(callbackRes.status).toBe(302);
+      const redirectTarget = new URL(callbackRes.headers.get("location")!);
+      expect(redirectTarget.searchParams.has("ln")).toBe(false);
+    } finally {
+      users.restore();
+      hca.restore();
+      await app.close();
+    }
+  });
+});
+
+describe("GET /auth/hackclub/callback retry link keeps the login nonce", () => {
+  test("a throttled token exchange offers a retry that still carries the nonce", async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url).includes("/oauth/token")) return new Response("slow your roll!", { status: 429 });
+      return realFetch(url as string, init);
+    }) as typeof fetch;
+    const app = await startTestApp();
+    try {
+      const redirect = encodeURIComponent("https://pixl.hackclub.com/shop/");
+      const res = await driveHcaCallback(app.baseUrl, `?web_redirect=${redirect}&nonce=abc123def456`);
+      expect(res.status).toBe(429);
+      const html = await res.text();
+      const href = /href="([^"]+)"/.exec(html)![1];
+      const retry = new URL(href, "http://x");
+      expect(retry.pathname).toBe("/auth/hackclub");
+      expect(retry.searchParams.get("web_redirect")).toBe("https://pixl.hackclub.com/shop/");
+      expect(retry.searchParams.get("nonce")).toBe("abc123def456");
+    } finally {
+      globalThis.fetch = realFetch;
+      await app.close();
+    }
+  });
+
+  test("without a nonce the retry link has none", async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url).includes("/oauth/token")) return new Response("boom", { status: 500 });
+      return realFetch(url as string, init);
+    }) as typeof fetch;
+    const app = await startTestApp();
+    try {
+      const res = await driveHcaCallback(app.baseUrl);
+      const href = /href="([^"]+)"/.exec(await res.text())![1];
+      expect(href).toBe("/auth/hackclub");
+    } finally {
+      globalThis.fetch = realFetch;
       await app.close();
     }
   });

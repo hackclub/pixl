@@ -140,6 +140,12 @@ interface PendingLogin {
   webRedirect?: string;
   purpose?: "verify_address";
   userId?: string;
+  // F-8: apps/web-shell/app/api/login/route.ts's login-nonce cookie value,
+  // opaque to us - round-tripped back onto the final redirect as `ln=` so
+  // proxy.ts can confirm the browser landing on ?token= is the same one
+  // that started this login, not an arbitrary visitor following a link
+  // someone else's valid token was tacked onto.
+  loginNonce?: string;
 }
 const PENDING_LOGIN_TTL_MS = 10 * 60_000;
 const pendingLogins = new Map<string, PendingLogin>();
@@ -295,10 +301,16 @@ router.get("/auth/hackclub", (req, res) => {
     }
   }
 
+  // Opaque - only apps/web-shell's proxy.ts ever compares this value against
+  // anything, we just carry it through the round trip. Capped defensively
+  // since it lands in an in-memory map keyed off `state`, not `nonce`.
+  const nonce = typeof req.query.nonce === "string" ? req.query.nonce.slice(0, 200) : undefined;
+
   const state = crypto.randomBytes(16).toString("hex");
   pendingLogins.set(state, {
     expiresAt: Date.now() + PENDING_LOGIN_TTL_MS,
     webRedirect: webRedirect ?? undefined,
+    loginNonce: nonce,
   });
 
   const url = new URL(`${HCA_BASE_URL}/oauth/authorize`);
@@ -387,9 +399,10 @@ router.get("/auth/hackclub/callback", async (req, res) => {
     // out a few times in a row. The code is spent either way, so the only way
     // through is a fresh login once their window clears.
     const throttled = tokenRes.status === 429 || body.includes("slow your roll");
-    const retry =
-      "/auth/hackclub" +
-      (webRedirect ? `?web_redirect=${encodeURIComponent(webRedirect)}` : "");
+    const retryParams = new URLSearchParams();
+    if (webRedirect) retryParams.set("web_redirect", webRedirect);
+    if (pending.loginNonce) retryParams.set("nonce", pending.loginNonce);
+    const retry = "/auth/hackclub" + (retryParams.size ? `?${retryParams}` : "");
     return res
       .status(throttled ? 429 : 502)
       .send(
@@ -617,6 +630,10 @@ router.get("/auth/hackclub/callback", async (req, res) => {
   localCallback.searchParams.set("token", sessionToken);
   localCallback.searchParams.set("name", displayName);
   if (isNewUser) localCallback.searchParams.set("new", "1");
+  // F-8: only present when this login started from apps/web-shell's
+  // /api/login (see PendingLogin.loginNonce) - proxy.ts needs it back to
+  // confirm the browser here is the same one that started the login.
+  if (pending.loginNonce) localCallback.searchParams.set("ln", pending.loginNonce);
 
   res.redirect(localCallback.toString());
 });

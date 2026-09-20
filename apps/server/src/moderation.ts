@@ -1,5 +1,6 @@
 import { supabase } from "./db/client.js";
 import { orValue } from "./db/pgCompat.js";
+import { verifySessionToken } from "./auth/session.js";
 
 // Normalized roots (see normalize below): lowercase, leetspeak folded, symbols
 // stripped. Substring match, so common evasions like f.u-c_k or sh1t still hit.
@@ -358,9 +359,9 @@ export interface BanRow {
   created_at: string;
 }
 
-// Returns the active ban for a user, or null. A ban is active while it hasn't
-// been lifted and either never expires or expires in the future.
-export async function activeBan(userId: string): Promise<BanRow | null> {
+export type BanLookup = { ok: true; ban: BanRow | null } | { ok: false };
+
+export async function lookupActiveBan(userId: string): Promise<BanLookup> {
   const { data, error } = await supabase
     .from("bans")
     .select("*")
@@ -371,7 +372,99 @@ export async function activeBan(userId: string): Promise<BanRow | null> {
     .limit(1);
   if (error) {
     console.error("Failed to check bans", error);
-    return null;
+    return { ok: false };
   }
-  return (data && (data[0] as BanRow)) ?? null;
+  return { ok: true, ban: (data && (data[0] as BanRow)) ?? null };
+}
+
+// Returns the active ban for a user, or null. A ban is active while it hasn't
+// been lifted and either never expires or expires in the future.
+export async function activeBan(userId: string): Promise<BanRow | null> {
+  const result = await lookupActiveBan(userId);
+  return result.ok ? result.ban : null;
+}
+
+// A signed, unexpired JWT only ever proved who someone was *when it was
+// issued* - every plain HTTP route just checked the signature and moved on,
+// so a player banned mid-session (their token has up to 14 days left, see
+// issueSessionToken) could keep shipping, buying, voting, uploading, etc.
+// through every route that never independently re-checked ban status. The
+// WebSocket path already re-checks (activeBan at connect, sweepBans while
+// connected) - this brings HTTP requests to the same standard, in one place
+// instead of a bespoke check bolted onto dozens of routes.
+//
+// A short in-memory cache keeps this from adding a DB round-trip to every
+// single request; a newly-banned player can make a few more requests within
+// the cache window, same trade-off sweepBans already makes on the WS side.
+const BAN_CACHE_TTL_MS = 30_000;
+const BAN_CACHE_MAX = 50_000;
+
+export type BanState = "banned" | "clear" | "unknown";
+
+export function createBanStateCache(
+  lookup: (userId: string) => Promise<BanState>,
+  ttlMs = BAN_CACHE_TTL_MS,
+  now: () => number = Date.now,
+) {
+  const cache = new Map<string, { banned: boolean; at: number }>();
+  return async function banState(userId: string): Promise<BanState> {
+    const cached = cache.get(userId);
+    if (cached && now() - cached.at < ttlMs) return cached.banned ? "banned" : "clear";
+    const fresh = await lookup(userId);
+    if (fresh === "unknown") return cached?.banned ? "banned" : "unknown";
+    if (cache.size >= BAN_CACHE_MAX) {
+      for (const [id, entry] of cache) if (now() - entry.at >= ttlMs) cache.delete(id);
+    }
+    cache.set(userId, { banned: fresh === "banned", at: now() });
+    return fresh;
+  };
+}
+
+const currentBanState = createBanStateCache(async (userId) => {
+  const result = await lookupActiveBan(userId);
+  if (!result.ok) return "unknown";
+  return result.ban ? "banned" : "clear";
+});
+
+export interface EnforceActiveBansDeps {
+  banState?: (userId: string) => Promise<BanState>;
+  verify?: (token: string) => ReturnType<typeof verifySessionToken>;
+}
+
+// Express middleware, mounted globally in index.ts. Reads the same
+// `?token=` every route already reads; a request with no token, or one that
+// fails signature/expiry verification, is left untouched - that's the
+// existing per-route "not authenticated" handling's job, not this
+// middleware's. This only ever acts on a token that verifies successfully
+// but names a currently-banned user, which every route handler skips being
+// reached for entirely.
+export function enforceActiveBans(deps: EnforceActiveBansDeps = {}) {
+  const banState = deps.banState ?? currentBanState;
+  const verify = deps.verify ?? verifySessionToken;
+  return async (
+    req: import("express").Request,
+    res: import("express").Response,
+    next: import("express").NextFunction,
+  ): Promise<void> => {
+    const token = typeof req.query.token === "string" ? req.query.token : "";
+    if (!token) return next();
+    const session = verify(token);
+    if (!session) return next();
+    let state: BanState;
+    try {
+      state = await banState(session.userId);
+    } catch {
+      state = "unknown";
+    }
+    if (state === "banned") {
+      res.status(403).json({ ok: false, error: "banned" });
+      return;
+    }
+    if (state === "unknown" && req.method !== "GET" && req.method !== "HEAD") {
+      res.setHeader("Retry-After", "5");
+      res.status(503).json({ ok: false, error: "ban_check_unavailable" });
+      return;
+    }
+    next();
+  };
 }

@@ -1,4 +1,5 @@
 import { DASH_URL } from "./reports.js";
+import { escapeMrkdwn, escapeMrkdwnWithin, safeHttpUrl, slackLinkUrl } from "./slackEscape.js";
 
 // Pings the team's ship-alerts channel with a rich preview whenever a project
 // lands in the review queue , both a first ship and a re-ship of an approved
@@ -31,20 +32,32 @@ export async function postShipToSlack(
     ? "Project update submitted for review"
     : "New project submitted for review";
   const status = isUpdate ? "Under review (re-ship)." : "Under review.";
-  const who = ownerSlackId ? `<@${ownerSlackId}>` : "Unknown";
+  const who = ownerSlackId && /^[A-Z0-9]{2,32}$/.test(ownerSlackId) ? `<@${ownerSlackId}>` : "Unknown";
   const hours = (trackedSeconds / 3600).toFixed(2);
   const reviewUrl = `${DASH_URL}/review/${project.id}`;
+
+  const repoLink = slackLinkUrl(project.repo_url);
+  const demoLink = slackLinkUrl(project.demo_url);
+  const imageUrl = safeHttpUrl(project.image_url);
+  const viewUrl = safeHttpUrl(project.demo_url) ?? reviewUrl;
+  const linkField = (raw: string | null, link: string | null, label: string) =>
+    link ? `<${link}|${label}>` : raw ? "Invalid link" : "Not provided";
+
+  // project.name/description are typed by the shipping player, not staff -
+  // escaped so a project can't mass-ping this channel via <!channel>/<!here>
+  // in its own name/description or render a forged link under the bot.
+  const safeName = escapeMrkdwn(project.name);
+  const safeDescription = escapeMrkdwnWithin(project.description || "_No description._", 2500);
 
   const blocks: Record<string, unknown>[] = [
     { type: "section", text: { type: "mrkdwn", text: `*${headline}*\n${status}` } },
   ];
-  if (project.image_url)
-    blocks.push({ type: "image", image_url: project.image_url, alt_text: project.name });
+  if (imageUrl) blocks.push({ type: "image", image_url: imageUrl, alt_text: project.name });
   blocks.push({
     type: "section",
     text: {
       type: "mrkdwn",
-      text: `*${project.name}*\n${(project.description || "_No description._").slice(0, 2500)}`,
+      text: `*${safeName}*\n${safeDescription}`,
     },
   });
   blocks.push({
@@ -54,11 +67,11 @@ export async function postShipToSlack(
       { type: "mrkdwn", text: `*Hours logged:*\n${hours}h` },
       {
         type: "mrkdwn",
-        text: `*GitHub repo:*\n${project.repo_url ? `<${project.repo_url}|Open repo>` : "Not provided"}`,
+        text: `*GitHub repo:*\n${linkField(project.repo_url, repoLink, "Open repo")}`,
       },
       {
         type: "mrkdwn",
-        text: `*Demo URL:*\n${project.demo_url ? `<${project.demo_url}|Open demo>` : "Not provided"}`,
+        text: `*Demo URL:*\n${linkField(project.demo_url, demoLink, "Open demo")}`,
       },
     ],
   });
@@ -69,7 +82,7 @@ export async function postShipToSlack(
       {
         type: "button",
         text: { type: "plain_text", text: "View project" },
-        url: project.demo_url || reviewUrl,
+        url: viewUrl,
       },
     ],
   });
@@ -83,7 +96,8 @@ export async function postShipToSlack(
       },
       body: JSON.stringify({
         channel,
-        text: `${headline}: ${project.name}`,
+        // Fallback/notification text - also mrkdwn-parsed by Slack, so also escaped.
+        text: `${headline}: ${safeName}`,
         blocks,
         unfurl_links: false,
       }),

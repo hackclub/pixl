@@ -13,22 +13,25 @@ describe("gameUrl", () => {
 });
 
 describe("loginUrl", () => {
-  test("points at apps/server's hackclub auth entry point", () => {
-    expect(loginUrl("https://server.pixl.hackclub.com", "https://pixl.hackclub.com/dashboard")).toBe(
-      "https://server.pixl.hackclub.com/auth/hackclub?web_redirect=https%3A%2F%2Fpixl.hackclub.com%2Fdashboard",
+  test("points at this app's own login route, not straight at apps/server", () => {
+    // F-8: /api/login is what drops the login-nonce cookie before the
+    // browser ever leaves for apps/server - see proxy.ts and
+    // app/api/login/route.ts.
+    expect(loginUrl("https://pixl.hackclub.com/dashboard")).toBe(
+      "/api/login?back=https%3A%2F%2Fpixl.hackclub.com%2Fdashboard",
     );
   });
 
   test("encodes a return url that carries its own query", () => {
     // ?embed=1 is what the Godot client appends (web_pages.gd), and
     // apps/server's safeWebRedirect keeps url.search, so it survives login.
-    const url = loginUrl("https://s.example", "https://pixl.hackclub.com/dashboard?embed=1");
-    expect(url).toContain("web_redirect=https%3A%2F%2Fpixl.hackclub.com%2Fdashboard%3Fembed%3D1");
+    const url = loginUrl("https://pixl.hackclub.com/dashboard?embed=1");
+    expect(url).toContain("back=https%3A%2F%2Fpixl.hackclub.com%2Fdashboard%3Fembed%3D1");
     expect(url).not.toContain("embed=1&");
   });
 
   test("an empty target leaves a base the client can append to", () => {
-    expect(loginUrl("https://s.example", "")).toBe("https://s.example/auth/hackclub?web_redirect=");
+    expect(loginUrl("")).toBe("/api/login?back=");
   });
 });
 

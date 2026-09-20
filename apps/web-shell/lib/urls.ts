@@ -7,16 +7,16 @@ export function gameUrl(host: string): string {
   return host.startsWith("play.") ? "/" : "/play";
 }
 
-// Hack Club Auth login, the same entry point the Godot client and the old
-// static shell used (pixl.js's loginUrl). apps/server finishes the OAuth
-// dance and redirects back to `back` with ?token= on the end, which
-// proxy.ts turns into the pixl_session cookie. So a signed-out visitor can
-// log in from a shell page directly, without opening the game first.
+// Hack Club Auth login entry point for a signed-out shell page. Routed
+// through this app's own /api/login (not straight to apps/server) so that
+// route can drop a same-origin login nonce cookie before the browser ever
+// leaves - see its own comment, and proxy.ts, for why (F-8: a bare ?token=
+// arriving on any page must not be enough to establish a session).
 //
 // `back` has to be absolute and on a host apps/server allows
 // (ALLOWED_REDIRECT_HOSTS in routes/auth.ts) or the whole login 400s.
-export function loginUrl(server: string, back: string): string {
-  return `${server}/auth/hackclub?web_redirect=${encodeURIComponent(back)}`;
+export function loginUrl(back: string): string {
+  return `/api/login?back=${encodeURIComponent(back)}`;
 }
 
 // Absolute URL of the current request. The request's own scheme can't be

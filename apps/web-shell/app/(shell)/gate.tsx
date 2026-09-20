@@ -15,7 +15,7 @@ export function Gate({
   fallbackBack,
 }: {
   game: string;
-  /** `${server}/auth/hackclub?web_redirect=` , the target gets appended. */
+  /** `/api/login?back=` , the target gets appended. */
   loginBase: string;
   /** Best-effort current URL from the server, replaced once we're in the
    * browser: the server only sees an internal hop and a proxy header, while

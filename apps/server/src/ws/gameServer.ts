@@ -2,6 +2,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import type { Server, IncomingMessage } from "http";
 import { verifySessionToken } from "../auth/session.js";
 import { consumeRateLimit, type RateLimitOptions } from "../rateLimit.js";
+import { requestIpKey } from "../clientIp.js";
 import { activeBan, censorChat, recordChatViolation } from "../moderation.js";
 import { areFriends } from "../social.js";
 import { getPixoChatReply } from "../pixoChat.js";
@@ -95,8 +96,16 @@ const pixoCooldowns = new Map<string, number>();
 // "village", but each player gets their own room so they don't share it.
 // Other scenes (openworld, house_interior) stay shared. Lobby scenes
 // ("lobby:<CODE>") are shared rooms scoped to one lobby instance.
-function roomFor(userId: string, scene: string): string {
-  return scene === "village" ? `village:${userId}` : scene;
+//
+// A client only ever legitimately sends the bare "village" - the room string
+// "village:<userId>" is a server-internal detail (used for broadcast/lookup
+// keys, see baseSceneName below). Matching only the exact "village" literal
+// used to mean a client sending "village:<someone else's id>" directly as
+// `scene` fell through unchanged and was accepted as-is, joining another
+// player's private village outright. Every village-shaped request now
+// resolves to the CALLER's own room regardless of what id (if any) it named.
+export function roomFor(userId: string, scene: string): string {
+  return scene === "village" || scene.startsWith("village:") ? `village:${userId}` : scene;
 }
 
 function lobbyMemberCount(id: string, exceptUserId?: string): number {
@@ -445,24 +454,6 @@ const UPGRADE_WINDOW_MS = 60_000;
 const UPGRADE_MAX_PER_WINDOW = 30;
 const upgradeAttempts = new Map<string, number[]>();
 
-// Mirrors the Express `trust proxy: 1` setting in index.ts, this handler
-// runs on the raw http.Server 'upgrade' event, outside Express, so req.ip
-// isn't available. With exactly one trusted hop (the platform's edge/ingress
-// proxy) in front of us, the rightmost X-Forwarded-For entry is the address
-// that proxy actually saw; req.socket.remoteAddress alone would be the
-// proxy's own shared IP, and trusting the client-suppliable leftmost entry
-// would let anyone rotate it to dodge the limit entirely.
-function upgradeClientIp(req: IncomingMessage): string {
-  const fwd = req.headers["x-forwarded-for"];
-  const raw = Array.isArray(fwd) ? fwd[0] : fwd;
-  if (raw) {
-    const parts = raw.split(",").map((p) => p.trim());
-    const last = parts[parts.length - 1];
-    if (last) return last;
-  }
-  return req.socket.remoteAddress ?? "unknown";
-}
-
 function upgradeRateLimited(ip: string): boolean {
   const now = Date.now();
   const arr = (upgradeAttempts.get(ip) ?? []).filter(
@@ -473,6 +464,18 @@ function upgradeRateLimited(ip: string): boolean {
   return arr.length > UPGRADE_MAX_PER_WINDOW;
 }
 
+// upgradeAttempts otherwise only ever grows: an IP that connects once and
+// never again keeps its (eventually empty) array forever. Sweep alongside
+// the same cadence as the window itself.
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, arr] of upgradeAttempts) {
+    const fresh = arr.filter((t) => now - t < UPGRADE_WINDOW_MS);
+    if (fresh.length === 0) upgradeAttempts.delete(ip);
+    else if (fresh.length !== arr.length) upgradeAttempts.set(ip, fresh);
+  }
+}, UPGRADE_WINDOW_MS).unref();
+
 export function attachWebSocketServer(httpServer: Server) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 32 * 1024 });
 
@@ -482,7 +485,7 @@ export function attachWebSocketServer(httpServer: Server) {
       socket.destroy();
       return;
     }
-    const ip = upgradeClientIp(req);
+    const ip = requestIpKey(req);
     if (upgradeRateLimited(ip)) {
       socket.destroy();
       return;
@@ -749,7 +752,10 @@ export function attachWebSocketServer(httpServer: Server) {
         const leaving = player;
         leaving.changingScene = true;
         const oldScene = leaving.scene;
-        let requested = String(msg.scene ?? "");
+        // Every real scene name is short (open_world, house_interior,
+        // village, lobby:<6-char code>) - cap well above that rather than
+        // letting an arbitrary-length string flow into room lookups/broadcasts.
+        let requested = String(msg.scene ?? "").slice(0, 64);
 
         const targetLobbyId = lobbyIdFromScene(requested);
         if (targetLobbyId) {
