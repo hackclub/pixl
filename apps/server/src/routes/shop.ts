@@ -46,16 +46,12 @@ const COUNTRY_REGION: Record<string, string> = {
   JO: "ASIA", LB: "ASIA", AU: "ASIA", NZ: "ASIA",
 };
 
-// shop_items are split per region specifically so fulfillment/pricing can
-// differ by where a player lives (see 0063_shop_items_region.sql,
-// 0064_users_region.sql) — trophies (unlock_xp > 0) are the deliberate
-// exception and never reach this check (buy_shop_item rejects them outright
-// as not_for_sale; they're claimed via /api/shop/claim instead). Without
-// this, a player could switch their own listed region (POST /api/shop/region
-// has no tie to their real address) and buy a physical item at whichever
-// region's price is lowest while still shipping to their real address.
 export function regionMismatch(itemRegion: string, buyerRegion: string): boolean {
   return itemRegion !== buyerRegion;
+}
+
+export function regionForCountry(country: string): string {
+  return COUNTRY_REGION[country.trim().toUpperCase()] ?? "US";
 }
 
 async function regionFor(userId: string): Promise<string> {
@@ -73,8 +69,7 @@ async function regionFor(userId: string): Promise<string> {
   if (row?.region_auto === false && row.region && SHOP_REGIONS.includes(row.region)) {
     return row.region;
   }
-  const country = decryptPII(row?.address_country).trim().toUpperCase();
-  return COUNTRY_REGION[country] ?? "US";
+  return regionForCountry(decryptPII(row?.address_country));
 }
 
 // Base columns plus unlock_xp (trophies), region and category. unlock_xp/
@@ -522,8 +517,10 @@ router.post("/api/shop/buy/:id", async (req, res) => {
     String(buyer.address_city ?? "").trim() !== "" &&
     String(buyer.address_country ?? "").trim() !== "" &&
     String(buyer.address_postal ?? "").trim() !== "";
-  if (!addressOnFile)
+  const buyerCountry = decryptPII(buyer?.address_country).trim();
+  if (!addressOnFile || !buyerCountry)
     return res.status(400).json({ ok: false, error: "address_required" });
+  const buyerRegion = regionForCountry(buyerCountry);
 
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ ok: false });
@@ -553,18 +550,10 @@ router.post("/api/shop/buy/:id", async (req, res) => {
     .maybeSingle();
   if ((gateRow as { manual_locked?: boolean } | null)?.manual_locked)
     return res.status(403).json({ ok: false, error: "locked" });
-  // Physical, shipped items are priced per region — buying with a real
-  // address that doesn't match the item's region would let a player switch
-  // their listed region (see /api/shop/region above, which trusts whatever
-  // the player sends) to whichever region is cheapest. Trophies (unlock_xp >
-  // 0) aren't region-scoped at all, so they're exempt.
   const itemRegion = (gateRow as { region?: string } | null)?.region;
   const itemUnlockXp = Number((gateRow as { unlock_xp?: number } | null)?.unlock_xp ?? 0);
-  if (itemRegion && itemUnlockXp <= 0) {
-    const buyerRegion = await regionFor(session.userId);
-    if (regionMismatch(itemRegion, buyerRegion))
-      return res.status(403).json({ ok: false, error: "wrong_region" });
-  }
+  if (itemRegion && itemUnlockXp <= 0 && regionMismatch(itemRegion, buyerRegion))
+    return res.status(403).json({ ok: false, error: "wrong_region", region: buyerRegion });
   const gateIds = Array.isArray((gateRow as { unlock_trial_ids?: unknown[] } | null)?.unlock_trial_ids)
     ? ((gateRow as { unlock_trial_ids: unknown[] }).unlock_trial_ids).map(Number).filter((n) => Number.isFinite(n) && n > 0)
     : [];
@@ -580,7 +569,7 @@ router.post("/api/shop/buy/:id", async (req, res) => {
       return res.status(403).json({ ok: false, error: "locked" });
   }
 
-  let { data, error } = await supabase.rpc("buy_shop_item", {
+  const { data, error } = await supabase.rpc("buy_shop_item", {
     p_user_id: session.userId,
     p_item_id: id,
     p_option: option,
@@ -588,21 +577,8 @@ router.post("/api/shop/buy/:id", async (req, res) => {
     p_quantity: quantity,
     p_note: note,
     p_stock_choice: stockChoice,
+    p_buyer_region: buyerRegion,
   });
-  // Only when migration 0093 (note + stock choice) genuinely isn't applied and
-  // the 7-arg signature is missing, 42883. Retrying on any error instead would
-  // swallow real failures: every overload here has defaults, so a 5-arg call
-  // matches both the 5- and 7-arg ones and dies with "is not unique" (42725),
-  // reporting that instead of whatever actually went wrong.
-  if (error?.code === "42883") {
-    ({ data, error } = await supabase.rpc("buy_shop_item", {
-      p_user_id: session.userId,
-      p_item_id: id,
-      p_option: option,
-      p_config: config,
-      p_quantity: quantity,
-    }));
-  }
   if (error) {
     console.error("[shop] buy failed", error);
     return res.status(500).json({ ok: false });

@@ -1,29 +1,19 @@
--- Security fix: buy_shop_item never checked that the item being bought
--- belongs to the buyer's own shop region. shop_items are deliberately split
--- per region so pricing/fulfillment can differ by where a player actually
--- lives (0063_shop_items_region.sql, 0064_users_region.sql) - a player's
--- listed region (users.region) is fully self-service via POST
--- /api/shop/region with no tie to their real address (0064's own comment:
--- "Everyone defaults to 'US' until they pick a different region from the
--- shop's region selector"). Without this check, any player could switch
--- their listed region to whichever one prices a physical item cheapest, buy
--- it there, and still ship to their real address - a price-arbitrage bug,
--- not a display quirk, since fulfillment ships whatever shop_orders records
--- regardless of the buyer's real address.
+-- buy_shop_item authorizes the purchase against the buyer's region, which the
+-- server derives from the account's address country (COUNTRY_REGION in
+-- routes/shop.ts) and passes in as p_buyer_region. users.region is the
+-- browse-only region selector (POST /api/shop/region) and is never used to
+-- authorize a purchase. A NULL p_buyer_region fails closed as wrong_region.
 --
--- apps/server/src/routes/shop.ts's buy handler now rejects a region mismatch
--- before ever calling this RPC, but per the RPC being the authoritative,
--- privileged sink (see 0110_harden_shop_config_pricing.sql's own reasoning
--- for revoking PUBLIC execute), the check belongs here too so no other
--- caller can bypass it.
---
--- Trophies (unlock_xp > 0) are the deliberate exception: they're earned by
--- level, not shipped, and were already rejected as not_for_sale before any
--- region logic - this migration doesn't touch that.
---
--- Idempotent: CREATE OR REPLACE. Safe to run more than once.
+-- Every older buy_shop_item overload is dropped so nothing can call a variant
+-- without the region check. Run before deploying the server that passes
+-- p_buyer_region. Idempotent.
 
 BEGIN;
+
+DROP FUNCTION IF EXISTS public.buy_shop_item(uuid, integer, text);
+DROP FUNCTION IF EXISTS public.buy_shop_item(uuid, integer, text, jsonb);
+DROP FUNCTION IF EXISTS public.buy_shop_item(uuid, integer, text, jsonb, integer);
+DROP FUNCTION IF EXISTS public.buy_shop_item(uuid, integer, text, jsonb, integer, text, text);
 
 CREATE OR REPLACE FUNCTION public.buy_shop_item(
   p_user_id uuid,
@@ -32,14 +22,14 @@ CREATE OR REPLACE FUNCTION public.buy_shop_item(
   p_config jsonb DEFAULT NULL::jsonb,
   p_quantity integer DEFAULT 1,
   p_note text DEFAULT ''::text,
-  p_stock_choice text DEFAULT ''::text
+  p_stock_choice text DEFAULT ''::text,
+  p_buyer_region text DEFAULT NULL::text
 )
 RETURNS json
 LANGUAGE plpgsql
 AS $function$
 declare
   v_item shop_items%rowtype;
-  v_buyer_region text;
   v_balance bigint;
   v_order_id bigint;
   v_unit_price integer;
@@ -60,8 +50,8 @@ begin
     return json_build_object('ok', false, 'error', 'not_for_sale');
   end if;
 
-  select region into v_buyer_region from users where id = p_user_id;
-  if v_buyer_region is null or v_item.region <> v_buyer_region then
+  if v_item.region is not null
+     and (p_buyer_region is null or v_item.region <> p_buyer_region) then
     return json_build_object('ok', false, 'error', 'wrong_region');
   end if;
 
@@ -178,5 +168,7 @@ begin
     'order_id', v_order_id, 'item_name', v_item.name, 'price', v_price, 'quantity', v_qty);
 end;
 $function$;
+
+REVOKE EXECUTE ON FUNCTION public.buy_shop_item(uuid, integer, text, jsonb, integer, text, text, text) FROM PUBLIC;
 
 COMMIT;
