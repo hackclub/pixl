@@ -3612,6 +3612,13 @@ export async function addShopItem(formData: FormData): Promise<void> {
   const regions = [...new Set(regionsRaw.map(readRegion))];
   if (!name || regions.length === 0) return;
 
+  // Price-changing options (config_options), optional - see ShopConfigEditor.
+  // The item's own price/price_<region> above doubles as each region's
+  // config_options.base_price, so there's no separate base-price input here.
+  const configEnabled = formData.get("config_enable") === "1";
+  const configGroups = configEnabled ? parseConfigGroups(formData.get("config_groups")) ?? [] : [];
+  const configReferenceUrl = String(formData.get("config_reference_url") ?? "").trim().slice(0, 500);
+
   let imageUrl = "";
   const image = formData.get("image");
   if (image instanceof File && image.size > 0) {
@@ -3636,6 +3643,14 @@ export async function addShopItem(formData: FormData): Promise<void> {
       .limit(1);
     if (recent && recent.length > 0) continue;
 
+    const configOptions = configEnabled
+      ? {
+          base_price: price,
+          reference_url: configReferenceUrl,
+          groups: resolveConfigGroupsForRegion(configGroups, region),
+        }
+      : null;
+
     const { data: inserted, error } = await db
       .from("shop_items")
       .insert({
@@ -3646,6 +3661,7 @@ export async function addShopItem(formData: FormData): Promise<void> {
         options,
         region,
         category,
+        config_options: configOptions,
         created_by: actorName(access),
       })
       .select("*")
@@ -3812,6 +3828,10 @@ export async function updateShopItemPrices(formData: FormData): Promise<void> {
 interface ParsedConfigChoice {
   label: string;
   price: number;
+  // Only present when the item was created across multiple regions at once
+  // (see ShopConfigEditor's `regions` prop) - a region with no entry here
+  // just uses `price` above.
+  regionPrices?: Partial<Record<ShopRegion, number>>;
 }
 interface ParsedConfigGroup {
   name: string;
@@ -3850,12 +3870,35 @@ function parseConfigGroups(raw: FormDataEntryValue | null): ParsedConfigGroup[] 
       const label = String(cr.label ?? "").trim().slice(0, 120);
       if (!label) continue;
       const price = Math.max(0, Math.min(999_999, Math.round(Number(cr.price) || 0)));
-      choices.push({ label, price });
+      let regionPrices: Partial<Record<ShopRegion, number>> | undefined;
+      if (cr.regionPrices && typeof cr.regionPrices === "object") {
+        for (const [r, v] of Object.entries(cr.regionPrices as Record<string, unknown>)) {
+          if (!(SHOP_REGIONS as readonly string[]).includes(r)) continue;
+          (regionPrices ??= {})[r as ShopRegion] = Math.max(0, Math.min(999_999, Math.round(Number(v) || 0)));
+        }
+      }
+      choices.push(regionPrices ? { label, price, regionPrices } : { label, price });
     }
     if (choices.length === 0) continue;
     groups.push({ name, type, choices });
   }
   return groups;
+}
+
+// Resolves each choice's per-region override (if any) down to a flat
+// {label, price} list for one specific region, for the shop_items row that
+// region actually gets. Choice labels are shared across every region -
+// buy_shop_item charges by exact label match, so the same option has to be
+// spelled identically everywhere it's stocked, only its price may differ.
+function resolveConfigGroupsForRegion(
+  groups: ParsedConfigGroup[],
+  region: ShopRegion,
+): { name: string; type: "single" | "multi"; choices: { label: string; price: number }[] }[] {
+  return groups.map((g) => ({
+    name: g.name,
+    type: g.type,
+    choices: g.choices.map((c) => ({ label: c.label, price: c.regionPrices?.[region] ?? c.price })),
+  }));
 }
 
 export async function updateShopItemRegionDetails(formData: FormData): Promise<void> {

@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { PendingButton } from "@/app/_components/PendingButton";
 import { OptionsEditor } from "@/app/_components/OptionsEditor";
+import { ShopConfigEditor } from "@/app/_components/ShopConfigEditor";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { SHOP_REGIONS, SHOP_REGION_LABELS, type ShopRegion } from "@/lib/shopRegions";
 import { SHOP_CATEGORIES, SHOP_CATEGORY_LABELS } from "@/lib/shopCategories";
 import { config } from "@/app/_generated/config";
@@ -28,6 +30,10 @@ export function AddShopItemForm({
   // Per-region price overrides, keyed by region. A region with no entry here
   // just uses the shared `price` field when the form submits.
   const [regionPrices, setRegionPrices] = useState<Partial<Record<ShopRegion, string>>>({});
+  // Price-changing options (config_options) - optional. The item's own
+  // price/region overrides above double as each region's base price, so
+  // there's no separate base-price field here, just the reference link.
+  const [configEnabled, setConfigEnabled] = useState(false);
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -179,6 +185,35 @@ export function AddShopItemForm({
           <span className="block text-xs text-muted-foreground mt-1">
             Optional , groups like Color or Storage, each with comma-separated choices.
           </span>
+        </div>
+
+        <div className="block rounded-md border border-border p-3">
+          <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+            <Checkbox checked={configEnabled} onCheckedChange={(v) => setConfigEnabled(v === true)} />
+            Price-changing options
+          </label>
+          <span className="block text-xs text-muted-foreground mt-1 mb-2">
+            Unlike Options above, these change the price , e.g. a Storage group where
+            &quot;256GB&quot; costs more than &quot;128GB&quot;. Set a price per region if it should differ.
+          </span>
+          {configEnabled && (
+            <div className="space-y-2 mt-2">
+              <input type="hidden" name="config_enable" value="1" />
+              <Input
+                name="config_reference_url"
+                type="url"
+                placeholder="https://… (reference listing for the base price)"
+                className="w-full text-sm"
+              />
+              <ShopConfigEditor
+                name="config_groups"
+                initialGroups={[]}
+                pixelValueUsd={config.economy.pixelValueUsd}
+                regions={regions}
+                regionLabels={SHOP_REGION_LABELS}
+              />
+            </div>
+          )}
         </div>
 
         <Label className="block font-normal">
