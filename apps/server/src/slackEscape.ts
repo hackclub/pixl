@@ -10,6 +10,16 @@ export function escapeMrkdwn(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+export function escapeMrkdwnWithin(text: string, max: number): string {
+  let out = "";
+  for (const ch of text) {
+    const escaped = escapeMrkdwn(ch);
+    if (out.length + escaped.length > max) break;
+    out += escaped;
+  }
+  return out;
+}
+
 export function safeHttpUrl(raw: string | null | undefined): string | null {
   if (!raw) return null;
   try {

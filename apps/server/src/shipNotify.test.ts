@@ -146,3 +146,48 @@ describe("postShipToSlack (Slack link injection through URL fields)", () => {
     expect(JSON.stringify(capture.body()?.blocks)).not.toContain("<!channel>");
   });
 });
+
+describe("postShipToSlack description truncation", () => {
+  const brokenEntity = /&(?!amp;|lt;|gt;)/;
+
+  async function sentDescription(description: string): Promise<string> {
+    process.env.SLACK_BOT_TOKEN = "xoxb-test";
+    const capture = captureSentBody();
+    await postShipToSlack(
+      { id: 20, name: "Game", description, image_url: null, repo_url: null, demo_url: null },
+      "U123",
+      3600,
+      false,
+    );
+    const blocks = capture.body()?.blocks as { text?: { text: string } }[];
+    const section = blocks.map((b) => b.text?.text ?? "").find((t) => t.startsWith("*Game*\n"))!;
+    return section.slice("*Game*\n".length);
+  }
+
+  test("plain text is cut to the same 2500 characters as before", async () => {
+    expect(await sentDescription("a".repeat(5000))).toBe("a".repeat(2500));
+  });
+
+  test("an ampersand at the cut is dropped whole, never left as a partial entity", async () => {
+    const text = await sentDescription(`${"a".repeat(2497)}&tail`);
+    expect(text).not.toMatch(brokenEntity);
+    expect(text).toBe("a".repeat(2497));
+  });
+
+  test("a < at the cut is dropped whole", async () => {
+    const text = await sentDescription(`${"a".repeat(2498)}<!channel>`);
+    expect(text).not.toMatch(brokenEntity);
+    expect(text).toBe("a".repeat(2498));
+  });
+
+  test("a > at the cut is dropped whole", async () => {
+    const text = await sentDescription(`${"a".repeat(2498)}>tail`);
+    expect(text).not.toMatch(brokenEntity);
+    expect(text).toBe("a".repeat(2498));
+  });
+
+  test("a description that escapes to exactly the limit is kept whole", async () => {
+    expect(await sentDescription("&".repeat(500))).toBe("&amp;".repeat(500));
+    expect(await sentDescription("&".repeat(501))).toBe("&amp;".repeat(500));
+  });
+});

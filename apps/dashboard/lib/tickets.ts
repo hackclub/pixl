@@ -10,6 +10,16 @@ function escapeMrkdwn(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+function escapeMrkdwnWithin(text: string, max: number): string {
+  let out = "";
+  for (const ch of text) {
+    const escaped = escapeMrkdwn(ch);
+    if (out.length + escaped.length > max) break;
+    out += escaped;
+  }
+  return out;
+}
+
 export interface TicketStats {
   total: number;
   open: number;
@@ -261,7 +271,7 @@ export function ticketBlocks(ticket: FullTicketRow) {
   const { description, title, opened_by_slack_id, status, claimed_by_slack_id, closed_by_slack_id, ticket_number, permalink } = ticket;
   const msg_ts = ticket.msg_ts == null ? "" : String(ticket.msg_ts);
   const rawDescription = description || "";
-  const safeDescription = escapeMrkdwn(rawDescription);
+  const safeDescription = escapeMrkdwnWithin(rawDescription, 2900);
   const truncatedDescription = rawDescription.length > 80 ? rawDescription.substring(0, 80) + "..." : rawDescription;
   const displayTitle = escapeMrkdwn(title || truncatedDescription || "(no description)");
 
@@ -306,7 +316,7 @@ export function ticketBlocks(ticket: FullTicketRow) {
     },
     {
       type: "section",
-      text: { type: "mrkdwn", text: `>${safeDescription.slice(0, 2900).replace(/\n/g, "\n>")}` },
+      text: { type: "mrkdwn", text: `>${safeDescription.replace(/\n/g, "\n>")}` },
     },
   ];
 

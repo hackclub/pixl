@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { escapeMrkdwn, safeHttpUrl, slackLinkUrl } from "./slackEscape.js";
+import { escapeMrkdwn, escapeMrkdwnWithin, safeHttpUrl, slackLinkUrl } from "./slackEscape.js";
 
 // F-7: staff-facing Slack messages (reports, ship alerts, ticket cards)
 // interpolate player-controlled text (report reasons, project names/
@@ -64,5 +64,28 @@ describe("safeHttpUrl", () => {
   test("normalizes valid http(s) URLs and rejects others", () => {
     expect(safeHttpUrl("https://e.test/a b")).toBe("https://e.test/a%20b");
     expect(safeHttpUrl("ftp://e.test/")).toBeNull();
+  });
+});
+
+describe("escapeMrkdwnWithin", () => {
+  test("matches escapeMrkdwn when the result fits", () => {
+    expect(escapeMrkdwnWithin("a & <b>", 100)).toBe(escapeMrkdwn("a & <b>"));
+  });
+
+  test("cuts the raw text so no entity is split", () => {
+    expect(escapeMrkdwnWithin("ab&cd", 4)).toBe("ab");
+    expect(escapeMrkdwnWithin("ab&cd", 7)).toBe("ab&amp;");
+    expect(escapeMrkdwnWithin("ab<cd", 5)).toBe("ab");
+    expect(escapeMrkdwnWithin("ab>cd", 6)).toBe("ab&gt;");
+  });
+
+  test("keeps a surrogate pair together or drops it", () => {
+    expect(escapeMrkdwnWithin("a\u{1F600}", 2)).toBe("a");
+    expect(escapeMrkdwnWithin("a\u{1F600}", 3)).toBe("a\u{1F600}");
+  });
+
+  test("zero or empty input gives an empty string", () => {
+    expect(escapeMrkdwnWithin("", 10)).toBe("");
+    expect(escapeMrkdwnWithin("abc", 0)).toBe("");
   });
 });

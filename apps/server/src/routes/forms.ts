@@ -2,6 +2,7 @@ import { Router } from "express";
 import crypto from "crypto";
 import { supabase } from "../db/client.js";
 import { rateLimit } from "../rateLimit.js";
+import { config as pixlConfig } from "../config.generated.js";
 import { createVerificationStore } from "./formVerification.js";
 
 // Public, no-account forms (e.g. pixl.hackclub.com/form/review). A submitter
@@ -91,7 +92,7 @@ async function lookupSlackUser(slackId: string): Promise<{ name: string } | null
 // endpoint is public by design (no account, no secret to check) - it's meant
 // to keep a browser-based attack (e.g. a form on another site auto-POSTing
 // here) from working, not to be the only line of defense.
-const APEX_URL = "https://pixl.hackclub.com";
+const APEX_URL = pixlConfig.urls.site;
 function isTrustedOrigin(req: import("express").Request): boolean {
   const origin = req.headers.origin || req.headers.referer || "";
   if (!origin) return false;

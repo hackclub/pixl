@@ -6,6 +6,7 @@ import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import express from "express";
 import postgres from "postgres";
+import { config } from "../config.generated.js";
 
 const adminUrl = process.env.PIXL_TEST_DATABASE_URL;
 
@@ -174,6 +175,38 @@ if (!adminUrl) {
       for (let i = 0; i < 3; i++) results.push(await requestCode(slackId));
       expect(new Set(results.map((r) => JSON.stringify(r))).size).toBe(1);
       expect(codesFor(slackId)).toHaveLength(1);
+    });
+  });
+
+  describe("origin check follows the configured site url", () => {
+    const send = async (headers: Record<string, string>) => {
+      const res = await realFetch(`${base}/api/forms/${FORM}/request-code`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-forwarded-for": "198.51.100.77", ...headers },
+        body: JSON.stringify({ slackId: newSlackId() }),
+      });
+      return { status: res.status, body: (await res.json()) as Record<string, unknown> };
+    };
+
+    test("the configured site origin is accepted", async () => {
+      expect((await send({ origin: config.urls.site })).status).toBe(200);
+    });
+
+    test("a page on the configured site is accepted through the referer", async () => {
+      expect((await send({ referer: `${config.urls.site}/form/review` })).status).toBe(200);
+    });
+
+    test("another origin, a lookalike host, and no origin are rejected", async () => {
+      for (const headers of [
+        { origin: "https://evil.example" },
+        { origin: `${config.urls.site}.evil.example` },
+        { origin: config.urls.play },
+        {},
+      ]) {
+        const res = await send(headers);
+        expect(res.status).toBe(403);
+        expect(res.body.error).toBe("bad_origin");
+      }
     });
   });
 }
