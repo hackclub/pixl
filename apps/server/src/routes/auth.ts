@@ -8,6 +8,7 @@ import { fetchSlackAvatar, fetchSlackDisplayName } from "../slackAvatar.js";
 import { enrollSlackPlayerInPixl } from "../pixlSlack.js";
 import { config } from "../config.generated.js";
 import { encryptPII } from "../crypto.js";
+import { hcaStatePatch, isSignupRejected } from "../hcaEligibility.js";
 import { nameProblem } from "./profile.js";
 
 const router = Router();
@@ -226,13 +227,6 @@ interface HcaAddress {
   primary?: boolean;
 }
 
-// HCA's own YSWS verification state (auth.hackclub.com's public API docs,
-// app/views/docs/api.md.erb in hackclub/auth). Delivered as part of the
-// "basic_info" scope response ("Email, name, verification status, birthday,
-// phone") , PIXL already requests basic_info for birthdate, so no scope
-// change is needed to read this field.
-type HcaVerificationStatus = "needs_submission" | "pending" | "verified" | "ineligible";
-
 interface HackClubMeResponse {
   identity: {
     id: string;
@@ -247,7 +241,8 @@ interface HackClubMeResponse {
     // `addresses` ARRAY (one entry per address on file), not a single object.
     birthday?: string;
     addresses?: HcaAddress[];
-    verification_status?: HcaVerificationStatus;
+    verification_status?: string;
+    ysws_eligible?: boolean;
     [key: string]: unknown;
   };
   scopes: string[];
@@ -512,7 +507,7 @@ router.get("/auth/hackclub/callback", async (req, res) => {
     const existing = existingUsers[0] as UserRow;
     userId = existing.id;
     displayName = existing.display_name;
-    const patch: Record<string, string> = {};
+    const patch: Record<string, string | boolean | null> = { ...hcaStatePatch(identity) };
     if (identity.slack_id) patch.slack_id = identity.slack_id;
     if (identity.primary_email) patch.email = identity.primary_email;
     // Keep the real name in sync every login , it's the authoritative identity the
@@ -543,22 +538,16 @@ router.get("/auth/hackclub/callback", async (req, res) => {
     if (identity.slack_id && !(existing as { avatar_url?: string | null }).avatar_url)
       void saveSlackAvatar(userId, identity.slack_id);
   } else {
-    // Only gates brand-new accounts, existing rows are untouched (this whole
-    // branch only runs when no users row matched above). A successful HCA
-    // OAuth round trip only proves the player has a Hack Club account, not
-    // that HCA has verified their identity , that's a separate review HCA
-    // itself tracks via verification_status. Brand-new signup requires the
-    // explicit "verified" outcome; pending/needs_submission/ineligible, and a
-    // missing field (scope not granted, HCA outage, etc.), all fail closed
-    // rather than quietly treating "we don't know" as good enough to hand
-    // out a new account.
-    if (identity.verification_status !== "verified") {
-      const heading = "This Hack Club account isn't verified yet.";
-      const detail =
-        identity.verification_status === "ineligible"
-          ? "Hack Club Auth marked this identity as ineligible, so a new Pixl account can't be created. If you think this is a mistake, reach out to the Pixl team."
-          : "Hack Club Auth needs to verify this identity before a new Pixl account can be created. Finish verification on Hack Club Auth, then log back in.";
-      return res.status(403).send(loginErrorPage(heading, detail, "/auth/hackclub"));
+    if (isSignupRejected(identity)) {
+      return res
+        .status(403)
+        .send(
+          loginErrorPage(
+            "This Hack Club account isn't eligible for Pixl.",
+            "Hack Club Auth marks this identity as ineligible for YSWS programs, so a new Pixl account can't be created. If you think this is a mistake, reach out to the Pixl team.",
+            "/auth/hackclub",
+          ),
+        );
     }
 
     const { data: created, error: insertError } = await supabase
@@ -566,6 +555,7 @@ router.get("/auth/hackclub/callback", async (req, res) => {
       .insert({
         oauth_provider: "hackclub",
         oauth_id: identity.id,
+        ...hcaStatePatch(identity),
         display_name: displayNameFromHca,
         real_name: fullName,
         first_name: identity.first_name ?? "",

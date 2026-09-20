@@ -6,6 +6,7 @@ import { findAllInYswsArchive } from "../ysws/archive.js";
 import { buildDoubleDip, type TeamMember } from "../ysws/doubleDip.js";
 import { fetchHackatimeStats, fetchTrackedSecondsSince } from "../hackatime/api.js";
 import { postShipToSlack } from "../shipNotify.js";
+import { shipEligibilityBlock, type HcaStateRow } from "../hcaEligibility.js";
 import { normalizeProjectUrl } from "./projectUrlSafety.js";
 import { isGitRepoUrl } from "./gitRepoUrl.js";
 import { urlAlive } from "./urlLiveness.js";
@@ -520,6 +521,20 @@ router.post("/api/projects/:id/ship", async (req, res) => {
   const shippable = ["draft", "needs_changes", "approved"];
   if (!shippable.includes(project.status as string) && !project.rejected_at)
     return res.status(400).json({ ok: false, error: "already_shipped" });
+
+  const { data: hcaRow, error: hcaError } = await supabase
+    .from("users")
+    .select("hca_verification_status, hca_ysws_eligible")
+    .eq("id", session.userId)
+    .maybeSingle();
+  if (hcaError) {
+    console.error("[projects] hca state fetch failed", hcaError.message);
+    return res.status(500).json({ ok: false });
+  }
+  const hcaBlock = shipEligibilityBlock(hcaRow as HcaStateRow | null);
+  if (hcaBlock)
+    return res.status(403).json({ ok: false, error: hcaBlock.error, message: hcaBlock.message });
+
   if (!project.repo_url)
     return res.status(400).json({ ok: false, error: "repo_required" });
   if (!project.demo_url)
