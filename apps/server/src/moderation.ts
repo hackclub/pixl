@@ -1,5 +1,6 @@
 import { supabase } from "./db/client.js";
 import { orValue } from "./db/pgCompat.js";
+import { verifySessionToken } from "./auth/session.js";
 
 // Normalized roots (see normalize below): lowercase, leetspeak folded, symbols
 // stripped. Substring match, so common evasions like f.u-c_k or sh1t still hit.
@@ -374,4 +375,63 @@ export async function activeBan(userId: string): Promise<BanRow | null> {
     return null;
   }
   return (data && (data[0] as BanRow)) ?? null;
+}
+
+// A signed, unexpired JWT only ever proved who someone was *when it was
+// issued* - every plain HTTP route just checked the signature and moved on,
+// so a player banned mid-session (their token has up to 14 days left, see
+// issueSessionToken) could keep shipping, buying, voting, uploading, etc.
+// through every route that never independently re-checked ban status. The
+// WebSocket path already re-checks (activeBan at connect, sweepBans while
+// connected) - this brings HTTP requests to the same standard, in one place
+// instead of a bespoke check bolted onto dozens of routes.
+//
+// A short in-memory cache keeps this from adding a DB round-trip to every
+// single request; a newly-banned player can make a few more requests within
+// the cache window, same trade-off sweepBans already makes on the WS side.
+const BAN_CACHE_TTL_MS = 30_000;
+const banCache = new Map<string, { banned: boolean; at: number }>();
+
+async function isCurrentlyBanned(userId: string): Promise<boolean> {
+  const cached = banCache.get(userId);
+  const now = Date.now();
+  if (cached && now - cached.at < BAN_CACHE_TTL_MS) return cached.banned;
+  const banned = (await activeBan(userId)) !== null;
+  banCache.set(userId, { banned, at: now });
+  return banned;
+}
+
+export interface EnforceActiveBansDeps {
+  // Overridable for tests only, so this doesn't need a live "bans" table to
+  // exercise the request-handling logic - production always uses the real,
+  // cached activeBan check above.
+  isBanned?: (userId: string) => Promise<boolean>;
+  verify?: (token: string) => ReturnType<typeof verifySessionToken>;
+}
+
+// Express middleware, mounted globally in index.ts. Reads the same
+// `?token=` every route already reads; a request with no token, or one that
+// fails signature/expiry verification, is left untouched - that's the
+// existing per-route "not authenticated" handling's job, not this
+// middleware's. This only ever acts on a token that verifies successfully
+// but names a currently-banned user, which every route handler skips being
+// reached for entirely.
+export function enforceActiveBans(deps: EnforceActiveBansDeps = {}) {
+  const isBanned = deps.isBanned ?? isCurrentlyBanned;
+  const verify = deps.verify ?? verifySessionToken;
+  return async (
+    req: import("express").Request,
+    res: import("express").Response,
+    next: import("express").NextFunction,
+  ): Promise<void> => {
+    const token = typeof req.query.token === "string" ? req.query.token : "";
+    if (!token) return next();
+    const session = verify(token);
+    if (!session) return next();
+    if (await isBanned(session.userId)) {
+      res.status(403).json({ ok: false, error: "banned" });
+      return;
+    }
+    next();
+  };
 }
