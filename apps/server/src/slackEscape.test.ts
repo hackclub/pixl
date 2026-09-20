@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { escapeMrkdwn } from "./slackEscape.js";
+import { escapeMrkdwn, safeHttpUrl, slackLinkUrl } from "./slackEscape.js";
 
 // F-7: staff-facing Slack messages (reports, ship alerts, ticket cards)
 // interpolate player-controlled text (report reasons, project names/
@@ -32,5 +32,37 @@ describe("escapeMrkdwn (F-7 Slack mrkdwn injection)", () => {
 
   test("ordinary text with no mrkdwn syntax passes through unchanged", () => {
     expect(escapeMrkdwn("my cool project")).toBe("my cool project");
+  });
+});
+
+describe("slackLinkUrl", () => {
+  test("keeps a normal URL and escapes only the ampersand", () => {
+    expect(slackLinkUrl("https://github.com/a/b?x=1&y=2")).toBe("https://github.com/a/b?x=1&amp;y=2");
+  });
+
+  test("never emits link delimiters", () => {
+    for (const raw of [
+      "https://e.test/a><!channel>",
+      "https://e.test/a|b",
+      "https://e.test/?q=<x>#<y>",
+      "https://us<er@e.test/",
+    ]) {
+      expect(slackLinkUrl(raw)).not.toMatch(/[<>|]/);
+    }
+  });
+
+  test("rejects non-http(s) and unparseable values", () => {
+    expect(slackLinkUrl("javascript:alert(1)")).toBeNull();
+    expect(slackLinkUrl("data:text/html,x")).toBeNull();
+    expect(slackLinkUrl("not a url")).toBeNull();
+    expect(slackLinkUrl("")).toBeNull();
+    expect(slackLinkUrl(null)).toBeNull();
+  });
+});
+
+describe("safeHttpUrl", () => {
+  test("normalizes valid http(s) URLs and rejects others", () => {
+    expect(safeHttpUrl("https://e.test/a b")).toBe("https://e.test/a%20b");
+    expect(safeHttpUrl("ftp://e.test/")).toBeNull();
   });
 });

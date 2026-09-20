@@ -72,3 +72,77 @@ describe("postShipToSlack (F-7 Slack mrkdwn injection)", () => {
     expect(blocksJson).toContain("a drawing app");
   });
 });
+
+describe("postShipToSlack (Slack link injection through URL fields)", () => {
+  const attack = "https://example.test/path><!channel><https://evil.test|Open review";
+  const project = (over: Record<string, string | null>) => ({
+    id: 9,
+    name: "Game",
+    description: "d",
+    image_url: null,
+    repo_url: null,
+    demo_url: null,
+    ...over,
+  });
+
+  test("a demo URL cannot break out of the link or forge a second one", async () => {
+    process.env.SLACK_BOT_TOKEN = "xoxb-test";
+    const capture = captureSentBody();
+    await postShipToSlack(project({ demo_url: attack }), "U123", 3600, false);
+    const json = JSON.stringify(capture.body()?.blocks);
+    expect(json).not.toContain("<!channel>");
+    expect(json).not.toContain("<https://evil.test");
+    const fields = (capture.body()?.blocks as { fields?: { text: string }[] }[]).find((b) => b.fields)!.fields!;
+    const demo = fields.find((f) => f.text.startsWith("*Demo URL:*"))!.text;
+    expect(demo.match(/</g)).toHaveLength(1);
+    expect(demo.match(/>/g)).toHaveLength(1);
+    expect(demo.match(/\|/g)).toHaveLength(1);
+  });
+
+  test("a repo URL cannot break out of the link either", async () => {
+    process.env.SLACK_BOT_TOKEN = "xoxb-test";
+    const capture = captureSentBody();
+    await postShipToSlack(project({ repo_url: attack }), "U123", 3600, false);
+    const json = JSON.stringify(capture.body()?.blocks);
+    expect(json).not.toContain("<!channel>");
+    expect(json).not.toContain("<https://evil.test");
+  });
+
+  test("the button URL is normalized and cannot carry Slack syntax", async () => {
+    process.env.SLACK_BOT_TOKEN = "xoxb-test";
+    const capture = captureSentBody();
+    await postShipToSlack(project({ demo_url: attack }), "U123", 3600, false);
+    const actions = (capture.body()?.blocks as { elements?: { url?: string }[] }[]).find((b) => b.elements)!.elements!;
+    for (const el of actions) expect(el.url).not.toMatch(/[<>]/);
+  });
+
+  test("a non-http URL is not linked", async () => {
+    process.env.SLACK_BOT_TOKEN = "xoxb-test";
+    const capture = captureSentBody();
+    await postShipToSlack(project({ repo_url: "javascript:alert(1)", demo_url: "not a url" }), "U123", 3600, false);
+    const json = JSON.stringify(capture.body()?.blocks);
+    expect(json).not.toContain("javascript:");
+    expect(json).toContain("Invalid link");
+  });
+
+  test("legitimate URLs still render as links", async () => {
+    process.env.SLACK_BOT_TOKEN = "xoxb-test";
+    const capture = captureSentBody();
+    await postShipToSlack(
+      project({ repo_url: "https://github.com/a/b?tab=readme&x=1", demo_url: "https://demo.example.test/play" }),
+      "U123",
+      3600,
+      false,
+    );
+    const json = JSON.stringify(capture.body()?.blocks);
+    expect(json).toContain("<https://github.com/a/b?tab=readme&amp;x=1|Open repo>");
+    expect(json).toContain("<https://demo.example.test/play|Open demo>");
+  });
+
+  test("an owner id that is not a Slack id is not turned into a mention", async () => {
+    process.env.SLACK_BOT_TOKEN = "xoxb-test";
+    const capture = captureSentBody();
+    await postShipToSlack(project({}), "U1|<!channel>", 3600, false);
+    expect(JSON.stringify(capture.body()?.blocks)).not.toContain("<!channel>");
+  });
+});
