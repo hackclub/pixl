@@ -75,11 +75,13 @@ function mockUsersTable(initialRows: Record<string, unknown>[] = []) {
   const realFrom = db.from;
   const rows = [...initialRows];
   const inserted: Record<string, unknown>[] = [];
+  const updates: Record<string, unknown>[] = [];
   let nextId = 1;
 
   function usersChain() {
     let filters: Record<string, unknown> = {};
     let insertPayload: Record<string, unknown> | null = null;
+    let updatePayload: Record<string, unknown> | null = null;
     const chain: Record<string, unknown> = {
       select: () => chain,
       eq: (col: string, val: unknown) => {
@@ -93,13 +95,16 @@ function mockUsersTable(initialRows: Record<string, unknown>[] = []) {
         insertPayload = row;
         return chain;
       },
-      // The existing-user branch fires a fire-and-forget backfill update
-      // (slack_id/email/name sync) - not under test here, just needs to
-      // resolve cleanly instead of throwing on a missing chain method.
-      update: () => chain,
+      update: (payload: Record<string, unknown>) => {
+        updatePayload = payload;
+        return chain;
+      },
       then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) => {
         let result: { data: unknown; error: unknown };
-        if (insertPayload) {
+        if (updatePayload) {
+          updates.push(updatePayload);
+          result = { data: null, error: null };
+        } else if (insertPayload) {
           const row = { id: `user-${nextId++}`, ...insertPayload };
           rows.push(row);
           inserted.push(row);
@@ -123,6 +128,7 @@ function mockUsersTable(initialRows: Record<string, unknown>[] = []) {
 
   return {
     insertedRows: () => inserted,
+    updatedRows: () => updates,
     restore: () => {
       db.from = realFrom;
     },
@@ -265,6 +271,151 @@ describe("GET /auth/hackclub/callback", () => {
       users.restore();
       hca.restore();
       await app.close();
+    }
+  });
+});
+
+async function loginWith(identity: Record<string, unknown>, existingRows: Record<string, unknown>[] = []) {
+  const users = mockUsersTable(existingRows);
+  const hca = mockHcaFetch(identity);
+  const app = await startTestApp();
+  try {
+    const res = await driveHcaCallback(app.baseUrl);
+    return {
+      status: res.status,
+      body: res.status === 403 ? await res.text() : "",
+      location: res.headers.get("location"),
+      inserted: users.insertedRows(),
+      updated: users.updatedRows(),
+    };
+  } finally {
+    users.restore();
+    hca.restore();
+    await app.close();
+  }
+}
+
+describe("GET /auth/hackclub/callback -> HCA eligibility", () => {
+  const base = { first_name: "Some", last_name: "Player" };
+
+  test("needs_submission creates an account and stores the status", async () => {
+    const r = await loginWith({ ...base, id: "hca-needs-submission", verification_status: "needs_submission" });
+    expect(r.status).toBe(302);
+    expect(r.inserted).toHaveLength(1);
+    expect(r.inserted[0]?.hca_verification_status).toBe("needs_submission");
+    expect(r.inserted[0]?.hca_ysws_eligible).toBeNull();
+  });
+
+  test("pending creates an account and stores the status", async () => {
+    const r = await loginWith({ ...base, id: "hca-pending", verification_status: "pending" });
+    expect(r.status).toBe(302);
+    expect(r.inserted).toHaveLength(1);
+    expect(r.inserted[0]?.hca_verification_status).toBe("pending");
+  });
+
+  test("verified and ysws_eligible creates an account and stores both claims", async () => {
+    const r = await loginWith({
+      ...base,
+      id: "hca-verified-eligible",
+      verification_status: "verified",
+      ysws_eligible: true,
+    });
+    expect(r.status).toBe(302);
+    expect(r.inserted).toHaveLength(1);
+    expect(r.inserted[0]?.hca_verification_status).toBe("verified");
+    expect(r.inserted[0]?.hca_ysws_eligible).toBe(true);
+  });
+
+  test("verified but not ysws_eligible is rejected with no account", async () => {
+    const r = await loginWith({
+      ...base,
+      id: "hca-verified-not-eligible",
+      verification_status: "verified",
+      ysws_eligible: false,
+    });
+    expect(r.status).toBe(403);
+    expect(r.body).toContain("isn't eligible");
+    expect(r.inserted).toHaveLength(0);
+  });
+
+  test("verified with no ysws_eligible claim is rejected with no account", async () => {
+    const r = await loginWith({ ...base, id: "hca-verified-no-claim", verification_status: "verified" });
+    expect(r.status).toBe(403);
+    expect(r.inserted).toHaveLength(0);
+  });
+
+  test("ineligible is rejected with no account", async () => {
+    const r = await loginWith({ ...base, id: "hca-ineligible", verification_status: "ineligible" });
+    expect(r.status).toBe(403);
+    expect(r.body).toContain("isn't eligible");
+    expect(r.inserted).toHaveLength(0);
+  });
+
+  test("a missing status still creates an account, with no state stored", async () => {
+    const r = await loginWith({ ...base, id: "hca-no-status" });
+    expect(r.status).toBe(302);
+    expect(r.inserted).toHaveLength(1);
+    expect(r.inserted[0]).not.toHaveProperty("hca_verification_status");
+    expect(r.inserted[0]).not.toHaveProperty("hca_ysws_eligible");
+  });
+
+  test("an existing user with an ineligible status still logs in and their state is refreshed", async () => {
+    const r = await loginWith(
+      { ...base, id: "hca-existing-ineligible", verification_status: "ineligible", ysws_eligible: false },
+      [
+        {
+          id: "existing-user-id",
+          oauth_provider: "hackclub",
+          oauth_id: "hca-existing-ineligible",
+          display_name: "Returning Player",
+          real_name: "Returning Player",
+          avatar_url: "https://example.com/avatar.png",
+        },
+      ],
+    );
+    expect(r.status).toBe(302);
+    expect(new URL(r.location!).searchParams.get("token")).toBeTruthy();
+    expect(r.inserted).toHaveLength(0);
+    const refresh = r.updated.find((u) => "hca_verification_status" in u);
+    expect(refresh?.hca_verification_status).toBe("ineligible");
+    expect(refresh?.hca_ysws_eligible).toBe(false);
+  });
+
+  test("an existing user picks up a newly verified state on login", async () => {
+    const r = await loginWith(
+      { ...base, id: "hca-existing-verified", verification_status: "verified", ysws_eligible: true },
+      [
+        {
+          id: "existing-user-id",
+          oauth_provider: "hackclub",
+          oauth_id: "hca-existing-verified",
+          display_name: "Returning Player",
+          real_name: "Returning Player",
+          avatar_url: "https://example.com/avatar.png",
+        },
+      ],
+    );
+    expect(r.status).toBe(302);
+    const refresh = r.updated.find((u) => "hca_verification_status" in u);
+    expect(refresh?.hca_verification_status).toBe("verified");
+    expect(refresh?.hca_ysws_eligible).toBe(true);
+  });
+
+  test("an existing user's stored state is not wiped when HCA sends no status", async () => {
+    const r = await loginWith({ ...base, id: "hca-existing-no-status" }, [
+      {
+        id: "existing-user-id",
+        oauth_provider: "hackclub",
+        oauth_id: "hca-existing-no-status",
+        display_name: "Returning Player",
+        real_name: "Returning Player",
+        avatar_url: "https://example.com/avatar.png",
+      },
+    ]);
+    expect(r.status).toBe(302);
+    for (const u of r.updated) {
+      expect(u).not.toHaveProperty("hca_verification_status");
+      expect(u).not.toHaveProperty("hca_ysws_eligible");
     }
   });
 });
