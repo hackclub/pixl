@@ -170,7 +170,12 @@ describe("GET /auth/hackclub/callback", () => {
       real_name: "Race Winner",
     };
     const race = mockUsersRace(winnerRow);
-    const hca = mockHcaFetch({ id: "hca-race-identity", first_name: "Race", last_name: "Winner" });
+    const hca = mockHcaFetch({
+      id: "hca-race-identity",
+      first_name: "Race",
+      last_name: "Winner",
+      verification_status: "verified",
+    });
     const app = await startTestApp();
     try {
       const callbackRes = await driveHcaCallback(app.baseUrl);
@@ -199,7 +204,12 @@ describe("GET /auth/hackclub/callback", () => {
       { id: "should-not-be-used" },
       "users_referral_code_key",
     );
-    const hca = mockHcaFetch({ id: "hca-unrelated-conflict", first_name: "Some", last_name: "Body" });
+    const hca = mockHcaFetch({
+      id: "hca-unrelated-conflict",
+      first_name: "Some",
+      last_name: "Body",
+      verification_status: "verified",
+    });
     const app = await startTestApp();
     try {
       const callbackRes = await driveHcaCallback(app.baseUrl);
@@ -216,7 +226,12 @@ describe("GET /auth/hackclub/callback", () => {
 
   test("a brand new HCA identity creates exactly one account and is flagged as a new signup", async () => {
     const users = mockUsersTable([]);
-    const hca = mockHcaFetch({ id: "hca-fresh-identity", first_name: "Fresh", last_name: "User" });
+    const hca = mockHcaFetch({
+      id: "hca-fresh-identity",
+      first_name: "Fresh",
+      last_name: "User",
+      verification_status: "verified",
+    });
     const app = await startTestApp();
     try {
       const callbackRes = await driveHcaCallback(app.baseUrl);
@@ -270,9 +285,10 @@ describe("GET /auth/hackclub/callback", () => {
 });
 
 // HCA's own YSWS verification review (auth/routes/auth.ts's
-// HcaVerificationStatus) gates brand-new signups only: "ineligible" is HCA's
-// explicit rejection, every other status (or a missing field) still signs up
-// as before.
+// HcaVerificationStatus) gates brand-new signups only: a successful OAuth
+// round trip alone is never treated as identity verification. Only the
+// explicit "verified" outcome creates an account; pending, needs_submission,
+// ineligible, and a missing field all fail closed.
 describe("GET /auth/hackclub/callback -> HCA verification_status admission", () => {
   test("verified creates a new account", async () => {
     const users = mockUsersTable([]);
@@ -295,7 +311,7 @@ describe("GET /auth/hackclub/callback -> HCA verification_status admission", () 
     }
   });
 
-  test("pending still creates a new account", async () => {
+  test("pending is rejected and never creates an account", async () => {
     const users = mockUsersTable([]);
     const hca = mockHcaFetch({
       id: "hca-pending",
@@ -306,9 +322,10 @@ describe("GET /auth/hackclub/callback -> HCA verification_status admission", () 
     const app = await startTestApp();
     try {
       const callbackRes = await driveHcaCallback(app.baseUrl);
-      expect(callbackRes.status).toBe(302);
-      expect(users.insertedRows()).toHaveLength(1);
-      expect(users.insertedRows()[0]?.oauth_id).toBe("hca-pending");
+      expect(callbackRes.status).toBe(403);
+      const body = await callbackRes.text();
+      expect(body).toContain("isn't verified yet");
+      expect(users.insertedRows()).toHaveLength(0);
     } finally {
       users.restore();
       hca.restore();
@@ -316,7 +333,7 @@ describe("GET /auth/hackclub/callback -> HCA verification_status admission", () 
     }
   });
 
-  test("needs_submission still creates a new account", async () => {
+  test("needs_submission is rejected and never creates an account", async () => {
     const users = mockUsersTable([]);
     const hca = mockHcaFetch({
       id: "hca-needs-submission",
@@ -327,9 +344,10 @@ describe("GET /auth/hackclub/callback -> HCA verification_status admission", () 
     const app = await startTestApp();
     try {
       const callbackRes = await driveHcaCallback(app.baseUrl);
-      expect(callbackRes.status).toBe(302);
-      expect(users.insertedRows()).toHaveLength(1);
-      expect(users.insertedRows()[0]?.oauth_id).toBe("hca-needs-submission");
+      expect(callbackRes.status).toBe(403);
+      const body = await callbackRes.text();
+      expect(body).toContain("isn't verified yet");
+      expect(users.insertedRows()).toHaveLength(0);
     } finally {
       users.restore();
       hca.restore();
@@ -350,7 +368,7 @@ describe("GET /auth/hackclub/callback -> HCA verification_status admission", () 
       const callbackRes = await driveHcaCallback(app.baseUrl);
       expect(callbackRes.status).toBe(403);
       const body = await callbackRes.text();
-      expect(body).toContain("isn't eligible");
+      expect(body).toContain("ineligible");
       expect(users.insertedRows()).toHaveLength(0);
     } finally {
       users.restore();
@@ -359,14 +377,16 @@ describe("GET /auth/hackclub/callback -> HCA verification_status admission", () 
     }
   });
 
-  test("a missing verification_status field still creates a new account (fails open)", async () => {
+  test("a missing verification_status field is rejected and never creates an account (fails closed)", async () => {
     const users = mockUsersTable([]);
     const hca = mockHcaFetch({ id: "hca-no-status", first_name: "No", last_name: "Status" });
     const app = await startTestApp();
     try {
       const callbackRes = await driveHcaCallback(app.baseUrl);
-      expect(callbackRes.status).toBe(302);
-      expect(users.insertedRows()).toHaveLength(1);
+      expect(callbackRes.status).toBe(403);
+      const body = await callbackRes.text();
+      expect(body).toContain("isn't verified yet");
+      expect(users.insertedRows()).toHaveLength(0);
     } finally {
       users.restore();
       hca.restore();
@@ -417,7 +437,12 @@ describe("GET /auth/hackclub/callback -> new signup display_name validation", ()
 
   test("a normal HCA name is stored as-is", async () => {
     const users = mockUsersTable([]);
-    const hca = mockHcaFetch({ id: "hca-name-ok", first_name: "Ada", last_name: "Lovelace" });
+    const hca = mockHcaFetch({
+      id: "hca-name-ok",
+      first_name: "Ada",
+      last_name: "Lovelace",
+      verification_status: "verified",
+    });
     const app = await startTestApp();
     try {
       await driveHcaCallback(app.baseUrl);
@@ -431,7 +456,11 @@ describe("GET /auth/hackclub/callback -> new signup display_name validation", ()
 
   test("a <script> tag in the HCA name never reaches display_name", async () => {
     const users = mockUsersTable([]);
-    const hca = mockHcaFetch({ id: "hca-name-xss", first_name: "<script>alert(1)</script>" });
+    const hca = mockHcaFetch({
+      id: "hca-name-xss",
+      first_name: "<script>alert(1)</script>",
+      verification_status: "verified",
+    });
     const app = await startTestApp();
     try {
       await driveHcaCallback(app.baseUrl);
@@ -467,7 +496,11 @@ describe("GET /auth/hackclub/callback -> new signup display_name validation", ()
       if (href.includes("/api/v1/me")) {
         return new Response(
           JSON.stringify({
-            identity: { id: "hca-slack-nasty", slack_id: "U999NASTY" },
+            identity: {
+              id: "hca-slack-nasty",
+              slack_id: "U999NASTY",
+              verification_status: "verified",
+            },
             scopes: [],
           }),
           { status: 200 },
@@ -502,6 +535,7 @@ describe("GET /auth/hackclub/callback -> new signup display_name validation", ()
       id: "hca-name-long",
       first_name: "Reallylongfirstnamehere",
       last_name: "AndAnEvenLongerLastName",
+      verification_status: "verified",
     });
     const app = await startTestApp();
     try {
@@ -518,7 +552,12 @@ describe("GET /auth/hackclub/callback -> new signup display_name validation", ()
 
   test("a valid Unicode name is stored as-is", async () => {
     const users = mockUsersTable([]);
-    const hca = mockHcaFetch({ id: "hca-name-unicode", first_name: "José", last_name: "García" });
+    const hca = mockHcaFetch({
+      id: "hca-name-unicode",
+      first_name: "José",
+      last_name: "García",
+      verification_status: "verified",
+    });
     const app = await startTestApp();
     try {
       await driveHcaCallback(app.baseUrl);
@@ -532,7 +571,11 @@ describe("GET /auth/hackclub/callback -> new signup display_name validation", ()
 
   test("a blocked word in the HCA name falls back to the generated placeholder", async () => {
     const users = mockUsersTable([]);
-    const hca = mockHcaFetch({ id: "hca-name-blocked", first_name: "idiot" });
+    const hca = mockHcaFetch({
+      id: "hca-name-blocked",
+      first_name: "idiot",
+      verification_status: "verified",
+    });
     const app = await startTestApp();
     try {
       await driveHcaCallback(app.baseUrl);
@@ -555,7 +598,12 @@ describe("GET /auth/hackclub/callback -> new signup display_name validation", ()
 describe("GET /auth/hackclub -> callback (F-8 login nonce round-trip)", () => {
   test("a nonce passed to /auth/hackclub comes back as ln= on the final redirect", async () => {
     const users = mockUsersTable([]);
-    const hca = mockHcaFetch({ id: "hca-nonce-identity", first_name: "Nonce", last_name: "Tester" });
+    const hca = mockHcaFetch({
+      id: "hca-nonce-identity",
+      first_name: "Nonce",
+      last_name: "Tester",
+      verification_status: "verified",
+    });
     const app = await startTestApp();
     try {
       const callbackRes = await driveHcaCallback(app.baseUrl, "?nonce=abc123def456");
@@ -572,7 +620,12 @@ describe("GET /auth/hackclub -> callback (F-8 login nonce round-trip)", () => {
 
   test("no nonce means no ln= on the final redirect (the Godot client's flow, unaffected)", async () => {
     const users = mockUsersTable([]);
-    const hca = mockHcaFetch({ id: "hca-no-nonce-identity", first_name: "No", last_name: "Nonce" });
+    const hca = mockHcaFetch({
+      id: "hca-no-nonce-identity",
+      first_name: "No",
+      last_name: "Nonce",
+      verification_status: "verified",
+    });
     const app = await startTestApp();
     try {
       const callbackRes = await driveHcaCallback(app.baseUrl);

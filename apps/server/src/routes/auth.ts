@@ -543,26 +543,22 @@ router.get("/auth/hackclub/callback", async (req, res) => {
     if (identity.slack_id && !(existing as { avatar_url?: string | null }).avatar_url)
       void saveSlackAvatar(userId, identity.slack_id);
   } else {
-    // Only gates brand-new accounts. HCA's own verification review already
-    // rejected this identity for YSWS ("ineligible" is HCA's explicit
-    // negative outcome, see HcaVerificationStatus above) , handing out a
-    // fresh Pixl account anyway would let a rejected identity back in
-    // through the side door. Every other status (verified/pending/
-    // needs_submission), and a missing field entirely, still signs up as
-    // before , HCA verification is a separate, often slower, opt-in process
-    // most new players haven't finished yet, and PIXL has never gated
-    // account creation on it. Existing accounts are untouched either way,
-    // this whole branch only runs when no users row matched above.
-    if (identity.verification_status === "ineligible") {
-      return res
-        .status(403)
-        .send(
-          loginErrorPage(
-            "This Hack Club account isn't eligible for Pixl.",
-            "Hack Club Auth marked this identity as ineligible, so a new Pixl account can't be created. If you think this is a mistake, reach out to the Pixl team.",
-            "/auth/hackclub",
-          ),
-        );
+    // Only gates brand-new accounts, existing rows are untouched (this whole
+    // branch only runs when no users row matched above). A successful HCA
+    // OAuth round trip only proves the player has a Hack Club account, not
+    // that HCA has verified their identity , that's a separate review HCA
+    // itself tracks via verification_status. Brand-new signup requires the
+    // explicit "verified" outcome; pending/needs_submission/ineligible, and a
+    // missing field (scope not granted, HCA outage, etc.), all fail closed
+    // rather than quietly treating "we don't know" as good enough to hand
+    // out a new account.
+    if (identity.verification_status !== "verified") {
+      const heading = "This Hack Club account isn't verified yet.";
+      const detail =
+        identity.verification_status === "ineligible"
+          ? "Hack Club Auth marked this identity as ineligible, so a new Pixl account can't be created. If you think this is a mistake, reach out to the Pixl team."
+          : "Hack Club Auth needs to verify this identity before a new Pixl account can be created. Finish verification on Hack Club Auth, then log back in.";
+      return res.status(403).send(loginErrorPage(heading, detail, "/auth/hackclub"));
     }
 
     const { data: created, error: insertError } = await supabase
