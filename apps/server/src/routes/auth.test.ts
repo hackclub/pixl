@@ -151,8 +151,8 @@ function mockHcaFetch(identity: Record<string, unknown>) {
   };
 }
 
-async function driveHcaCallback(baseUrl: string) {
-  const startRes = await fetch(`${baseUrl}/auth/hackclub`, { redirect: "manual" });
+async function driveHcaCallback(baseUrl: string, startQuery = "") {
+  const startRes = await fetch(`${baseUrl}/auth/hackclub${startQuery}`, { redirect: "manual" });
   const location = startRes.headers.get("location")!;
   const state = new URL(location).searchParams.get("state")!;
   return fetch(`${baseUrl}/auth/hackclub/callback?code=fake-code&state=${state}`, {
@@ -261,6 +261,47 @@ describe("GET /auth/hackclub/callback", () => {
       expect(redirectTarget.searchParams.get("new")).not.toBe("1");
       // No new row was ever created for a login that already had one.
       expect(users.insertedRows()).toHaveLength(0);
+    } finally {
+      users.restore();
+      hca.restore();
+      await app.close();
+    }
+  });
+});
+
+// F-8: apps/web-shell's proxy.ts must be able to tell a genuine login
+// round trip apart from an arbitrary ?token= on a link. It does that by
+// requiring ?ln= to match a cookie it set itself before the browser ever
+// left for this flow - this only proves this server's half: a nonce handed
+// to /auth/hackclub comes back unchanged on the callback's final redirect.
+describe("GET /auth/hackclub -> callback (F-8 login nonce round-trip)", () => {
+  test("a nonce passed to /auth/hackclub comes back as ln= on the final redirect", async () => {
+    const users = mockUsersTable([]);
+    const hca = mockHcaFetch({ id: "hca-nonce-identity", first_name: "Nonce", last_name: "Tester" });
+    const app = await startTestApp();
+    try {
+      const callbackRes = await driveHcaCallback(app.baseUrl, "?nonce=abc123def456");
+
+      expect(callbackRes.status).toBe(302);
+      const redirectTarget = new URL(callbackRes.headers.get("location")!);
+      expect(redirectTarget.searchParams.get("ln")).toBe("abc123def456");
+    } finally {
+      users.restore();
+      hca.restore();
+      await app.close();
+    }
+  });
+
+  test("no nonce means no ln= on the final redirect (the Godot client's flow, unaffected)", async () => {
+    const users = mockUsersTable([]);
+    const hca = mockHcaFetch({ id: "hca-no-nonce-identity", first_name: "No", last_name: "Nonce" });
+    const app = await startTestApp();
+    try {
+      const callbackRes = await driveHcaCallback(app.baseUrl);
+
+      expect(callbackRes.status).toBe(302);
+      const redirectTarget = new URL(callbackRes.headers.get("location")!);
+      expect(redirectTarget.searchParams.has("ln")).toBe(false);
     } finally {
       users.restore();
       hca.restore();
