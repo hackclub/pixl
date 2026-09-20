@@ -359,9 +359,9 @@ export interface BanRow {
   created_at: string;
 }
 
-// Returns the active ban for a user, or null. A ban is active while it hasn't
-// been lifted and either never expires or expires in the future.
-export async function activeBan(userId: string): Promise<BanRow | null> {
+export type BanLookup = { ok: true; ban: BanRow | null } | { ok: false };
+
+export async function lookupActiveBan(userId: string): Promise<BanLookup> {
   const { data, error } = await supabase
     .from("bans")
     .select("*")
@@ -372,9 +372,16 @@ export async function activeBan(userId: string): Promise<BanRow | null> {
     .limit(1);
   if (error) {
     console.error("Failed to check bans", error);
-    return null;
+    return { ok: false };
   }
-  return (data && (data[0] as BanRow)) ?? null;
+  return { ok: true, ban: (data && (data[0] as BanRow)) ?? null };
+}
+
+// Returns the active ban for a user, or null. A ban is active while it hasn't
+// been lifted and either never expires or expires in the future.
+export async function activeBan(userId: string): Promise<BanRow | null> {
+  const result = await lookupActiveBan(userId);
+  return result.ok ? result.ban : null;
 }
 
 // A signed, unexpired JWT only ever proved who someone was *when it was
@@ -389,23 +396,39 @@ export async function activeBan(userId: string): Promise<BanRow | null> {
 // A short in-memory cache keeps this from adding a DB round-trip to every
 // single request; a newly-banned player can make a few more requests within
 // the cache window, same trade-off sweepBans already makes on the WS side.
+// A failed lookup is never cached as "not banned".
 const BAN_CACHE_TTL_MS = 30_000;
-const banCache = new Map<string, { banned: boolean; at: number }>();
+const BAN_CACHE_MAX = 50_000;
 
-async function isCurrentlyBanned(userId: string): Promise<boolean> {
-  const cached = banCache.get(userId);
-  const now = Date.now();
-  if (cached && now - cached.at < BAN_CACHE_TTL_MS) return cached.banned;
-  const banned = (await activeBan(userId)) !== null;
-  banCache.set(userId, { banned, at: now });
-  return banned;
+export type BanState = "banned" | "clear" | "unknown";
+
+export function createBanStateCache(
+  lookup: (userId: string) => Promise<BanState>,
+  ttlMs = BAN_CACHE_TTL_MS,
+  now: () => number = Date.now,
+) {
+  const cache = new Map<string, { banned: boolean; at: number }>();
+  return async function banState(userId: string): Promise<BanState> {
+    const cached = cache.get(userId);
+    if (cached && now() - cached.at < ttlMs) return cached.banned ? "banned" : "clear";
+    const fresh = await lookup(userId);
+    if (fresh === "unknown") return cached?.banned ? "banned" : "unknown";
+    if (cache.size >= BAN_CACHE_MAX) {
+      for (const [id, entry] of cache) if (now() - entry.at >= ttlMs) cache.delete(id);
+    }
+    cache.set(userId, { banned: fresh === "banned", at: now() });
+    return fresh;
+  };
 }
 
+const currentBanState = createBanStateCache(async (userId) => {
+  const result = await lookupActiveBan(userId);
+  if (!result.ok) return "unknown";
+  return result.ban ? "banned" : "clear";
+});
+
 export interface EnforceActiveBansDeps {
-  // Overridable for tests only, so this doesn't need a live "bans" table to
-  // exercise the request-handling logic - production always uses the real,
-  // cached activeBan check above.
-  isBanned?: (userId: string) => Promise<boolean>;
+  banState?: (userId: string) => Promise<BanState>;
   verify?: (token: string) => ReturnType<typeof verifySessionToken>;
 }
 
@@ -417,7 +440,7 @@ export interface EnforceActiveBansDeps {
 // but names a currently-banned user, which every route handler skips being
 // reached for entirely.
 export function enforceActiveBans(deps: EnforceActiveBansDeps = {}) {
-  const isBanned = deps.isBanned ?? isCurrentlyBanned;
+  const banState = deps.banState ?? currentBanState;
   const verify = deps.verify ?? verifySessionToken;
   return async (
     req: import("express").Request,
@@ -428,8 +451,19 @@ export function enforceActiveBans(deps: EnforceActiveBansDeps = {}) {
     if (!token) return next();
     const session = verify(token);
     if (!session) return next();
-    if (await isBanned(session.userId)) {
+    let state: BanState;
+    try {
+      state = await banState(session.userId);
+    } catch {
+      state = "unknown";
+    }
+    if (state === "banned") {
       res.status(403).json({ ok: false, error: "banned" });
+      return;
+    }
+    if (state === "unknown" && req.method !== "GET" && req.method !== "HEAD") {
+      res.setHeader("Retry-After", "5");
+      res.status(503).json({ ok: false, error: "ban_check_unavailable" });
       return;
     }
     next();
