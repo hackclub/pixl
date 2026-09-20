@@ -102,9 +102,6 @@ function isTrustedOrigin(req: import("express").Request): boolean {
   }
 }
 
-// One entry per (form, slackId) - a code is only ever good for the form it
-// was requested for. See formVerification.ts for the single-use/expiry/
-// attempt-cap/resend-cooldown logic itself.
 const verificationStore = createVerificationStore();
 
 // Keyed by IP, separate from the per-slackId resend cooldown below - stops
@@ -131,12 +128,16 @@ router.post("/api/forms/:formKey/request-code", codeRequestLimiter, async (req, 
   // resend cooldown, actually issues a code and sends a DM.
   const slackUser = await lookupSlackUser(slackId);
   if (slackUser) {
-    const code = verificationStore.issue(key, slackUser.name);
-    if (code) {
-      void dmSlackUser(
-        slackId,
-        `Your PIXL verification code for "${formKey}" is *${code}*. It expires in 10 minutes , if you didn't request this, ignore it.`,
-      );
+    try {
+      const code = await verificationStore.issue(key, slackUser.name);
+      if (code) {
+        void dmSlackUser(
+          slackId,
+          `Your PIXL verification code for "${formKey}" is *${code}*. It expires in 10 minutes , if you didn't request this, ignore it.`,
+        );
+      }
+    } catch (err) {
+      console.error("[forms] issuing a verification code failed", (err as Error).message);
     }
   }
   res.json({ ok: true });
@@ -171,10 +172,15 @@ router.post("/api/forms/:formKey/submit", submitLimiter, async (req, res) => {
   if (!CODE_RE.test(code)) return res.status(400).json({ ok: false, error: "invalid_code" });
 
   const key = `${formKey}:${slackId}`;
-  // Captured before verify() - a successful verify consumes (deletes) the
-  // pending entry, so the name has to be read off it first.
-  const name = verificationStore.peekName(key) ?? slackId;
-  const result = verificationStore.verify(key, code);
+  let name: string;
+  let result: Awaited<ReturnType<typeof verificationStore.verify>>;
+  try {
+    name = (await verificationStore.peekName(key)) ?? slackId;
+    result = await verificationStore.verify(key, code);
+  } catch (err) {
+    console.error("[forms] verification failed", (err as Error).message);
+    return res.status(503).json({ ok: false, error: "verification_unavailable" });
+  }
   if (result === "expired_or_missing")
     return res.status(400).json({ ok: false, error: "code_expired_or_missing" });
   if (result === "too_many_attempts")
