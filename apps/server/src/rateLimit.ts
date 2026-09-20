@@ -1,10 +1,12 @@
 import type { Request, Response, NextFunction } from "express";
+import { realIpFromHeaders, rateLimitIpKey } from "./clientIp.js";
 
-// Fixed-window in-memory rate limiter keyed by IP. Relies on `trust proxy`
-// being set in index.ts so req.ip is the platform proxy's own account of the
-// client address, not a header a client can freely rewrite, never read
-// X-Forwarded-For directly here. Good enough for a single instance; swap for
-// Redis if the server ever scales horizontally.
+// Fixed-window in-memory rate limiter keyed by IP. The key prefers
+// CF-Connecting-IP (see clientIp.ts for why that's trustworthy regardless of
+// internal hop count) over Express's own `trust proxy`-derived req.ip, and
+// aggregates IPv6 to a /64 so rotating within one assigned block doesn't
+// dodge the limit. Good enough for a single instance; swap for Redis if the
+// server ever scales horizontally.
 interface Bucket {
   count: number;
   resetAt: number;
@@ -39,7 +41,8 @@ export function consumeRateLimit(opts: RateLimitOptions, key: string): number | 
 export function rateLimit(opts: RateLimitOptions) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (req.method === "OPTIONS") return next();
-    const retryAfter = consumeRateLimit(opts, opts.key?.(req) ?? req.ip ?? "unknown");
+    const ip = realIpFromHeaders(req.headers, req.ip ?? "unknown");
+    const retryAfter = consumeRateLimit(opts, opts.key?.(req) ?? rateLimitIpKey(ip));
     if (retryAfter !== null) {
       res.setHeader("Retry-After", retryAfter);
       return res.status(429).json({ ok: false, error: "rate_limited" });

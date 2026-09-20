@@ -2,6 +2,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import type { Server, IncomingMessage } from "http";
 import { verifySessionToken } from "../auth/session.js";
 import { consumeRateLimit, type RateLimitOptions } from "../rateLimit.js";
+import { realIpFromHeaders, rateLimitIpKey } from "../clientIp.js";
 import { activeBan, censorChat, recordChatViolation } from "../moderation.js";
 import { areFriends } from "../social.js";
 import { getPixoChatReply } from "../pixoChat.js";
@@ -453,22 +454,24 @@ const UPGRADE_WINDOW_MS = 60_000;
 const UPGRADE_MAX_PER_WINDOW = 30;
 const upgradeAttempts = new Map<string, number[]>();
 
-// Mirrors the Express `trust proxy: 1` setting in index.ts, this handler
-// runs on the raw http.Server 'upgrade' event, outside Express, so req.ip
-// isn't available. With exactly one trusted hop (the platform's edge/ingress
-// proxy) in front of us, the rightmost X-Forwarded-For entry is the address
-// that proxy actually saw; req.socket.remoteAddress alone would be the
-// proxy's own shared IP, and trusting the client-suppliable leftmost entry
-// would let anyone rotate it to dodge the limit entirely.
+// This handler runs on the raw http.Server 'upgrade' event, outside
+// Express, so req.ip isn't available - see clientIp.ts for why
+// CF-Connecting-IP (checked first) doesn't need to know or guess how many
+// internal hops sit behind Cloudflare. The X-Forwarded-For fallback below
+// only matters for traffic that somehow reaches the origin without going
+// through Cloudflare at all (local dev, direct origin access).
 function upgradeClientIp(req: IncomingMessage): string {
-  const fwd = req.headers["x-forwarded-for"];
-  const raw = Array.isArray(fwd) ? fwd[0] : fwd;
-  if (raw) {
-    const parts = raw.split(",").map((p) => p.trim());
-    const last = parts[parts.length - 1];
-    if (last) return last;
-  }
-  return req.socket.remoteAddress ?? "unknown";
+  const fallback = (() => {
+    const fwd = req.headers["x-forwarded-for"];
+    const raw = Array.isArray(fwd) ? fwd[0] : fwd;
+    if (raw) {
+      const parts = raw.split(",").map((p) => p.trim());
+      const last = parts[parts.length - 1];
+      if (last) return last;
+    }
+    return req.socket.remoteAddress ?? "unknown";
+  })();
+  return rateLimitIpKey(realIpFromHeaders(req.headers as Record<string, string | string[] | undefined>, fallback));
 }
 
 function upgradeRateLimited(ip: string): boolean {
@@ -480,6 +483,18 @@ function upgradeRateLimited(ip: string): boolean {
   upgradeAttempts.set(ip, arr);
   return arr.length > UPGRADE_MAX_PER_WINDOW;
 }
+
+// upgradeAttempts otherwise only ever grows: an IP that connects once and
+// never again keeps its (eventually empty) array forever. Sweep alongside
+// the same cadence as the window itself.
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, arr] of upgradeAttempts) {
+    const fresh = arr.filter((t) => now - t < UPGRADE_WINDOW_MS);
+    if (fresh.length === 0) upgradeAttempts.delete(ip);
+    else if (fresh.length !== arr.length) upgradeAttempts.set(ip, fresh);
+  }
+}, UPGRADE_WINDOW_MS).unref();
 
 export function attachWebSocketServer(httpServer: Server) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 32 * 1024 });
