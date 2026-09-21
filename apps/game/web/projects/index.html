@@ -1225,6 +1225,41 @@
         ["T3 Grid", "Multiple systems working together: backend, state, infra."],
         ["T4 Nexus", "Deep systems work: complex architecture and serious scope."],
       ].map(([name, blurb], i) => [name, `${blurb} ${RE_RATES[i]} RE per hour.`]);
+      // <hca-recheck>
+      const HCA_RECHECK_COPY = {
+        pending: {
+          title: "Still under review",
+          body: "Hack Club Auth has your verification as pending, so Pixl can't confirm it yet. Re-check once it's approved there.",
+        },
+        needs_submission: {
+          title: "Finish verifying",
+          body: "Hack Club Auth still needs you to finish identity verification. Do that at auth.hackclub.com, then re-check.",
+        },
+        unknown: {
+          title: "Verify with Hack Club Auth",
+          body: "Pixl doesn't have a verified status for your Hack Club account yet. Already verified? Re-check to pull your latest status from Hack Club Auth.",
+        },
+      };
+      const HCA_SYNCED_TOASTS = {
+        verified: ["Verified with Hack Club Auth. You can ship now.", false],
+        pending: ["Hack Club Auth still shows your verification as pending. Try again once it's approved.", true],
+        needs_submission: ["Hack Club Auth still needs you to finish verifying.", true],
+        ineligible: ["Hack Club Auth has this identity as ineligible for YSWS programs. If you think that's a mistake, reach out to the Pixl team.", true],
+        unknown: ["Hack Club Auth didn't return a verification status. Try again in a bit.", true],
+      };
+      function hcaRecheckCopy(status) {
+        return Object.hasOwn(HCA_RECHECK_COPY, status) ? HCA_RECHECK_COPY[status] : HCA_RECHECK_COPY.unknown;
+      }
+      function hcaResyncPath(returnTo) {
+        return "/auth/hackclub/resync?web_redirect=" + encodeURIComponent(returnTo);
+      }
+      function takeHcaSynced(params) {
+        const outcome = params.get("hca_synced");
+        if (outcome === null) return null;
+        params.delete("hca_synced");
+        return Object.hasOwn(HCA_SYNCED_TOASTS, outcome) ? outcome : "unknown";
+      }
+      // </hca-recheck>
       const ERRORS = {
         name_required: "Give it a name first.",
         repo_not_git: "The repo link must point to a Git repository.",
@@ -1263,7 +1298,7 @@
         trial_hours_below_minimum: "This Trial needs more tracked hours before you can ship it.",
         eligibility_attestation_required: "Confirm this isn't a school assignment or paid Hack Club work before shipping.",
         hca_verification_required:
-          "Verify your identity on Hack Club Auth before shipping. Already did? Log out and back in to refresh your status.",
+          "Verify your identity on Hack Club Auth before shipping. Already did? Re-check your status to pull it in from Hack Club Auth.",
         hca_ineligible:
           "You're not eligible to ship. Hack Club Auth has this identity as ineligible for YSWS programs. If you think that's a mistake, reach out to the Pixl team.",
         // Not shown directly , ship()'s address_required branch below offers a
@@ -3323,6 +3358,17 @@
             }
             return;
           }
+          if (r.error === "hca_verification_required") {
+            const copy = hcaRecheckCopy(r.hca_status);
+            const go = await Pixl.confirm({
+              title: copy.title,
+              body: copy.body,
+              confirmText: "Re-check status",
+              cancelText: "Not now",
+            });
+            if (go) location.href = Pixl.apiUrl(hcaResyncPath(location.href));
+            return;
+          }
           return Pixl.toast(err(r.error), true);
         }
         Pixl.toast("SHIPPED! It's in the review queue.");
@@ -4129,6 +4175,13 @@
             Pixl.toast("Couldn't reach the server.", true);
         }
         $("loading").remove();
+        const syncParams = new URLSearchParams(location.search);
+        const synced = takeHcaSynced(syncParams);
+        if (synced) {
+          const qs = syncParams.toString();
+          history.replaceState({}, "", location.pathname + (qs ? "?" + qs : "") + location.hash);
+          Pixl.toast(...HCA_SYNCED_TOASTS[synced]);
+        }
         renderHt();
         loadPendingInvites();
         renderJoinCodeBox();

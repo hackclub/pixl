@@ -36,27 +36,41 @@ export type ShipBlockCode = "hca_verification_required" | "hca_ineligible";
 export interface ShipBlock {
   error: ShipBlockCode;
   message: string;
+  status: string | null;
 }
 
-const VERIFY_BLOCK: ShipBlock = {
-  error: "hca_verification_required",
-  message:
-    "Verify your identity on Hack Club Auth before shipping. Already did? Log out and back in to refresh your status.",
-};
+const VERIFY_MESSAGE =
+  "Verify your identity on Hack Club Auth before shipping. Already did? Re-check your status to pull it in from Hack Club Auth.";
 
-const INELIGIBLE_BLOCK: ShipBlock = {
-  error: "hca_ineligible",
-  message:
-    "You're not eligible to ship. Hack Club Auth has this identity as ineligible for YSWS programs. If you think that's a mistake, reach out to the Pixl team.",
-};
+const INELIGIBLE_MESSAGE =
+  "You're not eligible to ship. Hack Club Auth has this identity as ineligible for YSWS programs. If you think that's a mistake, reach out to the Pixl team.";
 
 export function shipEligibilityBlock(row: HcaStateRow | null | undefined): ShipBlock | null {
   const status = cleanVerificationStatus(row?.hca_verification_status);
   if (status === "verified") {
-    return row?.hca_ysws_eligible === true ? null : INELIGIBLE_BLOCK;
+    return row?.hca_ysws_eligible === true
+      ? null
+      : { error: "hca_ineligible", message: INELIGIBLE_MESSAGE, status };
   }
   if (status === null || status === "needs_submission" || status === "pending") {
-    return VERIFY_BLOCK;
+    return { error: "hca_verification_required", message: VERIFY_MESSAGE, status };
   }
-  return INELIGIBLE_BLOCK;
+  return { error: "hca_ineligible", message: INELIGIBLE_MESSAGE, status };
+}
+
+export function hcaStateChanged(current: HcaStateRow | null | undefined, patch: HcaStateRow): boolean {
+  if (patch.hca_verification_status === undefined) return false;
+  return (
+    cleanVerificationStatus(current?.hca_verification_status) !== patch.hca_verification_status ||
+    cleanYswsEligible(current?.hca_ysws_eligible) !== (patch.hca_ysws_eligible ?? null)
+  );
+}
+
+export type HcaSyncOutcome = "verified" | "pending" | "needs_submission" | "ineligible" | "unknown";
+
+export function hcaSyncOutcome(row: HcaStateRow | null | undefined): HcaSyncOutcome {
+  const block = shipEligibilityBlock(row);
+  if (!block) return "verified";
+  if (block.error === "hca_ineligible") return "ineligible";
+  return block.status === "pending" || block.status === "needs_submission" ? block.status : "unknown";
 }
