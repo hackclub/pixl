@@ -1,4 +1,5 @@
 import type { Commit } from "@/lib/commits";
+import { db, type ShippedProject } from "@/lib/db";
 
 const BASE = (process.env.HACKATIME_BASE ?? "https://hackatime.hackclub.com").replace(/\/$/, "");
 
@@ -365,6 +366,59 @@ export async function fetchHackatimeReport(
     console.error("hackatime report fetch failed", (e as Error).message);
     return empty;
   }
+}
+
+// Just the numeric Hackatime user id (data.user_id on /stats - see
+// fetchHackatimeReport above), without the spans/lapses fan-out that makes
+// the full report expensive. Cheap enough to call once per row in a review
+// queue list. Empty when unavailable - never guess or fall back to a
+// different id (Slack id, Pixl user id, project id), since the whole point
+// is a link that opens the right person's real Hackatime data.
+export async function fetchHackatimeUserId(
+  slackId: string | null | undefined,
+  token: string | null,
+): Promise<string> {
+  const id = (slackId ?? "").trim();
+  if (!id) return "";
+  const headers: Record<string, string> = { Accept: "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  try {
+    const r = await fetch(`${BASE}/api/v1/users/${encodeURIComponent(id)}/stats`, {
+      headers,
+      signal: AbortSignal.timeout(10000),
+      next: { revalidate: 300 },
+    });
+    if (!r.ok) return "";
+    const data = ((await r.json()) as { data?: Record<string, unknown> }).data ?? {};
+    return data.user_id != null ? String(data.user_id) : "";
+  } catch (e) {
+    console.error("hackatime user id fetch failed", (e as Error).message);
+    return "";
+  }
+}
+
+// Batched Telescreen ids for a review queue (second-pass list pages) - one
+// token lookup across every relevant owner, then one lightweight /stats call
+// per project with linked Hackatime projects, all in parallel. Projects with
+// no linked Hackatime projects are skipped rather than making a call that
+// can never resolve to anything. Returns project id -> Hackatime user id,
+// omitting any project the id couldn't be resolved for.
+export async function hackatimeUserIdsFor(rows: ShippedProject[]): Promise<Map<number, string>> {
+  const out = new Map<number, string>();
+  const withHackatime = rows.filter((p) => p.hackatime_projects.length > 0);
+  if (withHackatime.length === 0) return out;
+  const ownerIds = [...new Set(withHackatime.map((p) => p.user_id))];
+  const { data: tokenRows } = await db.from("users").select("id, hackatime_token").in("id", ownerIds);
+  const tokenByUser = new Map(
+    (tokenRows ?? []).map((u) => [u.id as string, (u.hackatime_token as string | null) ?? null]),
+  );
+  await Promise.all(
+    withHackatime.map(async (p) => {
+      const hid = await fetchHackatimeUserId(p.users?.slack_id, tokenByUser.get(p.user_id) ?? null);
+      if (hid) out.set(p.id, hid);
+    }),
+  );
+  return out;
 }
 
 function overlap(spans: Span[], from: number, to: number): number {

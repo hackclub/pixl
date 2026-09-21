@@ -6,6 +6,7 @@ import {
   listReviewAudits,
 } from "@/lib/db";
 import { slackHandles } from "@/lib/slack";
+import { hackatimeUserIdsFor } from "@/lib/hackatime";
 import { ReviewTable } from "@/app/_components/ReviewTable";
 import { LiveReview } from "@/app/_components/LiveReview";
 import { Badge } from "@/components/ui/badge";
@@ -64,11 +65,12 @@ export default async function ReviewListPage({
   const slice = rows.slice(start, start + PER);
   // claimedBy is another reviewer's slack id, resolved through the same map
   // the maker column uses so the "being reviewed" tag can name them.
-  const [finalHandles, handles] = await Promise.all([
+  const [finalHandles, handles, finalHackatimeUserIds] = await Promise.all([
     finalRows.length
       ? slackHandles(finalRows.flatMap((p) => [p.users?.slack_id, p.claimedBy]))
       : Promise.resolve(new Map<string, string>()),
     slackHandles(slice.flatMap((p) => [p.users?.slack_id, p.claimedBy])),
+    hackatimeUserIdsFor(finalRows),
   ]);
   const sortKey = SORTS.some((s) => s.key === sort) ? sort : "oldest";
   const qp = (p: number) =>
@@ -118,6 +120,7 @@ export default async function ReviewListPage({
             <ReviewTable
               rows={finalRows}
               handles={finalHandles}
+              hackatimeUserIds={finalHackatimeUserIds}
               emptyLabel="Nothing waiting on a final pass."
             />
           </details>

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { requirePagePerm, requireGuidelinesAck } from "@/lib/guard";
 import { listSecondReviewProjects } from "@/lib/db";
 import { slackHandles } from "@/lib/slack";
+import { hackatimeUserIdsFor } from "@/lib/hackatime";
 import { ReviewTable } from "@/app/_components/ReviewTable";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +23,10 @@ export default async function SecondPassPage() {
   if (!access.canSecondPass) redirect("/review");
 
   const rows = await listSecondReviewProjects(access.session.slackId);
-  const handles = await slackHandles(rows.map((p) => p.users?.slack_id));
+  const [handles, hackatimeUserIds] = await Promise.all([
+    slackHandles(rows.map((p) => p.users?.slack_id)),
+    hackatimeUserIdsFor(rows),
+  ]);
 
   return (
     <div>
@@ -33,6 +37,7 @@ export default async function SecondPassPage() {
       <ReviewTable
         rows={rows}
         handles={handles}
+        hackatimeUserIds={hackatimeUserIds}
         emptyLabel="Nothing waiting on a final pass right now."
       />
     </div>

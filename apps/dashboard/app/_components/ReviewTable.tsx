@@ -45,10 +45,16 @@ function initials(name: string): string {
 export function ReviewTable({
   rows,
   handles,
+  hackatimeUserIds,
   emptyLabel = "Nothing here.",
 }: {
   rows: ShippedProject[];
   handles: Map<string, string>;
+  /** project id -> Hackatime user id (see hackatimeUserIdsFor in
+   * lib/hackatime.ts). Only passed by second-pass queue views - presence of
+   * this prop (not its contents) is what decides whether the Telescreen
+   * column renders at all, so a plain first-pass queue never shows it. */
+  hackatimeUserIds?: Map<number, string>;
   emptyLabel?: string;
 }) {
   const router = useRouter();
@@ -79,6 +85,11 @@ export function ReviewTable({
             {showFirstPass && (
               <TableHead className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 First-pass reviewer
+              </TableHead>
+            )}
+            {hackatimeUserIds && (
+              <TableHead className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Telescreen
               </TableHead>
             )}
             <TableHead className="px-5 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -193,6 +204,24 @@ export function ReviewTable({
                 {showFirstPass && (
                   <TableCell className="py-3.5 text-sm text-foreground/80 truncate max-w-[180px]">
                     {p.first_pass_by ? p.first_pass_by.replace(/\s*\([^)]*\)\s*$/, "") : "—"}
+                  </TableCell>
+                )}
+
+                {hackatimeUserIds && (
+                  <TableCell className="py-3.5">
+                    {hackatimeUserIds.get(p.id) ? (
+                      <a
+                        href={`https://telescreen.hackclub.com/workbench/hackatime/overview?u=${encodeURIComponent(hackatimeUserIds.get(p.id)!)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center rounded-md bg-primary px-2.5 py-1 text-xs font-semibold text-primary-foreground hover:bg-primary/80"
+                      >
+                        Telescreen
+                      </a>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
                   </TableCell>
                 )}
 
