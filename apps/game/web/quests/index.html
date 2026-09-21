@@ -117,10 +117,11 @@
   /* The baked art has "EXPERIENCE" + an empty XP-track box here (it's the
      player card's XP bar), nothing about a Trial belongs on top of that
      label, so patch it over with paper before laying the brief text down. */
-  .ticket-mask { position: absolute; left: 34px; top: 348px; width: 392px; height: 88px;
+  .ticket-mask { position: absolute; left: 34px; top: 348px; width: 392px; height: 152px;
     background: var(--panel); border: 2px solid var(--panel-2); box-sizing: border-box; }
-  .ticket-brief { position: absolute; left: 39.3px; top: 356px; width: 381.5px; height: 148px;
-    font-size: 12.5px; line-height: 1.55; color: var(--ink); overflow: hidden; }
+  .ticket-brief { position: absolute; left: 39.3px; top: 356px; width: 381.5px; height: 136px;
+    font-size: 12.5px; line-height: 1.55; color: var(--ink); overflow-x: hidden; overflow-y: auto;
+    overflow-wrap: anywhere; scrollbar-width: thin; scrollbar-color: var(--muted) transparent; }
   .ticket-brief.locked-text { color: var(--muted); font-style: italic; }
   .ticket-foot { position: absolute; left: 39.3px; top: 508.3px; width: 384px; height: 46.8px;
     display: flex; flex-direction: column; justify-content: center; gap: 4px; padding-left: 14px; box-sizing: border-box; overflow: hidden; }
