@@ -73,6 +73,7 @@ describe("POST /api/projects/:id/ship HCA gate", () => {
     const r = await ship({ hcaRow: { hca_verification_status: "needs_submission", hca_ysws_eligible: null } });
     expect(r.status).toBe(403);
     expect(r.body.error).toBe("hca_verification_required");
+    expect(r.body.hca_status).toBe("needs_submission");
     expect(String(r.body.message)).toContain("Verify your identity");
   });
 
@@ -80,13 +81,16 @@ describe("POST /api/projects/:id/ship HCA gate", () => {
     const r = await ship({ hcaRow: { hca_verification_status: "pending", hca_ysws_eligible: null } });
     expect(r.status).toBe(403);
     expect(r.body.error).toBe("hca_verification_required");
+    expect(r.body.hca_status).toBe("pending");
   });
 
-  test("an account that has never captured HCA state is told to verify and refresh", async () => {
+  test("an account that has never captured HCA state is told to verify and re-check", async () => {
     const r = await ship({ hcaRow: { hca_verification_status: null, hca_ysws_eligible: null } });
     expect(r.status).toBe(403);
     expect(r.body.error).toBe("hca_verification_required");
-    expect(String(r.body.message)).toContain("Log out and back in");
+    expect(r.body.hca_status).toBeNull();
+    expect(String(r.body.message)).toContain("Re-check");
+    expect(String(r.body.message)).not.toContain("Log out");
   });
 
   test("ineligible gets the ineligibility message", async () => {

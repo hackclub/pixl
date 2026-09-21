@@ -8,7 +8,13 @@ import { fetchSlackAvatar, fetchSlackDisplayName } from "../slackAvatar.js";
 import { enrollSlackPlayerInPixl } from "../pixlSlack.js";
 import { config } from "../config.generated.js";
 import { encryptPII } from "../crypto.js";
-import { hcaStatePatch, isSignupRejected } from "../hcaEligibility.js";
+import {
+  hcaStateChanged,
+  hcaStatePatch,
+  hcaSyncOutcome,
+  isSignupRejected,
+  type HcaStateRow,
+} from "../hcaEligibility.js";
 import { nameProblem } from "./profile.js";
 
 const router = Router();
@@ -140,7 +146,7 @@ const HCA_ADDRESS_SCOPES =
 interface PendingLogin {
   expiresAt: number;
   webRedirect?: string;
-  purpose?: "verify_address";
+  purpose?: "verify_address" | "resync_hca";
   userId?: string;
   // F-8: apps/web-shell/app/api/login/route.ts's login-nonce cookie value,
   // opaque to us - round-tripped back onto the final redirect as `ln=` so
@@ -290,8 +296,34 @@ function extractAddress(identity: HackClubMeResponse["identity"]): HcaAddressPat
   };
 }
 
-function loginErrorPage(heading: string, detail: string, retry: string): string {
-  return `<html><body style="font-family:sans-serif;text-align:center;margin-top:4rem;"><h2>${heading}</h2><p>${detail}</p><p><a href="${retry}">Try logging in again</a></p></body></html>`;
+function loginErrorPage(heading: string, detail: string, retry: string, linkText = "Try logging in again"): string {
+  return `<html><body style="font-family:sans-serif;text-align:center;margin-top:4rem;"><h2>${heading}</h2><p>${detail}</p><p><a href="${retry}">${linkText}</a></p></body></html>`;
+}
+
+function retryLoginUrl(pending: PendingLogin): string {
+  const params = new URLSearchParams();
+  if (pending.webRedirect) params.set("web_redirect", pending.webRedirect);
+  if (pending.loginNonce) params.set("nonce", pending.loginNonce);
+  return "/auth/hackclub" + (params.size ? `?${params}` : "");
+}
+
+async function persistHcaState(userId: string, patch: HcaStateRow): Promise<boolean> {
+  const { error } = await supabase.from("users").update(patch).eq("id", userId);
+  if (error) {
+    console.error("Failed to persist HCA state", userId, error.message);
+    return false;
+  }
+  console.log("[auth] stored HCA state", userId, patch.hca_verification_status, patch.hca_ysws_eligible);
+  return true;
+}
+
+function unsavedStatePage(retry: string, linkText?: string): string {
+  return loginErrorPage(
+    "Couldn't save your Hack Club Auth status",
+    "Nothing was lost. Give it a moment and try again.",
+    retry,
+    linkText,
+  );
 }
 
 router.get("/auth/hackclub", (req, res) => {
@@ -369,6 +401,39 @@ router.get("/auth/hackclub/verify-address", (req, res) => {
   res.redirect(url.toString());
 });
 
+router.get("/auth/hackclub/resync", (req, res) => {
+  const token = typeof req.query.token === "string" ? req.query.token : "";
+  const session = token ? verifySessionToken(token) : null;
+  if (!session) return res.status(401).send("Not logged in");
+
+  const requestedRedirect = req.query.web_redirect as string | undefined;
+  let webRedirect: string | null = null;
+  if (requestedRedirect) {
+    webRedirect = safeWebRedirect(requestedRedirect);
+    if (!webRedirect) {
+      console.warn("Rejected web_redirect", requestedRedirect);
+      return res.status(400).send("Invalid redirect target");
+    }
+  }
+
+  const state = crypto.randomBytes(16).toString("hex");
+  pendingLogins.set(state, {
+    expiresAt: Date.now() + PENDING_LOGIN_TTL_MS,
+    webRedirect: webRedirect ?? undefined,
+    purpose: "resync_hca",
+    userId: session.userId,
+  });
+
+  const url = new URL(`${HCA_BASE_URL}/oauth/authorize`);
+  url.searchParams.set("client_id", CLIENT_ID);
+  url.searchParams.set("redirect_uri", REDIRECT_URI);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("scope", HCA_LOGIN_SCOPES);
+  url.searchParams.set("state", state);
+
+  res.redirect(url.toString());
+});
+
 router.get("/auth/hackclub/callback", async (req, res) => {
   const code = req.query.code as string | undefined;
   const state = req.query.state as string | undefined;
@@ -403,10 +468,7 @@ router.get("/auth/hackclub/callback", async (req, res) => {
     // out a few times in a row. The code is spent either way, so the only way
     // through is a fresh login once their window clears.
     const throttled = tokenRes.status === 429 || body.includes("slow your roll");
-    const retryParams = new URLSearchParams();
-    if (webRedirect) retryParams.set("web_redirect", webRedirect);
-    if (pending.loginNonce) retryParams.set("nonce", pending.loginNonce);
-    const retry = "/auth/hackclub" + (retryParams.size ? `?${retryParams}` : "");
+    const retry = retryLoginUrl(pending);
     return res
       .status(throttled ? 429 : 502)
       .send(
@@ -433,6 +495,44 @@ router.get("/auth/hackclub/callback", async (req, res) => {
 
   const me = (await meRes.json()) as HackClubMeResponse;
   const identity = me.identity;
+
+  if (pending.purpose === "resync_hca") {
+    const back = webRedirect ?? config.urls.play;
+    const unsaved = () =>
+      res.status(503).set("Retry-After", "5").send(unsavedStatePage(back, "Back to Pixl"));
+    if (!pending.userId) return res.status(400).send("Invalid OAuth state");
+    const { data: row, error: rowError } = await supabase
+      .from("users")
+      .select("id, oauth_provider, oauth_id, hca_verification_status, hca_ysws_eligible")
+      .eq("id", pending.userId)
+      .maybeSingle();
+    if (rowError || !row) {
+      console.error("HCA resync user lookup failed", rowError?.message);
+      return unsaved();
+    }
+    // bound identity
+    if (row.oauth_provider !== "hackclub" || row.oauth_id !== identity.id) {
+      return res
+        .status(403)
+        .send(
+          loginErrorPage(
+            "That's a different Hack Club account",
+            "Sign in to Hack Club Auth with the same account you used to join Pixl, then re-check.",
+            back,
+            "Back to Pixl",
+          ),
+        );
+    }
+    const fresh = hcaStatePatch(identity);
+    if (fresh.hca_verification_status === undefined) {
+      console.warn("[auth] HCA identity has no verification_status", row.id);
+    } else if (hcaStateChanged(row as HcaStateRow, fresh) && !(await persistHcaState(row.id as string, fresh))) {
+      return unsaved();
+    }
+    const dest = new URL(back);
+    dest.searchParams.set("hca_synced", hcaSyncOutcome(fresh.hca_verification_status === undefined ? (row as HcaStateRow) : fresh));
+    return res.redirect(dest.toString());
+  }
 
   if (pending.purpose === "verify_address") {
     const addr = extractAddress(identity);
@@ -507,7 +607,13 @@ router.get("/auth/hackclub/callback", async (req, res) => {
     const existing = existingUsers[0] as UserRow;
     userId = existing.id;
     displayName = existing.display_name;
-    const patch: Record<string, string | boolean | null> = { ...hcaStatePatch(identity) };
+    const fresh = hcaStatePatch(identity);
+    if (fresh.hca_verification_status === undefined) {
+      console.warn("[auth] HCA identity has no verification_status", userId);
+    } else if (hcaStateChanged(existing as HcaStateRow, fresh) && !(await persistHcaState(userId, fresh))) {
+      return res.status(503).set("Retry-After", "5").send(unsavedStatePage(retryLoginUrl(pending)));
+    }
+    const patch: Record<string, string> = {};
     if (identity.slack_id) patch.slack_id = identity.slack_id;
     if (identity.primary_email) patch.email = identity.primary_email;
     // Keep the real name in sync every login , it's the authoritative identity the

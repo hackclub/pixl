@@ -533,7 +533,9 @@ router.post("/api/projects/:id/ship", async (req, res) => {
   }
   const hcaBlock = shipEligibilityBlock(hcaRow as HcaStateRow | null);
   if (hcaBlock)
-    return res.status(403).json({ ok: false, error: hcaBlock.error, message: hcaBlock.message });
+    return res
+      .status(403)
+      .json({ ok: false, error: hcaBlock.error, message: hcaBlock.message, hca_status: hcaBlock.status });
 
   if (!project.repo_url)
     return res.status(400).json({ ok: false, error: "repo_required" });

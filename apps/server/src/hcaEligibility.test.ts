@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { hcaStatePatch, isSignupRejected, shipEligibilityBlock } from "./hcaEligibility.js";
+import { hcaStateChanged, hcaStatePatch, hcaSyncOutcome, isSignupRejected, shipEligibilityBlock } from "./hcaEligibility.js";
 
 describe("isSignupRejected", () => {
   test.each([
@@ -58,5 +58,52 @@ describe("shipEligibilityBlock", () => {
     [{ hca_verification_status: "something_new" }, "hca_ineligible"],
   ])("%p -> %p", (row, code) => {
     expect(shipEligibilityBlock(row)?.error).toBe(code);
+  });
+
+  test("the block carries the stored status so the UI can say what is actually happening", () => {
+    expect(shipEligibilityBlock({ hca_verification_status: "pending" })?.status).toBe("pending");
+    expect(shipEligibilityBlock({})?.status).toBeNull();
+  });
+
+  test("the message never claims a re-login will fix it", () => {
+    expect(shipEligibilityBlock({})?.message).not.toContain("Log out");
+  });
+});
+
+describe("hcaStateChanged", () => {
+  const verified = { hca_verification_status: "verified", hca_ysws_eligible: true };
+
+  test("identical state is not a change", () => {
+    expect(hcaStateChanged(verified, verified)).toBe(false);
+  });
+
+  test.each([
+    [{}, verified],
+    [null, verified],
+    [{ hca_verification_status: "pending", hca_ysws_eligible: null }, verified],
+    [verified, { hca_verification_status: "pending", hca_ysws_eligible: null }],
+    [verified, { hca_verification_status: "verified", hca_ysws_eligible: false }],
+    [verified, { hca_verification_status: "verified", hca_ysws_eligible: null }],
+  ])("%p -> %p is a change", (current, next) => {
+    expect(hcaStateChanged(current, next)).toBe(true);
+  });
+
+  test("an empty patch is never a change, even against null state", () => {
+    expect(hcaStateChanged(null, {})).toBe(false);
+    expect(hcaStateChanged(verified, {})).toBe(false);
+  });
+});
+
+describe("hcaSyncOutcome", () => {
+  test.each([
+    [{ hca_verification_status: "verified", hca_ysws_eligible: true }, "verified"],
+    [{ hca_verification_status: "pending" }, "pending"],
+    [{ hca_verification_status: "needs_submission" }, "needs_submission"],
+    [{ hca_verification_status: "ineligible" }, "ineligible"],
+    [{ hca_verification_status: "verified", hca_ysws_eligible: false }, "ineligible"],
+    [{}, "unknown"],
+    [null, "unknown"],
+  ])("%p -> %p", (row, outcome) => {
+    expect(hcaSyncOutcome(row)).toBe(outcome);
   });
 });

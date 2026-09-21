@@ -210,6 +210,7 @@ const Pixl = (() => {
   }
   // </login-intake>
 
+  // <token-intake>
   const params = new URLSearchParams(location.search);
   let token = takeReturnedToken(params);
   if (params.has("token")) {
@@ -225,6 +226,7 @@ const Pixl = (() => {
   } else {
     try { token = localStorage.getItem("pixl_token") || ""; } catch {}
   }
+  // </token-intake>
 
   // Logging out in the game clears the shared session. Same origin, we hear it
   // through the storage event; on the play.* host the game can't touch our
