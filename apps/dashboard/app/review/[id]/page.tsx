@@ -994,6 +994,7 @@ export default async function ReviewDetail({
                         second_pass_hours_deflated: Boolean(p.second_pass_hours_deflated),
                         second_pass_heartbeats_added: Boolean(p.second_pass_heartbeats_added),
                       }}
+                      hackatimeUserId={hackatimeReport?.hackatimeUserId ?? ""}
                     />
                   )}
                 </Card>
