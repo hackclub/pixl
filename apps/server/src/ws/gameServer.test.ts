@@ -1,10 +1,17 @@
-import { describe, expect, test } from "bun:test";
-import { consumeRateLimit } from "../rateLimit.js";
+import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
+import { requestIpKey } from "../clientIp.js";
+import {
+  consumeRateLimit,
+  peekRateLimit,
+  rateLimitBucketCount,
+  sweepRateLimitBuckets,
+} from "../rateLimit.js";
 import {
   lobbyJoinError,
   lobbyJoinDenialReason,
   roomFor,
   LOBBY_JOIN_ATTEMPT_LIMIT,
+  LOBBY_JOIN_IP_LIMIT,
   NPC_SAVE_LIMIT,
 } from "./gameServer.js";
 import type { Lobby } from "./lobbies.js";
@@ -51,11 +58,6 @@ describe("lobbyJoinError", () => {
 });
 
 describe("lobby join brute-force limiting", () => {
-  // gameServer.ts only calls consumeRateLimit(LOBBY_JOIN_ATTEMPT_LIMIT, userId)
-  // when a private lobby's non-owner password check actually fails - this
-  // exercises that same primitive with the real configured limit, proving a
-  // 4-digit lobby password (10,000 possibilities) can no longer be brute
-  // forced by unlimited guesses on one connection.
   test("wrong-password attempts are capped, not unlimited", () => {
     const userId = `brute-force-test-${Date.now()}`;
     let blockedAt = -1;
@@ -77,18 +79,16 @@ describe("lobby join brute-force limiting", () => {
   test("once locked out, the correct password is denied too, not just wrong guesses", () => {
     const lobby = makeLobby({ password: "9999" });
     const userId = `lockout-test-${Date.now()}`;
+    const ip = nextIp();
 
     for (let i = 0; i < LOBBY_JOIN_ATTEMPT_LIMIT.max; i++) {
-      lobbyJoinDenialReason(lobby, userId, "0000");
+      lobbyJoinDenialReason(lobby, userId, "0000", ip);
     }
 
-    expect(lobbyJoinDenialReason(lobby, userId, "9999")).toBe(
-      "Too many attempts. Wait a bit and try again.",
-    );
+    expect(lobbyJoinDenialReason(lobby, userId, "9999", ip)).toBe(TOO_MANY);
   });
 
   test("the lockout clears once the rate-limit window resets", async () => {
-    // short window, same primitive as LOBBY_JOIN_ATTEMPT_LIMIT
     const opts = { windowMs: 50, max: 1, name: `lobby-reset-test-${Date.now()}` };
     const userId = "reset-user";
 
@@ -98,6 +98,187 @@ describe("lobby join brute-force limiting", () => {
     await new Promise((resolve) => setTimeout(resolve, 80));
 
     expect(consumeRateLimit(opts, userId)).toBeNull();
+  });
+});
+
+const WRONG = "Wrong password.";
+const TOO_MANY = "Too many attempts. Wait a bit and try again.";
+
+let ipCounter = 0;
+const nextIp = () => `10.9.${Math.floor(++ipCounter / 250)}.${(ipCounter % 250) + 1}`;
+let userCounter = 0;
+const nextUser = (label = "u") => `${label}-${Date.now()}-${++userCounter}`;
+
+function guessUntilBlocked(lobby: Lobby, users: string[], ips: string[], cap = 200) {
+  let wrong = 0;
+  const perUser = new Map<string, number>();
+  for (let i = 0; i < cap; i++) {
+    const user = users[i % users.length];
+    const ip = ips[i % ips.length];
+    const result = lobbyJoinDenialReason(lobby, user, "WRONG000", ip);
+    if (result === TOO_MANY) return { wrong, perUser, blockedAt: i };
+    expect(result).toBe(WRONG);
+    wrong++;
+    perUser.set(user, (perUser.get(user) ?? 0) + 1);
+  }
+  return { wrong, perUser, blockedAt: -1 };
+}
+
+describe("private lobby password guessing: account and source-IP limits", () => {
+  afterEach(() => setSystemTime());
+
+  test("one account is stopped at the per-account limit", () => {
+    const lobby = makeLobby({ password: "K7M2QX9F" });
+    const user = nextUser();
+    const ips = Array.from({ length: 20 }, nextIp);
+    const { wrong } = guessUntilBlocked(lobby, [user], ips);
+    expect(wrong).toBe(LOBBY_JOIN_ATTEMPT_LIMIT.max);
+    expect(lobbyJoinDenialReason(lobby, user, "K7M2QX9F", nextIp())).toBe(TOO_MANY);
+  });
+
+  test("four accounts on one IP share one budget instead of getting 4x", () => {
+    const lobby = makeLobby({ password: "K7M2QX9F" });
+    const users = [nextUser("a"), nextUser("b"), nextUser("c"), nextUser("d")];
+    const ip = nextIp();
+    const { wrong, perUser } = guessUntilBlocked(lobby, users, [ip]);
+    expect(wrong).toBe(LOBBY_JOIN_IP_LIMIT.max);
+    expect(wrong).toBeLessThan(users.length * LOBBY_JOIN_ATTEMPT_LIMIT.max);
+    for (const count of perUser.values()) expect(count).toBeLessThanOrEqual(LOBBY_JOIN_ATTEMPT_LIMIT.max);
+  });
+
+  test("a fresh account on an exhausted IP is blocked even with the right password", () => {
+    const lobby = makeLobby({ password: "K7M2QX9F" });
+    const ip = nextIp();
+    guessUntilBlocked(lobby, [nextUser(), nextUser(), nextUser(), nextUser()], [ip]);
+    expect(lobbyJoinDenialReason(lobby, nextUser(), "K7M2QX9F", ip)).toBe(TOO_MANY);
+  });
+
+  test("different source IPs do not share a bucket", () => {
+    const lobby = makeLobby({ password: "K7M2QX9F" });
+    const burned = nextIp();
+    guessUntilBlocked(lobby, [nextUser(), nextUser(), nextUser(), nextUser()], [burned]);
+
+    const otherIp = nextIp();
+    const other = nextUser();
+    expect(lobbyJoinDenialReason(lobby, other, "WRONG000", otherIp)).toBe(WRONG);
+    expect(lobbyJoinDenialReason(lobby, other, "K7M2QX9F", otherIp)).toBeNull();
+    expect(peekRateLimit(LOBBY_JOIN_IP_LIMIT, otherIp)).toBeNull();
+  });
+
+  test("reconnecting or hopping IPs does not reset an account's budget", () => {
+    const lobby = makeLobby({ password: "K7M2QX9F" });
+    const user = nextUser();
+    const first = nextIp();
+    for (let i = 0; i < LOBBY_JOIN_ATTEMPT_LIMIT.max; i++) {
+      expect(lobbyJoinDenialReason(lobby, user, "WRONG000", first)).toBe(WRONG);
+    }
+    expect(lobbyJoinDenialReason(lobby, user, "WRONG000", first)).toBe(TOO_MANY);
+    expect(lobbyJoinDenialReason(lobby, user, "WRONG000", nextIp())).toBe(TOO_MANY);
+    expect(lobbyJoinDenialReason(lobby, user, "K7M2QX9F", nextIp())).toBe(TOO_MANY);
+  });
+
+  test("a spoofed CF-Connecting-IP from a direct peer cannot rotate the limiter identity", () => {
+    const lobby = makeLobby({ password: "K7M2QX9F" });
+    const users = [nextUser(), nextUser(), nextUser(), nextUser()];
+    const ips = Array.from({ length: 200 }, (_, i) =>
+      requestIpKey({
+        headers: { "cf-connecting-ip": `203.0.113.${(i % 250) + 1}` },
+        socket: { remoteAddress: "198.51.100.77" },
+      }),
+    );
+    expect(new Set(ips).size).toBe(1);
+    const { wrong } = guessUntilBlocked(lobby, users, ips);
+    expect(wrong).toBe(LOBBY_JOIN_IP_LIMIT.max);
+  });
+
+  test("a spoofed X-Forwarded-For prefix cannot rotate the limiter identity", () => {
+    const lobby = makeLobby({ password: "K7M2QX9F" });
+    const users = [nextUser(), nextUser(), nextUser(), nextUser()];
+    const ips = Array.from({ length: 200 }, (_, i) =>
+      requestIpKey({
+        headers: { "x-forwarded-for": `1.1.${Math.floor(i / 250)}.${(i % 250) + 1}, 198.51.100.88` },
+        socket: { remoteAddress: "10.0.0.1" },
+      }),
+    );
+    expect(new Set(ips).size).toBe(1);
+    const { wrong } = guessUntilBlocked(lobby, users, ips);
+    expect(wrong).toBe(LOBBY_JOIN_IP_LIMIT.max);
+  });
+
+  test("real clients behind Cloudflare keep separate buckets", () => {
+    const behindCf = (client: string) =>
+      requestIpKey({
+        headers: { "x-forwarded-for": "162.158.10.20", "cf-connecting-ip": client },
+        socket: { remoteAddress: "10.0.0.1" },
+      });
+    expect(behindCf("203.0.113.1")).not.toBe(behindCf("203.0.113.2"));
+  });
+
+  test("a correct password never consumes the account or IP budget", () => {
+    const lobby = makeLobby({ password: "K7M2QX9F" });
+    const user = nextUser();
+    const ip = nextIp();
+    for (let i = 0; i < 100; i++) {
+      expect(lobbyJoinDenialReason(lobby, user, "K7M2QX9F", ip)).toBeNull();
+    }
+    expect(peekRateLimit(LOBBY_JOIN_ATTEMPT_LIMIT, user)).toBeNull();
+    const { wrong } = guessUntilBlocked(lobby, [user], [ip]);
+    expect(wrong).toBe(LOBBY_JOIN_ATTEMPT_LIMIT.max);
+  });
+
+  test("the password is case and whitespace insensitive", () => {
+    const lobby = makeLobby({ password: "K7M2QX9F" });
+    expect(lobbyJoinDenialReason(lobby, nextUser(), " k7m2qx9f ", nextIp())).toBeNull();
+  });
+
+  test("the owner joins their own lobby without burning attempts, even from a burned IP", () => {
+    const lobby = makeLobby({ password: "K7M2QX9F", ownerId: "owner-x" });
+    const ip = nextIp();
+    guessUntilBlocked(lobby, [nextUser(), nextUser(), nextUser(), nextUser()], [ip]);
+    for (let i = 0; i < 100; i++) {
+      expect(lobbyJoinDenialReason(lobby, "owner-x", "", ip)).toBeNull();
+    }
+    expect(peekRateLimit(LOBBY_JOIN_ATTEMPT_LIMIT, "owner-x")).toBeNull();
+  });
+
+  test("public lobbies stay open for accounts and IPs that are fully throttled", () => {
+    const priv = makeLobby({ password: "K7M2QX9F" });
+    const pub = makeLobby({ id: "PUBLC", isPublic: true, password: "" });
+    const user = nextUser();
+    const ip = nextIp();
+    guessUntilBlocked(priv, [user], [ip]);
+    expect(lobbyJoinDenialReason(priv, user, "K7M2QX9F", ip)).toBe(TOO_MANY);
+    expect(lobbyJoinDenialReason(pub, user, "", ip)).toBeNull();
+  });
+
+  test("there is no per-lobby lockout an attacker can use against everyone else", () => {
+    const lobby = makeLobby({ password: "K7M2QX9F" });
+    const attackerIp = nextIp();
+    guessUntilBlocked(lobby, [nextUser(), nextUser(), nextUser(), nextUser()], [attackerIp]);
+    expect(lobbyJoinDenialReason(lobby, nextUser("friend"), "K7M2QX9F", nextIp())).toBeNull();
+  });
+
+  test("a missing or full lobby does not consume guess budget", () => {
+    const user = nextUser();
+    const ip = nextIp();
+    expect(lobbyJoinDenialReason(undefined, user, "x", ip)).toBe("That lobby doesn't exist.");
+    expect(peekRateLimit(LOBBY_JOIN_ATTEMPT_LIMIT, user)).toBeNull();
+    expect(peekRateLimit(LOBBY_JOIN_IP_LIMIT, ip)).toBeNull();
+  });
+
+  test("buckets expire and are swept once the window passes", () => {
+    setSystemTime(new Date("2032-06-01T00:00:00Z"));
+    sweepRateLimitBuckets();
+    const base = rateLimitBucketCount();
+    const lobby = makeLobby({ password: "K7M2QX9F" });
+    const user = nextUser();
+    const ip = nextIp();
+    lobbyJoinDenialReason(lobby, user, "WRONG000", ip);
+    expect(rateLimitBucketCount()).toBe(base + 2);
+    setSystemTime(new Date("2032-06-01T00:01:01Z"));
+    expect(lobbyJoinDenialReason(lobby, user, "K7M2QX9F", ip)).toBeNull();
+    sweepRateLimitBuckets();
+    expect(rateLimitBucketCount()).toBe(base);
   });
 });
 

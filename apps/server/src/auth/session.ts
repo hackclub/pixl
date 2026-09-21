@@ -11,17 +11,30 @@ export interface SessionPayload {
   displayName: string;
 }
 
-// Sessions can't be revoked server side, so keep the window short enough that a
-// leaked token dies on its own. An expired token closes the socket with 4001
-// and the client sends the player back to the login screen.
+export interface VerifiedSession extends SessionPayload {
+  iat: number;
+}
+
+// revocable per user, see revocation.ts
 export function issueSessionToken(payload: SessionPayload): string {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: "14d" });
 }
 
-export function verifySessionToken(token: string): SessionPayload | null {
+export function verifySessionToken(token: string): VerifiedSession | null {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as unknown as SessionPayload;
-    return decoded;
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (
+      typeof decoded !== "object" ||
+      typeof decoded.userId !== "string" ||
+      typeof decoded.displayName !== "string"
+    ) {
+      return null;
+    }
+    return {
+      userId: decoded.userId,
+      displayName: decoded.displayName,
+      iat: typeof decoded.iat === "number" ? decoded.iat : 0,
+    };
   } catch {
     return null;
   }

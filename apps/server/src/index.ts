@@ -31,6 +31,7 @@ import macondoRouter from "./macondo/routes.js";
 import yswsRouter from "./ysws/routes.js";
 import { rateLimit } from "./rateLimit.js";
 import { enforceActiveBans } from "./moderation.js";
+import { enforceSessionRevocation } from "./auth/revocation.js";
 import { attachWebSocketServer } from "./ws/gameServer.js";
 
 const app = express();
@@ -75,6 +76,7 @@ app.use((req, res, next) =>
 );
 
 app.use(express.json());
+app.use(enforceSessionRevocation());
 // Global: a signed, unexpired token only proves who someone was when it was
 // issued, not that they're still allowed to act now - see moderation.ts's
 // enforceActiveBans for why this can't just live in one or two routes.

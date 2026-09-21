@@ -1,4 +1,4 @@
-import { randomInt } from "node:crypto";
+import { createHash, randomInt, timingSafeEqual } from "node:crypto";
 import { supabase } from "../db/client.js";
 
 export interface Lobby {
@@ -27,6 +27,8 @@ export interface LobbyInfo {
 
 export const LOBBY_SCENE_PREFIX = "lobby:";
 export const LOBBY_CAPACITY = 16;
+export const LOBBY_PASSWORD_LENGTH = 8;
+const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const MAX_LOBBIES = 200;
 
 // Cosmetic village themes, the first village upgrade. Each is a tint the whole
@@ -75,6 +77,15 @@ export async function loadLobbies() {
     });
   }
 
+  let rotated = 0;
+  for (const l of lobbies.values()) {
+    if (l.isPublic || isStrongLobbyPassword(l.password)) continue;
+    l.password = genLobbyPassword();
+    persistLobby(l);
+    rotated++;
+  }
+  if (rotated > 0) console.log(`[lobbies] replaced ${rotated} weak private passwords`);
+
   // Fold permanent unlocks into each lobby so the owner's picker knows what's
   // already bought without a per-lobby round trip.
   const { data: upgrades, error: upgradeError } = await supabase
@@ -108,16 +119,28 @@ function persistLobby(l: Lobby) {
     });
 }
 
-function gen4DigitPassword(): string {
-  return randomInt(1000, 10000).toString();
+export function genLobbyPassword(): string {
+  let password = "";
+  for (let i = 0; i < LOBBY_PASSWORD_LENGTH; i++) password += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)];
+  return password;
+}
+
+export function isStrongLobbyPassword(password: string): boolean {
+  return password.length >= LOBBY_PASSWORD_LENGTH;
+}
+
+const normalizePassword = (value: string) => createHash("sha256").update(value.trim().toUpperCase()).digest();
+
+export function lobbyPasswordMatches(input: string, secret: string): boolean {
+  if (!secret) return false;
+  return timingSafeEqual(normalizePassword(input), normalizePassword(secret));
 }
 
 function genLobbyCode(len = 5): string {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code: string;
   do {
     code = "";
-    for (let i = 0; i < len; i++) code += alphabet[randomInt(alphabet.length)];
+    for (let i = 0; i < len; i++) code += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)];
   } while (lobbies.has(code));
   return code;
 }
@@ -136,7 +159,7 @@ export function createLobby(opts: {
     id,
     name,
     isPublic: opts.isPublic,
-    password: opts.isPublic ? "" : gen4DigitPassword(),
+    password: opts.isPublic ? "" : genLobbyPassword(),
     capacity: LOBBY_CAPACITY,
     ownerId: opts.ownerId,
     createdAt: Date.now(),
@@ -156,7 +179,7 @@ export function renameLobby(l: Lobby, name: string) {
 
 export function setLobbyVisibility(l: Lobby, isPublic: boolean) {
   l.isPublic = isPublic;
-  l.password = isPublic ? "" : l.password || gen4DigitPassword();
+  l.password = isPublic ? "" : isStrongLobbyPassword(l.password) ? l.password : genLobbyPassword();
   persistLobby(l);
 }
 
