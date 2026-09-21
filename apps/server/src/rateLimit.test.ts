@@ -1,8 +1,15 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, setSystemTime, test } from "bun:test";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import express from "express";
-import { rateLimit } from "./rateLimit.js";
+import {
+  RATE_LIMIT_MAX_BUCKETS,
+  consumeRateLimit,
+  peekRateLimit,
+  rateLimit,
+  rateLimitBucketCount,
+  sweepRateLimitBuckets,
+} from "./rateLimit.js";
 
 async function startTestApp(max: number) {
   const app = express();
@@ -90,5 +97,84 @@ describe("rateLimit (Express middleware, trusted client IP)", () => {
     } finally {
       await close();
     }
+  });
+});
+
+describe("peekRateLimit", () => {
+  const opts = { windowMs: 60_000, max: 2, name: "peek-test" };
+
+  afterEach(() => setSystemTime());
+
+  test("reads a bucket without consuming it", () => {
+    const key = `peek-${Math.random()}`;
+    for (let i = 0; i < 50; i++) expect(peekRateLimit(opts, key)).toBeNull();
+    expect(consumeRateLimit(opts, key)).toBeNull();
+    expect(consumeRateLimit(opts, key)).toBeNull();
+    expect(consumeRateLimit(opts, key)).not.toBeNull();
+  });
+
+  test("reports retry-after once max failures are recorded", () => {
+    const key = `peek-full-${Math.random()}`;
+    consumeRateLimit(opts, key);
+    expect(peekRateLimit(opts, key)).toBeNull();
+    consumeRateLimit(opts, key);
+    expect(peekRateLimit(opts, key)).toBeGreaterThan(0);
+  });
+
+  test("a peek at an unseen key does not create a bucket", () => {
+    const before = rateLimitBucketCount();
+    peekRateLimit(opts, `never-seen-${Math.random()}`);
+    expect(rateLimitBucketCount()).toBe(before);
+  });
+
+  test("the block lifts when the window expires", () => {
+    const key = `peek-expire-${Math.random()}`;
+    setSystemTime(new Date("2030-01-01T00:00:00Z"));
+    consumeRateLimit(opts, key);
+    consumeRateLimit(opts, key);
+    expect(peekRateLimit(opts, key)).not.toBeNull();
+    setSystemTime(new Date("2030-01-01T00:01:01Z"));
+    expect(peekRateLimit(opts, key)).toBeNull();
+  });
+});
+
+describe("bucket cleanup and bounds", () => {
+  afterEach(() => setSystemTime());
+
+  function clearAllBuckets() {
+    setSystemTime(new Date("2040-01-01T00:00:00Z"));
+    sweepRateLimitBuckets();
+    setSystemTime();
+  }
+
+  test("expired buckets are swept and live ones are kept", () => {
+    setSystemTime(new Date("2031-01-01T00:00:00Z"));
+    sweepRateLimitBuckets();
+    const base = rateLimitBucketCount();
+    const short = { windowMs: 1_000, max: 5, name: "sweep-short" };
+    const long = { windowMs: 600_000, max: 1, name: "sweep-long" };
+    consumeRateLimit(short, "a");
+    consumeRateLimit(long, "a");
+    expect(rateLimitBucketCount()).toBe(base + 2);
+
+    setSystemTime(new Date("2031-01-01T00:00:05Z"));
+    sweepRateLimitBuckets();
+    expect(rateLimitBucketCount()).toBe(base + 1);
+    expect(peekRateLimit(long, "a")).toBeGreaterThan(0);
+
+    setSystemTime(new Date("2031-01-01T00:20:00Z"));
+    sweepRateLimitBuckets();
+    expect(rateLimitBucketCount()).toBe(base);
+  });
+
+  test("a key flood never grows the map past its cap and evicts oldest first", () => {
+    clearAllBuckets();
+    const flood = { windowMs: 600_000, max: 1, name: "flood" };
+    const total = RATE_LIMIT_MAX_BUCKETS + 5_000;
+    for (let i = 0; i < total; i++) consumeRateLimit(flood, `k${i}`);
+    expect(rateLimitBucketCount()).toBeLessThanOrEqual(RATE_LIMIT_MAX_BUCKETS);
+    expect(peekRateLimit(flood, "k0")).toBeNull();
+    expect(peekRateLimit(flood, `k${total - 1}`)).toBeGreaterThan(0);
+    clearAllBuckets();
   });
 });

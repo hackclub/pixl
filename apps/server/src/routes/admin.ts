@@ -1,6 +1,7 @@
 import { Router, type Request } from "express";
 import { timingSafeEqual } from "crypto";
-import { listOnlinePlayers, kickPlayer } from "../ws/gameServer.js";
+import { listOnlinePlayers, kickPlayer, endUserSession } from "../ws/gameServer.js";
+import { forgetCachedRevocation, revokeUserSessions } from "../auth/revocation.js";
 
 const router = Router();
 
@@ -29,6 +30,22 @@ router.post("/api/admin/kick", (req, res) => {
     reason ? `Kicked by a moderator: ${reason}` : "",
   );
   res.json({ ok: true, kicked });
+});
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+router.post("/api/admin/revoke-sessions", async (req, res) => {
+  if (!authorized(req)) return res.status(401).json({ ok: false });
+  const userId = String(req.body?.userId ?? "").trim().toLowerCase();
+  if (!UUID_RE.test(userId)) return res.status(400).json({ ok: false, error: "userId must be a uuid" });
+  const revokedAtMs = Date.now();
+  const result = await revokeUserSessions(userId, revokedAtMs);
+  if (result === "not_found") return res.status(404).json({ ok: false, error: "no such user" });
+  if (result === "not_migrated") return res.status(503).json({ ok: false, error: "session revocation migration not applied" });
+  if (result === "error") return res.status(500).json({ ok: false, error: "revocation failed" });
+  forgetCachedRevocation(userId);
+  console.log("[admin] revoked all sessions for", userId);
+  res.json({ ok: true, kicked: endUserSession(userId, revokedAtMs) });
 });
 
 export default router;

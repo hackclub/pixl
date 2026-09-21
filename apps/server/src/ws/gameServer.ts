@@ -1,7 +1,8 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { Server, IncomingMessage } from "http";
 import { verifySessionToken } from "../auth/session.js";
-import { consumeRateLimit, type RateLimitOptions } from "../rateLimit.js";
+import { isSessionRevoked, lookupSessionRevokedAt, parseRevokedAt } from "../auth/revocation.js";
+import { consumeRateLimit, peekRateLimit, type RateLimitOptions } from "../rateLimit.js";
 import { requestIpKey } from "../clientIp.js";
 import { activeBan, censorChat, recordChatViolation } from "../moderation.js";
 import { areFriends } from "../social.js";
@@ -20,6 +21,7 @@ import {
   setLobbyTheme,
   deleteLobby,
   lobbyInfoFor,
+  lobbyPasswordMatches,
   VILLAGE_THEMES,
   themePrice,
 } from "./lobbies.js";
@@ -35,6 +37,8 @@ interface ConnectedPlayer {
   skin: string;
   lastSaved: number;
   lastMoveAt: number;
+  ip: string;
+  iat: number;
   changingScene: boolean;
   lobbyGrant: string;
   blocked: Set<string>;
@@ -54,17 +58,22 @@ const MOVE_SLACK_PX = 200;
 const MSG_WINDOW_MS = 1000;
 const MSG_MAX_PER_WINDOW = 60;
 
-// A lobby password is a 4-digit code (10,000 possibilities), meant as
-// low-friction sharing between friends, not a real secret - but with no
-// per-attempt limit, the generic message throttle above still lets the full
-// keyspace be guessed in a few minutes over one connection. Keyed per user,
-// not per lobby, so guessing a mistyped digit against your own friend's
-// lobby doesn't burn attempts against everyone else's.
+// Failed private-lobby password guesses only, per account and per source IP.
+// The IP bucket spans accounts so rotating logins buys no extra guesses.
 export const LOBBY_JOIN_ATTEMPT_LIMIT: RateLimitOptions = {
   windowMs: 60_000,
   max: 10,
   name: "lobby_join_attempt",
 };
+
+export const LOBBY_JOIN_IP_LIMIT: RateLimitOptions = {
+  windowMs: 60_000,
+  max: 30,
+  name: "lobby_join_ip",
+};
+
+const WRONG_PASSWORD = "Wrong password.";
+const TOO_MANY_ATTEMPTS = "Too many attempts. Wait a bit and try again.";
 
 // save_npcs is one batched upsert (up to 64 rows) per message, not per NPC,
 // but the generic 60/sec message throttle still lets that be 60 upserts/sec
@@ -125,23 +134,31 @@ export function lobbyJoinError(
 ): string | null {
   if (!l) return "That lobby doesn't exist.";
   if (lobbyMemberCount(l.id, userId) >= l.capacity) return "That lobby is full.";
-  if (!l.isPublic && l.ownerId !== userId && password !== l.password)
-    return "Wrong password.";
+  if (!l.isPublic && l.ownerId !== userId && !lobbyPasswordMatches(password, l.password))
+    return WRONG_PASSWORD;
   return null;
 }
 
-// checked before the password, every attempt
 export function lobbyJoinDenialReason(
   l: Lobby | undefined,
   userId: string,
   password: string,
+  ip: string,
 ): string | null {
-  if (l && !l.isPublic && l.ownerId !== userId) {
-    if (consumeRateLimit(LOBBY_JOIN_ATTEMPT_LIMIT, userId) !== null) {
-      return "Too many attempts. Wait a bit and try again.";
-    }
+  const guessable = !!l && !l.isPublic && l.ownerId !== userId;
+  if (
+    guessable &&
+    (peekRateLimit(LOBBY_JOIN_ATTEMPT_LIMIT, userId) !== null ||
+      peekRateLimit(LOBBY_JOIN_IP_LIMIT, ip) !== null)
+  ) {
+    return TOO_MANY_ATTEMPTS;
   }
-  return lobbyJoinError(l, userId, password);
+  const error = lobbyJoinError(l, userId, password);
+  if (guessable && error === WRONG_PASSWORD) {
+    consumeRateLimit(LOBBY_JOIN_ATTEMPT_LIMIT, userId);
+    consumeRateLimit(LOBBY_JOIN_IP_LIMIT, ip);
+  }
+  return error;
 }
 
 function pickPublicLobby(): Lobby | null {
@@ -420,6 +437,30 @@ export function kickPlayer(userId: string, reason: string): boolean {
 }
 
 const BAN_SWEEP_MS = 30_000;
+const REVOKE_SWEEP_MS = 30_000;
+
+export function endUserSession(userId: string, revokedAtMs: number): boolean {
+  const p = players.get(userId);
+  if (!p || !isSessionRevoked(p, revokedAtMs)) return false;
+  p.ws.close(4001, "Unauthorized");
+  return true;
+}
+
+export async function sweepRevokedSessions() {
+  if (players.size === 0) return;
+  const { data, error } = await supabase
+    .from("users")
+    .select("id, sessions_revoked_at")
+    .in("id", [...players.keys()]);
+  if (error) {
+    if (error.code !== "42703") console.error("Failed to sweep revoked sessions", error.message);
+    return;
+  }
+  for (const row of data ?? []) {
+    const state = parseRevokedAt(row.sessions_revoked_at);
+    if (state.ok && state.revokedAtMs !== null) endUserSession(row.id as string, state.revokedAtMs);
+  }
+}
 
 // Dashboard bans land directly in the bans table, so poll it to kick
 // players who are banned while already connected.
@@ -497,6 +538,7 @@ export function attachWebSocketServer(httpServer: Server) {
 
   void loadLobbies();
   setInterval(() => void sweepBans(), BAN_SWEEP_MS);
+  setInterval(() => void sweepRevokedSessions(), REVOKE_SWEEP_MS);
   setInterval(sweepEmptySystemLobbies, EMPTY_SYSTEM_LOBBY_GRACE_MS);
 
   const heartbeatInterval = setInterval(() => {
@@ -522,6 +564,7 @@ export function attachWebSocketServer(httpServer: Server) {
     const url = new URL(req.url ?? "", "http://localhost");
     const token = url.searchParams.get("token");
     const session = token ? verifySessionToken(token) : null;
+    const ip = requestIpKey(req);
 
     if (!session) {
       console.log("Connection rejected: invalid/missing token");
@@ -539,6 +582,17 @@ export function attachWebSocketServer(httpServer: Server) {
     let player: ConnectedPlayer | null = null;
 
     (async () => {
+      const revocation = await lookupSessionRevokedAt(session.userId);
+      if (!revocation.ok) {
+        ws.close(1013, "Try again later");
+        return;
+      }
+      if (isSessionRevoked(session, revocation.revokedAtMs)) {
+        console.log("Connection rejected: revoked session", session.userId);
+        ws.close(4001, "Unauthorized");
+        return;
+      }
+
       const ban = await activeBan(session.userId);
       if (ban) {
         const message = ban.expires_at
@@ -602,6 +656,8 @@ export function attachWebSocketServer(httpServer: Server) {
         skin: (userRow as { skin?: string } | null)?.skin ?? "cvc:1",
         lastSaved: Date.now(),
         lastMoveAt: Date.now(),
+        ip,
+        iat: session.iat,
         changingScene: false,
         lobbyGrant,
         blocked,
@@ -1193,9 +1249,9 @@ export function attachWebSocketServer(httpServer: Server) {
 
       if (msg.type === "lobby_join") {
         const id = String(msg.id ?? "").trim().toUpperCase();
-        const password = String(msg.password ?? "").trim();
+        const password = String(msg.password ?? "").trim().slice(0, 64);
         const lobby = lobbies.get(id);
-        const err = lobbyJoinDenialReason(lobby, player.userId, password);
+        const err = lobbyJoinDenialReason(lobby, player.userId, password, player.ip);
         if (err || !lobby) {
           ws.send(
             JSON.stringify({

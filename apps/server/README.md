@@ -30,6 +30,7 @@ Backend server for **Pixl**, a multiplayer 2D game (the client is built in Godot
 src/
 ├── index.ts                 # Entry point (Express + WS bootstrap)
 ├── auth/session.ts          # JWT session issue/verify
+├── auth/revocation.ts       # Per-user session revocation (HTTP middleware + helpers)
 ├── db/client.ts             # Supabase service client + row types
 ├── social.ts                # Friend-pair helpers
 ├── moderation.ts            # Profanity filter, violation log, ban checks
@@ -148,6 +149,13 @@ The server listens on `PORT` (default `3000`).
 - `GET /api/notifications` - user inbox
 - `POST /api/notifications/read` - mark as read
 
+### Session revocation
+
+- `POST /api/admin/revoke-sessions` - header `x-admin-key: <ADMIN_API_KEY>`, body `{ "userId": "<uuid>" }`. Invalidates every session token issued to that user up to now, on HTTP and WebSocket, and closes their live socket. Other users stay signed in and the user can sign in again right away. Answers 503 until `drizzle/0181_session_revocation.sql` is applied.
+- Stored as `users.sessions_revoked_at`. A token is rejected when its `iat` is at or before that second, so a login in the same second as the revocation has to be repeated once. Other replicas pick it up within 10s on HTTP (cache TTL) and within 30s for sockets that are already open (sweep); new socket connections check the database directly.
+- Deploy order: apply `0181_session_revocation.sql` first (as the app role, it is idempotent and metadata-only), then deploy the server. A server running against a database without the column keeps working and simply revokes nothing.
+- Without the API, revoke by hand: `update users set sessions_revoked_at = now() where id = '<uuid>';`
+
 ### Profile
 
 - `POST /api/profile/name` - change display name (profanity-guarded)
@@ -182,7 +190,7 @@ Binary frames are relayed as proximity voice.
 ### Notes
 
 - `village` is a private per-player room (`village:<userId>`).
-- Lobbies are shared rooms (`lobby:<CODE>`), capped at 16 players per lobby, with a maximum of 200 lobbies. Private lobbies use a 4-digit password.
+- Lobbies are shared rooms (`lobby:<CODE>`), capped at 16 players per lobby, with a maximum of 200 lobbies. Private lobbies use a random 8-character password (legacy weaker ones are replaced when lobbies load); wrong guesses are limited to 10/min per account and 30/min per source IP, and a correct password never counts against either.
 - Player positions are persisted per `(user, scene)` every 5 seconds.
 
 ## Database
