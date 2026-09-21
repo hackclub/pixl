@@ -114,7 +114,7 @@ function projCard(p) {
       <div class="proj-foot">
         <span>${statusChip(p)}${levelBadge(p)}${beaconChip(p)}${p.hackatime_seconds ? ` <span class="chip teal">${Pixl.hours(p.hackatime_seconds)}</span>` : ""}</span>
         ${Pixl.hasToken
-          ? `<span class="vote-group">${upvoteBtn(p)}${downvoteBtn(p)}</span>`
+          ? upvoteBtn(p)
           /* A guest reaching these through a shared profile can't vote, and a
              live button would only send them into the sign-in gate. */
           : `<span class="chip">▲ ${p.upvotes || 0}</span>`}
@@ -144,47 +144,33 @@ window.copyPlayerLink = async function (e, id) {
   return false;
 };
 
-// Upvote pill. Click again to remove your vote; disabled only while the
-// opposite direction is active (remove that one first to switch).
+// Upvote pill. Click again to remove your vote.
 function upvoteBtn(p) {
-  return `<button class="upvote-btn${p.has_upvoted ? " on" : ""}" onclick="return castVote(event,${Number(p.id)},'up')"${p.has_downvoted ? " disabled" : ""} aria-label="Upvote this project" title="${p.has_upvoted ? "Remove your upvote" : "Upvote this project"}">▲ <span class="uv-count">${p.upvotes || 0}</span></button>`;
+  return `<button class="upvote-btn${p.has_upvoted ? " on" : ""}" onclick="return castVote(event,${Number(p.id)})" aria-label="Upvote this project" title="${p.has_upvoted ? "Remove your upvote" : "Upvote this project"}">▲ <span class="uv-count">${p.upvotes || 0}</span></button>`;
 }
 
-// Downvote pill. Same removable, click-to-toggle behaviour as upvote.
-function downvoteBtn(p) {
-  return `<button class="downvote-btn${p.has_downvoted ? " on" : ""}" onclick="return castVote(event,${Number(p.id)},'down')"${p.has_upvoted ? " disabled" : ""} aria-label="Downvote this project" title="${p.has_downvoted ? "Remove your downvote" : "Downvote this project"}">▼ <span class="dv-count">${p.downvotes || 0}</span></button>`;
-}
-
-// Cast or remove an up/downvote without following the card link (click an
-// already-active vote to take it back). Updates both buttons in place; the
-// server is idempotent, rejects self-votes, and blocks voting the opposite
-// direction until you remove your current vote first.
-window.castVote = async function (e, id, dir) {
+// Cast or remove an upvote without following the card link (click an
+// already-active vote to take it back). The server is idempotent and
+// rejects self-votes.
+window.castVote = async function (e, id) {
   e.preventDefault();
   e.stopPropagation();
   const btn = e.currentTarget;
   if (btn.disabled) return false;
   const removing = btn.classList.contains("on");
-  const group = btn.closest(".vote-group") || btn.parentElement;
-  const upBtn = group ? group.querySelector(".upvote-btn") : null;
-  const downBtn = group ? group.querySelector(".downvote-btn") : null;
-  if (upBtn) upBtn.disabled = true;
-  if (downBtn) downBtn.disabled = true;
-  const path = "/api/projects/" + id + "/" + (dir === "up" ? "upvote" : "downvote");
-  const r = await Pixl.send(removing ? "DELETE" : "POST", path);
+  btn.disabled = true;
+  const r = await Pixl.send(removing ? "DELETE" : "POST", "/api/projects/" + id + "/upvote");
   if (r.ok) {
     btn.classList.toggle("on", !removing);
-    const c = btn.querySelector(dir === "up" ? ".uv-count" : ".dv-count");
-    if (c) c.textContent = dir === "up" ? r.upvotes : r.downvotes;
-    if (upBtn) upBtn.disabled = dir === "down" && !removing;
-    if (downBtn) downBtn.disabled = dir === "up" && !removing;
+    const c = btn.querySelector(".uv-count");
+    if (c) c.textContent = r.upvotes;
+    btn.disabled = false;
   } else {
-    if (upBtn) upBtn.disabled = false;
-    if (downBtn) downBtn.disabled = false;
+    btn.disabled = false;
     const msg = r.error === "own_project" ? "You can't vote on your own project."
-      : r.error === "already_upvoted" || r.error === "already_downvoted" ? "You've already voted on this project."
+      : r.error === "already_upvoted" ? "You've already voted on this project."
       : r.error === "not_found" ? "You can't upvote unshipped projects."
-      : `Couldn't ${dir}vote right now.`;
+      : "Couldn't upvote right now.";
     Pixl.toast(msg, true);
   }
   return false;

@@ -63,13 +63,6 @@
   .upvote-btn:hover:not(:disabled) { color: var(--gold); border-color: var(--gold); transform: translateY(-1px); }
   .upvote-btn.on { color: var(--btn-ink); background: var(--gold); border-color: var(--gold); }
   .upvote-btn:disabled { cursor: default; }
-  .vote-group { display: inline-flex; align-items: center; gap: 6px; }
-  .downvote-btn { display: inline-flex; align-items: center; gap: 5px; font-family: var(--pixel, inherit); font-size: 13px; font-weight: 600;
-    color: var(--dim); background: var(--panel-2); border: var(--bw) solid var(--stroke); border-radius: 0; padding: 4px 11px; cursor: pointer;
-    transition: color .12s ease, border-color .12s ease, background .12s ease, transform .08s ease; }
-  .downvote-btn:hover:not(:disabled) { color: var(--bad); border-color: var(--bad); transform: translateY(-1px); }
-  .downvote-btn.on { color: var(--btn-ink); background: var(--bad); border-color: var(--bad); }
-  .downvote-btn:disabled { cursor: default; }
   .status-chip { text-transform: uppercase; }
   .board { display: flex; flex-direction: column; gap: 8px; }
   .board-row {

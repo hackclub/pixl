@@ -70,18 +70,13 @@ router.post("/api/projects/:id/upvote", async (req, res) => {
     return res.status(400).json({ ok: false, error: "own_project" });
 
   try {
-    // A lock scoped to this (project, voter) pair closes the race where a
-    // concurrent upvote and downvote for the same project each read "no
-    // opposite vote exists" before either writes, leaving the voter holding
-    // both directions at once.
+    // A lock scoped to this (project, voter) pair serializes the
+    // insert-then-grant sequence below against a double-click racing itself
+    // (the insert is already idempotent via ON CONFLICT, but this keeps the
+    // count read and the collectible grant consistent with it).
     const result = await withLock(
       `project_vote:${id}:${session.userId}`,
       async (tx) => {
-        const existingDownvote = (
-          await tx`select id from project_downvotes where project_id = ${id} and voter_id = ${session.userId}`
-        )[0];
-        if (existingDownvote) return { error: "already_downvoted" as const };
-
         await tx`insert into project_upvotes (project_id, voter_id) values (${id}, ${session.userId}) on conflict do nothing`;
         const [{ n }] =
           await tx`select count(*)::int as n from project_upvotes where project_id = ${id}`;
@@ -89,7 +84,6 @@ router.post("/api/projects/:id/upvote", async (req, res) => {
         return { upvotes: n as number };
       },
     );
-    if ("error" in result) return res.status(400).json({ ok: false, error: result.error });
     res.json({ ok: true, upvotes: result.upvotes, has_upvoted: true });
   } catch (e) {
     console.error("[upvotes] insert failed", e);
@@ -119,76 +113,6 @@ router.delete("/api/projects/:id/upvote", async (req, res) => {
     res.json({ ok: true, upvotes: result.upvotes, has_upvoted: false });
   } catch (e) {
     console.error("[upvotes] delete failed", e);
-    res.status(500).json({ ok: false });
-  }
-});
-
-// Downvote on an approved project. Same rules as upvote: one per voter, can't
-// downvote your own project, and a voter can't hold both directions at once
-// on the same project. Doesn't touch collectibles - it's a signal, not
-// currency. Removable via the DELETE route below.
-router.post("/api/projects/:id/downvote", async (req, res) => {
-  const token = typeof req.query.token === "string" ? req.query.token : "";
-  const session = token ? verifySessionToken(token) : null;
-  if (!session) return res.status(401).json({ ok: false });
-
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: "bad_id" });
-
-  const { data: project } = await supabase
-    .from("projects")
-    .select("id, user_id, status")
-    .eq("id", id)
-    .is("archived_at", null)
-    .is("banned_at", null)
-    .maybeSingle();
-  if (!project || project.status !== "approved")
-    return res.status(404).json({ ok: false, error: "not_found" });
-  if (project.user_id === session.userId)
-    return res.status(400).json({ ok: false, error: "own_project" });
-
-  try {
-    const result = await withLock(
-      `project_vote:${id}:${session.userId}`,
-      async (tx) => {
-        const existingUpvote = (
-          await tx`select id from project_upvotes where project_id = ${id} and voter_id = ${session.userId}`
-        )[0];
-        if (existingUpvote) return { error: "already_upvoted" as const };
-
-        await tx`insert into project_downvotes (project_id, voter_id) values (${id}, ${session.userId}) on conflict do nothing`;
-        const [{ n }] =
-          await tx`select count(*)::int as n from project_downvotes where project_id = ${id}`;
-        return { downvotes: n as number };
-      },
-    );
-    if ("error" in result) return res.status(400).json({ ok: false, error: result.error });
-    res.json({ ok: true, downvotes: result.downvotes, has_downvoted: true });
-  } catch (e) {
-    console.error("[downvotes] insert failed", e);
-    res.status(500).json({ ok: false });
-  }
-});
-
-// Remove your own downvote. Idempotent, same shape as removing an upvote.
-router.delete("/api/projects/:id/downvote", async (req, res) => {
-  const token = typeof req.query.token === "string" ? req.query.token : "";
-  const session = token ? verifySessionToken(token) : null;
-  if (!session) return res.status(401).json({ ok: false });
-
-  const id = Number(req.params.id);
-  if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: "bad_id" });
-
-  try {
-    const result = await withLock(`project_vote:${id}:${session.userId}`, async (tx) => {
-      await tx`delete from project_downvotes where project_id = ${id} and voter_id = ${session.userId}`;
-      const [{ n }] =
-        await tx`select count(*)::int as n from project_downvotes where project_id = ${id}`;
-      return { downvotes: n as number };
-    });
-    res.json({ ok: true, downvotes: result.downvotes, has_downvoted: false });
-  } catch (e) {
-    console.error("[downvotes] delete failed", e);
     res.status(500).json({ ok: false });
   }
 });
