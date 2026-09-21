@@ -994,7 +994,6 @@ export default async function ReviewDetail({
                         second_pass_hours_deflated: Boolean(p.second_pass_hours_deflated),
                         second_pass_heartbeats_added: Boolean(p.second_pass_heartbeats_added),
                       }}
-                      hackatimeUserId={hackatimeReport?.hackatimeUserId ?? ""}
                     />
                   )}
                 </Card>
@@ -1036,8 +1035,21 @@ export default async function ReviewDetail({
                 {canReview ? (
                   <>
                     <Card className="p-5 gap-0">
-                      <div className="text-sm font-semibold mb-1">
-                        {isFinalStage ? "Final pass" : "First pass"}
+                      <div className="flex items-center justify-between gap-3 mb-1 flex-wrap">
+                        <div className="text-sm font-semibold">
+                          {isFinalStage ? "Final pass" : "First pass"}
+                        </div>
+                        {isFinalStage && hackatimeReport?.hackatimeUserId && (
+                          <Button asChild variant="default" size="sm">
+                            <a
+                              href={`https://telescreen.hackclub.com/workbench/hackatime/overview?u=${encodeURIComponent(hackatimeReport.hackatimeUserId)}`}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              Open in Telescreen
+                            </a>
+                          </Button>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground mb-3">
                         {isFinalStage
