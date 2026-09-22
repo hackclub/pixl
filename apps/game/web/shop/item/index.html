@@ -79,6 +79,22 @@
         color: var(--ink);
         white-space: pre-wrap;
       }
+      /* "Bought by 23 people · Added Sep 19". Empty (and so invisible, the
+         column gap collapses) for the long-standing catalog , see
+         NEW_ITEM_DAYS / BUYERS_VISIBLE_MIN in apps/server/src/routes/shop.ts
+         for which items get which half. */
+      #detail-meta {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 7px;
+        font-family: var(--sans);
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--faint);
+      }
+      #detail-meta:empty { display: none; }
+      #detail-meta .sep { opacity: 0.55; }
       .price {
         color: var(--gold);
         font-family: var(--sans);
@@ -236,6 +252,7 @@
               <div id="detail-limited"></div>
               <div class="price" id="detail-price"></div>
               <div id="detail-desc"></div>
+              <div id="detail-meta"></div>
               <div class="options-row" id="detail-options"></div>
               <div class="note-row" id="note-row" hidden>
                 <label
@@ -572,10 +589,44 @@
       function say() {}
       function nudgeKeeper() {}
 
+      // "Added Sep 19" for a recently-stocked item, formatted in UTC so the
+      // same timestamp doesn't render as two different days either side of the
+      // date line (the drift packages/config exists to stop).
+      function addedLabel(item) {
+        const raw = String(item.created_at || "");
+        if (!raw) return "";
+        const d = new Date(raw);
+        if (isNaN(d.getTime())) return "";
+        return d.toLocaleDateString("en-US", {
+          timeZone: "UTC",
+          month: "short",
+          day: "numeric",
+        });
+      }
+
+      // Mirrors the catalog grid's meta line. Both switches (show_buyers,
+      // is_new) are the server's call, so this page never decides what counts
+      // as new or how many buyers are worth showing , it just renders.
+      function metaHtml(item) {
+        const bits = [];
+        const buyers = Number(item.buyers) || 0;
+        if (item.show_buyers)
+          bits.push(
+            `Bought by ${buyers.toLocaleString()} ${buyers === 1 ? "person" : "people"}`,
+          );
+        if (item.is_new) {
+          const added = addedLabel(item);
+          if (added) bits.push(`Added ${added}`);
+        }
+        if (!bits.length) return "";
+        return bits.map((b) => Pixl.esc(b)).join(`<span class="sep">·</span>`);
+      }
+
       function renderDetail() {
         $("detail-img").innerHTML = imgHtml(selected);
         $("detail-name").textContent = selected.name;
         $("detail-desc").innerHTML = Pixl.bbcode(selected.description || "");
+        $("detail-meta").innerHTML = metaHtml(selected);
         document.title = `Pixl · ${selected.name}`;
 
         $("qty-row").hidden = true;

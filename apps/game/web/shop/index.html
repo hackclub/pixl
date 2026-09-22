@@ -230,6 +230,35 @@
         letter-spacing: 1px;
         padding: 3px 7px;
       }
+      /* Recently added items only - the server decides what counts as recent
+         (is_new, see NEW_ITEM_DAYS in apps/server/src/routes/shop.ts). The
+         long-standing catalog renders nothing here, otherwise every card in
+         the shop would carry a tag and the tag would mean nothing. Shares the
+         top-right corner with .limited-tag, so a card never draws both. */
+      .new-corner-tag {
+        position: absolute;
+        top: -9px;
+        right: 9px;
+        background: var(--good);
+        color: var(--btn-ink);
+        border-radius: 0;
+        font-family: var(--pixel);
+        font-size: 10px;
+        letter-spacing: 1px;
+        padding: 3px 7px;
+      }
+      .item-meta {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 6px;
+        font-family: var(--sans);
+        font-size: 11px;
+        font-weight: 500;
+        line-height: 1.4;
+        color: var(--faint);
+      }
+      .item-meta .sep { opacity: 0.55; }
       /* Trial-gated item: still shown, but greyed out until unlocked. */
       .item-card.locked {
         filter: saturate(0.45) brightness(0.82);
@@ -540,6 +569,44 @@
         return `<img src="${Pixl.esc(url)}" alt="" loading="lazy" onerror="this.outerHTML='<span class=ph></span>'">`;
       }
 
+      // "Added Sep 19" for a recently-stocked item. Formatted in UTC on
+      // purpose , a naive local render puts the same timestamp on different
+      // days for players either side of the date line (the drift
+      // packages/config exists to stop).
+      function addedLabel(item) {
+        const raw = String(item.created_at || "");
+        if (!raw) return "";
+        const d = new Date(raw);
+        if (isNaN(d.getTime())) return "";
+        return d.toLocaleDateString("en-US", {
+          timeZone: "UTC",
+          month: "short",
+          day: "numeric",
+        });
+      }
+
+      // The small grey line under an item: how many players have bought it and
+      // when it landed. Both switches (show_buyers, is_new) are the server's
+      // call, so the thresholds live in one place rather than being duplicated
+      // per page , this just renders what it's handed, and renders nothing at
+      // all for the long-standing catalog.
+      function metaHtml(item) {
+        const bits = [];
+        const buyers = Number(item.buyers) || 0;
+        if (item.show_buyers)
+          bits.push(
+            `Bought by ${buyers.toLocaleString()} ${buyers === 1 ? "person" : "people"}`,
+          );
+        if (item.is_new) {
+          const added = addedLabel(item);
+          if (added) bits.push(`Added ${added}`);
+        }
+        if (!bits.length) return "";
+        return `<div class="item-meta">${bits
+          .map((b) => Pixl.esc(b))
+          .join(`<span class="sep">·</span>`)}</div>`;
+      }
+
       function trophyCard(item) {
         const state = trophyState(item);
         const need = Number(item.unlock_xp);
@@ -621,10 +688,12 @@
     <div class="card panel item-card ${item.limited ? "limited" : ""} ${item.locked ? "locked" : ""}" data-id="${item.id}" style="animation: toast-in .2s ease both; animation-delay:${Math.min(idx * 30, 400)}ms">
       ${item.locked && !item.unlockPending ? `<div class="locked-corner-tag">🔒 LOCKED</div>` : ""}
       ${item.limited ? `<div class="limited-tag">LIMITED</div>` : ""}
+      ${item.is_new && !item.limited ? `<div class="new-corner-tag">NEW</div>` : ""}
       ${item.stock && item.stock.length ? `<div class="stock-corner-tag">${item.stock[0].total} ONLY</div>` : ""}
       <div class="item-img">${imgHtml(item)}<button type="button" class="pin-btn ${item.saved ? "on" : ""}" data-pin="${item.id}" title="${item.saved ? "Saved, click to unsave" : "Save this item"}">${item.saved ? "★" : "☆"}</button></div>
       <div class="item-name">${Pixl.esc(item.name)}</div>
       <div class="item-desc">${Pixl.esc(Pixl.bbstrip(item.description || ""))}</div>
+      ${metaHtml(item)}
       <div class="item-foot">
         ${
           item.locked && item.unlockPending

@@ -77,8 +77,33 @@ async function regionFor(userId: string): Promise<string> {
 // with 0106 , fall back gracefully before each is applied so the catalog
 // keeps loading.
 const ITEM_COLUMNS =
-  "id, name, description, price, image_url, options, unlock_xp, config_options, region, category, unlock_trial_ids, manual_locked, lock_note";
+  "id, name, description, price, image_url, options, unlock_xp, config_options, region, category, unlock_trial_ids, manual_locked, lock_note, created_at";
 const ITEM_COLUMNS_FALLBACK = "id, name, description, price, image_url, options";
+
+// How recently an item has to have been added to still be worth flagging as
+// new in the catalog. The shop is ~180 items deep and almost all of them
+// landed in the bulk imports (migrations 0047/0048/0051), so tagging every
+// item with its add date would just be noise , only the genuinely recent
+// arrivals get a NEW tag and an "Added ..." line.
+export const NEW_ITEM_DAYS = 30;
+
+// Below this, "Bought by N people" stops being social proof and starts
+// reading as "nobody wants this", which is worse for the item than showing
+// nothing at all. Sold-once items simply don't get the line.
+export const BUYERS_VISIBLE_MIN = 3;
+
+export function isNewItem(createdAt: unknown, now: Date = new Date()): boolean {
+  if (typeof createdAt !== "string" || !createdAt) return false;
+  const added = new Date(createdAt);
+  if (Number.isNaN(added.getTime())) return false;
+  const ageMs = now.getTime() - added.getTime();
+  // A clock-skewed future timestamp is still "new", it just isn't old yet.
+  return ageMs < NEW_ITEM_DAYS * 86_400_000;
+}
+
+export function shouldShowBuyerCount(buyers: unknown): boolean {
+  return Number(buyers) >= BUYERS_VISIBLE_MIN;
+}
 
 // Items are scoped to the player's own region (fulfillment/shipping differ a
 // lot by where they live) , pass `region` to filter, or omit it to get every
@@ -106,6 +131,7 @@ async function fetchItems(filterIds?: number[], region?: string) {
         region: "US",
         category: "other",
         unlock_trial_ids: [],
+        created_at: null,
       })),
     };
   }
@@ -133,6 +159,32 @@ async function attachStock(items: Record<string, unknown>[]): Promise<void> {
   for (const item of items) {
     const stock = byItem.get(Number(item.id));
     if (stock) item.stock = stock;
+  }
+}
+
+// "Bought by N people" plus the NEW / "Added ..." flags, attached to every item
+// the catalog is about to return. Both rules live here rather than in the page
+// so the client only renders what it's told , see NEW_ITEM_DAYS and
+// BUYERS_VISIBLE_MIN above for why each threshold exists.
+//
+// Fail-soft on purpose: before migration 0182 is applied the RPC doesn't
+// exist, and a shop that won't load is a far worse outcome than a shop with no
+// buyer counts. Same spirit as ITEM_COLUMNS_FALLBACK above.
+async function attachBuyerCounts(items: Record<string, unknown>[]): Promise<void> {
+  const { data, error } = await supabase.rpc("shop_item_buyer_counts");
+  const byItem = new Map<number, number>();
+  if (error) {
+    console.error("[shop] buyer counts failed", error);
+  } else {
+    for (const row of (data ?? []) as { item_id: number; buyers: number }[]) {
+      byItem.set(Number(row.item_id), Number(row.buyers));
+    }
+  }
+  for (const item of items) {
+    const buyers = byItem.get(Number(item.id)) ?? 0;
+    item.buyers = buyers;
+    item.show_buyers = shouldShowBuyerCount(buyers);
+    item.is_new = isNewItem(item.created_at);
   }
 }
 
@@ -173,6 +225,7 @@ router.get("/api/shop/items", async (req, res) => {
   }
 
   await attachStock(items);
+  await attachBuyerCounts(items);
 
   // Saved (pinned) items, and for a config_options item the last spec the
   // player put together , restored on the detail page instead of resetting
