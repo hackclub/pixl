@@ -7,7 +7,7 @@ export interface BriefingCopy {
 
 const en: BriefingCopy = {
   intro:
-    "Something knocked the power out of the Industrial District. Whatever ships during this Operation has to work without it. Here is how Operation Blackout works.",
+    "PIXL's grid has gone dark. Whatever ships during this Operation needs to be about light — bring it back, any way you can build it. Here is how Operation Blackout works.",
   rules: [
     {
       title: "The window",
@@ -50,7 +50,7 @@ const en: BriefingCopy = {
 
 const es: BriefingCopy = {
   intro:
-    "Algo cortó la energía en el Distrito Industrial. Lo que sea que se entregue durante esta Operación tiene que funcionar sin ella. Así funciona la Operación Blackout.",
+    "La red de PIXL se ha quedado a oscuras. Lo que sea que se entregue durante esta Operación tiene que ser sobre la luz — tráela de vuelta, como sea que la construyas. Así funciona la Operación Blackout.",
   rules: [
     { title: "La ventana", body: "La Operación Blackout va del {start} al {end}. Las horas se muestran en tu hora local." },
     { title: "Un bono de tarifa", body: "Las horas aprobadas para Blackout reciben ${rate}/h extra sobre tu propia tarifa normal. Todos reciben el mismo bono, sea cual sea tu tarifa normal." },
@@ -66,7 +66,7 @@ const es: BriefingCopy = {
 
 const fr: BriefingCopy = {
   intro:
-    "Quelque chose a coupé le courant dans le District Industriel. Tout ce qui sera livré pendant cette Opération doit fonctionner sans lui. Voici comment fonctionne l'Opération Blackout.",
+    "Le réseau de PIXL s'est retrouvé dans le noir. Tout ce qui sera livré pendant cette Opération doit parler de lumière — ramène-la, peu importe comment tu la construis. Voici comment fonctionne l'Opération Blackout.",
   rules: [
     { title: "La fenêtre", body: "L'Opération Blackout va du {start} au {end}. Les heures sont affichées dans ton fuseau local." },
     { title: "Un bonus de taux", body: "Les heures approuvées pour Blackout gagnent un bonus de ${rate}/h en plus de ton propre taux habituel. Tout le monde reçoit le même bonus, quel que soit ton taux habituel." },
@@ -82,7 +82,7 @@ const fr: BriefingCopy = {
 
 const pt: BriefingCopy = {
   intro:
-    "Alguma coisa cortou a energia do Distrito Industrial. O que for lançado durante essa Operação precisa funcionar sem ela. Veja como funciona a Operação Blackout.",
+    "A rede da PIXL ficou às escuras. O que for lançado durante essa Operação precisa ser sobre luz — traga ela de volta, do jeito que você conseguir construir. Veja como funciona a Operação Blackout.",
   rules: [
     { title: "A janela", body: "A Operação Blackout vai de {start} a {end}. Os horários aparecem no seu horário local." },
     { title: "Um bônus na taxa", body: "As horas aprovadas para o Blackout ganham um bônus de ${rate}/h além da sua própria taxa normal. Todo mundo recebe o mesmo bônus, seja qual for a sua taxa normal." },
@@ -98,7 +98,7 @@ const pt: BriefingCopy = {
 
 const hi: BriefingCopy = {
   intro:
-    "किसी चीज़ ने इंडस्ट्रियल डिस्ट्रिक्ट की बिजली गुल कर दी। इस ऑपरेशन के दौरान जो भी शिप होगा, उसे बिना बिजली के चलना होगा। ऑपरेशन ब्लैकआउट ऐसे काम करता है।",
+    "PIXL का ग्रिड अँधेरे में चला गया है। इस ऑपरेशन के दौरान जो भी शिप होगा, वह रोशनी के बारे में होना चाहिए — जैसे भी बना सकें, उसे वापस लाएँ। ऑपरेशन ब्लैकआउट ऐसे काम करता है।",
   rules: [
     { title: "समय-सीमा", body: "ऑपरेशन ब्लैकआउट {start} से {end} तक चलता है। समय आपके स्थानीय समय में दिखाया गया है।" },
     { title: "दर बोनस", body: "ब्लैकआउट के लिए मंज़ूर घंटों पर आपकी अपनी सामान्य दर के ऊपर अतिरिक्त ${rate}/घंटा मिलता है। आपकी सामान्य दर चाहे जो हो, सबको एक जैसा बोनस मिलता है।" },
