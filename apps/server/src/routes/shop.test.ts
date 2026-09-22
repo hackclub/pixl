@@ -51,6 +51,21 @@ describe("isNewItem", () => {
     expect(isNewItem(daysAgo(0), now)).toBe(true);
   });
 
+  // The shape that actually reaches this function in production. pgCompat
+  // reads through postgres.js, which parses timestamptz into a Date, so a
+  // string-only guard here silently flags nothing as new - which is exactly
+  // what shipped the first time.
+  test("accepts the Date the postgres driver actually returns", () => {
+    expect(isNewItem(new Date(now.getTime() - 86_400_000), now)).toBe(true);
+    expect(
+      isNewItem(new Date(now.getTime() - NEW_ITEM_DAYS * 86_400_000), now),
+    ).toBe(false);
+  });
+
+  test("an invalid Date is never new", () => {
+    expect(isNewItem(new Date("nonsense"), now)).toBe(false);
+  });
+
   test("an item added inside the window is new", () => {
     expect(isNewItem(daysAgo(NEW_ITEM_DAYS - 1), now)).toBe(true);
   });

@@ -81,21 +81,34 @@ const ITEM_COLUMNS =
 const ITEM_COLUMNS_FALLBACK = "id, name, description, price, image_url, options";
 
 // How recently an item has to have been added to still be worth flagging as
-// new in the catalog. The shop is ~180 items deep and almost all of them
-// landed in the bulk imports (migrations 0047/0048/0051), so tagging every
-// item with its add date would just be noise , only the genuinely recent
-// arrivals get a NEW tag and an "Added ..." line.
-export const NEW_ITEM_DAYS = 30;
+// new in the catalog. The shop is 539 active items deep and most of it landed
+// in bulk drops, so tagging every item with its add date would just be noise ,
+// only recent arrivals get a NEW tag and an "Added ..." line.
+//
+// 14 days puts the tag on ~100 items. 30 would reach ~149 (28% of the shop),
+// which stops meaning anything; re-check against the real spread before
+// widening this again.
+export const NEW_ITEM_DAYS = 14;
 
 // Below this, "Bought by N people" stops being social proof and starts
 // reading as "nobody wants this", which is worse for the item than showing
 // nothing at all. Sold-once items simply don't get the line.
 export const BUYERS_VISIBLE_MIN = 3;
 
+// created_at arrives as a Date, not a string: pgCompat talks to Postgres
+// through postgres.js, which parses timestamptz into a JS Date with its
+// default type handlers (there's no `types` override on the client). It only
+// looks like an ISO string from outside, because res.json() serialises it on
+// the way out. Both shapes are accepted so this can't silently go false again
+// if the driver or the column type ever changes underneath it.
 export function isNewItem(createdAt: unknown, now: Date = new Date()): boolean {
-  if (typeof createdAt !== "string" || !createdAt) return false;
-  const added = new Date(createdAt);
-  if (Number.isNaN(added.getTime())) return false;
+  const added =
+    createdAt instanceof Date
+      ? createdAt
+      : typeof createdAt === "string" && createdAt
+        ? new Date(createdAt)
+        : null;
+  if (!added || Number.isNaN(added.getTime())) return false;
   const ageMs = now.getTime() - added.getTime();
   // A clock-skewed future timestamp is still "new", it just isn't old yet.
   return ageMs < NEW_ITEM_DAYS * 86_400_000;
