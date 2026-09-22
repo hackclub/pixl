@@ -384,7 +384,7 @@ const Pixl = (() => {
     // opts.kind: "image" (default, /api/uploads) or "bom" (project-scoped,
     // a hardware ship's Bill of Materials CSV, see MAX_CSV_BYTES server-side).
     const isBom = opts.kind === "bom";
-    // Must match MAX_MODERATE_BYTES in apps/server/src/imageModeration.ts (images)
+    // Must match MAX_IMAGE_BYTES in apps/server/src/routes/uploads.ts (images)
     // or MAX_CSV_BYTES in apps/server/src/routes/uploads.ts (bom), those are the
     // hard server-side caps, so reject early instead of making the caller wait
     // on an upload that's guaranteed to 413.
@@ -400,8 +400,6 @@ const Pixl = (() => {
     });
     const json = await res.json().catch(() => null);
     if (!json || !json.ok || !json.url) {
-      if (json && json.error === "image_rejected")
-        throw new Error("That image was rejected: " + (json.reason || "inappropriate for Pixl") + ".");
       throw new Error((json && json.error) || "upload_failed");
     }
     return json.url;

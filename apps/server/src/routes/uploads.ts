@@ -1,7 +1,6 @@
 import express, { Router } from "express";
 import { verifySessionToken } from "../auth/session.js";
 import { supabase } from "../db/client.js";
-import { checkImageSafe, MAX_MODERATE_BYTES } from "../imageModeration.js";
 import { isRealImage } from "../imageValidation.js";
 import { consumeRateLimit, type RateLimitOptions } from "../rateLimit.js";
 import { validateBomCsv, sanitizeBomCsv } from "./bomCsv.js";
@@ -12,6 +11,7 @@ const router = Router();
 // No image/gif: YSWS submission guidelines require screenshots to be static,
 // not animated or video.
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
+const MAX_IMAGE_BYTES = 15_000_000;
 
 type CdnOutcome =
   | { ok: true; url: string }
@@ -63,7 +63,7 @@ async function uploadToCdn(form: FormData, key: string): Promise<CdnOutcome> {
 // Proxy image uploads to the Hack Club CDN so the key stays server-side.
 router.post(
   "/api/uploads",
-  express.raw({ type: IMAGE_TYPES, limit: MAX_MODERATE_BYTES }),
+  express.raw({ type: IMAGE_TYPES, limit: MAX_IMAGE_BYTES }),
   async (req, res) => {
     const token = typeof req.query.token === "string" ? req.query.token : "";
     const session = token ? verifySessionToken(token) : null;
@@ -107,18 +107,6 @@ router.post(
         return res.status(429).json({ ok: false, error: "quota_exceeded" });
       }
       return res.status(503).json({ ok: false, error: "quota_unavailable" });
-    }
-
-    // Moderation must finish, and pass, before the bytes ever reach the CDN -
-    // an image cdn.hackclub.com has stored is public and durable, so a
-    // rejected image must never be uploaded at all, not just withheld from
-    // the response.
-    const safety = await checkImageSafe(buf, type);
-    if (!safety.safe) {
-      await releaseCdnUploadQuota(session.userId, buf.length, quota.windowId);
-      return res
-        .status(400)
-        .json({ ok: false, error: "image_rejected", reason: safety.reason });
     }
 
     const ext = type === "image/jpeg" ? "jpg" : (type.split("/")[1] ?? "png");
