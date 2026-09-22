@@ -22,6 +22,7 @@ import {
 import { TECHNICAL_FEATURES_MIN } from "@/lib/auditNote";
 import { isSafeUrl } from "@/lib/safeUrl";
 import { PendingButton } from "@/app/_components/PendingButton";
+import { BlackoutReviewSection, type BlackoutReviewData } from "@/app/_components/BlackoutReviewSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -382,6 +383,7 @@ export function ReviewForm({
   hackatimeSeconds = 0,
   ageFlag = false,
   collaborators = [],
+  blackout = null,
   tier = 1,
   playerReBefore = 0,
   fundingUsd = 0,
@@ -408,6 +410,8 @@ export function ReviewForm({
   hackatimeSeconds?: number;
   ageFlag?: boolean;
   collaborators?: CollaboratorHours[];
+  /** Operation Blackout entry awaiting a ruling, when this project has one. */
+  blackout?: BlackoutReviewData | null;
   /** The project's current tier (1-4). Submitted with the verdict. */
   tier?: number;
   /** The player's lifetime RE excluding this project - what sets their rate. */
@@ -744,6 +748,20 @@ export function ReviewForm({
         return false;
       }
     }
+    if (blackout && verdict === "approved") {
+      const picked = document.querySelector<HTMLInputElement>('input[name="blackoutDecision"]:checked');
+      const reason = document.querySelector<HTMLTextAreaElement>('textarea[name="blackoutNote"]');
+      if (!picked) {
+        setStep(1);
+        setStepError("Rule on the Operation Blackout entry first: eligible or not eligible.");
+        return false;
+      }
+      if (picked.value === "ineligible" && !reason?.value.trim()) {
+        setStep(1);
+        setStepError("Say why this entry isn't eligible for Operation Blackout.");
+        return false;
+      }
+    }
     setStepError("");
     return true;
   };
@@ -925,6 +943,7 @@ export function ReviewForm({
       {collaborators.map((c) => (
         <CollaboratorHoursInput key={c.id} c={c} />
       ))}
+      {blackout && <BlackoutReviewSection data={blackout} />}
       <TierAndPayout
         hours={hours}
         tier={tierState}

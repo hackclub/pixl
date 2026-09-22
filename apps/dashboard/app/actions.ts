@@ -99,6 +99,8 @@ import {
   type ReviewQueueScope,
 } from "@/lib/guard";
 import { GUIDELINES_VERSION } from "@/lib/guidelines";
+import { applyBlackoutDecision } from "@/lib/operationsReview";
+import { BLACKOUT_SLUG, getBlackoutEntry, operationRpc } from "@/lib/operations";
 
 const DEFAULT_WARNING =
   "Please keep chat messages and display names appropriate. Continued violations may result in a ban from Pixl.";
@@ -613,6 +615,9 @@ interface BeneficiaryPayout {
   goalMult: number;
   /** Pixels withheld from this payout for a hardware funding grant (0 = none). */
   fundingPx: number;
+  /** The person's RE-derived $/hr on this ship, before referral boosts or goal
+   * multipliers , the "normal rate" Operation Blackout compares its floor to. */
+  baseUsdRate: number;
 }
 
 // Credits one beneficiary (the project owner, or an accepted collaborator)
@@ -662,6 +667,7 @@ async function creditBeneficiary(
   const xpBefore = await lifetimeRe(userId, projectId);
   const projectRe = reForHours(creditHours, tier);
   let pxRate = pxPerHourOver(xpBefore, xpBefore + projectRe);
+  const baseUsdRate = pxRate * config.economy.pixelValueUsd;
   const alreadyPx = await projectPixelTotal(projectId, userId);
   // A project only counts as a "new ship" for referral purposes the first
   // time it earns any pixels , re-approvals of an already-credited project
@@ -734,7 +740,7 @@ async function creditBeneficiary(
         .is("rewarded_at", null)
         .select("id")
         .maybeSingle();
-      if (!claimed) return { totalPx, deltaPx, pxRate, xpBefore, goalNote, referralNote, alreadyPx, projectRe, goalMult, fundingPx };
+      if (!claimed) return { totalPx, deltaPx, pxRate, xpBefore, goalNote, referralNote, alreadyPx, projectRe, goalMult, fundingPx, baseUsdRate };
       await db.rpc("adjust_user_pixels", {
         p_user_id: referral.referrer_id,
         p_amount: tier.px,
@@ -768,7 +774,7 @@ async function creditBeneficiary(
     }
   }
 
-  return { totalPx, deltaPx, pxRate, xpBefore, goalNote, referralNote, alreadyPx, projectRe, goalMult, fundingPx };
+  return { totalPx, deltaPx, pxRate, xpBefore, goalNote, referralNote, alreadyPx, projectRe, goalMult, fundingPx, baseUsdRate };
 }
 
 // Admin-only: drafts review notes with AI (Claude Sonnet via OpenRouter, see
@@ -981,6 +987,10 @@ export async function reviewProject(formData: FormData): Promise<void> {
   // a second pass, so it falls through to bounce straight back to the maker.
   if (stage === "shipped" && verdict !== "needs_changes") {
     const proposedKey = verdict === "ban" ? "banned" : verdict;
+    if (verdict === "approved") {
+      const blackoutError = await applyBlackoutDecision({ projectId, formData, by, stage: "first_pass" });
+      if (blackoutError) redirect(`${back}?error=${encodeURIComponent(blackoutError)}`);
+    }
     const { data: project, error } = await db
       .from("projects")
       .update({
@@ -1078,6 +1088,17 @@ export async function reviewProject(formData: FormData): Promise<void> {
       return;
     }
     await insertReviewAudit(formData, projectId, project.user_id, by, "needs_changes", note, claimedHours, approvedHours);
+    await operationRpc.requestChanges(projectId);
+    const changesEntry = await getBlackoutEntry(projectId);
+    if (changesEntry?.graceDeadline && changesEntry.status === "needs_changes") {
+      const deadlineLabel = new Date(changesEntry.graceDeadline).toLocaleString("en-GB", {
+        day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC",
+      });
+      const msg = `"${project.name}" keeps its Operation Blackout entry. Make the requested fixes and ship again by ${deadlineLabel} UTC , only a small amount of fix work in that window counts toward Blackout, it isn't a second Blackout window.`;
+      await notifyOwner(project.user_id, "Operation Blackout: fix window", msg);
+      for (const collaboratorId of await acceptedCollaboratorUserIds(projectId))
+        await notifyOwner(collaboratorId, "Operation Blackout: fix window", msg);
+    }
     if (stage === "second_review")
       await voidFirstPassPayouts(projectId, "final verdict was needs_changes, not an approval");
     // Pays out only when an admin has set needs_changes_pixels above 0 (see
@@ -1126,6 +1147,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
       return;
     }
     await insertReviewAudit(formData, projectId, project.user_id, by, "banned", note, claimedHours, approvedHours);
+    await operationRpc.onBan(projectId);
     if (stage === "second_review")
       await voidFirstPassPayouts(projectId, "final verdict was a ban, not an approval");
     const banBody =`Your project "${project.name}" was permanently banned by ${reviewer} and can no longer be shipped to Pixl.\n\nReason: ${note}\n\nIf you think this is a mistake, contact the Pixl team.`;
@@ -1155,6 +1177,9 @@ export async function reviewProject(formData: FormData): Promise<void> {
       )}`,
     );
   }
+
+  const finalBlackoutError = await applyBlackoutDecision({ projectId, formData, by, stage: "final" });
+  if (finalBlackoutError) redirect(`${back}?error=${encodeURIComponent(finalBlackoutError)}`);
 
   const { data: project, error } = await db
     .from("projects")
@@ -1287,6 +1312,14 @@ export async function reviewProject(formData: FormData): Promise<void> {
   // Split payout: every accepted collaborator is credited independently at
   // their own rate tier for their own submitted hours slice (capped at what
   // they actually tracked, see claimedHoursForCollaborator).
+  const blackoutContribs: { user_id: string; normal_usd_rate: number; credit_hours: number; skip_reason?: string }[] = [
+    {
+      user_id: project.user_id,
+      normal_usd_rate: ownerPayout.baseUsdRate,
+      credit_hours: creditHours,
+      ...(holdForTrial ? { skip_reason: "trial_prize_hold" } : {}),
+    },
+  ];
   for (const c of collaborators) {
     const cClaimedHours = await claimedHoursForCollaborator(projectId, c.user_id, c.hackatime_seconds);
     const rawHours = Number(String(formData.get(`collabHours_${c.id}`) ?? cClaimedHours));
@@ -1304,6 +1337,11 @@ export async function reviewProject(formData: FormData): Promise<void> {
       allBeneficiaryIds.filter((id) => id !== c.user_id),
       tierUsed,
     );
+    blackoutContribs.push({
+      user_id: c.user_id,
+      normal_usd_rate: cPayout.baseUsdRate,
+      credit_hours: cCreditHours,
+    });
     let cCredited: string;
     if (cPayout.alreadyPx > 0 && cPayout.deltaPx > 0) {
       cCredited = `\n\n+${cPayout.deltaPx} pixels for what's new (${cPayout.totalPx} pixels total for this project , ${cCreditHours}h approved).`;
@@ -1321,6 +1359,31 @@ export async function reviewProject(formData: FormData): Promise<void> {
       "Project approved!",
       `"${project.name}" passed review , approved by ${reviewer}. Congrats on shipping!${cCredited}`,
     );
+  }
+
+  const blackout = await operationRpc.settle({
+    slug: BLACKOUT_SLUG,
+    projectId,
+    by,
+    contribs: blackoutContribs,
+  });
+  if (!blackout.ok) {
+    console.error("reviewProject: Blackout settlement failed", projectId, blackout.error);
+    await logModAction(project.user_id, "blackout_settle_failed", `${project.name}: ${blackout.error}`, by);
+  } else if (Array.isArray(blackout.contributors)) {
+    for (const r of blackout.contributors as { user_id: string; paid_hours: number; uplift_px: number; effective_usd_rate?: number; skipped?: string }[]) {
+      if (r.skipped || !(Number(r.paid_hours) > 0)) continue;
+      const rate = Number(r.effective_usd_rate) || 0;
+      await notifyOwner(
+        r.user_id,
+        "Operation Blackout approved",
+        Number(r.uplift_px) > 0
+          ? `"${project.name}" was approved for Operation Blackout: ${r.paid_hours}h count at $${rate.toFixed(2)}/hr, +${r.uplift_px} pixels on top of your normal payout.`
+          : `"${project.name}" was approved for Operation Blackout: ${r.paid_hours}h count. Your normal rate ($${rate.toFixed(2)}/hr) was already at or above the Blackout floor, so no extra pixels this time.`,
+      );
+    }
+    if (Number(blackout.paid_px) > 0)
+      await logModAction(project.user_id, "blackout_paid", `${project.name}: +${blackout.paid_px} pixels Blackout top-up`, by);
   }
 
   // Bounties the final reviewer ticked: fixed prize each, once per project,
@@ -1577,6 +1640,8 @@ export async function reReviewProject(formData: FormData): Promise<void> {
   // were credited independently, so each gets their own clawback too.
   let revoked = await revokeProjectPixels(project.user_id, project.id, by);
   await reverseReferralForRevokedProject(project.user_id, project.id, by);
+  const blackoutRevert = await operationRpc.revert(project.id, by);
+  if (!blackoutRevert.ok) console.error("reReviewProject: Blackout revert failed", project.id, blackoutRevert.error);
   // An unclaimed Trial reward goes back in the box with the verdict. One
   // already taken stays taken , the prize order is out the door by then.
   await db
@@ -2369,6 +2434,7 @@ export async function banProject(formData: FormData): Promise<void> {
     return;
   }
   await logModAction(project.user_id, "project_banned", `${project.name}: ${reason}`, by);
+  await operationRpc.onBan(projectId);
 
   const body = `Your project "${project.name}" was permanently banned by ${reviewer} and can no longer be shipped to Pixl.\n\nReason: ${reason}\n\nIf you think this is a mistake, contact the Pixl team.`;
   const { error: notifyError } = await db.from("notifications").insert({

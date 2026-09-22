@@ -3,6 +3,7 @@ import { requirePagePerm, requireGuidelinesAck } from "@/lib/guard";
 import { listSecondReviewProjects } from "@/lib/db";
 import { slackHandles } from "@/lib/slack";
 import { hackatimeUserIdsFor } from "@/lib/hackatime";
+import { listBlackoutQueueProjectIds } from "@/lib/operations";
 import { ReviewTable } from "@/app/_components/ReviewTable";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +23,10 @@ export default async function SecondPassPage() {
   await requireGuidelinesAck(access);
   if (!access.canSecondPass) redirect("/review");
 
-  const rows = await listSecondReviewProjects(access.session.slackId);
+  const [rows, blackoutIds] = await Promise.all([
+    listSecondReviewProjects(access.session.slackId),
+    listBlackoutQueueProjectIds(),
+  ]);
   const [handles, hackatimeUserIds] = await Promise.all([
     slackHandles(rows.map((p) => p.users?.slack_id)),
     hackatimeUserIdsFor(rows),
@@ -38,6 +42,7 @@ export default async function SecondPassPage() {
         rows={rows}
         handles={handles}
         hackatimeUserIds={hackatimeUserIds}
+        blackoutIds={blackoutIds}
         emptyLabel="Nothing waiting on a final pass right now."
       />
     </div>

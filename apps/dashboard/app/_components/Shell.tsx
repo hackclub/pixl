@@ -38,6 +38,7 @@ export interface NavFlags {
   shop: boolean;
   fulfillment: boolean;
   events: boolean;
+  operations: boolean;
   sidequests: boolean;
   story: boolean;
   goals: boolean;
@@ -68,6 +69,7 @@ const GLYPHS = {
   shopDetail: "search",
   fulfillment: "package",
   events: "explore",
+  operations: "flag",
   sidequests: "compass",
   story: "compass",
   goals: "bank",
@@ -173,6 +175,7 @@ export function Shell({
           count: orderCount,
         },
         { href: "/events", label: "Events", icon: "events", show: nav.events },
+        { href: "/operations", label: "Operations", icon: "operations", show: nav.operations },
         {
           href: "/sidequests",
           label: "Trials & NPCs",

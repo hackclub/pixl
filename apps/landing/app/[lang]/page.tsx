@@ -7,6 +7,7 @@ import { WTFISTHIS } from "../_components/Description";
 import { Story } from "../_components/Story";
 import { MapPreview } from "../_components/MapPreview";
 import { MainContent } from "../_components/MainContent";
+import { OperationTeaser } from "../_components/OperationTeaser";
 import { FAQ } from "../_components/FAQ";
 import { Footer } from "../_components/Footer";
 import { ExampleSubmission } from "../_components/ExampleSubmission";
@@ -25,6 +26,7 @@ export default async function Home({ params }: PageProps<"/[lang]">) {
       <Story />
       <MapPreview />
       <MainContent />
+      <OperationTeaser />
       <FAQ />
       <Footer />
     </div>

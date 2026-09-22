@@ -854,6 +854,31 @@
         font-size: 15.5px;
         color: var(--ink);
       }
+      .bo-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 13px 15px;
+        border: var(--bw) solid var(--gold);
+        background: var(--panel-deep);
+      }
+      .bo-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .bo-text {
+        font-size: 13.5px;
+        color: var(--ink);
+        line-height: 1.45;
+      }
+      .bo-link {
+        font-size: 13px;
+        color: var(--teal);
+        align-self: flex-start;
+      }
       .check-row input {
         accent-color: var(--gold);
         width: 18px;
@@ -1325,6 +1350,7 @@
       let activity = []; // synthesized action log, newest first
       let news = []; // program news, newest first
       let activeTrial = null; // the Trial the player arrived to build for, if any
+      let blackout = { op: null, entries: {} }; // Operation Blackout: public status + this player's entries by project id
       let hasBirthday = true; // assume yes until we hear otherwise, avoids a flash of the banner
       let form = null;
       // The player's current $/hour ship rate (from /api/profile/wallet), used
@@ -1669,6 +1695,7 @@
               <span class="chip ${cls}">${label}</span>
               <span class="chip">${LEVELS[(p.level || 1) - 1][0]}</span>
               ${trackedChipHtml(p)}
+              ${blackoutChipHtml(p)}
               ${p.trial_reward_choice === "pending" ? `<span class="chip gold">TRIAL REWARD WAITING</span>` : ""}
             </div>
             ${p.description ? `<div class="proj-meta"><span>${Pixl.esc(p.description)}</span></div>` : ""}
@@ -2494,7 +2521,7 @@
         // collaborator on it (or you're signed out, where the list is empty),
         // so this is somebody else's project seen through its permalink.
         if (!p) return renderPublicProjectView(id);
-        await loadTrials();
+        await Promise.all([loadTrials(), loadBlackout()]);
         $("new-btn").style.display = "none";
         // Collaborators are view/log-hours only, they get a trimmed read-only
         // page instead of the owner's full editor.
@@ -2517,6 +2544,7 @@
         <span class="chip teal tip-wrap" id="time-chip" tabindex="0"><span class="tip-main">${Pixl.hours(linkedSeconds(p))} TRACKED</span><span class="tip-pop">Hackatime: ${Pixl.hours(linkedSeconds(p))} · Journal: 0h</span></span>
         ${p.pixels_earned ? `<span class="chip gold">+${Math.round(p.pixels_earned)} PX EARNED</span>` : ""}
         ${p.sidequest_name ? `<span class="chip teal">TRIAL: ${Pixl.esc(p.sidequest_name)}</span>` : ""}
+        <span id="bo-head-chip">${blackoutChipHtml(p)}</span>
         <button class="btn ghost" id="share-btn" style="margin-left:auto">SHARE</button>
       </div>
       <div class="proj-hero" id="p-hero">${p.image_url ? `<img src="${Pixl.esc(p.image_url)}" alt="">` : `<span class="faint" style="font-size:13px">No thumbnail yet</span>`}</div>
@@ -2555,6 +2583,7 @@
           justify your hours, so an empty journal is the fastest way to get deflated.
         </div>
         ${inReview ? "" : trialPickerHtml(p)}
+        ${blackoutPanelHtml(p, inReview)}
         <label class="check-row">
           <input type="checkbox" id="s-eligible"${p.eligibility_attested || inReview ? " checked" : ""}>
           This isn't a school assignment or paid Hack Club work
@@ -2705,6 +2734,7 @@
         autoGrow($("j-content"));
         loadJournal(p.id);
         renderCollaborators(p);
+        wireBlackout(p);
       }
 
       /* ---------- collaborators ---------- */
@@ -3372,7 +3402,7 @@
           return Pixl.toast(err(r.error), true);
         }
         Pixl.toast("SHIPPED! It's in the review queue.");
-        await loadProjects();
+        await Promise.all([loadProjects(), loadBlackout()]);
         renderProject(p.id);
       }
 
@@ -4049,6 +4079,110 @@
         projects = (d.projects || []).map((p) => ({ ...p, id: Number(p.id) }));
       }
 
+      const BLACKOUT_SLUG = "operation-blackout";
+      const BLACKOUT_CHIPS = {
+        entered: ["BLACKOUT: ENTERED", "gold"],
+        shipped: ["BLACKOUT: SHIPPED", "gold"],
+        awaiting_review: ["BLACKOUT: IN REVIEW", "gold"],
+        eligible: ["BLACKOUT: ELIGIBLE", "green"],
+        ineligible: ["BLACKOUT: NOT ELIGIBLE", "red"],
+        approved: ["BLACKOUT: APPROVED", "green"],
+        needs_changes: ["BLACKOUT: FIX WINDOW", "gold"],
+      };
+      const BLACKOUT_TEXT = {
+        entered: "Entered Blackout. Work you do from now until you ship counts toward it.",
+        shipped: "Shipped for Blackout. A reviewer will rule on it with your normal review.",
+        awaiting_review: "Awaiting Blackout review. It is decided together with your project review.",
+        eligible: "Blackout eligible.",
+        ineligible: "Blackout ineligible. Your normal review and payout are unaffected.",
+        approved: "Blackout approved. Your Blackout pixels were added with your project payout.",
+        needs_changes: "Changes were requested. Your Blackout entry is kept: fix it and ship again before the fix window closes.",
+      };
+      const BLACKOUT_ERRORS = {
+        not_accepting_entries: "Operation Blackout isn't taking entries right now.",
+        project_in_review: "Unship it first, a project that is already in review can't be entered.",
+        project_banned: "This project can't be entered.",
+        cannot_withdraw: "It already shipped for Blackout, that can't be undone.",
+        project_not_found: "Only the project's owner can enter it.",
+      };
+
+      async function loadBlackout() {
+        try {
+          const d = await Pixl.api("/api/operations/" + BLACKOUT_SLUG);
+          blackout.op = d.operation || null;
+          blackout.entries = {};
+          for (const e of d.entries || []) blackout.entries[e.projectId] = e;
+        } catch (e) {
+          blackout = { op: null, entries: {} };
+        }
+      }
+
+      function blackoutChipHtml(p) {
+        const e = blackout.entries[p.id];
+        const c = e && BLACKOUT_CHIPS[e.label];
+        return c ? `<span class="chip ${c[1]}">${c[0]}</span>` : "";
+      }
+
+      function blackoutPanelHtml(p, inReview) {
+        const op = blackout.op;
+        if (!op) return "";
+        const e = blackout.entries[p.id];
+        const canEnter = ["draft", "needs_changes", "approved"].includes(p.status) && !p.banned_at;
+        const accepting = op.status === "active";
+        if (!e && !(accepting && canEnter)) return "";
+        const briefing = Pixl.config && Pixl.config.urls ? Pixl.config.urls.site + "/en/operations/blackout" : "#";
+        if (e) {
+          const c = BLACKOUT_CHIPS[e.label];
+          const canTakeBack = e.label === "entered" && !e.firstShipAt;
+          const until = e.graceDeadline
+            ? ` Fix window closes ${new Date(e.graceDeadline).toLocaleString()}.`
+            : "";
+          return `<div class="bo-panel" id="bo-panel">
+          <div class="bo-head"><strong>Operation Blackout</strong><span class="chip ${c[1]}">${c[0]}</span></div>
+          <div class="bo-text">${BLACKOUT_TEXT[e.label] || ""}${until}</div>
+          ${canTakeBack && !inReview ? `<label class="check-row"><input type="checkbox" id="bo-check" checked> Enter this project into Operation Blackout</label>` : ""}
+          <a class="bo-link" href="${briefing}" target="_blank" rel="noopener">Read the briefing</a>
+        </div>`;
+        }
+        const ends = op.endsAt ? new Date(op.endsAt).toLocaleString() : "";
+        return `<div class="bo-panel" id="bo-panel">
+          <div class="bo-head"><strong>Operation Blackout</strong></div>
+          <label class="check-row"><input type="checkbox" id="bo-check"> Enter this project into Operation Blackout</label>
+          <div class="bo-text">Only work you do after entering, and before you ship${ends ? " (by " + ends + ")" : ""}, is eligible. Entering doesn't guarantee approval, a reviewer decides. It can't be undone once you ship.</div>
+          <a class="bo-link" href="${briefing}" target="_blank" rel="noopener">Read the briefing</a>
+        </div>`;
+      }
+
+      function wireBlackout(p) {
+        const cb = $("bo-check");
+        if (!cb) return;
+        const inReview = ["shipped", "second_review", "fraud_review"].includes(p.status);
+        cb.addEventListener("change", async () => {
+          const want = cb.checked;
+          cb.disabled = true;
+          const r = want
+            ? await Pixl.send("POST", `/api/operations/${BLACKOUT_SLUG}/entries`, { projectId: p.id })
+            : await Pixl.send("DELETE", `/api/operations/${BLACKOUT_SLUG}/entries/${p.id}`);
+          if (r.ok) {
+            if (want && r.entry) blackout.entries[p.id] = r.entry;
+            else delete blackout.entries[p.id];
+            Pixl.toast(want ? "Entered Operation Blackout." : "Removed from Operation Blackout.");
+          } else {
+            Pixl.toast(BLACKOUT_ERRORS[r.error] || "Couldn't update Operation Blackout.", true);
+          }
+          const headChip = $("bo-head-chip");
+          if (headChip) headChip.innerHTML = blackoutChipHtml(p);
+          const panel = $("bo-panel");
+          if (panel) {
+            const fresh = document.createElement("div");
+            fresh.innerHTML = blackoutPanelHtml(p, inReview);
+            if (fresh.firstElementChild) panel.replaceWith(fresh.firstElementChild);
+            else panel.remove();
+          }
+          wireBlackout(p);
+        });
+      }
+
       async function loadTrials() {
         try {
           const d = await Pixl.api("/api/sidequests");
@@ -4165,6 +4299,7 @@
             Pixl.api("/api/profile/wallet"),
             loadProjects(),
             loadTrials(),
+            loadBlackout(),
             loadFeeds(),
           ]);
           stats = s.stats || null;

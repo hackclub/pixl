@@ -7,6 +7,7 @@ import {
 } from "@/lib/db";
 import { slackHandles } from "@/lib/slack";
 import { hackatimeUserIdsFor } from "@/lib/hackatime";
+import { listBlackoutQueueProjectIds } from "@/lib/operations";
 import { ReviewTable } from "@/app/_components/ReviewTable";
 import { LiveReview } from "@/app/_components/LiveReview";
 import { Badge } from "@/components/ui/badge";
@@ -31,12 +32,13 @@ const SORTS = [
 export default async function ReviewListPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; sort?: string; kind?: string }>;
+  searchParams: Promise<{ page?: string; sort?: string; kind?: string; blackout?: string }>;
 }) {
   const access = await requirePagePerm(["review"]);
   await requireGuidelinesAck(access);
   const viewer = access.session.slackId;
-  const { page, sort, kind: rawKind } = await searchParams;
+  const { page, sort, kind: rawKind, blackout } = await searchParams;
+  const onlyBlackout = blackout === "1";
   // Hardware and software have separate review queues. A reviewer restricted
   // to one queue (access.reviewQueues) can't view or query the other , clamp
   // to their allowed queue regardless of what the URL asks for.
@@ -47,13 +49,20 @@ export default async function ReviewListPage({
 
   // None of these three depend on each other's result, so they run together
   // instead of as a chain of sequential round-trips.
-  const [finalRows, myRecent, rowsRaw] = await Promise.all([
+  const [finalRowsAll, myRecent, rowsAll, blackoutIds] = await Promise.all([
     access.canSecondPass
       ? listSecondReviewProjects(viewer, kind, { includeClaimed: true })
       : Promise.resolve([]),
     listReviewAudits(5, viewer),
     listShippedProjects(viewer, kind, { includeClaimed: true }),
+    listBlackoutQueueProjectIds(),
   ]);
+  const blackoutSet = new Set(blackoutIds);
+  const blackoutCount =
+    rowsAll.filter((p) => blackoutSet.has(Number(p.id))).length +
+    finalRowsAll.filter((p) => blackoutSet.has(Number(p.id))).length;
+  const finalRows = onlyBlackout ? finalRowsAll.filter((p) => blackoutSet.has(Number(p.id))) : finalRowsAll;
+  const rowsRaw = onlyBlackout ? rowsAll.filter((p) => blackoutSet.has(Number(p.id))) : rowsAll;
   let rows = rowsRaw;
   if (sort === "hours") rows = [...rows].sort((a, b) => b.hours - a.hours);
   else if (sort === "status") rows = [...rows].sort((a, b) => a.status.localeCompare(b.status));
@@ -73,8 +82,9 @@ export default async function ReviewListPage({
     hackatimeUserIdsFor(finalRows),
   ]);
   const sortKey = SORTS.some((s) => s.key === sort) ? sort : "oldest";
+  const blackoutQ = onlyBlackout ? "&blackout=1" : "";
   const qp = (p: number) =>
-    `/review?page=${p}${sortKey !== "oldest" ? `&sort=${sortKey}` : ""}${kindQ}`;
+    `/review?page=${p}${sortKey !== "oldest" ? `&sort=${sortKey}` : ""}${kindQ}${blackoutQ}`;
 
   return (
     <div>
@@ -121,9 +131,25 @@ export default async function ReviewListPage({
               rows={finalRows}
               handles={finalHandles}
               hackatimeUserIds={finalHackatimeUserIds}
+              blackoutIds={blackoutIds}
               emptyLabel="Nothing waiting on a final pass."
             />
           </details>
+        </div>
+      )}
+
+      {(blackoutCount > 0 || onlyBlackout) && (
+        <div className="mb-4">
+          <Button
+            asChild
+            variant={onlyBlackout ? "default" : "outline"}
+            size="sm"
+            className={onlyBlackout ? "" : "border-amber-300 text-amber-700 dark:text-amber-300"}
+          >
+            <Link href={onlyBlackout ? `/review${kindQ ? `?${kindQ.slice(1)}` : ""}` : `/review?blackout=1${kindQ}`}>
+              Blackout queue ({blackoutCount}){onlyBlackout ? " · show all" : ""}
+            </Link>
+          </Button>
         </div>
       )}
 
@@ -137,7 +163,7 @@ export default async function ReviewListPage({
               size="sm"
               className={sortKey === s.key ? "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground" : ""}
             >
-              <Link href={`/review?sort=${s.key}${kindQ}`}>
+              <Link href={`/review?sort=${s.key}${kindQ}${blackoutQ}`}>
                 {s.label}
               </Link>
             </Button>
@@ -154,6 +180,7 @@ export default async function ReviewListPage({
       <ReviewTable
         rows={slice}
         handles={handles}
+        blackoutIds={blackoutIds}
         emptyLabel="Queue's clear. Nothing waiting for review."
       />
 

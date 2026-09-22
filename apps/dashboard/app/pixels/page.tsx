@@ -30,6 +30,8 @@ const PER = 25;
 const REASON_LABEL: Record<string, string> = {
   project_approved: "Project approved",
   review_reverted: "Verdict reverted",
+  operation_blackout: "Operation Blackout",
+  operation_blackout_reverted: "Blackout reverted",
   manual_deduction: "Manual deduction",
   manual_grant: "Manual grant",
 };
