@@ -656,6 +656,20 @@ export default async function ReviewDetail({
                 </a>
               </Button>
             )}
+            {/* Second pass only - the Telescreen workbench is what a final
+                reviewer cross-checks heartbeats against, and there's nothing
+                to link to before the owner's Hackatime id resolves. */}
+            {isFinalStage && hackatimeReport?.hackatimeUserId && (
+              <Button asChild variant="default" size="sm">
+                <a
+                  href={`https://telescreen.hackclub.com/workbench/hackatime/overview?u=${encodeURIComponent(hackatimeReport.hackatimeUserId)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Telescreen ↗
+                </a>
+              </Button>
+            )}
           </div>
 
           {/* Eligibility check - YSWS submission guideline gaps (exclusions,
@@ -1035,21 +1049,8 @@ export default async function ReviewDetail({
                 {canReview ? (
                   <>
                     <Card className="p-5 gap-0">
-                      <div className="flex items-center justify-between gap-3 mb-1 flex-wrap">
-                        <div className="text-sm font-semibold">
-                          {isFinalStage ? "Final pass" : "First pass"}
-                        </div>
-                        {isFinalStage && hackatimeReport?.hackatimeUserId && (
-                          <Button asChild variant="default" size="sm">
-                            <a
-                              href={`https://telescreen.hackclub.com/workbench/hackatime/overview?u=${encodeURIComponent(hackatimeReport.hackatimeUserId)}`}
-                              target="_blank"
-                              rel="noreferrer"
-                            >
-                              Open in Telescreen
-                            </a>
-                          </Button>
-                        )}
+                      <div className="text-sm font-semibold mb-1">
+                        {isFinalStage ? "Final pass" : "First pass"}
                       </div>
                       <p className="text-xs text-muted-foreground mb-3">
                         {isFinalStage
