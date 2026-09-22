@@ -2126,7 +2126,7 @@ export async function deflateProjectHours(formData: FormData): Promise<void> {
 
   const { data: project } = await db
     .from("projects")
-    .select("id, name, user_id, status, banned_at, rejected_at, approved_hours, level")
+    .select("id, name, user_id, status, banned_at, rejected_at, approved_hours, level, funding_deducted_px")
     .eq("id", projectId)
     .maybeSingle();
   if (!project) redirect(`${back}?error=${encodeURIComponent("Project not found.")}`);
@@ -2147,7 +2147,15 @@ export async function deflateProjectHours(formData: FormData): Promise<void> {
   const ratio = newHours / oldHours;
   const tier = Number(project.level) || 1;
 
-  const newOwnerPx = await repriceForHours(project.user_id, projectId, newHours, tier);
+  // Hardware funding grants dock a flat pixel amount off the owner's payout
+  // (see creditBeneficiary's fundingPx) - repriceForHours only rebuilds the
+  // GROSS per-hour figure, so that same deduction has to come back off here
+  // too, or a funded project's "corrected" total comes out too high and
+  // creditProjectPixels ends up crediting MORE pixels instead of clawing
+  // back (funding_deducted_px is owner-only, never applies to collaborators).
+  const fundingDeductedPx = Number(project.funding_deducted_px) || 0;
+  const grossOwnerPx = await repriceForHours(project.user_id, projectId, newHours, tier);
+  const newOwnerPx = Math.max(grossOwnerPx - fundingDeductedPx, 0);
   await creditProjectPixels(project.user_id, projectId, newOwnerPx, newHours, by);
 
   const { data: collabRows } = await db
@@ -3953,6 +3961,19 @@ export async function updateShopItem(formData: FormData): Promise<void> {
   }
   const { data: before } = await db.from("shop_items").select("*").in("id", affectedIds);
 
+  // Configurator items (Framework laptops, Huawei tablets, ...) show their
+  // OWN price via config_options.base_price, not the plain `price` column
+  // (see the client's price lookup) - this form has no configurator fields at
+  // all, so without this, editing price here silently stopped mattering for
+  // any item that has a configurator, the plain column changed but the
+  // storefront kept reading the old base_price forever.
+  const target = (before ?? []).find((b) => (b as { id: number }).id === id) as
+    | { config_options: { base_price?: number; reference_url?: string; groups?: unknown[] } | null }
+    | undefined;
+  if (target?.config_options) {
+    patch.config_options = { ...target.config_options, base_price: price };
+  }
+
   const { error } = await db.from("shop_items").update(patch).eq("id", id);
   if (error) throw new Error(error.message);
 
@@ -4018,9 +4039,17 @@ export async function updateShopItemPrices(formData: FormData): Promise<void> {
     const raw = formData.get(`price_${r}`);
     if (raw === null) continue;
     const price = Math.max(0, Math.round(Number(raw) || 0));
+    const patch: Record<string, unknown> = { price };
+    // Same configurator base_price sync as updateShopItem above - this
+    // repricer is region-scoped, so look up that region's own existing row.
+    const existingConfig = ((before ?? []).find(
+      (b) => (b as { region: string }).region === r,
+    ) as { config_options: { base_price?: number; reference_url?: string; groups?: unknown[] } | null } | undefined)
+      ?.config_options;
+    if (existingConfig) patch.config_options = { ...existingConfig, base_price: price };
     const { error } = await db
       .from("shop_items")
-      .update({ price })
+      .update(patch)
       .eq("name", name)
       .eq("region", r)
       .eq("unlock_xp", 0);
@@ -4163,7 +4192,11 @@ export async function updateShopItemRegionDetails(formData: FormData): Promise<v
         base_price:
           basePriceRaw !== null
             ? Math.max(0, Math.round(Number(basePriceRaw) || 0))
-            : (existing.base_price ?? patch.price ?? row?.price ?? 0),
+            // The configurator's own base-price field wasn't touched this
+            // save - a plain price edit in this same save should still win
+            // over the old stale base_price (they're meant to track each
+            // other, see addShopItem), not get silently overridden by it.
+            : (patch.price ?? existing.base_price ?? row?.price ?? 0),
         reference_url:
           refUrlRaw !== null
             ? String(refUrlRaw).trim().slice(0, 500)
