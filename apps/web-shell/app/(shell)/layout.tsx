@@ -28,7 +28,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
     // guess, and a login that comes back to the wrong page is worse than no
     // login button at all. The client corrects this on mount either way.
     const back = currentUrl(host, h.get("x-pixl-path") ?? "/");
-    return <Gate game={game} loginBase={loginUrl("")} fallbackBack={back} />;
+    return <Gate loginBase={loginUrl("")} fallbackBack={back} />;
   }
 
   const [wallet, events] = await Promise.all([

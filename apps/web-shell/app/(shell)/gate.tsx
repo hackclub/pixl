@@ -3,18 +3,14 @@
 import { useEffect, useState } from "react";
 
 /**
- * Signed-out gate. Used to offer only "Enter the Game", which meant the only
- * way into any shell page was to load the Godot client and have it hand a
- * token over. The old static shell had a LOG IN button for exactly this
- * (pixl.js mountTopbar) and the React port dropped it, so this puts direct
- * login back.
+ * Signed-out gate. Only action offered is Log In - the old static shell's
+ * LOG IN button (pixl.js mountTopbar), which the React port dropped and this
+ * puts back.
  */
 export function Gate({
-  game,
   loginBase,
   fallbackBack,
 }: {
-  game: string;
   /** `/api/login?back=` , the target gets appended. */
   loginBase: string;
   /** Best-effort current URL from the server, replaced once we're in the
@@ -30,16 +26,10 @@ export function Gate({
     <div className="gate">
       <div className="gate-card">
         <img className="gate-splash" src="/img/boot-splash.png" alt="Pixl" />
-        <p>
-          This page is part of the Pixl world. Log in with Hack Club to use it right here, or hop
-          into the game and walk up to the shop or an NPC.
-        </p>
+        <p>This page is part of the Pixl world. Log in with Hack Club to use it right here.</p>
         <div className="gate-actions">
           <a className="btn-enter" href={loginBase + encodeURIComponent(back)}>
             Log In
-          </a>
-          <a className="btn-enter ghost" href={game}>
-            Enter the Game
           </a>
         </div>
       </div>

@@ -370,9 +370,6 @@ select.field { cursor: pointer; }
 }
 .btn-enter:hover { border-bottom-width: 12px; transform: translate(-4px, -4px); }
 .btn-enter:active { border-bottom-width: 4px; transform: translate(0, 2px); }
-/* Log in is the primary action now, so Enter the Game needs a quieter
-   sibling treatment rather than two identical black slabs. */
-.btn-enter.ghost { background: transparent; color: #000; }
 .gate-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 18px; }
 @media (max-height: 620px) {
   .gate-splash { --sw: min(560px, 70vw); }
