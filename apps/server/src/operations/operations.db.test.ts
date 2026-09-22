@@ -113,7 +113,7 @@ d("operations (real Postgres)", () => {
     process.env.DATABASE_URL = testUrl;
     process.env.JWT_SECRET ||= "test-secret";
     await sql.unsafe(loadSql("testdb/base-schema.sql"));
-    await sql.unsafe(loadSql("../../drizzle/0179_operations.sql"));
+    await sql.unsafe(loadSql("../../drizzle/0183_operations.sql"));
   });
 
   afterAll(async () => {

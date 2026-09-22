@@ -1,4 +1,4 @@
--- Minimal stand-in for the tables 0179_operations.sql reads or extends, so the
+-- Minimal stand-in for the tables 0183_operations.sql reads or extends, so the
 -- operations SQL can be exercised against a real Postgres in isolation. Only
 -- the columns those functions and the evidence code touch, kept in step with
 -- the real migrations (0009 project_journals, 0020/0023 pixels, 0081
