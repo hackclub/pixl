@@ -2015,6 +2015,149 @@ export async function sendProjectToAirtable(formData: FormData): Promise<void> {
   revalidatePath(back);
 }
 
+// A beneficiary's pixel payout for `hours` on this project, as if `hours` had
+// been the true credited figure all along - same rate formula creditBeneficiary
+// uses for a fresh approval (their own lifetime RE from every OTHER approved
+// project, averaged up through this project's own marginal RE window at its
+// tier), just run for a correction instead of a new ship. Deliberately never
+// re-triggers the one-time referral/community-goal bonuses a fresh approval
+// can add - those already paid out once and aren't part of the hourly rate
+// this recomputes.
+async function repriceForHours(
+  userId: string,
+  projectId: number,
+  hours: number,
+  tier: number,
+): Promise<number> {
+  const xpBefore = await lifetimeRe(userId, projectId);
+  const projectRe = reForHours(hours, tier);
+  const rate = pxPerHourOver(xpBefore, xpBefore + projectRe);
+  return Math.round(hours * rate);
+}
+
+// Lowers an already-approved project's credited hours after the fact - e.g.
+// Hack Club HQ flags an over-claim in the Unified YSWS Airtable base days
+// after approval, and Pixl risks a fine if the hours/pixels on our side don't
+// come back down to match. Recomputes the owner's (and every accepted
+// collaborator's, scaled by the same ratio as the owner's hours) pixel total
+// as if newHours had been the true figure from the start; creditProjectPixels
+// then does the actual clawback, which already auto-cancels pending orders
+// (newest first, refunding any leftover) if the corrected balance can't cover
+// them - see 0164_clawback_pending_orders.sql. Deflate only, never inflate -
+// raising hours back up isn't this button's job (that's a fresh appeal/review).
+// Owners/super-admins only: this DMs the player(s) and can cancel their
+// orders, a bigger blast radius than the "pixels" permission's manual
+// grant/deduct tool.
+export async function deflateProjectHours(formData: FormData): Promise<void> {
+  const access = await requireSuper();
+  const by = actorName(access);
+  const projectId = Number(formData.get("projectId") ?? 0);
+  const back = `/projects/${projectId}`;
+  if (!projectId) return;
+
+  const reason = String(formData.get("reason") ?? "").trim().slice(0, 1000);
+  if (!reason)
+    redirect(`${back}?error=${encodeURIComponent("A reason is required to deflate hours.")}`);
+
+  const { data: project } = await db
+    .from("projects")
+    .select("id, name, user_id, status, banned_at, rejected_at, approved_hours, level")
+    .eq("id", projectId)
+    .maybeSingle();
+  if (!project) redirect(`${back}?error=${encodeURIComponent("Project not found.")}`);
+  if (project.status !== "approved" || project.banned_at || project.rejected_at)
+    redirect(
+      `${back}?error=${encodeURIComponent("Only an approved, non-banned, non-rejected project can have its hours deflated.")}`,
+    );
+
+  const oldHours =
+    project.approved_hours != null ? Number(project.approved_hours) : await claimedHoursFor(projectId);
+  const rawNewHours = Number(String(formData.get("newHours") ?? "").trim());
+  const newHours = Math.round(rawNewHours * 10) / 10;
+  if (!Number.isFinite(newHours) || newHours < 0 || newHours >= oldHours)
+    redirect(
+      `${back}?error=${encodeURIComponent(`New hours must be a number from 0 up to (but not including) the current ${oldHours}h.`)}`,
+    );
+
+  const ratio = newHours / oldHours;
+  const tier = Number(project.level) || 1;
+
+  const newOwnerPx = await repriceForHours(project.user_id, projectId, newHours, tier);
+  await creditProjectPixels(project.user_id, projectId, newOwnerPx, newHours, by);
+
+  const { data: collabRows } = await db
+    .from("project_collaborators")
+    .select("id, user_id, approved_hours")
+    .eq("project_id", projectId)
+    .eq("status", "accepted");
+  const collaborators = (collabRows ?? []) as
+    { id: number; user_id: string; approved_hours: number | null }[];
+
+  const orderNote =
+    "If this left you without enough pixels to cover an order you'd already placed, that order was automatically cancelled and any leftover pixels refunded.";
+
+  for (const c of collaborators) {
+    const cOldHours = Number(c.approved_hours) || 0;
+    if (cOldHours <= 0) continue;
+    const cNewHours = Math.round(cOldHours * ratio * 10) / 10;
+    const cNewPx = await repriceForHours(c.user_id, projectId, cNewHours, tier);
+    await creditProjectPixels(c.user_id, projectId, cNewPx, cNewHours, by);
+    await db.from("project_collaborators").update({ approved_hours: cNewHours }).eq("id", c.id);
+
+    const cBody =
+      `"${project.name}"'s credited hours were corrected from ${cOldHours}h to ${cNewHours}h , your pixels for it were adjusted to match.\n\n` +
+      `Reason: ${reason}\n\n${orderNote}\n\nIf you think this is a mistake, contact the Pixl team.`;
+    await db.from("notifications").insert({ user_id: c.user_id, title: "Project hours corrected", body: cBody });
+    await dmOrEmail(c.user_id, "Project hours corrected", cBody);
+    await logModAction(
+      c.user_id,
+      "project_hours_deflated",
+      `${project.name}: collaborator ${cOldHours}h → ${cNewHours}h , ${reason}`,
+      by,
+    );
+  }
+
+  const { error } = await db
+    .from("projects")
+    .update({
+      approved_hours: newHours,
+      deflation_reason: reason,
+      hours_deflated_at: new Date().toISOString(),
+      hours_deflated_by: by,
+    })
+    .eq("id", projectId);
+  if (error) console.error("deflateProjectHours failed", error.message);
+
+  const { error: auditError } = await db.from("review_audits").insert({
+    project_id: projectId,
+    user_id: project.user_id,
+    reviewer: by,
+    verdict: "hours_deflated",
+    note: reason,
+    audit_note: "",
+    claimed_hours: oldHours,
+    approved_hours: newHours,
+  });
+  if (auditError) console.error("deflateProjectHours audit insert failed", auditError.message);
+
+  const ownerBody =
+    `"${project.name}"'s approved hours were corrected from ${oldHours}h to ${newHours}h , your pixels for it were adjusted to match.\n\n` +
+    `Reason: ${reason}\n\n${orderNote}\n\nIf you think this is a mistake, contact the Pixl team.`;
+  const { error: notifyError } = await db
+    .from("notifications")
+    .insert({ user_id: project.user_id, title: "Project hours corrected", body: ownerBody });
+  if (notifyError) console.error("deflateProjectHours notification failed", notifyError.message);
+  await dmOrEmail(project.user_id, "Project hours corrected", ownerBody);
+  await logModAction(
+    project.user_id,
+    "project_hours_deflated",
+    `${project.name}: ${oldHours}h → ${newHours}h , ${reason}`,
+    by,
+  );
+
+  revalidatePath(back);
+}
+
 // Any reviewer can nominate a project as a "Beacon" - a cosmetic badge shown
 // wherever the project is displayed publicly (explore, project page), never
 // a payout/pixel effect. Gated on "review" rather than "ban", unlike the

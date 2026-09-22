@@ -12,7 +12,9 @@ import {
   unbanProject,
   toggleProjectPeak,
   sendProjectToAirtable,
+  deflateProjectHours,
 } from "@/app/actions";
+import { fetchAirtableRecord, JUSTIFICATION_DISPLAY_FIELDS } from "@/lib/airtable";
 import {
   LevelBadge,
   BeaconBadge,
@@ -29,6 +31,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 export const dynamic = "force-dynamic";
 
@@ -78,6 +81,20 @@ export default async function ProjectPage({
   const canReReview =
     canModerate &&
     (project.status === "approved" || project.status === "needs_changes");
+  // Deflating hours moves real pixels, can cancel a player's orders, and DMs
+  // them , owners/super-admins only (see deflateProjectHours in app/actions.ts).
+  const canDeflate =
+    access.isSuper &&
+    project.status === "approved" &&
+    !project.banned_at &&
+    !project.rejected_at;
+  // What's actually sitting on the Airtable record this project was pushed
+  // to (see pushProjectToAirtable) - a staffer's context for whether/how much
+  // to deflate, never auto-applied. Only fetched when there's a record to
+  // read, and never blocks the page on a slow/failed Airtable call.
+  const airtable = project.airtable_record_id
+    ? await fetchAirtableRecord(project.airtable_record_id)
+    : null;
 
   return (
     <div>
@@ -422,6 +439,108 @@ export default async function ProjectPage({
               </form>
             </div>
           )}
+          {canDeflate && (
+            <div className="mt-4 pt-4 border-t border-border">
+              <div className="text-sm font-medium text-amber-700 dark:text-amber-400 mb-1">
+                Deflate approved hours
+              </div>
+              <p className="text-xs text-muted-foreground mb-2">
+                Lowers this project's credited hours after approval , e.g.
+                Hack Club HQ flagged an over-claim in Airtable. Automatically
+                claws back pixels for the owner (and, proportionally, any
+                accepted collaborators) down to what the new hours are worth,
+                DMs everyone affected with your reason, and auto-cancels any
+                pending order that can no longer be covered. Deflate only ,
+                never raises hours back up. Current: {project.approved_hours ?? totalHours}h.
+              </p>
+              <form
+                action={deflateProjectHours}
+                className="flex flex-wrap gap-2 items-start"
+              >
+                <input type="hidden" name="projectId" value={project.id} />
+                <Input
+                  name="newHours"
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  required
+                  placeholder="New hours…"
+                  className="w-32 text-sm"
+                />
+                <Textarea
+                  name="reason"
+                  required
+                  placeholder="Reason (shown to the owner, and any affected collaborators)…"
+                  className="flex-1 min-w-64 text-sm"
+                  rows={2}
+                />
+                <PendingButton
+                  className="bg-amber-600 text-white border-transparent hover:bg-amber-700"
+                  pendingText="Deflating…"
+                  confirm="Deflate this project's hours? This immediately claws back pixels (and may cancel pending orders) for the owner and any collaborators, and DMs them why."
+                >
+                  Deflate hours
+                </PendingButton>
+              </form>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {project.hours_deflated_at && (
+        <Alert className="mt-4 border-amber-400 dark:border-amber-500/40 bg-amber-500/10">
+          <AlertTitle className="font-pixel text-amber-700 dark:text-amber-400">
+            Hours deflated{project.hours_deflated_by ? ` by ${project.hours_deflated_by}` : ""} on{" "}
+            {new Date(project.hours_deflated_at).toLocaleString()}
+          </AlertTitle>
+          {project.deflation_reason && (
+            <AlertDescription className="mt-1 break-words text-foreground">
+              {project.deflation_reason}
+            </AlertDescription>
+          )}
+        </Alert>
+      )}
+
+      {project.airtable_record_id && (
+        <Card className="p-5 my-6 gap-0">
+          <div className="font-pixel text-xl mb-1">Airtable record</div>
+          {!airtable || !airtable.ok ? (
+            <p className="text-sm text-muted-foreground">
+              {airtable ? `Couldn't load: ${airtable.error}` : "Not sent to Airtable yet."}
+            </p>
+          ) : (
+            <div className="space-y-3 text-sm">
+              {(() => {
+                const hoursOnAirtable = airtable.fields["Optional - Override Hours Spent"];
+                return typeof hoursOnAirtable === "number" ? (
+                  <div
+                    className={
+                      project.approved_hours !== null && hoursOnAirtable !== project.approved_hours
+                        ? "font-bold text-amber-700 dark:text-amber-400"
+                        : "font-bold"
+                    }
+                  >
+                    Hours on Airtable: {hoursOnAirtable}h
+                    {project.approved_hours !== null &&
+                      hoursOnAirtable !== project.approved_hours &&
+                      ` (Pixl has ${project.approved_hours}h , mismatch)`}
+                  </div>
+                ) : null;
+              })()}
+              {JUSTIFICATION_DISPLAY_FIELDS.filter((f) => f !== "Optional - Override Hours Spent").map(
+                (field) => {
+                  const value = airtable.fields[field];
+                  if (value === undefined || value === null || value === "") return null;
+                  return (
+                    <div key={field}>
+                      <div className="font-pixel text-muted-foreground text-xs">{field}</div>
+                      <div className="whitespace-pre-wrap break-words">{String(value)}</div>
+                    </div>
+                  );
+                },
+              )}
+            </div>
+          )}
         </Card>
       )}
 
@@ -510,7 +629,9 @@ export default async function ProjectPage({
                     ? "info"
                     : v.action === "project_first_pass"
                       ? "secondary"
-                      : "destructive"
+                      : v.action === "project_hours_deflated"
+                        ? "warning"
+                        : "destructive"
               }
               className="shrink-0"
             >
@@ -520,7 +641,9 @@ export default async function ProjectPage({
                   ? "reverted"
                   : v.action === "project_first_pass"
                     ? "first pass"
-                    : "sent back"}
+                    : v.action === "project_hours_deflated"
+                      ? "hours deflated"
+                      : "sent back"}
             </Badge>
             <div className="flex-1 min-w-48">
               <span className="font-bold">{v.actor}</span>

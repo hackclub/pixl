@@ -145,6 +145,56 @@ export type PushResult =
   | { ok: true; recordId: string }
   | { ok: false; error: string };
 
+// Field names worth showing a staffer deciding whether (and how much) to
+// deflate an already-approved project's hours - HQ's own justification text
+// plus their hours override, never the PII fields (name/address/birthday/
+// email) also on this record. "Optional - Override Hours Spent" isn't itself
+// a "Justification - *" field but belongs here: it's the number a staffer is
+// comparing Pixl's own approved_hours against.
+export const JUSTIFICATION_DISPLAY_FIELDS: AirtableFieldName[] = [
+  "Optional - Override Hours Spent",
+  "Optional - Override Hours Spent Justification",
+  "Justification - Specific Technical Features",
+  "Justification - Deflation Justification",
+  "Optional - Override Age Justification",
+  "Justification - Additional Justification",
+  "Optional - Override Duplicate Justification",
+  "Justification - Hackatime Project Name(s) + Date Range(s)",
+  "Justification - Submitter Hackatime ID",
+  "Justification - Lapse Links, comma-separated",
+  "Justification - Alternate Tracking Method",
+];
+
+export type FetchRecordResult =
+  | { ok: true; fields: Partial<Record<AirtableFieldName, unknown>> }
+  | { ok: false; error: string };
+
+// Reads back the record a project was pushed to (see pushProjectRecord) - so
+// the project page can show what's actually sitting in Airtable right now,
+// including any "Optional - Override Hours Spent" value HQ has set on their
+// end after their own audit, before a staffer decides whether to deflate.
+export async function fetchAirtableRecord(recordId: string): Promise<FetchRecordResult> {
+  const token = process.env.AIRTABLE_PIXL_YSWS_UNIFIED_TOKEN;
+  if (!token) return { ok: false, error: "AIRTABLE_PIXL_YSWS_UNIFIED_TOKEN is not set" };
+
+  let res: Response;
+  try {
+    res = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}/${recordId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch (err) {
+    return { ok: false, error: `Airtable request failed: ${(err as Error).message}` };
+  }
+
+  const body = (await res.json().catch(() => null)) as
+    | { fields?: Partial<Record<AirtableFieldName, unknown>>; error?: { message?: string } }
+    | null;
+  if (!res.ok || !body?.fields) {
+    return { ok: false, error: body?.error?.message ?? `Airtable returned ${res.status}` };
+  }
+  return { ok: true, fields: body.fields };
+}
+
 // Creates a new record, or PATCHes an existing one when existingRecordId is
 // given (the caller looks this up from projects.airtable_record_id - see
 // Task 4). Never include "Automation - Submit to Unified YSWS" in `fields`.

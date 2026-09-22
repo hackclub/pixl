@@ -176,6 +176,12 @@ export interface ProjectRow {
   hours_extended_since: string | null;
   hours_extended_by: string;
   hours_extended_note: string;
+  // Post-approval hour correction from the project page, see
+  // deflateProjectHours in app/actions.ts - opposite direction from
+  // hours_extended_* above. hours_deflated_at null = never deflated.
+  deflation_reason: string;
+  hours_deflated_at: string | null;
+  hours_deflated_by: string;
   // Super-admin-only hold: blocks submitting any verdict on this project
   // while set (still visible in the queue). See holdReview/releaseReviewHold
   // in app/actions.ts. hold_at null = not held.
@@ -2620,7 +2626,13 @@ export async function getProject(id: number) {
       .from("mod_actions")
       .select("*")
       .eq("user_id", project.user_id)
-      .in("action", ["project_approved", "project_first_pass", "project_needs_changes", "review_reverted"])
+      .in("action", [
+        "project_approved",
+        "project_first_pass",
+        "project_needs_changes",
+        "review_reverted",
+        "project_hours_deflated",
+      ])
       .order("created_at", { ascending: false }),
     listReviewAuditsForProject(id),
   ]);
