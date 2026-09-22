@@ -17,10 +17,10 @@ Pixl is a Bun/Turborepo monorepo (`bun` workspaces: `apps/*`, `packages/*`) for 
 | `apps/pixo-dm` | Node (CommonJS), Express | Standalone Railway service that relays dashboard-initiated player DMs through Slack as Pixo - plain `node index.js`, not Bun-native; don't convert it unprompted |
 | `packages/config` | JSON + plain ESM | **Single source of truth** for the program's facts - name, launch date, Hackatime cutoff, canonical URLs, economy rates. See below. |
 | `packages/theme` | JSON + plain ESM | **Single source of truth** for the LEDGER color palette (dark/light, web + Godot). See below. |
-| `packages/docs-engine` | Bun/TypeScript | Builds `docs/*.md` into static per-page HTML + OG preview cards under `apps/game/web/docs/`. See below. |
+| `packages/docs-engine` | Bun/TypeScript | Renders `docs/*.md` for `apps/web-shell` and builds OG preview cards into `apps/web-shell/public/<slug>/`. See below. |
 | `packages/map-sync` | Bun/TypeScript | Copies `apps/game`'s baked world-map PNGs into `apps/dashboard` for the NPC spot-picker. See below. |
 
-Each app has its own `package.json`/scripts and is largely independent; they share only Supabase as a common data layer (each app talks to Supabase directly rather than through a shared internal API), plus Hack Club Auth/Slack OAuth for identity.
+Each app has its own `package.json`/scripts and is largely independent; they share only Supabase as a common data layer (each app talks to Supabase directly rather than through a shared internal API), plus Hack Club Auth/Slack OAuth for identity. Deployed on Orchard (Kubernetes), not Vercel/Railway, despite some apps (`dashboard`, `game`, `landing`) still shipping a stale `vercel.json` from an earlier deploy target - `pixo-dm` is the one exception, actually deployed on Railway.
 
 ## Commands
 
@@ -107,8 +107,8 @@ Doc *pages* now render in `apps/web-shell` (see below) - this package only still
 - `forms` backs public, no-account application forms (e.g. reviewer applications): questions and close date are editable from the dashboard's Forms tab without a deploy, submissions verified by Slack ID rather than a full OAuth login.
 - Real-time game state is handled separately in `src/ws/gameServer.ts` (the authoritative multiplayer/WebSocket loop) and `src/ws/lobbies.ts` (private village / lobby grouping).
 - `src/auth/session.ts` issues/validates JWT sessions signed with `JWT_SECRET`; Hack Club Auth (HCA) is the identity provider.
-- `src/db/client.ts` + `src/db/schema.ts` (Drizzle) define the Postgres schema (via Supabase). Run `db:generate` after schema changes, then `db:migrate` to apply.
-- Cross-cutting concerns: `src/xp.ts` (leveling/XP), `src/moderation.ts` / `src/imageModeration.ts` (content moderation, ties into `dashboard`'s review queue), `src/rateLimit.ts`, `src/hackatime/api.ts` (coding-time tracking integration), `src/shipsArchive.ts` (project submission history).
+- `src/db/client.ts` + `src/db/schema.ts` (Drizzle) define the Postgres schema (via Supabase). Run `db:generate` after schema changes, then `db:migrate` to apply. Migrations live in `apps/server/drizzle/` as sequentially numbered raw SQL files; hand-written/data-only migrations just take the next free number. This repo has multiple contributors pushing migrations concurrently (several numbers already collide, e.g. `0044_`, `0050_`, `0053_`), so check `git log`/the current highest number right before adding one, don't trust what you last pulled.
+- Cross-cutting concerns: `src/xp.ts` (leveling/XP), `src/moderation.ts` / `src/imageModeration.ts` (content moderation, ties into `dashboard`'s review queue), `src/rateLimit.ts`, `src/hackatime/api.ts` (coding-time tracking integration), `src/shipsArchive.ts` (project submission history), `src/ysws/doubleDip.ts` (cross-YSWS duplicate-submission detection).
 
 ### `apps/game` (Godot client)
 - Not a Node/Bun project - it's a Godot 4 project (`project.godot`, `scenes/`, `scripts/`, `addons/`, `shaders/`). GDScript, not TypeScript. Don't try to `bun install`/run it like the other apps.
@@ -119,6 +119,7 @@ Doc *pages* now render in `apps/web-shell` (see below) - this package only still
 - Both run **Next.js 16** with React 19 and Tailwind 4 (very recent, training-data knowledge of Next.js APIs/conventions is likely stale). `apps/landing` has an `AGENTS.md` flagging this explicitly: **read the relevant guide in `node_modules/next/dist/docs/` before writing Next.js code in either app**, and heed deprecation notices.
 - `dashboard` runs on port 4900 (`next dev -p 4900` / `next start -p 4900`) since multiple apps run concurrently in dev. It uses shadcn/radix-ui components and talks to Supabase directly plus Slack OAuth (`app/api/auth/*`) for admin login.
 - Page routes follow Next App Router conventions (`app/<route>/page.tsx`); shared page-local components live in `app/_components/`.
+- `apps/landing` is localized across 4 locales (`en`/`fr`/`es`/`pt`, plus `hi` per the README) under `app/[lang]/dictionaries/`. Anything in `Shop.tsx`/`Sidequests.tsx` that references a dictionary array by position must stay index-aligned across all locale files - add/remove/reorder an item identically everywhere, or the wrong name/price silently lands on the wrong image in some locales.
 
 ### `apps/web-shell` (React migration of the player-facing web shell)
 - Next.js 16 App Router, dev server on port 4901 (`next dev -p 4901`),
