@@ -2235,6 +2235,53 @@ export async function listShopOrders(status?: string, limit = 500): Promise<Shop
   return rows;
 }
 
+export interface BuyerDetails {
+  name: string;
+  email: string;
+  /** Non-empty lines only, in mailing order (line1, line2, city/state/zip, country). */
+  addressLines: string[];
+}
+
+// Shipping details for the fulfillment page's per-order "shipping info"
+// disclosure - name, email, and decrypted mailing address, batched by user
+// id so the fulfillment list doesn't do one query per card. Only fetched for
+// orders actually shown there (see FulfillmentPage), never bundled into
+// listShopOrders itself, so nothing else that reads shop_orders pulls PII it
+// doesn't need.
+export async function buyerDetailsByUserId(userIds: string[]): Promise<Map<string, BuyerDetails>> {
+  const ids = [...new Set(userIds)];
+  const out = new Map<string, BuyerDetails>();
+  if (ids.length === 0) return out;
+  const { data, error } = await db
+    .from("users")
+    .select(
+      "id, first_name, last_name, real_name, email, address_line1, address_line2, address_city, address_state, address_country, address_postal",
+    )
+    .in("id", ids);
+  if (error) {
+    console.error("buyerDetailsByUserId", error.message);
+    return out;
+  }
+  for (const u of data ?? []) {
+    const first = String(u.first_name ?? "").trim();
+    const last = String(u.last_name ?? "").trim();
+    const name = `${first} ${last}`.trim() || String(u.real_name ?? "").trim();
+    const line1 = decryptPII(u.address_line1 as string | null);
+    const line2 = decryptPII(u.address_line2 as string | null);
+    const city = decryptPII(u.address_city as string | null);
+    const state = decryptPII(u.address_state as string | null);
+    const country = decryptPII(u.address_country as string | null);
+    const postal = decryptPII(u.address_postal as string | null);
+    const cityStateZip = [city, [state, postal].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+    out.set(u.id as string, {
+      name,
+      email: String(u.email ?? "").trim(),
+      addressLines: [line1, line2, cityStateZip, country].filter((l) => l.trim() !== ""),
+    });
+  }
+  return out;
+}
+
 // Orders a specific fulfiller has claimed (any stage), newest first , powers
 // the order-history table on /fulfillers/[id].
 export async function listOrdersForFulfiller(slackId: string, limit = 100): Promise<ShopOrderRow[]> {

@@ -1,6 +1,14 @@
 import Link from "next/link";
 import { requireFulfiller } from "@/lib/guard";
-import { listShopOrders, listFulfillers, ORDER_STAGES, type ShopOrderRow, type OrderStatus } from "@/lib/db";
+import {
+  listShopOrders,
+  listFulfillers,
+  buyerDetailsByUserId,
+  ORDER_STAGES,
+  type ShopOrderRow,
+  type OrderStatus,
+  type BuyerDetails,
+} from "@/lib/db";
 import { slackHandles } from "@/lib/slack";
 import {
   claimOrder,
@@ -132,6 +140,10 @@ export default async function FulfillmentPage({
   const flaggedCount =
     active === "flagged" && !mineOnly ? orders.length : (await listShopOrders("flagged", 50)).length;
   const handles = await slackHandles(orders.map((o) => o.player_slack));
+  // Name/email/mailing address so a fulfiller can actually source and ship
+  // the right thing without leaving the page - see the "Shipping info"
+  // disclosure on each card.
+  const buyerDetails = await buyerDetailsByUserId(orders.map((o) => o.user_id));
 
   const tabs: { key: TabKey; label: string }[] = [
     { key: "pending", label: "New" },
@@ -223,6 +235,7 @@ export default async function FulfillmentPage({
               key={o.id}
               order={o}
               handle={o.player_slack ? handles.get(o.player_slack) : undefined}
+              buyer={buyerDetails.get(o.user_id)}
               mine={o.claimed_by_slack === me}
               canManage={access.perms.has("fulfillment")}
             />
@@ -266,11 +279,13 @@ function fmtDate(iso: string | null): string {
 function OrderCard({
   order: o,
   handle,
+  buyer,
   mine,
   canManage,
 }: {
   order: ShopOrderRow;
   handle?: string;
+  buyer?: BuyerDetails;
   mine: boolean;
   canManage: boolean;
 }) {
@@ -324,6 +339,34 @@ function OrderCard({
             {" · "}
             {new Date(o.created_at).toLocaleString()}
           </div>
+          {buyer && (
+            <Disclosure summary="Shipping info" className="mt-1">
+              <div className="text-sm rounded border border-border bg-muted/40 p-2.5 space-y-1">
+                <div>
+                  <span className="text-xs text-muted-foreground">Name: </span>
+                  {buyer.name || <span className="text-muted-foreground">not on file</span>}
+                </div>
+                <div>
+                  <span className="text-xs text-muted-foreground">Email: </span>
+                  {buyer.email ? (
+                    <a href={`mailto:${buyer.email}`} className="text-brand hover:underline">
+                      {buyer.email}
+                    </a>
+                  ) : (
+                    <span className="text-muted-foreground">not on file</span>
+                  )}
+                </div>
+                <div>
+                  <span className="text-xs text-muted-foreground">Address: </span>
+                  {buyer.addressLines.length > 0 ? (
+                    <span className="whitespace-pre-line">{buyer.addressLines.join("\n")}</span>
+                  ) : (
+                    <span className="text-muted-foreground">not on file</span>
+                  )}
+                </div>
+              </div>
+            </Disclosure>
+          )}
           {o.claimed_by && o.status !== "pending" && (
             <div className="text-xs text-muted-foreground mt-1">
               {o.status === "cancelled"
