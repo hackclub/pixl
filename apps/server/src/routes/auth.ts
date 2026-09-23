@@ -567,19 +567,28 @@ router.get("/auth/hackclub/callback", async (req, res) => {
       Object.keys(identity),
     );
   }
-  let fullName = [identity.first_name, identity.last_name]
+  // The verified real name, straight from HCA and nothing else - this is
+  // what real_name/first_name/last_name get set to below, since those feed
+  // the review pipeline, the dashboard's "who is this" and the Airtable
+  // submission. Never fall back to a player's own Slack display name here:
+  // that's self-editable (exactly the "fake/game name" a player could set),
+  // so it's only ever used for the cosmetic in-game display_name below, never
+  // for the name anything treats as verified.
+  const fullName = [identity.first_name, identity.last_name]
     .filter(Boolean)
     .join(" ")
     .trim();
   // HCA doesn't always have a name on file (younger/incomplete accounts) ,
   // fall back to Slack's own directory before resorting to a generated
-  // placeholder, since every player is a real Slack workspace member.
-  if (!fullName && identity.slack_id) {
+  // placeholder, since every player is a real Slack workspace member. This
+  // only ever seeds the in-game display name, never real_name.
+  let displayNameSource = fullName;
+  if (!displayNameSource && identity.slack_id) {
     const slackName = await fetchSlackDisplayName(identity.slack_id);
-    if (slackName) fullName = slackName;
+    if (slackName) displayNameSource = slackName;
   }
   const fallbackName = `user_${identity.id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8)}`;
-  const candidateName = fullName || identity.primary_email || fallbackName;
+  const candidateName = displayNameSource || identity.primary_email || fallbackName;
   // A rename later rejects a nasty/malformed name via nameProblem() , the
   // initial name from HCA/Slack must pass the same check or it never would.
   const displayNameFromHca = nameProblem(candidateName) ? fallbackName : candidateName;
