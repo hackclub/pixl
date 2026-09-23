@@ -16,6 +16,7 @@ import {
 } from "@/app/actions";
 import { PendingButton } from "@/app/_components/PendingButton";
 import { Disclosure } from "@/app/_components/Disclosure";
+import { isSafeUrl } from "@/lib/safeUrl";
 import { config } from "@/app/_generated/config";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -331,6 +332,18 @@ function OrderCard({
               Tracking: <span className="text-foreground font-mono">{o.tracking}</span> · DM&apos;d to buyer
             </div>
           )}
+          {o.status !== "pending" && o.status !== "cancelled" && o.hcb_link && (
+            <div className="text-xs text-muted-foreground mt-1">
+              HCB:{" "}
+              {isSafeUrl(o.hcb_link) ? (
+                <a href={o.hcb_link} target="_blank" rel="noreferrer" className="text-brand hover:underline break-all">
+                  {o.hcb_link}
+                </a>
+              ) : (
+                <span className="break-all">{o.hcb_link}</span>
+              )}
+            </div>
+          )}
           {actionable && /robux/i.test(o.item_name ?? "") && (
             <div className="text-xs mt-1">
               <a
@@ -472,8 +485,21 @@ function OrderActions({
   if (o.status === "pending") {
     return (
       <div className="flex items-end gap-2 flex-wrap">
-        <form action={claimOrder}>
+        <form action={claimOrder} className="flex items-end gap-2 flex-1 min-w-64">
           <input type="hidden" name="id" value={o.id} />
+          <label className="block flex-1 min-w-0">
+            <span className="block text-xs font-medium text-muted-foreground mb-1">
+              HCB link (the transaction or grant this was paid from)
+            </span>
+            <Input
+              name="hcbLink"
+              type="url"
+              maxLength={300}
+              required
+              placeholder="https://hcb.hackclub.com/…"
+              className="w-full text-sm"
+            />
+          </label>
           <PendingButton className="bg-brand text-white border-transparent" pendingText="Claiming…">
             Place order &amp; claim
           </PendingButton>

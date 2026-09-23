@@ -76,7 +76,7 @@ import { SHOP_CATEGORIES, type ShopCategory } from "@/lib/shopCategories";
 import { kickOnlinePlayer } from "@/lib/gameServer";
 import { dmOrEmail } from "@/lib/notify";
 import { assertSafeExternalUrl } from "@/lib/urlSafety";
-import { safeRedirectPath } from "@/lib/safeUrl";
+import { safeRedirectPath, isSafeUrl } from "@/lib/safeUrl";
 import {
   requirePerm,
   requireSuper,
@@ -4382,6 +4382,15 @@ export async function claimOrder(formData: FormData): Promise<void> {
   const access = await requireFulfiller();
   const id = Number(formData.get("id") ?? 0);
   if (!id) return;
+  // The transaction or grant this order was actually paid from - required so
+  // every fulfilled order has a paper trail back to real HCB spend. Same
+  // http(s)-only check the rest of the dashboard uses for a
+  // database-controlled URL it's about to render as a link (see isSafeUrl).
+  const hcbLink = String(formData.get("hcbLink") ?? "").trim().slice(0, 300);
+  if (!hcbLink || !isSafeUrl(hcbLink)) {
+    revalidatePath("/fulfillment");
+    return;
+  }
   const { data: order } = await db
     .from("shop_orders")
     .select("user_id, item_name, status")
@@ -4400,6 +4409,7 @@ export async function claimOrder(formData: FormData): Promise<void> {
       claimed_by_slack: access.session.slackId,
       claimed_at: now,
       ordered_at: now,
+      hcb_link: hcbLink,
     })
     .eq("id", id)
     .eq("status", "pending");

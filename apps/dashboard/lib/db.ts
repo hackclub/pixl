@@ -2189,6 +2189,10 @@ export interface ShopOrderRow {
   shipped_at: string | null;
   done_at: string | null;
   tracking: string;
+  // The HCB (hcb.hackclub.com) transaction or grant the order was actually
+  // paid from - required to claim an order (see claimOrder in
+  // app/actions.ts), so every fulfilled order has a paper trail.
+  hcb_link: string;
   // Over-budget flag: the item can't be sourced for what the player's pixels
   // are worth, so it's parked for an owner instead of ordered.
   flagged_at: string | null;
