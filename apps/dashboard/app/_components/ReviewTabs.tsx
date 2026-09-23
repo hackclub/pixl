@@ -10,6 +10,7 @@ export function ReviewTabs({
   canSecondPass,
   pending,
   secondPassCount,
+  secondPassHours,
   spotCheckCount,
   proposedBanCount,
 }: {
@@ -17,11 +18,12 @@ export function ReviewTabs({
   canSecondPass: boolean;
   pending?: number;
   secondPassCount?: number;
+  secondPassHours?: number;
   spotCheckCount?: number;
   proposedBanCount?: number;
 }) {
   const pathname = usePathname();
-  const tabs: { href: string; label: string; count?: number }[] = [
+  const tabs: { href: string; label: string; count?: number; extra?: string }[] = [
     { href: "/review", label: "Needs review", count: pending },
     { href: "/review/reviewed", label: "Reviewed" },
     { href: "/review/stats", label: "Stats" },
@@ -35,7 +37,15 @@ export function ReviewTabs({
     // work the same queue via /review's "Awaiting your final pass" section ,
     // that's easy to miss buried in the main queue, this is a dedicated view
     // of just that stage.
-    tabs.push({ href: "/review/second-pass", label: "Second pass", count: secondPassCount });
+    tabs.push({
+      href: "/review/second-pass",
+      label: "Second pass",
+      count: secondPassCount,
+      // Total hours sitting in the queue, not just how many projects - a
+      // project count alone doesn't say whether the queue is five quick
+      // ships or five 40-hour builds.
+      extra: secondPassHours ? `${secondPassHours}h` : undefined,
+    });
   }
   if (isSuper) {
     // A first-pass reviewer's "ban" verdict is only a proposal (see
@@ -75,6 +85,11 @@ export function ReviewTabs({
                   {t.count}
                 </Badge>
               ) : null}
+              {t.extra && (
+                <span className="ml-1 text-xs text-muted-foreground" title="Total hours pending in this queue">
+                  {t.extra}
+                </span>
+              )}
             </Link>
           </TabsTrigger>
         ))}

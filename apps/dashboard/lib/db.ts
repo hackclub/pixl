@@ -859,6 +859,46 @@ export async function countSecondPassReviews(): Promise<number> {
   return count ?? 0;
 }
 
+// Total hours sitting in the second-pass queue right now, for the tab badge
+// next to countSecondPassReviews' project count. Same filter, and the same
+// "Hackatime if tracked, else journal hours" rule hydrateHours uses per
+// project - just summed across the whole queue instead of hydrated onto
+// individual rows.
+export async function sumSecondPassHours(): Promise<number> {
+  const { data, error } = await db
+    .from("projects")
+    .select("id, hackatime_seconds")
+    .eq("status", "second_review")
+    .neq("first_pass_verdict", "banned")
+    .is("archived_at", null)
+    .is("rejected_at", null)
+    .is("banned_at", null);
+  if (error) {
+    console.error("sumSecondPassHours", error.message);
+    return 0;
+  }
+  const rows = (data ?? []) as { id: number; hackatime_seconds: number | null }[];
+  if (rows.length === 0) return 0;
+  const { data: journals } = await db
+    .from("project_journals")
+    .select("project_id, hours")
+    .in(
+      "project_id",
+      rows.map((r) => r.id),
+    );
+  const journalTotals = new Map<number, number>();
+  for (const j of journals ?? []) {
+    const id = j.project_id as number;
+    journalTotals.set(id, (journalTotals.get(id) ?? 0) + (Number(j.hours) || 0));
+  }
+  const total = rows.reduce((sum, r) => {
+    const hackatimeHours = (r.hackatime_seconds ?? 0) / 3600;
+    const journalHours = journalTotals.get(r.id) ?? 0;
+    return sum + (hackatimeHours > 0 ? hackatimeHours : journalHours);
+  }, 0);
+  return Math.round(total * 10) / 10;
+}
+
 // Super-admin-only optional QA pass - every second_review project nobody has
 // spot-checked yet (see spot_checked_at on ProjectRow above). Unlike
 // listSecondReviewProjects this doesn't filter out projects another reviewer
