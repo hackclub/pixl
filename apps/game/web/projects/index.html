@@ -1398,6 +1398,7 @@
         timeZone: "UTC",
       }).format(HT_CUTOFF_MS);
 
+      // <ship-checklist>
       function checkedHtBoxes() {
         return [...document.querySelectorAll('input[name="ht"]:checked')];
       }
@@ -1456,6 +1457,7 @@
           : `≥ 1h tracked from ${HT_CUTOFF_LABEL} onward`;
         return `<span class="${ok ? "ok" : "no"}">${ok ? "+" : "-"}</span> ${label} <span class="teal">(${detail})</span>`;
       }
+      // </ship-checklist>
 
       // Sum of the currently-ticked Hackatime boxes, shown right next to the
       // picker so the player can see their proof-of-hours total without
@@ -1504,6 +1506,11 @@
             const linked = new Set(checkedHtBoxes().map((c) => c.value));
             pick.innerHTML = htOptionsHtml(linked);
             wireHtPicker(onChange);
+            // A refresh is the one moment the hours behind those boxes change
+            // without anyone ticking anything, so the ship checklist has to be
+            // recomputed here too - otherwise it keeps insisting the hour floor
+            // is unmet while the picker right above it shows the new time.
+            onChange?.();
           }
           Pixl.toast("Hackatime refreshed.");
         } catch (e) {
@@ -2541,8 +2548,9 @@
       <div class="section-h" style="margin-top:0;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
         ${Pixl.esc(p.name)}
         <span class="chip ${cls}">${label}</span>
-        <span class="chip teal tip-wrap" id="time-chip" tabindex="0"><span class="tip-main">${Pixl.hours(linkedSeconds(p))} TRACKED</span><span class="tip-pop">Hackatime: ${Pixl.hours(linkedSeconds(p))} · Journal: 0h</span></span>
+        <span class="chip teal tip-wrap" id="time-chip" tabindex="0"><span class="tip-main">${Pixl.hours(linkedSeconds(p) + (p.journal_seconds || 0))} TRACKED</span><span class="tip-pop">Hackatime: ${Pixl.hours(linkedSeconds(p))} · Journal: ${Pixl.hours(p.journal_seconds || 0)}</span></span>
         ${p.pixels_earned ? `<span class="chip gold">+${Math.round(p.pixels_earned)} PX EARNED</span>` : ""}
+        <span id="est-chips-wrap">${estimateChipsHtml(p, linkedSeconds(p), p.journal_seconds || 0)}</span>
         ${p.sidequest_name ? `<span class="chip teal">TRIAL: ${Pixl.esc(p.sidequest_name)}</span>` : ""}
         <span id="bo-head-chip">${blackoutChipHtml(p)}</span>
         <button class="btn ghost" id="share-btn" style="margin-left:auto">SHARE</button>
@@ -2707,6 +2715,12 @@
           el.innerHTML = shipHtLine(p.kind === "hardware");
         };
         wireHtPicker(onHtChange);
+        // Recompute the line now that the picker is actually mounted. The
+        // copy built into the markup above ran while this project's form was
+        // still a string, so its querySelectorAll saw the *previous* DOM: the
+        // project list, the boot spinner, or the last project's picker, whose
+        // ticked boxes would otherwise be counted toward this project.
+        onHtChange();
         if ($("f-ht-refresh"))
           $("f-ht-refresh").addEventListener("click", () => refreshHackatimeStats(onHtChange));
         if ($("s-unship"))
@@ -3774,6 +3788,34 @@
 
       let journalEntries = [];
 
+      // Net hours this project would newly bank if shipped right now: total
+      // tracked time minus whatever's already been paid out on a prior
+      // approval, so an update ship's estimate doesn't double-count hours the
+      // owner was already credited for (p.approved_hours is only ever
+      // non-null once a project is actually approved - see toPlayerProject in
+      // apps/server/src/routes/projects.ts - so a first-time ship naturally
+      // estimates off its full tracked total). Uses the flat "current rate"
+      // (walletUsdPerHour) the funding-hours note above already estimates
+      // with, rather than re-deriving the tier/RE payout ramp client-side -
+      // same rough-estimate tradeoff, same disclaimer.
+      function estimatePayout(p, htSec, jSec) {
+        const totalHours = (htSec + jSec) / 3600;
+        const approvedHours = Number(p.approved_hours) || 0;
+        const netHours = Math.max(totalHours - approvedHours, 0);
+        const px = walletUsdPerHour > 0 ? (netHours * walletUsdPerHour) / Pixl.config.economy.pixelValueUsd : 0;
+        return { netHours, approvedHours, px };
+      }
+
+      function estimateChipsHtml(p, htSec, jSec) {
+        if (htSec + jSec <= 0) return "";
+        const { netHours, approvedHours, px } = estimatePayout(p, htSec, jSec);
+        const note =
+          approvedHours > 0
+            ? `${Pixl.hours(htSec + jSec)} tracked − ${approvedHours}h already paid out`
+            : `${Pixl.hours(htSec + jSec)} tracked`;
+        return `<span class="chip teal tip-wrap" id="est-hours-chip" tabindex="0"><span class="tip-main">${Pixl.hours(netHours * 3600)} NEW</span><span class="tip-pop">${note}</span></span><span class="chip gold tip-wrap" id="est-px-chip" tabindex="0"><span class="tip-main">≈${Math.round(px)} PX EST.</span><span class="tip-pop">At your current rate ($${walletUsdPerHour.toFixed(2)}/hr). Rough estimate, actual review may differ.</span></span>`;
+      }
+
       // hackatime + journal, kept in sync with journalEntries
       function updateTrackedChip(id) {
         const el = $("time-chip");
@@ -3787,6 +3829,8 @@
         const htSec = linkedSeconds(p);
         const jSec = journalEntries.reduce((s, e) => s + (Number(e.hours) || 0), 0) * 3600;
         el.innerHTML = `<span class="tip-main">${Pixl.hours(htSec + jSec)} TRACKED</span><span class="tip-pop">Hackatime: ${Pixl.hours(htSec)} · Journal: ${Pixl.hours(jSec)}</span>`;
+        const wrap = $("est-chips-wrap");
+        if (wrap) wrap.innerHTML = estimateChipsHtml(p, htSec, jSec);
       }
 
       async function loadCollabTrackedHours(id) {
