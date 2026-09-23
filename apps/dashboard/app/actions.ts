@@ -3931,6 +3931,13 @@ export async function updateShopItem(formData: FormData): Promise<void> {
   // Saving silently skips telling pixorpheus about this change (e.g. a typo
   // fix that isn't worth a Slack ping), see notifyShopUpdates below.
   const silent = formData.get("silent") === "1";
+  // Price-changing options (config_options) - see ShopItemEditConfigurator.
+  // Unlike the /shop-detail region table, this form edits one row, so there's
+  // no per-region suffix on these field names (config_enable, not
+  // config_enable_US).
+  const configEnabled = formData.get("config_enable") === "1";
+  const configDisabled = formData.get("config_disable") === "1";
+  const configGroups = configEnabled ? (parseConfigGroups(formData.get("config_groups")) ?? []) : [];
   const patch: Record<string, unknown> = {
     name,
     description,
@@ -3971,14 +3978,34 @@ export async function updateShopItem(formData: FormData): Promise<void> {
 
   // Configurator items (Framework laptops, Huawei tablets, ...) show their
   // OWN price via config_options.base_price, not the plain `price` column
-  // (see the client's price lookup) - this form has no configurator fields at
-  // all, so without this, editing price here silently stopped mattering for
-  // any item that has a configurator, the plain column changed but the
-  // storefront kept reading the old base_price forever.
+  // (see the client's price lookup).
   const target = (before ?? []).find((b) => (b as { id: number }).id === id) as
     | { config_options: { base_price?: number; reference_url?: string; groups?: unknown[] } | null }
     | undefined;
-  if (target?.config_options) {
+  if (configDisabled) {
+    patch.config_options = null;
+  } else if (configEnabled) {
+    const configBasePriceRaw = formData.get("config_base_price");
+    const configReferenceUrl = String(formData.get("config_reference_url") ?? "").trim().slice(0, 500);
+    const existing =
+      target?.config_options && typeof target.config_options === "object" ? target.config_options : {};
+    patch.config_options = {
+      base_price:
+        configBasePriceRaw !== null
+          ? Math.max(0, Math.round(Number(configBasePriceRaw) || 0))
+          : (existing.base_price ?? price),
+      reference_url: configReferenceUrl || existing.reference_url || "",
+      groups: configGroups.map((g) => ({
+        name: g.name,
+        type: g.type,
+        choices: g.choices.map((c) => ({ label: c.label, price: c.price })),
+      })),
+    };
+  } else if (target?.config_options) {
+    // The form always renders the configurator panel when the item has one,
+    // so configEnabled should be "1" whenever it's on - this branch is a
+    // defensive fallback keeping base_price synced to the plain price field
+    // if that somehow didn't happen.
     patch.config_options = { ...target.config_options, base_price: price };
   }
 
@@ -4012,6 +4039,63 @@ export async function updateShopItem(formData: FormData): Promise<void> {
       .eq("unlock_xp", 0)
       .neq("id", id);
     if (propErr) throw new Error(propErr.message);
+  }
+
+  // "Apply to all regions" per price-changing-options group (see
+  // ShopItemEditConfigurator) - pushes just the named group(s) into every
+  // sibling region's own config_options.groups, merging by name (replace a
+  // same-named group there, append otherwise) so a region's own base price
+  // and other groups are left alone. A sibling with no configurator yet gets
+  // one created, defaulting its base price to its own plain price column
+  // (same "price doubles as base_price" convention addShopItem uses).
+  const applyGroupNames = String(formData.get("apply_groups_all_regions") ?? "")
+    .split("|")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (applyGroupNames.length > 0 && originalName) {
+    const groupsToApply = configGroups.filter((g) => applyGroupNames.includes(g.name.trim()));
+    if (groupsToApply.length > 0) {
+      const { data: siblings, error: siblingsErr } = await db
+        .from("shop_items")
+        .select("id, price, config_options")
+        .eq("name", originalName)
+        .eq("unlock_xp", 0)
+        .neq("id", id);
+      if (siblingsErr) {
+        console.error("updateShopItem (apply group lookup)", siblingsErr.message);
+      } else {
+        for (const sib of (siblings ?? []) as {
+          id: number;
+          price: number;
+          config_options: { base_price?: number; reference_url?: string; groups?: ParsedConfigGroup[] } | null;
+        }[]) {
+          const existing = sib.config_options && typeof sib.config_options === "object" ? sib.config_options : {};
+          const existingGroups = Array.isArray(existing.groups) ? existing.groups : [];
+          const merged = [...existingGroups];
+          for (const g of groupsToApply) {
+            const plain = {
+              name: g.name,
+              type: g.type,
+              choices: g.choices.map((c) => ({ label: c.label, price: c.price })),
+            };
+            const idx = merged.findIndex((eg) => eg.name.trim().toLowerCase() === g.name.trim().toLowerCase());
+            if (idx === -1) merged.push(plain);
+            else merged[idx] = plain;
+          }
+          const { error: applyErr } = await db
+            .from("shop_items")
+            .update({
+              config_options: {
+                base_price: existing.base_price ?? sib.price ?? 0,
+                reference_url: existing.reference_url ?? "",
+                groups: merged,
+              },
+            })
+            .eq("id", sib.id);
+          if (applyErr) console.error("updateShopItem (apply group to region)", sib.id, applyErr.message);
+        }
+      }
+    }
   }
 
   if (!silent) {

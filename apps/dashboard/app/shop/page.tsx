@@ -7,6 +7,7 @@ import { PendingButton } from "@/app/_components/PendingButton";
 import { Disclosure } from "@/app/_components/Disclosure";
 import { OptionsEditor } from "@/app/_components/OptionsEditor";
 import { AddShopItemForm } from "@/app/_components/AddShopItemForm";
+import { ShopItemEditConfigurator } from "@/app/_components/ShopItemEditConfigurator";
 import { BulkUploadShopItemsForm } from "@/app/_components/BulkUploadShopItemsForm";
 import { parseOptionGroups } from "@/lib/shopOptions";
 import { config } from "@/app/_generated/config";
@@ -343,6 +344,19 @@ export default async function ShopPage({
                       <div className="block">
                         <span className="block text-xs font-medium text-muted-foreground mb-1">Options</span>
                         <OptionsEditor name="options" initial={item.options} />
+                      </div>
+                      <div className="block rounded-md border border-border p-3">
+                        <ShopItemEditConfigurator
+                          hasConfig={!!item.config_options}
+                          basePrice={item.config_options?.base_price ?? item.price}
+                          referenceUrl={item.config_options?.reference_url ?? ""}
+                          groups={(item.config_options?.groups ?? []).map((g) => ({
+                            name: g.name,
+                            type: g.type === "multi" ? ("multi" as const) : ("single" as const),
+                            choices: g.choices,
+                          }))}
+                          pixelValueUsd={config.economy.pixelValueUsd}
+                        />
                       </div>
                       <div className="block">
                         <span className="block text-xs font-medium text-muted-foreground mb-1">

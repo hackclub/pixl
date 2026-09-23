@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -75,6 +75,8 @@ export function ShopConfigEditor({
   pixelValueUsd,
   regions,
   regionLabels,
+  onApplyToAllRegions,
+  injectedGroup,
 }: {
   name: string;
   initialGroups: EditableGroup[];
@@ -84,8 +86,38 @@ export function ShopConfigEditor({
   // field). Omit for the single-region shop-detail editor.
   regions?: string[];
   regionLabels?: Partial<Record<string, string>>;
+  // Shop-detail's per-region editors are otherwise fully independent React
+  // state with no shared parent that knows about groups specifically - this
+  // callback is how a group reaches ShopItemConfigurators, which then hands
+  // it back down to every OTHER region's editor as injectedGroup below.
+  onApplyToAllRegions?: (group: EditableGroup) => void;
+  // A group pushed in from another region's "Apply to all regions" click.
+  // `token` changes on every push (even re-applying an unchanged group), so
+  // the effect below fires each time rather than only on first receipt.
+  injectedGroup?: { group: EditableGroup; token: number };
 }) {
   const [groups, setGroups] = useState<EditableGroup[]>(initialGroups);
+
+  // Merge an incoming group: replace an existing same-named group (case-
+  // insensitive) so re-applying is idempotent instead of duplicating it,
+  // otherwise append.
+  useEffect(() => {
+    if (!injectedGroup) return;
+    setGroups((prev) => {
+      const incoming = injectedGroup.group;
+      const idx = prev.findIndex(
+        (g) => g.name.trim().toLowerCase() === incoming.name.trim().toLowerCase(),
+      );
+      if (idx === -1) return [...prev, incoming];
+      const next = [...prev];
+      next[idx] = incoming;
+      return next;
+    });
+    // Only the token identifies a new push - re-running this because `groups`
+    // or `injectedGroup.group` changed identity on every render would fight
+    // the local edits this same effect just made.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [injectedGroup?.token]);
 
   function addGroup() {
     setGroups([...groups, { name: "", type: "single", choices: [{ label: "", price: 0 }] }]);
@@ -132,11 +164,23 @@ export function ShopConfigEditor({
               <option value="single">Pick one</option>
               <option value="multi">Pick any (add-ons)</option>
             </select>
+            {onApplyToAllRegions && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="ml-auto"
+                title="Copy this group (name, type, choices, prices) into every other region's configurator, replacing a same-named group there if one exists"
+                onClick={() => onApplyToAllRegions(g)}
+              >
+                Apply to all regions
+              </Button>
+            )}
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              className="text-destructive hover:text-destructive ml-auto"
+              className={`text-destructive hover:text-destructive ${onApplyToAllRegions ? "" : "ml-auto"}`}
               onClick={() => removeGroup(gi)}
             >
               Remove group
