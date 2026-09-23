@@ -523,7 +523,36 @@ router.get("/api/shop/orders", async (req, res) => {
     console.error("[shop] orders failed", error);
     return res.status(500).json({ ok: false });
   }
-  res.json({ ok: true, orders: data ?? [] });
+  const orders = (data ?? []) as { id: number; status: string }[];
+
+  // Queue position for any still-pending order: FIFO by created_at across
+  // EVERY player's pending orders, same "New" queue fulfillers work off in
+  // the dashboard - not scoped to this player, the whole point is showing
+  // how many orders (anyone's) are ahead of theirs.
+  const pendingIds = new Set(orders.filter((o) => o.status === "pending").map((o) => o.id));
+  if (pendingIds.size > 0) {
+    const { data: queue, error: queueError } = await supabase
+      .from("shop_orders")
+      .select("id, created_at")
+      .eq("status", "pending")
+      .order("created_at", { ascending: true });
+    if (queueError) {
+      console.error("[shop] orders queue position failed", queueError);
+    } else {
+      const positionById = new Map((queue ?? []).map((o, i) => [o.id as number, i + 1]));
+      for (const o of orders as (typeof orders[number] & {
+        queue_position?: number;
+        queue_total?: number;
+      })[]) {
+        if (pendingIds.has(o.id)) {
+          o.queue_position = positionById.get(o.id);
+          o.queue_total = queue?.length ?? undefined;
+        }
+      }
+    }
+  }
+
+  res.json({ ok: true, orders });
 });
 
 // Let a player cancel their own order and get their pixels back, as long as

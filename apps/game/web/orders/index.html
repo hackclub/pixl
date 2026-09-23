@@ -188,10 +188,15 @@
           ? `<span class="order-when">${Pixl.timeAgo(o.created_at)}</span>`
           : "";
 
+        const queuePos =
+          o.status === "pending" && o.queue_position
+            ? `<div class="order-meta">#${o.queue_position}${o.queue_total ? ` of ${o.queue_total}` : ""} in line to be claimed by fulfillment</div>`
+            : "";
+
         const body =
           o.status === "cancelled"
             ? `<div class="order-note">Refunded to your wallet.${o.note ? " " + Pixl.esc(o.note) : ""}</div>`
-            : tracker(o.status);
+            : tracker(o.status) + queuePos;
 
         const tracking =
           (o.status === "shipped" || o.status === "done") && o.tracking
