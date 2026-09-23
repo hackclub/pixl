@@ -65,7 +65,7 @@ import { decryptPII } from "@/lib/crypto";
 import { buildAirtableFields, pushProjectRecord } from "@/lib/airtable";
 import { joeEnabled } from "@/lib/joe";
 import { submitToJoe } from "@/lib/joeSync";
-import { slackHandle, dmUser, slackAvatars } from "@/lib/slack";
+import { slackHandle, dmUser, slackAvatars, DM_EXCLUDED_SLACK_IDS } from "@/lib/slack";
 import { fetchHackatimeReport, fetchTrackedSecondsSince, fetchTrustFactor } from "@/lib/hackatime";
 import { fetchCommits, attachCommitStats } from "@/lib/commits";
 import { yswsShipsFor } from "@/lib/ysws";
@@ -358,6 +358,10 @@ async function recordSettledPayout(
   verdict: string,
   projectName: string,
 ): Promise<void> {
+  // Excluded reviewer (see DM_EXCLUDED_SLACK_IDS in lib/slack.ts) - reviews
+  // without being paid or DMed for it. No payout row at all, same as the
+  // "skip entirely" convention below for a verdict whose rate is 0.
+  if (DM_EXCLUDED_SLACK_IDS.has(access.session.slackId)) return;
   const { full, blitzApplied } = await payoutBasePixels(verdict);
   if (full <= 0) return;
   const credited = await creditReviewerPixels(access.session.slackId, full);
@@ -392,7 +396,11 @@ async function settleFirstPassPayouts(projectId: number, projectName: string): P
     .eq("project_id", projectId)
     .eq("status", "pending");
   for (const p of pending ?? []) {
-    const full = Number(p.full_pixels) || 0;
+    // Excluded reviewer (see DM_EXCLUDED_SLACK_IDS): still close the row out
+    // so it doesn't sit pending forever, just for 0 pixels, and skip the
+    // credit/DM entirely.
+    const excluded = DM_EXCLUDED_SLACK_IDS.has(p.reviewer_slack_id);
+    const full = excluded ? 0 : Number(p.full_pixels) || 0;
     const { data: claimed } = await db
       .from("review_payouts")
       .update({
@@ -403,7 +411,7 @@ async function settleFirstPassPayouts(projectId: number, projectName: string): P
       .eq("id", p.id)
       .eq("status", "pending")
       .select("id");
-    if (!claimed || claimed.length === 0) continue;
+    if (!claimed || claimed.length === 0 || excluded) continue;
     const credited = await creditReviewerPixels(p.reviewer_slack_id, full);
     if (credited === "credited")
       await db.from("review_payouts").update({ credited: true }).eq("id", p.id);

@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { dmUser } from "@/lib/slack";
+import { dmUser, DM_EXCLUDED_SLACK_IDS } from "@/lib/slack";
 
 // Best-effort email via Resend. Silently skipped when not configured.
 async function sendEmail(to: string, subject: string, text: string): Promise<boolean> {
@@ -32,7 +32,7 @@ export async function dmOrEmail(userId: string, subject: string, body: string): 
   const slackId = (user?.slack_id as string | null) ?? null;
   const email = (user?.email as string | null) ?? null;
 
-  if (slackId) {
+  if (slackId && !DM_EXCLUDED_SLACK_IDS.has(slackId)) {
     try {
       await dmUser(slackId, `<@${slackId}> ${subject}\n\n${body}`);
       return;

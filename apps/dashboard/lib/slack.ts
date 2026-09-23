@@ -260,12 +260,25 @@ async function dmViaPixorpheus(url: string, key: string, userId: string, text: s
   }
 }
 
+// Slack ids the dashboard should never DM, regardless of reason (warn,
+// ban, project approve/reject, review payout, shipping tracking, ...) - this
+// is the one place every dashboard-originated DM funnels through (dmOrEmail
+// in lib/notify.ts also checks it directly, so it falls back to email
+// instead of silently doing nothing). A short hardcoded list rather than an
+// env var: a handful of specific exclusions, not a config knob meant to
+// change without a code review.
+export const DM_EXCLUDED_SLACK_IDS = new Set<string>(["U09HNFFLFDF"]);
+
 // All player-facing DMs (warns, bans, project approve/reject/ban, shipping
 // tracking, notices). By default these go out directly from the dashboard's
 // Slack bot , the same token the tickets/avatar helpers already use , so DMs
 // don't depend on a separate Pixorpheus process being deployed and reachable.
 // Set EXTERNAL_DM_URL (+ EXTERNAL_API_KEY) to route through Pixorpheus instead.
+// A no-op (not a thrown error) for an excluded id - several callers don't
+// wrap this in try/catch, so throwing here would turn "don't DM this person"
+// into "break whatever action was trying to DM them".
 export async function dmUser(slackUserId: string, text: string): Promise<void> {
+  if (DM_EXCLUDED_SLACK_IDS.has(slackUserId)) return;
   const url = process.env.EXTERNAL_DM_URL;
   const key = process.env.EXTERNAL_API_KEY;
   if (url && key) {
