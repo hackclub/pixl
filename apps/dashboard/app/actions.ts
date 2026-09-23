@@ -30,6 +30,7 @@ import {
   projectPixelTotal,
   lifetimeRe,
   creditReviewerPixels,
+  creditFulfillerPixels,
   type CreditReviewerResult,
   activeDashEvents,
   communityGoalShipCount,
@@ -4626,6 +4627,10 @@ export async function markOrderCredited(formData: FormData): Promise<void> {
   revalidatePath("/fulfillment");
 }
 
+// Flat pixel payout to whoever ships an order - see shipOrder below and
+// creditFulfillerPixels in lib/db.ts.
+const FULFILLMENT_PAYOUT_PIXELS = 3;
+
 // The order shipped: credited -> shipped with a tracking number. The number is
 // DM'd to the buyer by Pixo and also lands as an in-game notification. Only the
 // claiming fulfiller can ship it, and tracking is required.
@@ -4683,6 +4688,27 @@ export async function shipOrder(formData: FormData): Promise<void> {
     }
   }
   await logOrderAction(id, "order_shipped", `tracking ${tracking}`, actorName(access), order);
+
+  // Flat payout to whoever actually did the fulfillment work - claimed_by_slack
+  // is exactly who that is (ownsOrder already confirmed it's the caller).
+  // Best-effort: a failed credit shouldn't undo a shipment that already went out.
+  const fulfillerSlackId = access.session.slackId;
+  const credited = await creditFulfillerPixels(fulfillerSlackId, FULFILLMENT_PAYOUT_PIXELS);
+  if (credited === "credited") {
+    const { error: paidErr } = await db
+      .from("shop_orders")
+      .update({ fulfillment_pixels_paid: FULFILLMENT_PAYOUT_PIXELS })
+      .eq("id", id);
+    if (paidErr) console.error("shipOrder (fulfillment payout stamp)", paidErr.message);
+    try {
+      await dmUser(
+        fulfillerSlackId,
+        `You earned ${FULFILLMENT_PAYOUT_PIXELS} pixels for fulfilling "${order.item_name}". Thanks for keeping orders moving!`,
+      );
+    } catch (err) {
+      console.error("shipOrder (fulfillment payout DM)", err instanceof Error ? err.message : err);
+    }
+  }
   revalidatePath("/fulfillment");
 }
 

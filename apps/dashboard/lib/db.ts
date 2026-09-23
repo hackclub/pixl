@@ -1234,6 +1234,36 @@ export async function creditReviewerPixels(
   return "credited";
 }
 
+// Same shape as creditReviewerPixels above, for the flat fulfillment payout
+// (see shipOrder in app/actions.ts) - a separate function (not a shared one
+// with a reason param) matches how creditProjectPixels/creditReviewerPixels
+// are already kept distinct in this file, one per payout kind.
+export async function creditFulfillerPixels(
+  slackId: string,
+  amount: number,
+): Promise<CreditReviewerResult> {
+  if (!slackId) return "no_account";
+  const { data: user } = await db
+    .from("users")
+    .select("id")
+    .eq("slack_id", slackId)
+    .limit(1)
+    .maybeSingle();
+  if (!user?.id) return "no_account";
+  if (amount <= 0) return "nothing_to_credit";
+  const { error } = await db.rpc("adjust_user_pixels", {
+    p_user_id: user.id,
+    p_amount: amount,
+    p_reason: "fulfillment_payout",
+    p_created_by: "payout system",
+  });
+  if (error) {
+    console.error("creditFulfillerPixels", error.message);
+    return "no_account";
+  }
+  return "credited";
+}
+
 export async function listReviewPayouts(
   reviewerSlackId?: string,
   limit = 200,
@@ -2042,15 +2072,20 @@ export interface FulfillerStats {
   inQueue: number;
   avgShipSeconds: number;
   lastActivity: string | null;
+  // Lifetime fulfillment_pixels_paid actually paid (see creditFulfillerPixels
+  // and shipOrder in app/actions.ts) - the leaderboard tab on /fulfillment
+  // sorts by this.
+  pixelsEarned: number;
 }
 
 // Per-fulfiller order stats, keyed by claimed_by_slack , mirrors
 // reviewerStatsBySlackId's shape (one query, grouped client-side) so the
-// /fulfillers/[id] page can reuse the same Stat-card pattern as /reviewers/[id].
+// /fulfillers/[id] page can reuse the same Stat-card pattern as /reviewers/[id],
+// and the Leaderboard tab on /fulfillment can rank by pixelsEarned.
 export async function fulfillerStatsBySlackId(): Promise<Map<string, FulfillerStats>> {
   const { data, error } = await db
     .from("shop_orders")
-    .select("claimed_by_slack, status, claimed_at, shipped_at, done_at")
+    .select("claimed_by_slack, status, claimed_at, shipped_at, done_at, fulfillment_pixels_paid")
     .not("claimed_by_slack", "is", null)
     .neq("claimed_by_slack", "");
   if (error) {
@@ -2070,6 +2105,7 @@ export async function fulfillerStatsBySlackId(): Promise<Map<string, FulfillerSt
       inQueue: 0,
       avgShipSeconds: 0,
       lastActivity: null,
+      pixelsEarned: 0,
       _shipSecondsSum: 0,
       _shipSecondsCount: 0,
     };
@@ -2077,6 +2113,7 @@ export async function fulfillerStatsBySlackId(): Promise<Map<string, FulfillerSt
     if (r.status === "shipped" || r.status === "done") s.shipped += 1;
     if (r.status === "done") s.done += 1;
     if (r.status === "ordered" || r.status === "credited") s.inQueue += 1;
+    s.pixelsEarned += Number(r.fulfillment_pixels_paid) || 0;
     if (r.claimed_at && r.shipped_at) {
       const secs = (new Date(r.shipped_at).getTime() - new Date(r.claimed_at).getTime()) / 1000;
       if (secs > 0) {
@@ -2097,6 +2134,7 @@ export async function fulfillerStatsBySlackId(): Promise<Map<string, FulfillerSt
       inQueue: s.inQueue,
       avgShipSeconds: s._shipSecondsCount > 0 ? Math.round(s._shipSecondsSum / s._shipSecondsCount) : 0,
       lastActivity: s.lastActivity,
+      pixelsEarned: s.pixelsEarned,
     });
   }
   return result;
@@ -2233,6 +2271,11 @@ export interface ShopOrderRow {
   // paid from - required to claim an order (see claimOrder in
   // app/actions.ts), so every fulfilled order has a paper trail.
   hcb_link: string;
+  // Flat pixel payout to the fulfiller for actually shipping this order (see
+  // creditFulfillerPixels below and shipOrder in app/actions.ts). 0 = not yet
+  // paid - stores the exact amount, not just a boolean, so a future rate
+  // change never makes an already-paid order's history ambiguous.
+  fulfillment_pixels_paid: number;
   // What it actually cost, in real dollars - distinct from `price` (pixels)
   // and the derived USD "budget" (a ceiling, not the real spend). Null until
   // recorded; editable at any post-claim stage, including done, via

@@ -4,6 +4,7 @@ import {
   listShopOrders,
   listFulfillers,
   buyerDetailsByUserId,
+  fulfillerStatsBySlackId,
   ORDER_STAGES,
   type ShopOrderRow,
   type OrderStatus,
@@ -64,8 +65,53 @@ function usdBudget(pricePx: number): string {
   return (pricePx * config.economy.pixelValueUsd).toFixed(2);
 }
 
-const TAB_KEYS = ["pending", "ordered", "credited", "shipped", "done", "cancelled", "flagged", "all", "fulfillers"] as const;
+const TAB_KEYS = ["pending", "ordered", "credited", "shipped", "done", "cancelled", "flagged", "all", "leaderboard", "fulfillers"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
+
+// Who's actually fulfilling orders - ranked by lifetime fulfillment pixels
+// earned (3px per order shipped, see FULFILLMENT_PAYOUT_PIXELS in
+// app/actions.ts), not just order count, so a handful of expensive/slow
+// orders don't look like less work than a pile of easy ones.
+async function FulfillmentLeaderboard() {
+  const stats = await fulfillerStatsBySlackId();
+  const rows = [...stats.entries()].sort((a, b) => b[1].pixelsEarned - a[1].pixelsEarned);
+  const handles = await slackHandles(rows.map(([slack]) => slack));
+  return (
+    <Card className="overflow-hidden py-0">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-xs text-muted-foreground text-left border-b border-border">
+            <th className="p-3 font-medium">Fulfiller</th>
+            <th className="p-3 font-medium">Orders fulfilled</th>
+            <th className="p-3 font-medium">Pixels earned</th>
+            <th className="p-3 font-medium">Last active</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={4} className="p-5 text-center text-muted-foreground">
+                No fulfillments yet.
+              </td>
+            </tr>
+          )}
+          {rows.map(([slack, s]) => (
+            <tr key={slack}>
+              <td className="p-3 font-medium">
+                <Link href={`/fulfillers/${slack}`} className="hover:text-brand">
+                  {handles.get(slack) ?? `@${slack}`}
+                </Link>
+              </td>
+              <td className="p-3 tabular-nums">{s.shipped}</td>
+              <td className="p-3 tabular-nums font-medium">{s.pixelsEarned.toLocaleString()} px</td>
+              <td className="p-3 text-muted-foreground">{fmtDate(s.lastActivity)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Card>
+  );
+}
 
 async function FulfillerManager() {
   const fulfillers = await listFulfillers();
@@ -128,10 +174,12 @@ export default async function FulfillmentPage({
   const active: TabKey = TAB_KEYS.includes(status as TabKey) ? (status as TabKey) : "pending";
   const mineOnly = mine === "1";
   const showingFulfillers = active === "fulfillers";
+  const showingLeaderboard = active === "leaderboard";
 
-  let orders = showingFulfillers
-    ? []
-    : await listShopOrders(active === "all" ? undefined : active, 500);
+  let orders =
+    showingFulfillers || showingLeaderboard
+      ? []
+      : await listShopOrders(active === "all" ? undefined : active, 500);
   if (mineOnly) orders = orders.filter((o) => o.claimed_by_slack === me);
   const pendingCount =
     active === "pending" && !mineOnly
@@ -154,13 +202,14 @@ export default async function FulfillmentPage({
     { key: "cancelled", label: "Cancelled" },
     { key: "flagged", label: `Over budget${flaggedCount > 0 ? ` (${flaggedCount})` : ""}` },
     { key: "all", label: "All" },
+    { key: "leaderboard", label: "Leaderboard" },
     ...(access.isSuper ? [{ key: "fulfillers" as TabKey, label: "Fulfillers" }] : []),
   ];
 
   const linkFor = (key: TabKey) => {
     const params = new URLSearchParams();
     if (key !== "pending") params.set("status", key);
-    if (mineOnly && key !== "fulfillers") params.set("mine", "1");
+    if (mineOnly && key !== "fulfillers" && key !== "leaderboard") params.set("mine", "1");
     const qs = params.toString();
     return qs ? `/fulfillment?${qs}` : "/fulfillment";
   };
@@ -204,7 +253,7 @@ export default async function FulfillmentPage({
             </Button>
           ))}
         </div>
-        {!showingFulfillers && (
+        {!showingFulfillers && !showingLeaderboard && (
           <Button
             asChild
             variant={mineOnly ? "default" : "outline"}
@@ -218,6 +267,8 @@ export default async function FulfillmentPage({
 
       {showingFulfillers ? (
         <FulfillerManager />
+      ) : showingLeaderboard ? (
+        <FulfillmentLeaderboard />
       ) : orders.length === 0 ? (
         <Card className="p-8 text-center text-muted-foreground text-sm">
           {active === "pending"

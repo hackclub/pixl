@@ -32,6 +32,7 @@ const EMPTY_STATS: FulfillerStats = {
   inQueue: 0,
   avgShipSeconds: 0,
   lastActivity: null,
+  pixelsEarned: 0,
 };
 
 const STATUS_BADGE: Record<OrderStatus, "secondary" | "success" | "destructive" | "warning"> = {
