@@ -29,6 +29,14 @@ export function buildTokens(config: PixlConfig): Record<string, string> {
     maxPx: px(E.maxPayoutUsd),
     baseUsd: `$${E.basePayoutUsd.toFixed(2)}`,
     maxUsd: `$${E.maxPayoutUsd.toFixed(2)}`,
+    // Unrounded px/hr at the floor and cap rate, for the "why the totals
+    // don't divide out evenly" explainer in docs/150-rewards.md - basePx/maxPx
+    // above are the rounded whole-pixel amounts players actually get paid,
+    // these are the exact figures behind them.
+    baseExactPx: (E.basePayoutUsd / E.pixelValueUsd).toFixed(2),
+    maxExactPx: (E.maxPayoutUsd / E.pixelValueUsd).toFixed(2),
+    pixelValueUsd: `$${E.pixelValueUsd.toFixed(2)}`,
+    pxPerDollar: (1 / E.pixelValueUsd).toFixed(2),
     reCap: E.reForMaxPayout.toLocaleString("en-US"),
     payoutSlopeRe: E.payoutSlopeRe.toLocaleString("en-US"),
     maxLevel: String(E.levelBands[E.levelBands.length - 1]!.throughLevel),

@@ -30,6 +30,14 @@ describe("buildTokens", () => {
     expect(tokens.maxLevel).toBe("100");
   });
 
+  test("resolves the unrounded px/hr figures and the fixed px<->usd rate", () => {
+    const tokens = buildTokens(config);
+    expect(tokens.baseExactPx).toBe("57.14");
+    expect(tokens.maxExactPx).toBe("85.71");
+    expect(tokens.pixelValueUsd).toBe("$0.07");
+    expect(tokens.pxPerDollar).toBe("14.29");
+  });
+
   test("resolves tier rates and the trial bonus", () => {
     const tokens = buildTokens(config);
     expect(tokens.t1).toBe("10.71");
