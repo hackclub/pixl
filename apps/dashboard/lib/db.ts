@@ -2193,6 +2193,11 @@ export interface ShopOrderRow {
   // paid from - required to claim an order (see claimOrder in
   // app/actions.ts), so every fulfilled order has a paper trail.
   hcb_link: string;
+  // What it actually cost, in real dollars - distinct from `price` (pixels)
+  // and the derived USD "budget" (a ceiling, not the real spend). Null until
+  // recorded; editable at any post-claim stage, including done, via
+  // updateOrderFulfillmentInfo in app/actions.ts.
+  actual_cost_usd: number | null;
   // Over-budget flag: the item can't be sourced for what the player's pixels
   // are worth, so it's parked for an owner instead of ordered.
   flagged_at: string | null;

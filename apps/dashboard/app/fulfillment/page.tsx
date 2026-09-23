@@ -13,6 +13,7 @@ import {
   removeFulfillerAction,
   flagOrderOverBudget,
   clearOrderFlag,
+  updateOrderFulfillmentInfo,
 } from "@/app/actions";
 import { PendingButton } from "@/app/_components/PendingButton";
 import { Disclosure } from "@/app/_components/Disclosure";
@@ -294,6 +295,15 @@ function OrderCard({
             >
               ${usdBudget(o.price)} budget
             </Badge>
+            {o.actual_cost_usd !== null && (
+              <Badge
+                variant={Number(o.actual_cost_usd) > Number(usdBudget(o.price)) ? "destructive" : "success"}
+                className="tabular-nums"
+                title="What this order actually cost, recorded by the fulfiller who claimed it"
+              >
+                ${Number(o.actual_cost_usd).toFixed(2)} actual
+              </Badge>
+            )}
             <Badge variant={STATUS_BADGE[o.status] ?? "secondary"} className="capitalize">
               {STAGE_LABEL[o.status] ?? o.status}
             </Badge>
@@ -379,7 +389,55 @@ function OrderCard({
 
       {actionable && <OrderActions order={o} mine={mine} canManage={canManage} />}
       {actionable && o.status !== "shipped" && <FlagControls order={o} canManage={canManage} />}
+      {canManage && o.status !== "pending" && o.status !== "cancelled" && (
+        <EditFulfillmentInfo order={o} />
+      )}
     </Card>
+  );
+}
+
+// Corrects the HCB link / actual cost / tracking after the fact - deliberately
+// NOT gated by `actionable`, so it still works once an order is done (the
+// main pipeline actions disappear there on purpose, but a typo'd link or a
+// wrong cost still needs fixing after the fact). Owner-level only, same as
+// the rest of updateOrderFulfillmentInfo's gate.
+function EditFulfillmentInfo({ order: o }: { order: ShopOrderRow }) {
+  return (
+    <Disclosure summary="Edit HCB link / cost / tracking">
+      <form action={updateOrderFulfillmentInfo} className="flex items-end gap-2 flex-wrap pt-2">
+        <input type="hidden" name="id" value={o.id} />
+        <label className="block flex-1 min-w-64">
+          <span className="block text-xs font-medium text-muted-foreground mb-1">HCB link</span>
+          <Input
+            name="hcbLink"
+            type="url"
+            maxLength={300}
+            required
+            defaultValue={o.hcb_link}
+            className="w-full text-sm"
+          />
+        </label>
+        <label className="block w-32 shrink-0">
+          <span className="block text-xs font-medium text-muted-foreground mb-1">Actual cost ($)</span>
+          <Input
+            name="actualCostUsd"
+            type="number"
+            min="0"
+            step="0.01"
+            required
+            defaultValue={o.actual_cost_usd !== null ? Number(o.actual_cost_usd) : undefined}
+            className="w-full text-sm"
+          />
+        </label>
+        <label className="block flex-1 min-w-48">
+          <span className="block text-xs font-medium text-muted-foreground mb-1">Tracking</span>
+          <Input name="tracking" maxLength={120} defaultValue={o.tracking} className="w-full text-sm" />
+        </label>
+        <PendingButton variant="outline" pendingText="Saving…">
+          Save
+        </PendingButton>
+      </form>
+    </Disclosure>
   );
 }
 
@@ -497,6 +555,18 @@ function OrderActions({
               maxLength={300}
               required
               placeholder="https://hcb.hackclub.com/…"
+              className="w-full text-sm"
+            />
+          </label>
+          <label className="block w-32 shrink-0">
+            <span className="block text-xs font-medium text-muted-foreground mb-1">Actual cost ($)</span>
+            <Input
+              name="actualCostUsd"
+              type="number"
+              min="0"
+              step="0.01"
+              required
+              placeholder={usdBudget(o.price)}
               className="w-full text-sm"
             />
           </label>

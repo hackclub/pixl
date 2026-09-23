@@ -4387,7 +4387,11 @@ export async function claimOrder(formData: FormData): Promise<void> {
   // http(s)-only check the rest of the dashboard uses for a
   // database-controlled URL it's about to render as a link (see isSafeUrl).
   const hcbLink = String(formData.get("hcbLink") ?? "").trim().slice(0, 300);
-  if (!hcbLink || !isSafeUrl(hcbLink)) {
+  // What it actually cost, in real dollars - required alongside the HCB link
+  // so every claim records both where the money came from and how much of it
+  // was spent, not just the pixel price / derived budget ceiling.
+  const actualCostUsd = Math.round(Number(formData.get("actualCostUsd") ?? NaN) * 100) / 100;
+  if (!hcbLink || !isSafeUrl(hcbLink) || !Number.isFinite(actualCostUsd) || actualCostUsd < 0) {
     revalidatePath("/fulfillment");
     return;
   }
@@ -4410,6 +4414,7 @@ export async function claimOrder(formData: FormData): Promise<void> {
       claimed_at: now,
       ordered_at: now,
       hcb_link: hcbLink,
+      actual_cost_usd: actualCostUsd,
     })
     .eq("id", id)
     .eq("status", "pending");
@@ -4598,6 +4603,48 @@ export async function markOrderDone(formData: FormData): Promise<void> {
     .eq("status", "shipped");
   if (error) throw new Error(error.message);
   await logOrderAction(id, "order_done", "closed out as delivered", actorName(access));
+  revalidatePath("/fulfillment");
+}
+
+// Corrects an already-claimed order's fulfillment paper trail - the HCB link,
+// actual cost, and tracking number - after the fact. Every other action here
+// only ever writes these once, at the stage they're first collected, and
+// stops being reachable once an order is done/cancelled; this is the one
+// escape hatch for fixing a typo'd link or a wrong cost after the fact,
+// deliberately not gated by status (works on ordered/credited/shipped/done
+// alike). Owner-level, same as reassign/cancel/mark done above - this rewrites
+// financial records, not just queue state.
+export async function updateOrderFulfillmentInfo(formData: FormData): Promise<void> {
+  const access = await requirePerm("fulfillment");
+  const id = Number(formData.get("id") ?? 0);
+  if (!id) return;
+  const hcbLink = String(formData.get("hcbLink") ?? "").trim().slice(0, 300);
+  const actualCostUsd = Math.round(Number(formData.get("actualCostUsd") ?? NaN) * 100) / 100;
+  const tracking = String(formData.get("tracking") ?? "").trim().slice(0, 120);
+  if (!hcbLink || !isSafeUrl(hcbLink) || !Number.isFinite(actualCostUsd) || actualCostUsd < 0) {
+    revalidatePath("/fulfillment");
+    return;
+  }
+  const { data: order } = await db
+    .from("shop_orders")
+    .select("hcb_link, actual_cost_usd, tracking, status")
+    .eq("id", id)
+    .maybeSingle();
+  if (!order || order.status === "pending") {
+    revalidatePath("/fulfillment");
+    return;
+  }
+  const { error } = await db
+    .from("shop_orders")
+    .update({ hcb_link: hcbLink, actual_cost_usd: actualCostUsd, tracking })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+  await logOrderAction(
+    id,
+    "order_info_corrected",
+    `HCB ${order.hcb_link || "(none)"} → ${hcbLink} , cost $${order.actual_cost_usd ?? "?"} → $${actualCostUsd} , tracking "${order.tracking || "(none)"}" → "${tracking || "(none)"}"`,
+    actorName(access),
+  );
   revalidatePath("/fulfillment");
 }
 
