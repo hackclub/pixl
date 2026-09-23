@@ -20,6 +20,8 @@ Pixels only come in whole numbers, nobody gets paid 57.14 of one. So every payou
 
 At the very start ({{baseUsd}}/hr), one hour is worth {{baseExactPx}} px exactly, but you're paid **{{basePx}}** since it rounds down. At the {{maxUsd}}/hr cap, one hour is worth {{maxExactPx}} px exactly, and you're paid **{{maxPx}}** since it rounds up. Same rule both times, round to the nearest whole pixel, it just lands on opposite sides depending on where the decimal falls.
 
+In other words, a one-hour project at the starting rate isn't actually paid {{baseUsd}}/hour, it's paid **{{baseRealUsd}}/hour** ({{basePx}} × {{pixelValueUsd}}). At the cap it flips the other way: not exactly {{maxUsd}}/hour but **{{maxRealUsd}}/hour** ({{maxPx}} × {{pixelValueUsd}}). Longer projects land closer to the sticker rate since the same rounding is spread over more hours.
+
 That's also why dividing a rounded total back into "pixels per dollar" gives a slightly different number depending on which project you check: the underlying rate is always **{{pixelValueUsd}}** per pixel ({{pxPerDollar}} px per dollar), it never moves. What changes is only the rounded whole number you actually see, never the rate itself.
 
 Rounding this way means you can lose or gain a fraction of a pixel on any single project, at most half a pixel's worth, but it's never more than a cent or two, and it goes both ways. It is not a hidden cut and it does not favor higher rates over lower ones.

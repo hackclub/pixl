@@ -38,6 +38,12 @@ describe("buildTokens", () => {
     expect(tokens.pxPerDollar).toBe("14.29");
   });
 
+  test("resolves the real effective $/hr once the whole-pixel payout is converted back", () => {
+    const tokens = buildTokens(config);
+    expect(tokens.baseRealUsd).toBe("$3.99");
+    expect(tokens.maxRealUsd).toBe("$6.02");
+  });
+
   test("resolves tier rates and the trial bonus", () => {
     const tokens = buildTokens(config);
     expect(tokens.t1).toBe("10.71");

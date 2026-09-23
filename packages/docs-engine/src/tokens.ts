@@ -37,6 +37,11 @@ export function buildTokens(config: PixlConfig): Record<string, string> {
     maxExactPx: (E.maxPayoutUsd / E.pixelValueUsd).toFixed(2),
     pixelValueUsd: `$${E.pixelValueUsd.toFixed(2)}`,
     pxPerDollar: (1 / E.pixelValueUsd).toFixed(2),
+    // What a one-hour project at the floor/cap rate is REALLY worth once its
+    // rounded whole-pixel payout is converted back to dollars - not the same
+    // number as baseUsd/maxUsd, that's the whole point of this explainer.
+    baseRealUsd: `$${(Math.round(E.basePayoutUsd / E.pixelValueUsd) * E.pixelValueUsd).toFixed(2)}`,
+    maxRealUsd: `$${(Math.round(E.maxPayoutUsd / E.pixelValueUsd) * E.pixelValueUsd).toFixed(2)}`,
     reCap: E.reForMaxPayout.toLocaleString("en-US"),
     payoutSlopeRe: E.payoutSlopeRe.toLocaleString("en-US"),
     maxLevel: String(E.levelBands[E.levelBands.length - 1]!.throughLevel),
