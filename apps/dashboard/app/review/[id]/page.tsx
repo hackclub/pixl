@@ -706,18 +706,37 @@ export default async function ReviewDetail({
             )}
             {/* Second pass only - the Telescreen workbench is what a final
                 reviewer cross-checks heartbeats against, and there's nothing
-                to link to before the owner's Hackatime id resolves. */}
-            {isFinalStage && hackatimeReport?.hackatimeUserId && (
-              <Button asChild variant="default" size="sm">
-                <a
-                  href={`https://telescreen.hackclub.com/workbench/hackatime/overview?u=${encodeURIComponent(hackatimeReport.hackatimeUserId)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Telescreen ↗
-                </a>
-              </Button>
-            )}
+                to link to before the owner's Hackatime id resolves. One
+                button per linked Hackatime project (not the Pixl project's
+                own name) so &p= drops the reviewer straight into that
+                project's heartbeats instead of the whole-account overview -
+                falls back to a single unscoped link when nothing's linked
+                yet. */}
+            {isFinalStage && hackatimeReport?.hackatimeUserId && (() => {
+              const linkedProjects = hackatimeReport.projects.filter((hp) => hp.linked);
+              const telescreenUrl = (projectName?: string) => {
+                const url = new URL("https://telescreen.hackclub.com/workbench/hackatime/overview");
+                url.searchParams.set("u", hackatimeReport.hackatimeUserId);
+                if (projectName) url.searchParams.set("p", projectName);
+                return url.toString();
+              };
+              if (linkedProjects.length === 0) {
+                return (
+                  <Button asChild variant="default" size="sm">
+                    <a href={telescreenUrl()} target="_blank" rel="noreferrer">
+                      Telescreen ↗
+                    </a>
+                  </Button>
+                );
+              }
+              return linkedProjects.map((hp) => (
+                <Button key={hp.name} asChild variant="default" size="sm">
+                  <a href={telescreenUrl(hp.name)} target="_blank" rel="noreferrer">
+                    Telescreen: {hp.name} ↗
+                  </a>
+                </Button>
+              ));
+            })()}
           </div>
 
           {/* Eligibility check - YSWS submission guideline gaps (exclusions,
