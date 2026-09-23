@@ -95,6 +95,20 @@ const nextConfig: NextConfig = {
       { source: "/fonts/:path*", destination: `${GAME_ORIGIN}/fonts/:path*` },
     ];
   },
+  // Natural-spelling guesses that 404'd: the real referral page is at the
+  // oddly-spelled "/refers" (matches the nav slug and docs/190-refers.md),
+  // and there's no single standalone "upvote" page at all - upvoting is a
+  // button embedded in /explore, /ideas, /collectibles and /projects, so the
+  // most useful place to land someone who typed "/upvote" is where they can
+  // actually go upvote something.
+  async redirects() {
+    return [
+      { source: "/referral", destination: "/refers", permanent: false },
+      { source: "/referrals", destination: "/refers", permanent: false },
+      { source: "/upvote", destination: "/explore", permanent: false },
+      { source: "/upvotes", destination: "/explore", permanent: false },
+    ];
+  },
   async headers() {
     return [
       { source: "/play", headers: CROSS_ORIGIN_ISOLATION },
