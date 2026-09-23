@@ -543,7 +543,24 @@ function OrderActions({
   if (o.status === "pending") {
     return (
       <div className="flex items-end gap-2 flex-wrap">
-        <form action={claimOrder} className="flex items-end gap-2 flex-1 min-w-64">
+        <form action={claimOrder}>
+          <input type="hidden" name="id" value={o.id} />
+          <PendingButton className="bg-brand text-white border-transparent" pendingText="Claiming…">
+            Place order &amp; claim
+          </PendingButton>
+        </form>
+        {cancelForm}
+      </div>
+    );
+  }
+
+  // Ordered -> credited requires the HCB link and actual cost - the
+  // transaction only exists once HCB has actually credited the card, so it
+  // belongs here rather than at claim time.
+  if (o.status === "ordered") {
+    return (
+      <div className="flex items-end gap-2 flex-wrap">
+        <form action={markOrderCredited} className="flex items-end gap-2 flex-1 min-w-64">
           <input type="hidden" name="id" value={o.id} />
           <label className="block flex-1 min-w-0">
             <span className="block text-xs font-medium text-muted-foreground mb-1">
@@ -570,20 +587,6 @@ function OrderActions({
               className="w-full text-sm"
             />
           </label>
-          <PendingButton className="bg-brand text-white border-transparent" pendingText="Claiming…">
-            Place order &amp; claim
-          </PendingButton>
-        </form>
-        {cancelForm}
-      </div>
-    );
-  }
-
-  if (o.status === "ordered") {
-    return (
-      <div className="flex items-end gap-2 flex-wrap">
-        <form action={markOrderCredited}>
-          <input type="hidden" name="id" value={o.id} />
           <PendingButton className="bg-brand text-white border-transparent" pendingText="Saving…">
             Mark credited (receipt uploaded)
           </PendingButton>

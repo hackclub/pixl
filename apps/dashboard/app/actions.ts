@@ -4382,19 +4382,6 @@ export async function claimOrder(formData: FormData): Promise<void> {
   const access = await requireFulfiller();
   const id = Number(formData.get("id") ?? 0);
   if (!id) return;
-  // The transaction or grant this order was actually paid from - required so
-  // every fulfilled order has a paper trail back to real HCB spend. Same
-  // http(s)-only check the rest of the dashboard uses for a
-  // database-controlled URL it's about to render as a link (see isSafeUrl).
-  const hcbLink = String(formData.get("hcbLink") ?? "").trim().slice(0, 300);
-  // What it actually cost, in real dollars - required alongside the HCB link
-  // so every claim records both where the money came from and how much of it
-  // was spent, not just the pixel price / derived budget ceiling.
-  const actualCostUsd = Math.round(Number(formData.get("actualCostUsd") ?? NaN) * 100) / 100;
-  if (!hcbLink || !isSafeUrl(hcbLink) || !Number.isFinite(actualCostUsd) || actualCostUsd < 0) {
-    revalidatePath("/fulfillment");
-    return;
-  }
   const { data: order } = await db
     .from("shop_orders")
     .select("user_id, item_name, status")
@@ -4413,8 +4400,6 @@ export async function claimOrder(formData: FormData): Promise<void> {
       claimed_by_slack: access.session.slackId,
       claimed_at: now,
       ordered_at: now,
-      hcb_link: hcbLink,
-      actual_cost_usd: actualCostUsd,
     })
     .eq("id", id)
     .eq("status", "pending");
@@ -4506,10 +4491,25 @@ async function logOrderAction(
 
 // HCB credited the card and the fulfiller uploaded the receipt: ordered ->
 // credited (paid, not shipped yet). Only the claiming fulfiller can advance it.
+// The HCB link and actual cost are required here, not at claim time - the
+// transaction doesn't exist yet when an order is merely claimed, it exists
+// once HCB has actually credited the card.
 export async function markOrderCredited(formData: FormData): Promise<void> {
   const access = await requireFulfiller();
   const id = Number(formData.get("id") ?? 0);
   if (!id) return;
+  // The transaction or grant this order was actually paid from - required so
+  // every fulfilled order has a paper trail back to real HCB spend. Same
+  // http(s)-only check the rest of the dashboard uses for a
+  // database-controlled URL it's about to render as a link (see isSafeUrl).
+  const hcbLink = String(formData.get("hcbLink") ?? "").trim().slice(0, 300);
+  // What it actually cost, in real dollars - not just the pixel price /
+  // derived budget ceiling.
+  const actualCostUsd = Math.round(Number(formData.get("actualCostUsd") ?? NaN) * 100) / 100;
+  if (!hcbLink || !isSafeUrl(hcbLink) || !Number.isFinite(actualCostUsd) || actualCostUsd < 0) {
+    revalidatePath("/fulfillment");
+    return;
+  }
   const { data: order } = await db
     .from("shop_orders")
     .select("status, claimed_by_slack")
@@ -4521,7 +4521,12 @@ export async function markOrderCredited(formData: FormData): Promise<void> {
   }
   const { error } = await db
     .from("shop_orders")
-    .update({ status: "credited", credited_at: new Date().toISOString() })
+    .update({
+      status: "credited",
+      credited_at: new Date().toISOString(),
+      hcb_link: hcbLink,
+      actual_cost_usd: actualCostUsd,
+    })
     .eq("id", id)
     .eq("status", "ordered");
   if (error) throw new Error(error.message);
