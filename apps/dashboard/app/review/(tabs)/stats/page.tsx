@@ -1,5 +1,5 @@
 import { requirePagePerm, requireGuidelinesAck } from "@/lib/guard";
-import { db, type ReviewAuditRow } from "@/lib/db";
+import { db, payoutTotalsBySlackId, type ReviewAuditRow } from "@/lib/db";
 import { Card } from "@/components/ui/card";
 import {
   Table,
@@ -9,6 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ReviewVerdictChart, type VerdictCounts, type VerdictWindow } from "@/app/_components/ReviewVerdictChart";
 
 export const dynamic = "force-dynamic";
 
@@ -20,9 +21,8 @@ interface ReviewerStats {
   changes: number;
   reverted: number;
   hoursCredited: number;
+  pixelsWon: number;
   avgSeconds: number;
-  repoOpenedPct: number;
-  demoOpenedPct: number;
   lastActive: string;
 }
 
@@ -33,22 +33,68 @@ function fmtDur(secs: number): string {
   return `${(secs / 3600).toFixed(1)}h`;
 }
 
+// "Name (U0ABC123)" -> "U0ABC123", the format actorName() stamps into
+// review_audits.reviewer, mod_actions.actor, etc. across the dashboard.
+function slackIdFromLabel(label: string): string | null {
+  const m = label.match(/\(([^()]+)\)\s*$/);
+  return m ? m[1] : null;
+}
+
+function emptyCounts(): VerdictCounts {
+  return { approved: 0, firstPass: 0, changes: 0, rejected: 0 };
+}
+
+// Only the four verdicts a chart reader actually thinks of as "the outcome" -
+// first_pass_needs_changes/first_pass_banned, sent_to_first_pass, reverted,
+// and hours_deflated are review-pipeline housekeeping, not a review verdict.
+function bucketFor(verdict: string): keyof VerdictCounts | null {
+  if (verdict === "approved") return "approved";
+  if (verdict === "first_pass_approved") return "firstPass";
+  if (verdict === "needs_changes") return "changes";
+  if (verdict === "banned") return "rejected";
+  return null;
+}
+
 export default async function ReviewStatsPage() {
   const access = await requirePagePerm(["review"]);
   await requireGuidelinesAck(access);
-  const { data, error } = await db
-    .from("review_audits")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(2000);
+  const [{ data, error }, payoutTotals] = await Promise.all([
+    db.from("review_audits").select("*").order("created_at", { ascending: false }).limit(2000),
+    payoutTotalsBySlackId(),
+  ]);
   if (error) console.error("review stats", error.message);
   const audits = (data ?? []) as ReviewAuditRow[];
   // The board itself is open to anyone who can already reach /review - this
   // used to filter down to the viewer's own row unless they were a super.
-  // The two anti-abuse columns (avg time, repo/demo open rate) stay
-  // super-only below: they're moderation signals about a reviewer, not a
-  // scoreboard stat, and reading them as a ranking gets them wrong.
+  // Avg time stays super-only below: it's a moderation signal about a
+  // reviewer, not a scoreboard stat, and reading it as a ranking gets it
+  // wrong (repo/demo-open-rate used to live here too, removed in favor of
+  // lifetime pixels won, a real scoreboard stat everyone can see).
   const showAuditColumns = access.isSuper;
+
+  // Calendar windows in UTC (see packages/config's own UTC convention) -
+  // "this week" starts Monday, matching an ISO week rather than a rolling
+  // 7-day lookback.
+  const now = new Date();
+  const dayStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const daysSinceMonday = (now.getUTCDay() + 6) % 7;
+  const weekStart = dayStart - daysSinceMonday * 86_400_000;
+  const monthStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+  const windowDefs: { key: string; label: string; since: number | null }[] = [
+    { key: "all", label: "All time", since: null },
+    { key: "day", label: "Today", since: dayStart },
+    { key: "week", label: "This week", since: weekStart },
+    { key: "month", label: "This month", since: monthStart },
+  ];
+  const verdictWindows: VerdictWindow[] = windowDefs.map((w) => {
+    const counts = emptyCounts();
+    for (const a of audits) {
+      if (w.since !== null && new Date(a.created_at).getTime() < w.since) continue;
+      const bucket = bucketFor(a.verdict);
+      if (bucket) counts[bucket]++;
+    }
+    return { key: w.key, label: w.label, counts };
+  });
 
   const byReviewer = new Map<string, ReviewAuditRow[]>();
   for (const a of audits) {
@@ -59,6 +105,7 @@ export default async function ReviewStatsPage() {
   const stats: ReviewerStats[] = [...byReviewer.entries()].map(([reviewer, rows]) => {
     const approved = rows.filter((r) => r.verdict === "approved");
     const timed = rows.filter((r) => (r.total_seconds ?? 0) > 0);
+    const slackId = slackIdFromLabel(reviewer);
     return {
       reviewer,
       total: rows.length,
@@ -68,17 +115,15 @@ export default async function ReviewStatsPage() {
       reverted: rows.filter((r) => r.verdict === "reverted").length,
       hoursCredited:
         Math.round(approved.reduce((s, r) => s + (Number(r.approved_hours) || 0), 0) * 10) / 10,
+      // Actual pixels paid out historically (review_payouts.paid_pixels),
+      // never recomputed at today's rate - review payout rates have changed
+      // over time (see updateReviewPayoutSettings), so this is the real sum
+      // of what each payout was worth when it was actually paid, not what
+      // the same review count would be worth today.
+      pixelsWon: slackId ? (payoutTotals.get(slackId)?.earnedPixels ?? 0) : 0,
       avgSeconds:
         timed.length > 0
           ? timed.reduce((s, r) => s + r.total_seconds, 0) / timed.length
-          : 0,
-      repoOpenedPct:
-        rows.length > 0
-          ? Math.round((rows.filter((r) => r.repo_opened).length / rows.length) * 100)
-          : 0,
-      demoOpenedPct:
-        rows.length > 0
-          ? Math.round((rows.filter((r) => r.demo_opened).length / rows.length) * 100)
           : 0,
       lastActive: rows[0]?.created_at ?? "",
     };
@@ -89,11 +134,17 @@ export default async function ReviewStatsPage() {
     <div>
       <h1 className="text-2xl font-semibold text-foreground tracking-tight mb-1">Reviewer stats</h1>
       <p className="text-sm text-muted-foreground mb-5">
-        From the review audit log , verdicts and hours credited per reviewer
-        {showAuditColumns
-          ? ", plus time spent per review and whether the repo/demo were actually opened."
-          : "."}
+        From the review audit log , verdicts, hours credited, and pixels won per reviewer
+        {showAuditColumns ? ", plus time spent per review." : "."}
       </p>
+
+      <Card className="p-4 mb-8">
+        <div className="font-pixel text-xl mb-1">Verdicts over time</div>
+        <p className="text-sm text-muted-foreground mb-3">
+          Every review verdict across the whole team, by outcome.
+        </p>
+        <ReviewVerdictChart windows={verdictWindows} />
+      </Card>
 
       {stats.length === 0 ? (
         <Card className="p-8 text-center text-muted-foreground text-sm">No reviews logged yet.</Card>
@@ -108,15 +159,13 @@ export default async function ReviewStatsPage() {
                 <TableHead className="p-3 font-medium">First pass</TableHead>
                 <TableHead className="p-3 font-medium">Changes</TableHead>
                 <TableHead className="p-3 font-medium">Hours credited</TableHead>
+                <TableHead className="p-3 font-medium" title="Lifetime pixels actually paid out for reviewing, at whatever rate was in effect at the time">
+                  Pixels won
+                </TableHead>
                 {showAuditColumns ? (
-                  <>
-                    <TableHead className="p-3 font-medium" title="Average time spent on the review page per verdict">
-                      Avg time
-                    </TableHead>
-                    <TableHead className="p-3 font-medium" title="How often the repo / demo were actually opened">
-                      Repo / demo
-                    </TableHead>
-                  </>
+                  <TableHead className="p-3 font-medium" title="Average time spent on the review page per verdict">
+                    Avg time
+                  </TableHead>
                 ) : null}
                 <TableHead className="p-3 font-medium">Last active</TableHead>
               </TableRow>
@@ -130,26 +179,16 @@ export default async function ReviewStatsPage() {
                   <TableCell className="p-3 tabular-nums">{s.firstPass}</TableCell>
                   <TableCell className="p-3 tabular-nums">{s.changes}</TableCell>
                   <TableCell className="p-3 tabular-nums">{s.hoursCredited}h</TableCell>
+                  <TableCell className="p-3 tabular-nums font-medium">{s.pixelsWon.toLocaleString()} px</TableCell>
                   {showAuditColumns ? (
-                    <>
-                      <TableCell
-                        className={`p-3 tabular-nums ${
-                          s.avgSeconds > 0 && s.avgSeconds < 60 ? "text-rose-600 dark:text-rose-400 font-semibold" : ""
-                        }`}
-                        title={s.avgSeconds > 0 && s.avgSeconds < 60 ? "Under a minute per review , rubber-stamping?" : undefined}
-                      >
-                        {fmtDur(s.avgSeconds)}
-                      </TableCell>
-                      <TableCell className="p-3 tabular-nums">
-                        <span className={s.repoOpenedPct < 50 ? "text-rose-600 dark:text-rose-400" : ""}>
-                          {s.repoOpenedPct}%
-                        </span>{" "}
-                        /{" "}
-                        <span className={s.demoOpenedPct < 50 ? "text-rose-600 dark:text-rose-400" : ""}>
-                          {s.demoOpenedPct}%
-                        </span>
-                      </TableCell>
-                    </>
+                    <TableCell
+                      className={`p-3 tabular-nums ${
+                        s.avgSeconds > 0 && s.avgSeconds < 60 ? "text-rose-600 dark:text-rose-400 font-semibold" : ""
+                      }`}
+                      title={s.avgSeconds > 0 && s.avgSeconds < 60 ? "Under a minute per review , rubber-stamping?" : undefined}
+                    >
+                      {fmtDur(s.avgSeconds)}
+                    </TableCell>
                   ) : null}
                   <TableCell className="p-3 text-muted-foreground">
                     {s.lastActive ? new Date(s.lastActive).toLocaleDateString() : "-"}
