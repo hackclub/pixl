@@ -2,8 +2,7 @@ import { requirePagePerm } from "@/lib/guard";
 import { listShopItems, SHOP_REGIONS, SHOP_REGION_LABELS, SHOP_CATEGORY_LABELS, type ShopItemRow } from "@/lib/db";
 import { updateShopItemRegionDetails } from "@/app/actions";
 import { PendingButton } from "@/app/_components/PendingButton";
-import { PriceUsdInput } from "@/app/_components/PriceUsdInput";
-import { ShopConfiguratorPanel } from "@/app/_components/ShopConfiguratorPanel";
+import { ShopItemConfigurators } from "@/app/_components/ShopItemConfigurators";
 import { parseOptionGroups } from "@/lib/shopOptions";
 import { config } from "@/app/_generated/config";
 import { Badge } from "@/components/ui/badge";
@@ -119,66 +118,27 @@ export default async function ShopDetailPage({
                         </tr>
                       </thead>
                       <tbody>
-                        {SHOP_REGIONS.map((r) => {
-                          const row = byRegion.get(r);
-                          return (
-                            <tr key={r}>
-                              <td className="pr-2 align-top pt-1.5 whitespace-nowrap">
-                                {SHOP_REGION_LABELS[r]}
-                                {!row && (
-                                  <div className="text-[11px] text-muted-foreground">not stocked</div>
-                                )}
-                              </td>
-                              <td className="pr-2 align-top">
-                                <PriceUsdInput
-                                  name={`price_${r}`}
-                                  defaultValue={row?.price ?? 0}
-                                  disabled={!row}
-                                  pixelValueUsd={config.economy.pixelValueUsd}
-                                />
-                              </td>
-                              <td className="pr-2 align-top pt-1.5 text-muted-foreground tabular-nums whitespace-nowrap">
-                                ${((row?.price ?? 0) * config.economy.pixelValueUsd).toFixed(2)}
-                              </td>
-                              <td className="align-top">
-                                <div className="flex items-center gap-1.5">
-                                  <Input
-                                    name={`source_${r}`}
-                                    type="url"
-                                    disabled={!row}
-                                    placeholder="https://…"
-                                    defaultValue={row?.price_source_url ?? ""}
-                                    className="w-full min-w-[12rem] text-sm"
-                                  />
-                                  {row?.price_source_url && (
-                                    <a
-                                      href={row.price_source_url}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="text-xs text-brand hover:underline shrink-0"
-                                    >
-                                      Open
-                                    </a>
-                                  )}
-                                </div>
-                                {row && (
-                                  <ShopConfiguratorPanel
-                                    region={r}
-                                    hasConfig={!!row.config_options}
-                                    basePrice={row.config_options?.base_price ?? row.price}
-                                    referenceUrl={row.config_options?.reference_url ?? ""}
-                                    groups={(row.config_options?.groups ?? []).map((g) => ({
-                                      name: g.name,
-                                      type: g.type === "multi" ? "multi" : "single",
-                                      choices: g.choices,
-                                    }))}
-                                    pixelValueUsd={config.economy.pixelValueUsd}
-                                  />
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
+                        <ShopItemConfigurators
+                          pixelValueUsd={config.economy.pixelValueUsd}
+                          regions={SHOP_REGIONS.map((r) => {
+                            const row = byRegion.get(r);
+                            return {
+                              region: r,
+                              label: SHOP_REGION_LABELS[r],
+                              hasRow: !!row,
+                              price: row?.price ?? 0,
+                              priceSourceUrl: row?.price_source_url ?? "",
+                              hasConfig: !!row?.config_options,
+                              basePrice: row?.config_options?.base_price ?? row?.price ?? 0,
+                              referenceUrl: row?.config_options?.reference_url ?? "",
+                              groups: (row?.config_options?.groups ?? []).map((g) => ({
+                                name: g.name,
+                                type: g.type === "multi" ? ("multi" as const) : ("single" as const),
+                                choices: g.choices,
+                              })),
+                            };
+                          })}
+                        />
                       </tbody>
                     </table>
                   </div>
