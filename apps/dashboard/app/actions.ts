@@ -473,6 +473,13 @@ export async function updateReviewPayoutSettings(formData: FormData): Promise<vo
 // How a reviewer is credited in maker-facing notes. Prefers the Slack @handle;
 // never leaks a raw Slack user id (login stores the id as the name when Slack
 // gives us no real name), attribute it to the review team instead.
+// "Name (U0ABC123)" -> "U0ABC123", the format actorName() stamps into
+// first_pass_by (and review_audits.reviewer, mod_actions.actor, ...).
+function slackIdFromActorLabel(label: string): string | null {
+  const m = label.match(/\(([^()]+)\)\s*$/);
+  return m ? m[1] : null;
+}
+
 async function reviewerLabel(slackId: string, name: string): Promise<string> {
   const handle = await slackHandle(slackId);
   if (handle) return handle;
@@ -988,6 +995,20 @@ export async function reviewProject(formData: FormData): Promise<void> {
   // only ever swaps the player-facing notification text.
   const revealName = formData.get("revealName") === "1";
   const playerFacingReviewer = revealName ? reviewer : "the review team";
+  // On a full (second-pass) APPROVAL specifically, the player cares who
+  // actually reviewed their code in depth - that's the first-pass reviewer,
+  // not whoever clicked the final confirm (often a quicker second look).
+  // Only swaps the final "approved by" message below - first-pass and
+  // needs-changes notifications keep showing whoever is acting right now,
+  // via playerFacingReviewer above.
+  const firstPassSlackId = current.first_pass_by
+    ? slackIdFromActorLabel(String(current.first_pass_by))
+    : null;
+  const approvalReviewer =
+    stage === "second_review" && firstPassSlackId
+      ? await reviewerLabel(firstPassSlackId, String(current.first_pass_by))
+      : reviewer;
+  const approvalPlayerFacingReviewer = revealName ? approvalReviewer : "the review team";
 
   // First pass on a freshly-shipped project: approve and ban are only PROPOSALS,
   // regardless of the reviewer's own permissions, the project is held in
@@ -1366,7 +1387,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
     await notifyOwner(
       c.user_id,
       "Project approved!",
-      `"${project.name}" passed review , approved by ${reviewer}. Congrats on shipping!${cCredited}`,
+      `"${project.name}" passed review , approved by ${approvalReviewer}. Congrats on shipping!${cCredited}`,
     );
   }
 
@@ -1458,7 +1479,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
   await notifyOwner(
     project.user_id,
     "Project approved!",
-    `"${project.name}" passed review , approved by ${playerFacingReviewer}. Congrats on shipping!\n\nReviewer note: ${note}${credited}`,
+    `"${project.name}" passed review , approved by ${approvalPlayerFacingReviewer}. Congrats on shipping!\n\nReviewer note: ${note}${credited}`,
   );
   await logModAction(
     project.user_id,
