@@ -1,6 +1,5 @@
 import axios from "axios";
 import { app } from "../slack/app.js";
-import { PIXL_CHANNELS, PIXL_PROMO } from "../constants.js";
 import { aiPost, streamedAICall } from "../ai/client.js";
 import { getAIReply } from "../ai/persona.js";
 import { checkAiRateLimit, AI_RATE_LIMIT_MESSAGE } from "../ai/rateLimit.js";
@@ -8,21 +7,6 @@ import { userMemory, parseFacts } from "../memory/users.js";
 import { botStats } from "../stats.js";
 import { escapeMrkdwn } from "../slack/escape.js";
 import { hasBannedLanguage } from "../ai/outputFilter.js";
-
-app.command("/pixl-joke", async ({ command, ack, respond }) => {
-  await ack();
-  const promo = PIXL_CHANNELS.includes(command.channel_id) ? "" : PIXL_PROMO;
-  try {
-    const res = await axios.get("https://v2.jokeapi.dev/joke/Any?blacklistFlags=racist,sexist&type=twopart,single", {
-      timeout: 5000,
-    });
-    const joke = res.data;
-    const text = joke.type === "twopart" ? `${joke.setup}\n\n${joke.delivery}` : joke.joke;
-    await respond({ text: `${text}${promo}` });
-  } catch (err) {
-    await respond({ text: "couldn't fetch a joke lol" });
-  }
-});
 
 app.command("/pixl-roast", async ({ command, ack, client }) => {
   await ack();
@@ -131,7 +115,8 @@ app.command("/pixl-fact", async ({ command, ack, client }) => {
         messages: [
           {
             role: "system",
-            content: 'Give one genuinely surprising or weird fact. 1 sentence, lowercase, no intro like "did you know". Just the fact.',
+            content:
+              'Give one genuinely surprising or weird fact. 1 sentence, lowercase, no intro like "did you know". Just the fact. This is a Hack Club Slack with 13 year olds in it: never a sexual, gory, violent, drug-related, or otherwise NSFW fact, no exceptions. Stick to science, animals, history, space, or everyday trivia.',
           },
           { role: "user", content: "give me a fact" },
         ],
@@ -139,7 +124,13 @@ app.command("/pixl-fact", async ({ command, ack, client }) => {
       },
       { format: (t) => ` ${t}` },
     );
-    const fact = stream.rawContent.trim() || "facts are hard";
+    const raw = stream.rawContent.trim();
+    // This streams live as it's generated (see streamedAICall's own doc
+    // comment), so this check can't stop a bad partial from flashing on
+    // screen mid-stream - the system prompt above is the real guard. This
+    // is still worth doing: it keeps whatever's LEFT ON SCREEN afterward
+    // clean, same hasBannedLanguage check /pixl-urban and /pixl-joke use.
+    const fact = raw && !hasBannedLanguage(raw) ? raw : "facts are hard";
     await stream.finalize(` ${fact}`);
   } catch (e) {
     await client.chat.postEphemeral({

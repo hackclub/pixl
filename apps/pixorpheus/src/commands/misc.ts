@@ -22,7 +22,6 @@ app.command("/pixl-help", async ({ command, ack, respond }) => {
 */pixl-countdown [time] [label]* - Countdown timer that posts when it hits zero
 */pixl-ping* - Check bot latency
 */pixl-help* - Show this help message
-*/pixl-joke* - Get a random joke
 */pixl-coinflip* - Flip a coin
 */pixl-fact* - Get a random surprising fact
 */pixl-ask [question]* - Ask Pixorpheus anything publicly
