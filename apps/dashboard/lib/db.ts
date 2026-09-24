@@ -2178,6 +2178,10 @@ export interface ShopItemRow {
   // of the "ship this Trial" copy when this is what's locking the item.
   manual_locked: boolean;
   lock_note: string;
+  // Counting gate: locked until the player has at least one un-spent Beacon
+  // project (projects.is_peak) - see availableBeaconUnlocks in
+  // apps/server/src/routes/shop.ts. Item-wide, propagated like manual_locked.
+  beacon_locked: boolean;
   // Where this row's price was sourced from (a retailer product page, a
   // regional storefront, ...) - see updateShopItemRegionDetails in
   // app/actions.ts and the /shop-detail page. Empty string = not set.

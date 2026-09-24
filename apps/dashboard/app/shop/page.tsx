@@ -438,6 +438,22 @@ export default async function ShopPage({
                           />
                         </Label>
                       </div>
+                      <label className="flex items-start gap-2 text-sm cursor-pointer rounded-md border border-border p-3">
+                        <input
+                          type="checkbox"
+                          name="beacon_locked"
+                          value="1"
+                          defaultChecked={item.beacon_locked}
+                          className="mt-0.5 h-4 w-4 rounded border-border accent-brand"
+                        />
+                        <span>
+                          <span className="font-medium text-foreground">Beacon-locked</span> , only
+                          buyable by players who have a Beacon project (see the project page&apos;s
+                          Beacon nomination) they haven&apos;t already spent on another Beacon-locked
+                          item. One Beacon unlocks exactly one Beacon-locked item. Applies to this
+                          item in every region.
+                        </span>
+                      </label>
                       <label className="flex items-start gap-2 text-sm text-muted-foreground cursor-pointer">
                         <input
                           type="checkbox"

@@ -77,7 +77,7 @@ async function regionFor(userId: string): Promise<string> {
 // with 0106 , fall back gracefully before each is applied so the catalog
 // keeps loading.
 const ITEM_COLUMNS =
-  "id, name, description, price, image_url, options, unlock_xp, config_options, region, category, unlock_trial_ids, manual_locked, lock_note, created_at";
+  "id, name, description, price, image_url, options, unlock_xp, config_options, region, category, unlock_trial_ids, manual_locked, lock_note, beacon_locked, created_at";
 const ITEM_COLUMNS_FALLBACK = "id, name, description, price, image_url, options";
 
 // How recently an item has to have been added to still be worth flagging as
@@ -199,6 +199,35 @@ async function attachBuyerCounts(items: Record<string, unknown>[]): Promise<void
     item.show_buyers = shouldShowBuyerCount(buyers);
     item.is_new = isNewItem(item.created_at);
   }
+}
+
+// How many Beacon-locked items this player can still buy: one unlock per
+// Beacon project they have (projects.is_peak, live/not banned/rejected/
+// archived), minus however many they've already spent on a non-cancelled
+// order for a beacon_locked item. Shared pool across every beacon_locked
+// item, not one-per-item - see toggleProjectPeak in
+// apps/dashboard/app/actions.ts for how a project becomes a Beacon.
+async function availableBeaconUnlocks(userId: string): Promise<number> {
+  const [{ count: beaconCount }, { data: beaconItemIds }] = await Promise.all([
+    supabase
+      .from("projects")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("is_peak", true)
+      .is("archived_at", null)
+      .is("rejected_at", null)
+      .is("banned_at", null),
+    supabase.from("shop_items").select("id").eq("beacon_locked", true),
+  ]);
+  const ids = ((beaconItemIds ?? []) as { id: number }[]).map((i) => i.id);
+  if (ids.length === 0) return beaconCount ?? 0;
+  const { count: spent } = await supabase
+    .from("shop_orders")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .neq("status", "cancelled")
+    .in("item_id", ids);
+  return Math.max((beaconCount ?? 0) - (spent ?? 0), 0);
 }
 
 // Active catalog, plus mystery-merchant items while their event runs , those
@@ -333,6 +362,20 @@ router.get("/api/shop/items", async (req, res) => {
     if (i.manual_locked) {
       i.locked = true;
       i.unlockPending = false;
+    }
+  }
+
+  // Beacon-locked items: locked unless this player still has an unspent
+  // Beacon-project unlock. A manual lock above still wins if both are set.
+  let beaconAvailable = 0;
+  if (session && items.some((i) => i.beacon_locked)) {
+    beaconAvailable = await availableBeaconUnlocks(session.userId);
+  }
+  for (const i of items) {
+    if (i.beacon_locked && !i.manual_locked) {
+      i.locked = beaconAvailable < 1;
+      i.unlockPending = false;
+      i.beaconAvailable = beaconAvailable;
     }
   }
 
@@ -640,11 +683,15 @@ router.post("/api/shop/buy/:id", async (req, res) => {
   // outright, independent of any Trial.
   const { data: gateRow } = await supabase
     .from("shop_items")
-    .select("unlock_trial_ids, manual_locked, region, unlock_xp")
+    .select("unlock_trial_ids, manual_locked, region, unlock_xp, beacon_locked")
     .eq("id", id)
     .maybeSingle();
   if ((gateRow as { manual_locked?: boolean } | null)?.manual_locked)
     return res.status(403).json({ ok: false, error: "locked" });
+  if ((gateRow as { beacon_locked?: boolean } | null)?.beacon_locked) {
+    const available = await availableBeaconUnlocks(session.userId);
+    if (available < 1) return res.status(403).json({ ok: false, error: "locked" });
+  }
   const itemRegion = (gateRow as { region?: string } | null)?.region;
   const itemUnlockXp = Number((gateRow as { unlock_xp?: number } | null)?.unlock_xp ?? 0);
   if (itemRegion && itemUnlockXp <= 0 && regionMismatch(itemRegion, buyerRegion))

@@ -3950,6 +3950,10 @@ export async function updateShopItem(formData: FormData): Promise<void> {
   // also item-wide, mirrored below the same way the Trial gate is.
   const manualLocked = formData.get("manual_locked") === "1";
   const lockNote = String(formData.get("lock_note") ?? "").trim().slice(0, 300);
+  // Counting gate: locked until the player has an un-spent Beacon project
+  // (see availableBeaconUnlocks in apps/server/src/routes/shop.ts).
+  // Item-wide, mirrored below the same way the Trial gate/manual lock are.
+  const beaconLocked = formData.get("beacon_locked") === "1";
   // Saving silently skips telling pixorpheus about this change (e.g. a typo
   // fix that isn't worth a Slack ping), see notifyShopUpdates below.
   const silent = formData.get("silent") === "1";
@@ -3970,6 +3974,7 @@ export async function updateShopItem(formData: FormData): Promise<void> {
     unlock_trial_ids: unlockTrials,
     manual_locked: manualLocked,
     lock_note: lockNote,
+    beacon_locked: beaconLocked,
   };
   const image = formData.get("image");
   if (image instanceof File && image.size > 0) {
@@ -4052,6 +4057,14 @@ export async function updateShopItem(formData: FormData): Promise<void> {
     .eq("name", gateName)
     .eq("unlock_xp", 0);
   if (lockErr) console.error("updateShopItem (manual lock)", lockErr.message);
+
+  // Same for the Beacon lock , item-wide, not per-region.
+  const { error: beaconErr } = await db
+    .from("shop_items")
+    .update({ beacon_locked: beaconLocked })
+    .eq("name", gateName)
+    .eq("unlock_xp", 0);
+  if (beaconErr) console.error("updateShopItem (beacon lock)", beaconErr.message);
 
   if (applyAllRegions && originalName) {
     const { error: propErr } = await db
