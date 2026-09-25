@@ -176,11 +176,26 @@ export default async function FulfillmentPage({
   const showingFulfillers = active === "fulfillers";
   const showingLeaderboard = active === "leaderboard";
 
-  let orders =
-    showingFulfillers || showingLeaderboard
-      ? []
-      : await listShopOrders(active === "all" ? undefined : active, 500);
-  if (mineOnly) orders = orders.filter((o) => o.claimed_by_slack === me);
+  // "My queue" is a fixed cross-stage view, not a filter on whatever status
+  // tab happens to be selected - it always shows every order this fulfiller
+  // has claimed that isn't done yet (ordered/credited/shipped), regardless
+  // of `active`. Otherwise toggling it on from the default "New" tab showed
+  // nothing, since pending orders are never claimed by anyone yet.
+  let orders: ShopOrderRow[];
+  if (showingFulfillers || showingLeaderboard) {
+    orders = [];
+  } else if (mineOnly) {
+    const [orderedRows, creditedRows, shippedRows] = await Promise.all([
+      listShopOrders("ordered", 500),
+      listShopOrders("credited", 500),
+      listShopOrders("shipped", 500),
+    ]);
+    orders = [...orderedRows, ...creditedRows, ...shippedRows]
+      .filter((o) => o.claimed_by_slack === me)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  } else {
+    orders = await listShopOrders(active === "all" ? undefined : active, 500);
+  }
   const pendingCount =
     active === "pending" && !mineOnly
       ? orders.length
@@ -237,22 +252,24 @@ export default async function FulfillmentPage({
       </p>
 
       <div className="flex items-center gap-3 flex-wrap mb-4">
-        <div className="inline-flex items-center rounded-lg border border-border p-0.5 bg-card">
-          {tabs.map((t) => (
-            <Button
-              key={t.key}
-              asChild
-              variant="ghost"
-              size="sm"
-              className={active === t.key ? "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground" : ""}
-            >
-              <Link href={linkFor(t.key)}>
-                {t.label}
-                {t.key === "pending" && pendingCount > 0 ? ` (${pendingCount})` : ""}
-              </Link>
-            </Button>
-          ))}
-        </div>
+        {!mineOnly && (
+          <div className="inline-flex items-center rounded-lg border border-border p-0.5 bg-card">
+            {tabs.map((t) => (
+              <Button
+                key={t.key}
+                asChild
+                variant="ghost"
+                size="sm"
+                className={active === t.key ? "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground" : ""}
+              >
+                <Link href={linkFor(t.key)}>
+                  {t.label}
+                  {t.key === "pending" && pendingCount > 0 ? ` (${pendingCount})` : ""}
+                </Link>
+              </Button>
+            ))}
+          </div>
+        )}
         {!showingFulfillers && !showingLeaderboard && (
           <Button
             asChild
@@ -271,13 +288,13 @@ export default async function FulfillmentPage({
         <FulfillmentLeaderboard />
       ) : orders.length === 0 ? (
         <Card className="p-8 text-center text-muted-foreground text-sm">
-          {active === "pending"
-            ? "No orders waiting to be claimed. Nice and clear."
-            : active === "flagged"
-              ? "Nothing over budget right now."
-              : mineOnly
-              ? "Nothing in your queue here."
-              : "Nothing here yet."}
+          {mineOnly
+            ? "Nothing in your queue here."
+            : active === "pending"
+              ? "No orders waiting to be claimed. Nice and clear."
+              : active === "flagged"
+                ? "Nothing over budget right now."
+                : "Nothing here yet."}
         </Card>
       ) : (
         <div className="grid gap-3">
