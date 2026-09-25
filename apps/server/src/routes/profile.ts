@@ -347,7 +347,7 @@ router.get("/api/profile/eligibility", async (req, res) => {
 
   const { data, error } = await supabase
     .from("users")
-    .select(["birthday", ...ADDRESS_FIELDS].join(", "))
+    .select(["birthday", ...ADDRESS_FIELDS, "phone"].join(", "))
     .eq("id", session.userId)
     .maybeSingle();
   if (error) {
@@ -377,6 +377,7 @@ router.get("/api/profile/eligibility", async (req, res) => {
     addressCountry: decryptPII(row.address_country as string | null),
     addressPostal: decryptPII(row.address_postal as string | null),
     hasAddress: hasAddress(row),
+    hasPhone: String(decryptPII(row.phone as string | null) ?? "").trim() !== "",
   });
 });
 

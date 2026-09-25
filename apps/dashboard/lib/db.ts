@@ -2325,6 +2325,7 @@ export async function listShopOrders(status?: string, limit = 500): Promise<Shop
 export interface BuyerDetails {
   name: string;
   email: string;
+  phone: string;
   /** Non-empty lines only, in mailing order (line1, line2, city/state/zip, country). */
   addressLines: string[];
 }
@@ -2342,7 +2343,7 @@ export async function buyerDetailsByUserId(userIds: string[]): Promise<Map<strin
   const { data, error } = await db
     .from("users")
     .select(
-      "id, first_name, last_name, real_name, email, address_line1, address_line2, address_city, address_state, address_country, address_postal",
+      "id, first_name, last_name, real_name, email, phone, address_line1, address_line2, address_city, address_state, address_country, address_postal",
     )
     .in("id", ids);
   if (error) {
@@ -2363,6 +2364,7 @@ export async function buyerDetailsByUserId(userIds: string[]): Promise<Map<strin
     out.set(u.id as string, {
       name,
       email: String(u.email ?? "").trim(),
+      phone: decryptPII(u.phone as string | null).trim(),
       addressLines: [line1, line2, cityStateZip, country].filter((l) => l.trim() !== ""),
     });
   }

@@ -4699,10 +4699,11 @@ export async function shipOrder(formData: FormData): Promise<void> {
     .eq("status", "credited");
   if (error) throw new Error(error.message);
 
+  const showOffLine = "Show it off in <#C07UMRYJ1LH> when it arrives, we'd love to see it! 🎉";
   await db.from("notifications").insert({
     user_id: order.user_id,
     title: "Order shipped! 📦",
-    body: `Your "${order.item_name}" order shipped. Tracking: ${tracking}`,
+    body: `Your "${order.item_name}" order shipped. Tracking: ${tracking}\n\n${showOffLine}`,
   });
   // DM the tracking number to the buyer through Pixo. Best-effort , a missing
   // Slack link shouldn't block shipping, and the in-game notification still lands.
@@ -4715,7 +4716,7 @@ export async function shipOrder(formData: FormData): Promise<void> {
     try {
       await dmUser(
         buyer.slack_id,
-        `📦 Your "${order.item_name}" order shipped! Tracking number: ${tracking}`,
+        `📦 Your "${order.item_name}" order shipped! Tracking number: ${tracking}\n\n${showOffLine}`,
       );
     } catch (err) {
       console.error("shipOrder DM", err instanceof Error ? err.message : err);

@@ -408,6 +408,10 @@ function OrderCard({
                   )}
                 </div>
                 <div>
+                  <span className="text-xs text-muted-foreground">Phone: </span>
+                  {buyer.phone || <span className="text-muted-foreground">not on file</span>}
+                </div>
+                <div>
                   <span className="text-xs text-muted-foreground">Address: </span>
                   {buyer.addressLines.length > 0 ? (
                     <span className="whitespace-pre-line">{buyer.addressLines.join("\n")}</span>

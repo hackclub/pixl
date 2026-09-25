@@ -1213,6 +1213,8 @@ const Pixl = (() => {
       .pxl-dialog .pxl-ok{background:var(--gold);color:var(--btn-ink)}
       .pxl-dialog .pxl-ok.danger{background:var(--bad);color:var(--btn-ink)}
       .pxl-dialog .pxl-mid{color:var(--teal);border-color:var(--teal)}
+      .pxl-dialog .pxl-input{width:100%;box-sizing:border-box;margin-top:10px;padding:9px 10px;font-family:var(--sans);font-size:14px;background:var(--panel-2);color:var(--ink);border:var(--bw) solid var(--stroke)}
+      .pxl-dialog .pxl-err{font-size:12px;color:var(--bad);margin-top:6px;min-height:15px}
     `;
     document.head.appendChild(s);
   }
@@ -1259,6 +1261,61 @@ const Pixl = (() => {
         if (e.key === "Enter") done(true);
       });
       root.querySelector(".pxl-ok").focus();
+    });
+  }
+
+  /* ─────────────────── custom prompt dialog ───────────────────
+   * Drop-in async text-input dialog, same visual language as confirmDialog.
+   * Returns Promise<string|null> — the trimmed input on confirm/Enter, or
+   * null on cancel/Escape. `validate(value)` may return an error string to
+   * block submission (e.g. "Enter a valid phone number").
+   */
+  function promptDialog(opts = {}) {
+    const {
+      title = "",
+      body = "",
+      placeholder = "",
+      initialValue = "",
+      confirmText = "Save",
+      cancelText = "Cancel",
+      inputType = "text",
+      validate = null,
+    } = opts;
+    injectDialogCSS();
+    return new Promise((resolve) => {
+      const root = document.createElement("div");
+      root.className = "pxl-dialog";
+      root.tabIndex = -1;
+      root.innerHTML = `
+        <div class="pxl-veil"></div>
+        <div class="pxl-box" role="dialog" aria-modal="true">
+          <div class="pxl-t">${esc(title)}</div>
+          ${body ? `<div class="pxl-b">${esc(body)}</div>` : ""}
+          <input class="pxl-input" type="${esc(inputType)}" placeholder="${esc(placeholder)}" value="${esc(initialValue)}" />
+          <div class="pxl-err"></div>
+          <div class="pxl-acts">
+            <button class="pxl-cancel">${esc(cancelText)}</button>
+            <button class="pxl-ok">${esc(confirmText)}</button>
+          </div>
+        </div>`;
+      document.body.appendChild(root);
+      const input = root.querySelector(".pxl-input");
+      const err = root.querySelector(".pxl-err");
+      const done = (v) => { root.remove(); resolve(v); };
+      const submit = () => {
+        const v = input.value.trim();
+        const problem = validate ? validate(v) : "";
+        if (problem) { err.textContent = problem; input.focus(); return; }
+        done(v);
+      };
+      root.querySelector(".pxl-veil").onclick = () => done(null);
+      root.querySelector(".pxl-cancel").onclick = () => done(null);
+      root.querySelector(".pxl-ok").onclick = submit;
+      root.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") done(null);
+        if (e.key === "Enter") submit();
+      });
+      setTimeout(() => input.focus(), 0);
     });
   }
 
@@ -1417,5 +1474,5 @@ const Pixl = (() => {
     document.addEventListener("DOMContentLoaded", gate);
   }
 
-  return { API, config, token, api, apiUrl, send, upload, esc, safeHref, bbcode, bbstrip, markdown, toast, mountTopbar, loadWallet, loadRestoration, timeAgo, countdown, hours, hasToken: !!token, runTour, maybeOnboard, ONBOARDING_STEPS, confirm: confirmDialog, setTheme, loginUrl, enhanceSelects, reForHours, projectPayoutUsd, projectPayoutPx };
+  return { API, config, token, api, apiUrl, send, upload, esc, safeHref, bbcode, bbstrip, markdown, toast, mountTopbar, loadWallet, loadRestoration, timeAgo, countdown, hours, hasToken: !!token, runTour, maybeOnboard, ONBOARDING_STEPS, confirm: confirmDialog, prompt: promptDialog, setTheme, loginUrl, enhanceSelects, reForHours, projectPayoutUsd, projectPayoutPx };
 })();

@@ -903,7 +903,27 @@
           onMiddle: () => startAddressVerification(id),
         });
         if (!ok) return;
+        if (!elig.hasPhone) {
+          const phone = await promptForPhone();
+          if (!phone) return;
+          buyItem(id, phone);
+          return;
+        }
         buyItem(id);
+      }
+
+      // First-order-only phone collection — asked once, then saved server
+      // side and reused silently on every order after (see /api/shop/buy/:id).
+      // Fulfillers need it to actually get a physical prize delivered.
+      async function promptForPhone() {
+        return Pixl.prompt({
+          title: "Phone number needed",
+          body: "We need a phone number for shipping this prize. It's only asked once.",
+          placeholder: "e.g. +1 555 123 4567",
+          inputType: "tel",
+          confirmText: "Continue",
+          validate: (v) => (v.length < 7 || v.length > 20 ? "Enter a valid phone number." : ""),
+        });
       }
 
       // The raw picked label for the stock-tracked group (e.g. "Ridit"), or
@@ -927,7 +947,7 @@
         } catch (e) {}
       }
 
-      async function buyItem(id) {
+      async function buyItem(id, phone) {
         if (buying) return;
         buying = true;
         $("buy-btn").disabled = true;
@@ -935,6 +955,7 @@
         const option = optionSummary();
         const note = $("note-row").hidden ? "" : $("note-input").value.trim().slice(0, 300);
         const body = { option, note };
+        if (phone) body.phone = phone;
         if (selected && selected.config_options) body.config = configPick;
         else {
           body.quantity = quantity;
@@ -964,6 +985,11 @@
           await refreshStock();
           $("buy-btn").disabled = false;
           $("buy-btn").textContent = "BUY";
+        } else if (r.error === "phone_required") {
+          const retryPhone = await promptForPhone();
+          $("buy-btn").disabled = false;
+          $("buy-btn").textContent = "BUY";
+          if (retryPhone) buyItem(id, retryPhone);
         } else {
           Pixl.toast("Couldn't place that order right now.", true);
           $("buy-btn").disabled = false;

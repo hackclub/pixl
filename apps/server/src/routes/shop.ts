@@ -5,7 +5,7 @@ import { orValue } from "../db/pgCompat.js";
 import { activeEvents } from "../events.js";
 import { levelFor } from "../xp.js";
 import { addNotification } from "./notifications.js";
-import { decryptPII } from "../crypto.js";
+import { decryptPII, encryptPII } from "../crypto.js";
 
 const router = Router();
 
@@ -646,7 +646,7 @@ router.post("/api/shop/buy/:id", async (req, res) => {
   // let the purchase through , see /account in apps/game/web.
   const { data: buyer } = await supabase
     .from("users")
-    .select("address_line1, address_city, address_country, address_postal")
+    .select("address_line1, address_city, address_country, address_postal, phone")
     .eq("id", session.userId)
     .maybeSingle();
   const addressOnFile =
@@ -659,6 +659,23 @@ router.post("/api/shop/buy/:id", async (req, res) => {
   if (!addressOnFile || !buyerCountry)
     return res.status(400).json({ ok: false, error: "address_required" });
   const buyerRegion = regionForCountry(buyerCountry);
+
+  // A phone number is required on the FIRST order only - once one's on file
+  // it's reused silently on every order after, same "ask once, reuse
+  // forever" shape as the address check above. Fulfillers need it to
+  // actually get a physical prize delivered (see the Shipping info
+  // disclosure on /fulfillment).
+  const phoneOnFile = decryptPII(buyer?.phone).trim();
+  if (!phoneOnFile) {
+    const rawPhone = typeof req.body?.phone === "string" ? req.body.phone.trim() : "";
+    if (rawPhone.length < 7 || rawPhone.length > 20)
+      return res.status(400).json({ ok: false, error: "phone_required" });
+    const { error: phoneErr } = await supabase
+      .from("users")
+      .update({ phone: encryptPII(rawPhone) })
+      .eq("id", session.userId);
+    if (phoneErr) console.error("[shop] failed to save phone", phoneErr.message);
+  }
 
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ ok: false });
