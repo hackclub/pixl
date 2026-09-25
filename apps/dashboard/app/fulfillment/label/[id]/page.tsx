@@ -29,24 +29,26 @@ export default async function ShippingLabelPage({
       <PrintButton />
       <div className="sheet">
         <div className="label">
-          <img src="/label/pixl-wordmark.png" alt="Pixl" className="wordmark" />
-          <div className="address-block">
-            <div className="ship-to">Ship to</div>
-            <div className="name">{buyer?.name || order.player_name || "(name missing)"}</div>
-            {addressLines.length > 0 ? (
-              addressLines.map((line, i) => (
-                <div className="line" key={i}>
-                  {line}
-                </div>
-              ))
-            ) : (
-              <div className="line missing">No address on file - don&apos;t ship yet.</div>
-            )}
-            {buyer?.phone && <div className="phone">{buyer.phone}</div>}
-          </div>
-          <img src="/label/sparkle.png" alt="" className="sparkle" />
-          <div className="footer">
-            Pixl · {order.item_name || "item"} · Order #{order.id}
+          <div className="label-inner">
+            <img src="/label/pixl-wordmark.png" alt="Pixl" className="wordmark" />
+            <div className="address-block">
+              <div className="ship-to">Ship to</div>
+              <div className="name">{buyer?.name || order.player_name || "(name missing)"}</div>
+              {addressLines.length > 0 ? (
+                addressLines.map((line, i) => (
+                  <div className="line" key={i}>
+                    {line}
+                  </div>
+                ))
+              ) : (
+                <div className="line missing">No address on file - don&apos;t ship yet.</div>
+              )}
+              {buyer?.phone && <div className="phone">{buyer.phone}</div>}
+            </div>
+            <img src="/label/sparkle.png" alt="" className="sparkle" />
+            <div className="footer">
+              Pixl · {order.item_name || "item"} · Order #{order.id}
+            </div>
           </div>
         </div>
       </div>
@@ -67,8 +69,22 @@ export default async function ShippingLabelPage({
           width: 105mm;
           height: 148.5mm;
           box-sizing: border-box;
-          padding: 7mm;
           border: 0.4mm dashed #aaa;
+          overflow: hidden;
+        }
+        /* The label box itself stays portrait (105 x 148.5mm) - the content
+           is rotated 90deg within it, landscape, so it reads sideways when
+           the envelope/box is turned on its side. */
+        .label-inner {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          width: 148.5mm;
+          height: 105mm;
+          transform: translate(-50%, -50%) rotate(90deg);
+          transform-origin: center center;
+          box-sizing: border-box;
+          padding: 7mm;
           display: flex;
           flex-direction: column;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
