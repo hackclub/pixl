@@ -4519,7 +4519,7 @@ export async function claimOrder(formData: FormData): Promise<void> {
     return;
   }
   const now = new Date().toISOString();
-  const { error } = await db
+  const { data: claimed, error } = await db
     .from("shop_orders")
     .update({
       status: "ordered",
@@ -4529,8 +4529,14 @@ export async function claimOrder(formData: FormData): Promise<void> {
       ordered_at: now,
     })
     .eq("id", id)
-    .eq("status", "pending");
+    .eq("status", "pending")
+    .select("id");
   if (error) throw new Error(error.message);
+  // avoid double-claim race
+  if (!claimed || claimed.length === 0) {
+    revalidatePath("/fulfillment");
+    return;
+  }
   const placedBody = `Your "${order.item_name}" order has been placed and is being fulfilled. We'll let you know when it ships.`;
   await db.from("notifications").insert({
     user_id: order.user_id,
@@ -4686,7 +4692,7 @@ export async function shipOrder(formData: FormData): Promise<void> {
     revalidatePath("/fulfillment");
     return;
   }
-  const { error } = await db
+  const { data: shipped, error } = await db
     .from("shop_orders")
     .update({
       status: "shipped",
@@ -4696,8 +4702,14 @@ export async function shipOrder(formData: FormData): Promise<void> {
       tracking,
     })
     .eq("id", id)
-    .eq("status", "credited");
+    .eq("status", "credited")
+    .select("id");
   if (error) throw new Error(error.message);
+  // avoid double-ship race
+  if (!shipped || shipped.length === 0) {
+    revalidatePath("/fulfillment");
+    return;
+  }
 
   const showOffLine = "Show it off in <#C07UMRYJ1LH> when it arrives, we'd love to see it! 🎉";
   await db.from("notifications").insert({
