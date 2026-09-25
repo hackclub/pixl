@@ -171,6 +171,68 @@ export async function recordShipForOperations(
   return { ok: true, entries: entries.length };
 }
 
+// The authoritative refresh for the review/settlement path: unlike
+// recordShipForOperations (only ever triggered by a ship/reship event),
+// this recomputes an entry's evidence on demand against the window's live
+// upper bound, min(now(), operation.ends_at) - so a project shipped once,
+// never reshipped, whose owner kept working right up to Blackout's end,
+// still gets full credit for that work. Called from the dashboard's review
+// decision action (apps/dashboard/lib/operationsReview.ts) via the
+// /api/admin/operations/refresh-evidence route, so it runs on every review
+// decision regardless of what the reviewer's browser does - never a
+// frontend/manual-resync dependency.
+export async function refreshEntryEvidence(
+  entryId: number,
+): Promise<{ ok: boolean; error?: string }> {
+  const { data: row } = await supabase
+    .from("operation_entries")
+    .select("id, operation_id, project_id, status, window_start, first_qualified_ship_at, fix_window_end")
+    .eq("id", entryId)
+    .maybeSingle();
+  if (!row) return { ok: false, error: "entry_not_found" };
+  const entry = row as {
+    id: number;
+    operation_id: number;
+    project_id: number;
+    status: EntryStatus;
+    window_start: string;
+    first_qualified_ship_at: string | null;
+    fix_window_end: string | null;
+  };
+  // Nothing to evaluate before the first ship, and a settled entry is
+  // frozen (operation_record_evidence itself also guards per-contributor
+  // rows on settled_at, this just avoids the wasted work).
+  if (!entry.first_qualified_ship_at) return { ok: false, error: "not_shipped" };
+  if (entry.status === "approved") return { ok: true };
+
+  const { data: opRow } = await supabase
+    .from("operations")
+    .select("ends_at")
+    .eq("id", entry.operation_id)
+    .maybeSingle();
+  if (!opRow) return { ok: false, error: "operation_not_found" };
+  const endsAt = new Date((opRow as { ends_at: string }).ends_at);
+  const windowEnd = new Date(Math.min(Date.now(), endsAt.getTime()));
+
+  const shipEntry: ShipEntry = {
+    entry_id: entry.id,
+    operation_id: entry.operation_id,
+    status: entry.status,
+    window_start: entry.window_start,
+    window_end: windowEnd.toISOString(),
+    fix_window_end: entry.fix_window_end,
+  };
+  try {
+    const rows = await gatherEvidence(shipEntry, entry.project_id);
+    if (rows.length === 0) return { ok: true };
+    const res = await rpc("operation_record_evidence", { p_entry_id: entry.id, p_rows: rows });
+    return res.ok ? { ok: true } : { ok: false, error: res.error };
+  } catch (e) {
+    console.error("[operations] refreshEntryEvidence failed", (e as Error)?.message ?? e);
+    return { ok: false, error: "evidence_fetch_failed" };
+  }
+}
+
 export interface PublicOperationView {
   slug: string;
   name: string;

@@ -35,15 +35,18 @@ export interface EntryWindow {
   end: Date;
 }
 
+// Eligibility never depends on shipping/review timing - only on the
+// operation's own clock and when this entry opted in. The end is always
+// min(now, operation end), never the first-ship instant: work continues to
+// count for as long as it happens before Blackout ends, whether the ship
+// that surfaces it lands early, late, or long after the operation is over.
 export function entryWindow(
-  entry: { joinedAt: Date; firstQualifiedShipAt: Date | null },
+  entry: { joinedAt: Date },
   op: { startsAt: Date; endsAt: Date },
   now: Date = new Date(),
 ): EntryWindow {
   const start = new Date(Math.max(op.startsAt.getTime(), entry.joinedAt.getTime()));
-  const end = entry.firstQualifiedShipAt
-    ? new Date(Math.min(entry.firstQualifiedShipAt.getTime(), op.endsAt.getTime()))
-    : new Date(Math.min(now.getTime(), op.endsAt.getTime()));
+  const end = new Date(Math.min(now.getTime(), op.endsAt.getTime()));
   return { start, end: end.getTime() < start.getTime() ? start : end };
 }
 

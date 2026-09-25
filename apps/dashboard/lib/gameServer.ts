@@ -36,6 +36,31 @@ export async function fetchOnlinePlayers(): Promise<OnlinePlayer[] | null> {
   }
 }
 
+// Refreshes an Operation Blackout entry's tracked evidence against its live
+// window (min(now, operation.ends_at)) right before a review decision is
+// applied - see apps/server/src/operations/service.ts's
+// refreshEntryEvidence. Best-effort: if PixlServer is unreachable we log
+// and let the review proceed against whatever evidence is already on the
+// row rather than blocking a reviewer entirely.
+export async function refreshBlackoutEvidence(entryId: number): Promise<boolean> {
+  const cfg = config();
+  if (!cfg) return false;
+  try {
+    const res = await fetch(`${cfg.url}/api/admin/operations/refresh-evidence`, {
+      method: "POST",
+      headers: { "x-admin-key": cfg.key, "Content-Type": "application/json" },
+      body: JSON.stringify({ entryId }),
+      signal: AbortSignal.timeout(10_000),
+    });
+    const json = (await res.json()) as { ok: boolean; error?: string };
+    if (!json.ok) console.error("refreshBlackoutEvidence failed", json.error);
+    return json.ok === true;
+  } catch (e) {
+    console.error("refreshBlackoutEvidence", (e as Error).message);
+    return false;
+  }
+}
+
 export async function kickOnlinePlayer(userId: string, reason: string): Promise<boolean> {
   const cfg = config();
   if (!cfg) return false;

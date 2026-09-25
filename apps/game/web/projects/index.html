@@ -4177,6 +4177,9 @@
         const briefing = Pixl.config && Pixl.config.urls ? Pixl.config.urls.site + "/en/operations/blackout" : "#";
         if (e) {
           const c = BLACKOUT_CHIPS[e.label];
+          // Once shipped, first_qualified_ship_at locks in what's already
+          // being tracked - operation_withdraw refuses it server-side, so
+          // there is no opt-out affordance past that point either.
           const canTakeBack = e.label === "entered" && !e.firstShipAt;
           const until = e.graceDeadline
             ? ` Fix window closes ${new Date(e.graceDeadline).toLocaleString()} (your local time).`
@@ -4184,7 +4187,7 @@
           return `<div class="bo-panel" id="bo-panel">
           <div class="bo-head"><strong>Operation Blackout</strong><span class="chip ${c[1]}">${c[0]}</span></div>
           <div class="bo-text">${BLACKOUT_TEXT[e.label] || ""}${until}</div>
-          ${canTakeBack && !inReview ? `<label class="check-row"><input type="checkbox" id="bo-check" checked> Enter this project into Operation Blackout</label>` : ""}
+          ${canTakeBack && !inReview ? `<button type="button" class="btn ghost" id="bo-optout">OPT OUT OF BLACKOUT</button>` : ""}
           <a class="bo-link" href="${briefing}" target="_blank" rel="noopener">Read the briefing</a>
         </div>`;
         }
@@ -4192,28 +4195,15 @@
         return `<div class="bo-panel" id="bo-panel">
           <div class="bo-head"><strong>Operation Blackout</strong></div>
           <label class="check-row"><input type="checkbox" id="bo-check"> Enter this project into Operation Blackout</label>
-          <div class="bo-text">Only work you do after entering, and before you ship${ends ? " (by " + ends + ", your local time)" : ""}, is eligible. Entering doesn't guarantee approval, a reviewer decides. It can't be undone once you ship.</div>
+          <div class="bo-text">Only work you do after entering${ends ? ", and before Blackout ends (" + ends + ", your local time)" : ""}, is eligible. You can still ship and get reviewed anytime, even after Blackout ends. Entering doesn't guarantee approval, a reviewer decides. It can't be undone once you ship.</div>
           <a class="bo-link" href="${briefing}" target="_blank" rel="noopener">Read the briefing</a>
         </div>`;
       }
 
       function wireBlackout(p) {
-        const cb = $("bo-check");
-        if (!cb) return;
         const inReview = ["shipped", "second_review", "fraud_review"].includes(p.status);
-        cb.addEventListener("change", async () => {
-          const want = cb.checked;
-          cb.disabled = true;
-          const r = want
-            ? await Pixl.send("POST", `/api/operations/${BLACKOUT_SLUG}/entries`, { projectId: p.id })
-            : await Pixl.send("DELETE", `/api/operations/${BLACKOUT_SLUG}/entries/${p.id}`);
-          if (r.ok) {
-            if (want && r.entry) blackout.entries[p.id] = r.entry;
-            else delete blackout.entries[p.id];
-            Pixl.toast(want ? "Entered Operation Blackout." : "Removed from Operation Blackout.");
-          } else {
-            Pixl.toast(BLACKOUT_ERRORS[r.error] || "Couldn't update Operation Blackout.", true);
-          }
+
+        async function afterBlackoutChange() {
           const headChip = $("bo-head-chip");
           if (headChip) headChip.innerHTML = blackoutChipHtml(p);
           const panel = $("bo-panel");
@@ -4224,7 +4214,49 @@
             else panel.remove();
           }
           wireBlackout(p);
-        });
+        }
+
+        // Not entered yet: the checkbox only ever opts in here.
+        const cb = $("bo-check");
+        if (cb) {
+          cb.addEventListener("change", async () => {
+            cb.disabled = true;
+            const r = await Pixl.send("POST", `/api/operations/${BLACKOUT_SLUG}/entries`, { projectId: p.id });
+            if (r.ok) {
+              if (r.entry) blackout.entries[p.id] = r.entry;
+              Pixl.toast("Entered Operation Blackout.");
+            } else {
+              Pixl.toast(BLACKOUT_ERRORS[r.error] || "Couldn't update Operation Blackout.", true);
+            }
+            await afterBlackoutChange();
+          });
+        }
+
+        // Already entered, not yet shipped: an explicit opt-out button
+        // (with a confirm dialog) rather than a silent checkbox uncheck -
+        // this is the only point at which withdrawing is possible at all,
+        // see canTakeBack above.
+        const optOutBtn = $("bo-optout");
+        if (optOutBtn) {
+          optOutBtn.addEventListener("click", async () => {
+            const ok = await Pixl.confirm({
+              title: "Opt out of Operation Blackout?",
+              body: "You can rejoin later, as long as you haven't shipped yet and Blackout is still open. Once you ship, this can't be undone either way.",
+              confirmText: "Opt out",
+            });
+            if (!ok) return;
+            optOutBtn.disabled = true;
+            const r = await Pixl.send("DELETE", `/api/operations/${BLACKOUT_SLUG}/entries/${p.id}`);
+            if (r.ok) {
+              delete blackout.entries[p.id];
+              Pixl.toast("Removed from Operation Blackout.");
+            } else {
+              Pixl.toast(BLACKOUT_ERRORS[r.error] || "Couldn't update Operation Blackout.", true);
+              optOutBtn.disabled = false;
+            }
+            await afterBlackoutChange();
+          });
+        }
       }
 
       async function loadTrials() {

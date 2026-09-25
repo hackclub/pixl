@@ -41,25 +41,41 @@ describe("effectiveStatus", () => {
 describe("entryWindow", () => {
   const o = { startsAt: at(-10), endsAt: at(24) };
   test("3. an existing project only gets work after it joined", () => {
-    const w = entryWindow({ joinedAt: at(-3), firstQualifiedShipAt: at(-1) }, o, T0);
+    const w = entryWindow({ joinedAt: at(-3) }, o, at(-1));
     expect(w.start).toEqual(at(-3));
     expect(w.end).toEqual(at(-1));
   });
+  test("opt-in midway through Blackout: window starts at joined_at, not the operation start", () => {
+    const w = entryWindow({ joinedAt: at(10) }, o, T0);
+    expect(w.start).toEqual(at(10));
+  });
   test("joining before the operation started clamps to the start", () => {
-    const w = entryWindow({ joinedAt: at(-50), firstQualifiedShipAt: at(-1) }, o, T0);
+    const w = entryWindow({ joinedAt: at(-50) }, o, T0);
     expect(w.start).toEqual(at(-10));
   });
-  test("4. the end is min(first ship, operation end); later work is excluded", () => {
-    const shippedAfterEnd = entryWindow({ joinedAt: at(-3), firstQualifiedShipAt: at(40) }, o, T0);
-    expect(shippedAfterEnd.end).toEqual(at(24));
-    const open = entryWindow({ joinedAt: at(-3), firstQualifiedShipAt: null }, o, T0);
-    expect(open.end).toEqual(T0);
+  test("4. the end is min(now, operation end), never the ship time: hours after Blackout ends never count", () => {
+    expect(entryWindow({ joinedAt: at(-3) }, o, at(40)).end).toEqual(at(24));
+    expect(entryWindow({ joinedAt: at(-3) }, o, T0).end).toEqual(T0);
   });
-  test("6. once shipped the window ignores reship time and operation edits", () => {
-    const entry = { joinedAt: at(-3), firstQualifiedShipAt: at(-1) };
-    const before = entryWindow(entry, o, at(0));
-    const later = entryWindow(entry, { startsAt: o.startsAt, endsAt: at(500) }, at(300));
-    expect(later).toEqual(before);
+  test("boundary: exactly at ends_at is the last eligible instant, one tick later is excluded", () => {
+    expect(entryWindow({ joinedAt: at(-3) }, o, at(24)).end).toEqual(at(24));
+    expect(entryWindow({ joinedAt: at(-3) }, o, at(24.0001)).end).toEqual(at(24));
+  });
+  test("shipping or reviewing later does not shrink the window: work up to Blackout's end still counts", () => {
+    const entry = { joinedAt: at(-3) };
+    // A first ship at hour -1 no longer freezes the window there - work
+    // continued to be tracked right up to the operation's own end.
+    const atFirstShip = entryWindow(entry, o, at(-1));
+    const atOperationEnd = entryWindow(entry, o, at(24));
+    expect(atOperationEnd.end.getTime()).toBeGreaterThan(atFirstShip.end.getTime());
+    expect(atOperationEnd.end).toEqual(o.endsAt);
+  });
+  test("operation edits (e.g. an extension) only matter if they land before ends_at is reached", () => {
+    const entry = { joinedAt: at(-3) };
+    const before = entryWindow(entry, o, at(30));
+    const extended = entryWindow(entry, { startsAt: o.startsAt, endsAt: at(500) }, at(30));
+    expect(before.end).toEqual(at(24));
+    expect(extended.end).toEqual(at(30));
   });
 });
 

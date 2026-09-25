@@ -8,9 +8,12 @@
 -- Rules that matter (all enforced in the functions below, never in a client):
 --   * membership is an explicit DB row (operation_entries), never inferred
 --     from a title/tag, and joined_at is the database clock, not user input
---   * only work inside [max(starts_at, joined_at), min(first ship, ends_at)]
---     is eligible; the first qualifying ship is stamped once and never reset
---     by unship/reship
+--   * only work inside [max(starts_at, joined_at), min(now, ends_at)] is
+--     eligible - eligibility depends solely on the operation's own clock,
+--     never on when a project ships or is reviewed (see 0184's fix to
+--     operation_record_ship, which originally capped this at the ship
+--     instant instead); the first qualifying ship is still stamped once and
+--     never reset by unship/reship, but only for bookkeeping/audit
 --   * a reviewer decides eligibility + approved hours, never a dollar rate;
 --     operation.rate_usd is applied on top of the contributor's own normal
 --     rate according to operation.rate_mode - 'additive' means everyone gets

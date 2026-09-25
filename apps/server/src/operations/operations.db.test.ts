@@ -114,6 +114,7 @@ d("operations (real Postgres)", () => {
     process.env.JWT_SECRET ||= "test-secret";
     await sql.unsafe(loadSql("testdb/base-schema.sql"));
     await sql.unsafe(loadSql("../../drizzle/0183_operations.sql"));
+    await sql.unsafe(loadSql("../../drizzle/0184_blackout_window_fix.sql"));
   });
 
   afterAll(async () => {
@@ -166,7 +167,7 @@ d("operations (real Postgres)", () => {
     expect((await join(banned, owner)).error).toBe("project_banned");
   });
 
-  test("3+4. only work between join and first ship counts; later work is excluded (real evidence code, mocked Hackatime)", async () => {
+  test("3+4. work between join and Blackout's end counts, whenever it ships; only work not yet in the past is excluded (real evidence code, mocked Hackatime)", async () => {
     await setOp(-48, 48);
     process.env.DATABASE_URL = testUrl;
     process.env.JWT_SECRET ||= "test-secret";
@@ -210,23 +211,175 @@ d("operations (real Postgres)", () => {
     globalThis.fetch = (async () => new Response(JSON.stringify({ spans: [] }), { status: 200 })) as unknown as typeof fetch;
     try { await recordShipForOperations(pid, uid); } finally { globalThis.fetch = realFetch; }
     const c2 = await contribOf(Number(e.id), uid);
+    // Work dated in the future (relative to this reship) hasn't happened
+    // yet from the window's point of view, so it's still excluded - this is
+    // just "the window can't see the future", not "the window is frozen at
+    // ship time".
     expect(c2.journal_base_seconds).toBe(Math.round(1.5 * 3600));
+
+    // Now add a journal entry for work that happened *after* the first ship
+    // but is already in the past by the time of a later reship: under the
+    // old bug this would have been silently excluded (window frozen at the
+    // first ship instant); the fix picks it up, because eligibility never
+    // depended on the ship in the first place.
+    await sql`insert into project_journals (project_id, user_id, hours, created_at)
+      values (${pid}, ${uid}, 0.75, now() - interval '1 minute')`;
+    await sql`update projects set status = 'draft' where id = ${pid}`;
+    await sql`update projects set status = 'shipped' where id = ${pid}`;
+    globalThis.fetch = (async () => new Response(JSON.stringify({ spans: [] }), { status: 200 })) as unknown as typeof fetch;
+    try { await recordShipForOperations(pid, uid); } finally { globalThis.fetch = realFetch; }
+    const c3 = await contribOf(Number(e.id), uid);
+    expect(c3.journal_base_seconds).toBe(Math.round(2.25 * 3600));
   });
 
-  test("4b. shipping after the operation ended never qualifies", async () => {
-    await setOp(-48, -1);
+  // The residual gap from the first window fix: evidence only used to
+  // refresh on a ship/reship event, so a project shipped once and never
+  // reshipped again would never pick up hours worked afterward, even though
+  // they're still inside the Blackout window. refreshEntryEvidence (called
+  // from the dashboard's review-decision action, not from any player
+  // action) closes it: opt in -> work 4h -> ship -> work 6h more -> never
+  // reship -> the reviewer's decision still sees all 10h, whether that
+  // review happens after Blackout ends or while it's still active.
+  test("evidence refresh at review time (no reship): 4h before ship + 6h after ship, all the way to Blackout's end", async () => {
+    process.env.DATABASE_URL = testUrl;
+    process.env.JWT_SECRET ||= "test-secret";
+    const { recordShipForOperations, refreshEntryEvidence } = await import("./service.js");
+    const realFetch = globalThis.fetch;
+    const withEmptySpans = async <T>(fn: () => Promise<T>): Promise<T> => {
+      globalThis.fetch = (async () => new Response(JSON.stringify({ spans: [] }), { status: 200 })) as unknown as typeof fetch;
+      try {
+        return await fn();
+      } finally {
+        globalThis.fetch = realFetch;
+      }
+    };
+
+    async function run(reviewWhileStillActive: boolean) {
+      await setOp(-30, 30);
+      const uid = await mkUser();
+      const pid = await mkProject(uid);
+      await join(pid, uid);
+      const T = Date.now();
+      await sql`update operation_entries set joined_at = to_timestamp(${(T - 10 * 3600_000) / 1000}),
+        window_start = to_timestamp(${(T - 10 * 3600_000) / 1000}) where project_id = ${pid}`;
+      // 4h of work before shipping.
+      await sql`insert into project_journals (project_id, user_id, hours, created_at) values
+        (${pid}, ${uid}, 4, to_timestamp(${(T - 8 * 3600_000) / 1000}))`;
+
+      await sql`update projects set status = 'shipped' where id = ${pid}`;
+      await withEmptySpans(() => recordShipForOperations(pid, uid));
+
+      const entry = await entryOf(pid);
+      const before = await contribOf(Number(entry.id), uid);
+      expect(before.journal_base_seconds).toBe(4 * 3600);
+      expect(entry.reship_count).toBe(0);
+
+      // 6h more of work AFTER shipping, still inside Blackout - the player
+      // never reships.
+      await sql`insert into project_journals (project_id, user_id, hours, created_at) values
+        (${pid}, ${uid}, 6, to_timestamp(${(T - 2 * 3600_000) / 1000}))`;
+
+      await sql`update operations set ends_at = ${
+        reviewWhileStillActive ? sql`now() + interval '100 hours'` : sql`now() - interval '30 minutes'`
+      } where slug = ${SLUG}`;
+
+      // The reviewer opens the entry: this is the refresh a real review
+      // decision triggers (apps/dashboard's applyBlackoutDecision), not
+      // anything the player did.
+      const r = await withEmptySpans(() => refreshEntryEvidence(Number(entry.id)));
+      expect(r.ok).toBe(true);
+
+      expect((await entryOf(pid)).reship_count).toBe(0); // confirms no reship happened
+      const after = await contribOf(Number(entry.id), uid);
+      expect(after.journal_base_seconds).toBe(10 * 3600);
+      expect(after.eligible_tracked_seconds).toBe(10 * 3600);
+
+      expect((await decide(pid, "eligible", [{ user_id: uid, hours: 10 }])).ok).toBe(true);
+      expect(Number((await contribOf(Number(entry.id), uid)).approved_blackout_hours)).toBe(10);
+    }
+
+    await run(false); // review after Blackout has ended
+    await run(true); // review while Blackout is still active
+  });
+
+  test("4b. shipping after Blackout ends still qualifies for review - it just can't earn hours past ends_at", async () => {
     await setOp(-2, 24);
     const uid = await mkUser();
     const pid = await mkProject(uid);
     await join(pid, uid);
     await sql`update operations set ends_at = now() - interval '1 minute' where slug = ${SLUG}`;
     await sql`update projects set status = 'shipped' where id = ${pid}`;
+    const r = await recordShip(pid, uid);
+    const e = await entryOf(pid);
+    // Shipping time never gates eligibility: the entry ships normally and
+    // goes to review, same as any on-time ship.
+    expect(e.status).toBe("shipped");
+    expect(e.first_qualified_ship_at).not.toBeNull();
+    expect(e.decided_by).toBe("");
+    // But the window handed back for evidence-gathering is capped at
+    // ends_at, not the (later) ship instant - hours worked after Blackout
+    // ended never make it into the eligible total.
+    expect(new Date(r.entries[0].window_end).getTime()).toBe(
+      new Date((await sql`select ends_at from operations where slug = ${SLUG}`)[0].ends_at).getTime(),
+    );
+  });
+
+  test("shipping while the operation is admin-ended still qualifies and is capped the same way", async () => {
+    await setOp(-2, 24);
+    const uid = await mkUser();
+    const pid = await mkProject(uid);
+    await join(pid, uid);
+    await adminUpdate("end");
+    await sql`update projects set status = 'shipped' where id = ${pid}`;
     await recordShip(pid, uid);
     const e = await entryOf(pid);
-    expect(e.status).toBe("ineligible");
-    expect(e.first_qualified_ship_at).toBeNull();
-    expect(e.decided_by).toBe("system");
-    expect(e.system_reason).toMatch(/after the operation ended/);
+    expect(e.status).toBe("shipped");
+    expect(e.first_qualified_ship_at).not.toBeNull();
+  });
+
+  test("opt-in midway through Blackout: window_start is joined_at, not the operation start", async () => {
+    await setOp(-48, 48);
+    const uid = await mkUser();
+    const pid = await mkProject(uid);
+    await join(pid, uid);
+    // Simulate joining partway through the window: joined_at/window_start
+    // land well after the operation actually started (-48h).
+    const midpoint = await sql`select now() - interval '10 hours' as t`;
+    await sql`update operation_entries set joined_at = ${midpoint[0].t}, window_start = ${midpoint[0].t} where project_id = ${pid}`;
+    await sql`update projects set status = 'shipped' where id = ${pid}`;
+    const r = await recordShip(pid, uid);
+    expect(new Date(r.entries[0].window_start).getTime()).toBe(new Date(midpoint[0].t).getTime());
+  });
+
+  test("reviewing (deciding + settling) long after Blackout ends still pays normally", async () => {
+    await setOp(-2, 24);
+    const { uid, pid } = await shippedProject({ hours: 6 });
+    await sql`update operations set ends_at = now() - interval '5 days', starts_at = now() - interval '12 days' where slug = ${SLUG}`;
+    expect((await decide(pid, "eligible", [{ user_id: uid, hours: 6 }])).ok).toBe(true);
+    await sql`update projects set status = 'approved' where id = ${pid}`;
+    const r = await settle(pid, [{ user_id: uid, normal_usd_rate: 4, credit_hours: 6 }]);
+    expect(r.ok).toBe(true);
+    expect(r.paid_px).toBeGreaterThan(0);
+    expect((await entryOf(pid)).status).toBe("approved");
+  });
+
+  test("boundary: once ends_at has passed, a reship's window_end is pinned exactly to ends_at, not to reship time", async () => {
+    await setOp(-2, 24);
+    const uid = await mkUser();
+    const pid = await mkProject(uid);
+    await join(pid, uid);
+    await sql`update projects set status = 'shipped' where id = ${pid}`;
+    const r1 = await recordShip(pid, uid);
+    expect(new Date(r1.entries[0].window_end).getTime()).toBeLessThan(
+      new Date((await sql`select ends_at from operations where slug = ${SLUG}`)[0].ends_at).getTime(),
+    );
+    await sql`update operations set ends_at = now() - interval '1 hour' where slug = ${SLUG}`;
+    const opRow = (await sql`select ends_at from operations where slug = ${SLUG}`)[0];
+    await sql`update projects set status = 'draft' where id = ${pid}`;
+    await sql`update projects set status = 'shipped' where id = ${pid}`;
+    const r2 = await recordShip(pid, uid);
+    expect((await entryOf(pid)).status).toBe("shipped");
+    expect(new Date(r2.entries[0].window_end).getTime()).toBe(new Date(opRow.ends_at).getTime());
   });
 
   test("5. shipped before the deadline but reviewed days after the event still qualifies and pays", async () => {
