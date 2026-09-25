@@ -2,6 +2,7 @@ import { Router, type Request } from "express";
 import { timingSafeEqual } from "crypto";
 import { listOnlinePlayers, kickPlayer, endUserSession } from "../ws/gameServer.js";
 import { forgetCachedRevocation, revokeUserSessions } from "../auth/revocation.js";
+import { refreshEntryEvidence } from "../operations/service.js";
 
 const router = Router();
 
@@ -46,6 +47,20 @@ router.post("/api/admin/revoke-sessions", async (req, res) => {
   forgetCachedRevocation(userId);
   console.log("[admin] revoked all sessions for", userId);
   res.json({ ok: true, kicked: endUserSession(userId, revokedAtMs) });
+});
+
+// Called from the dashboard's Blackout review-decision action, before it
+// applies the reviewer's eligible/ineligible call - see
+// operations/service.ts's refreshEntryEvidence for why this can't just be
+// "reship again" (it isn't a player action, and requiring one is exactly
+// the bug this closes).
+router.post("/api/admin/operations/refresh-evidence", async (req, res) => {
+  if (!authorized(req)) return res.status(401).json({ ok: false });
+  const entryId = Number(req.body?.entryId);
+  if (!Number.isInteger(entryId) || entryId <= 0)
+    return res.status(400).json({ ok: false, error: "entryId required" });
+  const result = await refreshEntryEvidence(entryId);
+  res.json(result);
 });
 
 export default router;

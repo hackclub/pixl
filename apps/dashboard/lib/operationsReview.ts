@@ -4,6 +4,7 @@ import {
   operationRpc,
   type BlackoutEntry,
 } from "@/lib/operations";
+import { refreshBlackoutEvidence } from "@/lib/gameServer";
 
 export function isBlackoutReviewable(entry: BlackoutEntry | null): entry is BlackoutEntry {
   return (
@@ -37,8 +38,25 @@ export async function applyBlackoutDecision(args: {
   by: string;
   stage: "first_pass" | "final";
 }): Promise<string | null> {
-  const entry = await getBlackoutEntry(args.projectId);
+  let entry = await getBlackoutEntry(args.projectId);
   if (!isBlackoutReviewable(entry)) return null;
+  // Authoritative refresh, not a frontend concern: a project can ship once,
+  // never reship, and keep earning eligible hours right up to Blackout's
+  // end - nothing else re-syncs that, so every decision re-pulls the truth
+  // first. Fail CLOSED: a decision must never be finalized against evidence
+  // we couldn't confirm is current. If the refresh fails (PixlServer
+  // unreachable, or it reports an error), abort before touching
+  // operation_review_decision at all - no status change, no payout. This is
+  // a retryable condition, not a rejection: the reviewer just needs to try
+  // again once PixlServer is back.
+  if (!(await refreshBlackoutEvidence(entry.id))) {
+    return "Couldn't refresh this entry's Blackout evidence (PixlServer unreachable or the refresh failed) - the decision was NOT saved. Try again in a moment.";
+  }
+  const refreshed = await getBlackoutEntry(args.projectId);
+  if (!isBlackoutReviewable(refreshed)) {
+    return "This entry is no longer reviewable after refreshing its evidence. Reload the page.";
+  }
+  entry = refreshed;
   const input = parseBlackoutForm(args.formData, entry);
   if (!input.decision) return "Rule on this project's Operation Blackout entry: eligible or ineligible.";
   const res = await operationRpc.reviewDecision({
