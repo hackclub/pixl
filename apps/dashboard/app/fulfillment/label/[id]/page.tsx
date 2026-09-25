@@ -30,8 +30,10 @@ export default async function ShippingLabelPage({
       <div className="sheet">
         <div className="label">
           <div className="label-inner">
-            <img src="/label/pixl-wordmark.png" alt="Pixl" className="wordmark" />
-            <img src="/label/pixorpheus.png" alt="" className="mascot" />
+            <div className="header-row">
+              <img src="/label/pixl-wordmark.png" alt="Pixl" className="wordmark" />
+              <img src="/label/pixorpheus.png" alt="" className="mascot" />
+            </div>
             <div className="address-block">
               <div className="ship-to">Ship to</div>
               <div className="name">{buyer?.name || order.player_name || "(name missing)"}</div>
@@ -91,25 +93,27 @@ export default async function ShippingLabelPage({
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
           color: #111;
         }
+        /* .label-inner is a flex column, whose default align-items:stretch
+           forces a child's width to fill the container unless it opts out -
+           without this the images lose their aspect ratio and squash wide,
+           ignoring width:auto entirely. */
+        .header-row {
+          display: flex;
+          align-items: center;
+          gap: 3mm;
+          align-self: flex-start;
+        }
         .wordmark {
           height: 9mm;
           width: auto;
           image-rendering: pixelated;
           display: block;
-          /* .label-inner is a flex column, whose default align-items:stretch
-             forces a child's width to fill the container unless it opts out
-             - without this the image loses its aspect ratio and squashes
-             wide, ignoring width:auto entirely. */
-          align-self: flex-start;
         }
         .mascot {
-          position: absolute;
-          top: 7mm;
-          right: 7mm;
-          width: 16mm;
-          height: 16mm;
-          object-fit: contain;
+          height: 10mm;
+          width: auto;
           image-rendering: pixelated;
+          display: block;
         }
         .address-block {
           flex: 1;
@@ -129,9 +133,13 @@ export default async function ShippingLabelPage({
         .line { font-size: 12pt; line-height: 1.45; }
         .line.missing { color: #c0392b; font-style: italic; font-size: 11pt; }
         .phone { font-size: 11pt; margin-top: 2.5mm; color: #333; }
+        /* Content bottom-right ends up top-right on the printed label once
+           the 90deg rotation is applied - that's where a postage stamp
+           goes, so nothing sits there. Content top-right (here) lands
+           top-left on the printout instead. */
         .sparkle {
           position: absolute;
-          bottom: 7mm;
+          top: 7mm;
           right: 7mm;
           width: 8mm;
           height: 8mm;
