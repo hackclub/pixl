@@ -31,6 +31,7 @@ export default async function ShippingLabelPage({
         <div className="label">
           <div className="label-inner">
             <img src="/label/pixl-wordmark.png" alt="Pixl" className="wordmark" />
+            <img src="/label/pixorpheus.png" alt="" className="mascot" />
             <div className="address-block">
               <div className="ship-to">Ship to</div>
               <div className="name">{buyer?.name || order.player_name || "(name missing)"}</div>
@@ -95,6 +96,20 @@ export default async function ShippingLabelPage({
           width: auto;
           image-rendering: pixelated;
           display: block;
+          /* .label-inner is a flex column, whose default align-items:stretch
+             forces a child's width to fill the container unless it opts out
+             - without this the image loses its aspect ratio and squashes
+             wide, ignoring width:auto entirely. */
+          align-self: flex-start;
+        }
+        .mascot {
+          position: absolute;
+          top: 7mm;
+          right: 7mm;
+          width: 16mm;
+          height: 16mm;
+          object-fit: contain;
+          image-rendering: pixelated;
         }
         .address-block {
           flex: 1;
