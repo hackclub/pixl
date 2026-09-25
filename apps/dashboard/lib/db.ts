@@ -2322,6 +2322,27 @@ export async function listShopOrders(status?: string, limit = 500): Promise<Shop
   return rows;
 }
 
+// A single order by id, for the shipping-label print page - same row shape
+// as listShopOrders (player_name/player_slack resolved the same way), just
+// without the list/pagination machinery.
+export async function getShopOrder(id: number): Promise<ShopOrderRow | null> {
+  const { data, error } = await db.from("shop_orders").select("*").eq("id", id).maybeSingle();
+  if (error) {
+    console.error("getShopOrder", error.message);
+    return null;
+  }
+  if (!data) return null;
+  const row = data as ShopOrderRow;
+  const { data: user } = await db
+    .from("users")
+    .select("display_name, real_name, slack_id")
+    .eq("id", row.user_id)
+    .maybeSingle();
+  row.player_name = playerLabel(user as { display_name: string; real_name: string; slack_id: string | null } | null, row.user_id);
+  row.player_slack = user?.slack_id ?? null;
+  return row;
+}
+
 export interface BuyerDetails {
   name: string;
   email: string;

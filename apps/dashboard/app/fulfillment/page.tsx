@@ -44,6 +44,11 @@ const STATUS_BADGE: Record<OrderStatus, "secondary" | "success" | "destructive" 
   cancelled: "destructive",
 };
 
+// These two ship in a plain envelope with no carrier tracking of their own,
+// so a printable address label (app/fulfillment/label/[id]) is how the
+// fulfiller actually gets it to the right mailbox.
+const LABEL_ELIGIBLE_ITEMS = new Set(["Random Desk Object", "Signed Org Photo"]);
+
 // Human labels for each stage.
 const STAGE_LABEL: Record<OrderStatus, string> = {
   pending: "New",
@@ -438,6 +443,13 @@ function OrderCard({
                 </div>
               </div>
             </Disclosure>
+          )}
+          {LABEL_ELIGIBLE_ITEMS.has(o.item_name) && o.status !== "cancelled" && (
+            <div className="text-xs mt-1">
+              <Link href={`/fulfillment/label/${o.id}`} target="_blank" className="text-brand hover:underline">
+                Print shipping label →
+              </Link>
+            </div>
           )}
           {o.claimed_by && o.status !== "pending" && (
             <div className="text-xs text-muted-foreground mt-1">
