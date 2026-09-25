@@ -169,6 +169,12 @@ export function BlackoutReviewSection({ data }: { data: BlackoutReviewData }) {
           Not eligible
         </label>
       </div>
+      {decision === "ineligible" && (
+        <p className="text-xs text-muted-foreground">
+          This is the &quot;not a Blackout project, treat it as a normal PIXL project instead&quot; call: it only removes the
+          Blackout bonus path. It never changes this project&apos;s normal review, decision, or payout below.
+        </p>
+      )}
       <label className="grid gap-1 text-xs">
         <span>Reason / adjustment note{decision === "ineligible" ? " (required)" : ""}</span>
         <textarea
