@@ -310,6 +310,9 @@
       </div>
     </main>
 
+    <!-- Browsable signed out: skip pixl.js's sign-in gate. Guests get no
+         sidebar (guestNoShell) and LOG IN TO BUY in place of BUY. -->
+    <script>window.PIXL_PUBLIC = true;</script>
     <script src="/pixl.js?v=6"></script>
     <script>
       Pixl.mountTopbar("shop", { guestNoShell: true });
