@@ -2342,7 +2342,10 @@ export async function extendHoursCutoff(formData: FormData): Promise<void> {
     .eq("id", projectId)
     .single();
   if (!project) return;
-  if (await isOwnProject(access, project.user_id))
+  // Super-admins are already trusted with bigger self-adjacent calls
+  // (deflateProjectHours et al) - a plain reviewer still can't touch their
+  // own project's cutoff, self-review = cheating.
+  if (!access.isSuper && (await isOwnProject(access, project.user_id)))
     redirect(`${back}?error=${encodeURIComponent("You can't act on your own project.")}`);
   // Draft/shipped/second_review/needs_changes are all fair game - a reviewer
   // may want to set this up before the player even ships. approved is too
