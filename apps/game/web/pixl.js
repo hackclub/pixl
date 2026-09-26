@@ -1223,6 +1223,10 @@ const Pixl = (() => {
     const {
       title = "Are you sure?",
       body = "",
+      // Raw HTML instead of the auto-escaped `body` — for a caller-authored,
+      // hardcoded string only (e.g. a link to a docs page), never anything
+      // derived from user input.
+      bodyHtml = "",
       confirmText = "Confirm",
       cancelText = "Cancel",
       danger = false,
@@ -1242,7 +1246,7 @@ const Pixl = (() => {
         <div class="pxl-veil"></div>
         <div class="pxl-box" role="dialog" aria-modal="true">
           <div class="pxl-t">${esc(title)}</div>
-          ${body ? `<div class="pxl-b">${esc(body)}</div>` : ""}
+          ${bodyHtml ? `<div class="pxl-b">${bodyHtml}</div>` : body ? `<div class="pxl-b">${esc(body)}</div>` : ""}
           <div class="pxl-acts">
             <button class="pxl-cancel">${esc(cancelText)}</button>
             ${middleText ? `<button class="pxl-mid">${esc(middleText)}</button>` : ""}

@@ -2705,6 +2705,14 @@
               Pixl.toast("Can't ship yet: " + blockers.join("; ") + ".", true);
               return;
             }
+            const ok = await Pixl.confirm({
+              title: "Before you ship…",
+              bodyHtml:
+                'Make sure you\'ve read the <a href="/docs/shipping/" target="_blank" rel="noreferrer" style="text-decoration:underline">shipping requirements</a> , ships that miss something in there get sent back by a reviewer.',
+              confirmText: "OK, ship it",
+              cancelText: "Not yet",
+            });
+            if (!ok) return;
             // Persist the form first so the Hackatime boxes the player ticked
             // are saved before the server validates them , otherwise a linked
             // project reads as 0h just because Save wasn't clicked.
