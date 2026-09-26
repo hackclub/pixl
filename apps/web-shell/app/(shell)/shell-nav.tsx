@@ -24,11 +24,13 @@ function Icon({ svg }: { svg: string }) {
 export function ShellNav({
   game,
   pixels,
-  restorationPct,
+  re,
+  communityRe,
 }: {
   game: string;
   pixels: number;
-  restorationPct: number | null;
+  re: number;
+  communityRe: number;
 }) {
   const pathname = usePathname();
   const activeSlug = pathname.split("/").filter(Boolean)[0] ?? "";
@@ -138,18 +140,26 @@ export function ShellNav({
         </div>
       </aside>
       <div className="toprail">
-        {restorationPct !== null && (
-          <div className="rest-chip" title="Core Integrity: the community's Restoration progress">
-            <span
-              className="slot"
-              dangerouslySetInnerHTML={{
-                __html: `<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">${RE_ICON}</svg>`,
-              }}
-            />
-            <span className="re">{restorationPct}%</span>
-            <span className="rl">CORE</span>
-          </div>
-        )}
+        <div className="rest-chip" title="Core Integrity: total Restoration Energy earned by the whole community">
+          <span
+            className="slot"
+            dangerouslySetInnerHTML={{
+              __html: `<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">${RE_ICON}</svg>`,
+            }}
+          />
+          <span className="re">{communityRe.toLocaleString()}</span>
+          <span className="rl">CORE</span>
+        </div>
+        <div className="re-chip" title="Your Restoration Energy">
+          <span
+            className="slot"
+            dangerouslySetInnerHTML={{
+              __html: `<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">${RE_ICON}</svg>`,
+            }}
+          />
+          <span className="val">{re.toLocaleString()}</span>
+          <span className="rl">RE</span>
+        </div>
         <div className="wallet-chip" title="Your pixels">
           <span className="slot">
             <img src="/img/pixel.png" alt="px" />

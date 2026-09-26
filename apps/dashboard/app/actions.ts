@@ -2324,7 +2324,7 @@ export async function extendHoursCutoff(formData: FormData): Promise<void> {
   const projectId = Number(formData.get("projectId") ?? 0);
   const sinceRaw = String(formData.get("since") ?? "").trim();
   const note = String(formData.get("note") ?? "").trim().slice(0, 1000);
-  const back = `/review/${projectId}`;
+  const back = safeRedirectPath(formData.get("returnTo"), `/review/${projectId}`);
   if (!projectId) return;
   if (!note)
     redirect(`${back}?error=${encodeURIComponent("A note is required to extend the hours cutoff.")}`);
@@ -2385,6 +2385,12 @@ export async function extendHoursCutoff(formData: FormData): Promise<void> {
     "project_hours_extended",
     `${project.name}: counted hours from ${since.toISOString().slice(0, 10)} (${Math.round(currentSeconds / 3600)}h -> ${Math.round(newSeconds / 3600)}h) , ${note}`,
     by,
+  );
+  const sinceLabel = since.toISOString().slice(0, 10);
+  await notifyOwner(
+    project.user_id,
+    "Hours cutoff extended",
+    `Your project "${project.name}"'s Hackatime cutoff was extended by ${reviewer}: we're now counting hours from ${sinceLabel} instead of the usual ${hackatimeCutoffLabel} cutoff.\n\nReason: ${note}`,
   );
   revalidatePath(back);
   redirect(back);

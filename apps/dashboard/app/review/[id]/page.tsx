@@ -1204,7 +1204,7 @@ export default async function ReviewDetail({
                           name="note"
                           required
                           rows={2}
-                          placeholder="Why count from this date (internal, not shown to the player)…"
+                          placeholder="Why count from this date (the player will see this in a DM)…"
                           className="text-sm resize-y"
                         />
                         <PendingButton

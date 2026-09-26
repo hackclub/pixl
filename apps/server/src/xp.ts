@@ -86,6 +86,24 @@ export async function lifetimeRe(userId: string, excludeProjectId?: number): Pro
   return round1(rows.reduce((s, p) => s + reOf(p), bonus));
 }
 
+// Total lifetime RE across every player - the "Core Integrity" figure shown
+// in the web shell's topbar. Same math as lifetimeRe() above, but summed in
+// two queries instead of once per user (this repo has no per-user loop for
+// an aggregate this size).
+export async function totalCommunityRe(): Promise<number> {
+  const [{ data: projects }, { data: awards }] = await Promise.all([
+    supabase
+      .from("projects")
+      .select("approved_hours, hackatime_seconds, level, sidequest_id")
+      .eq("status", "approved")
+      .is("banned_at", null),
+    supabase.from("vault_chapter_awards").select("re_awarded"),
+  ]);
+  const projectRe = ((projects ?? []) as ProjectRow[]).reduce((s, p) => s + reOf(p), 0);
+  const bonusRe = (awards ?? []).reduce((s, r) => s + (Number(r.re_awarded) || 0), 0);
+  return round1(projectRe + bonusRe);
+}
+
 async function approvedProjectsFor(
   userId: string,
   excludeProjectId?: number,

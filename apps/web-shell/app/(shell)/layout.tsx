@@ -7,14 +7,10 @@ import { ShellNav } from "./shell-nav";
 
 interface Wallet {
   pixels: number;
-}
-interface ActiveEvent {
-  type: string;
-  target: number;
-  progress: number;
+  re: number;
 }
 interface EventsActive {
-  events: ActiveEvent[];
+  community_re: number;
 }
 
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
@@ -36,14 +32,12 @@ export default async function ShellLayout({ children }: { children: React.ReactN
     serverApi<EventsActive>("/api/events/active"),
   ]);
   const pixels = wallet ? Math.round(wallet.pixels) : 0;
-  const restoration = (events?.events ?? []).find((e) => e.type === "community_goal" && Number(e.target) > 0);
-  const restorationPct = restoration
-    ? Math.max(0, Math.min(100, Math.round((restoration.progress / restoration.target) * 100)))
-    : null;
+  const re = wallet ? Math.round(wallet.re) : 0;
+  const communityRe = events ? Math.round(events.community_re) : 0;
 
   return (
     <>
-      <ShellNav game={game} pixels={pixels} restorationPct={restorationPct} />
+      <ShellNav game={game} pixels={pixels} re={re} communityRe={communityRe} />
       <div className="shell-main">
         <main className="wrap">{children}</main>
       </div>

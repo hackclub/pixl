@@ -549,10 +549,15 @@ const Pixl = (() => {
         <div class="theme-menu" id="pixl-theme-menu" hidden></div>
       </div>`;
     const rail = token
-      ? `<div class="rest-chip" id="pixl-rest" title="Core Integrity: the community's Restoration progress" hidden>
+      ? `<div class="rest-chip" id="pixl-rest" title="Core Integrity: total Restoration Energy earned by the whole community" hidden>
             <span class="slot">${RE_ICON}</span>
             <span class="re">-</span>
             <span class="rl">CORE</span>
+          </div>
+          <div class="re-chip" id="pixl-re" title="Your Restoration Energy" hidden>
+            <span class="slot">${RE_ICON}</span>
+            <span class="val">-</span>
+            <span class="rl">RE</span>
           </div>
           <div class="wallet-chip" id="pixl-wallet" title="Your pixels">
             <span class="slot"><img src="/img/pixel.png" alt="px"></span>
@@ -620,6 +625,7 @@ const Pixl = (() => {
 
   async function loadWallet() {
     const el = document.getElementById("pixl-wallet");
+    const reEl = document.getElementById("pixl-re");
     // Kick off the collective Core Integrity chip alongside the personal wallet.
     loadRestoration();
     if (!el) return null;
@@ -627,27 +633,28 @@ const Pixl = (() => {
       const w = await api("/api/profile/wallet");
       if (!w.ok) return null;
       el.querySelector(".px").textContent = Math.round(w.pixels).toLocaleString();
+      if (reEl) {
+        reEl.querySelector(".val").textContent = Math.round(w.re).toLocaleString();
+        reEl.removeAttribute("hidden");
+      }
       return w;
     } catch {
       return null;
     }
   }
 
-  // Fills the teal "Core Integrity" chip from the live community goal, if one is
-  // running. No active goal → the chip stays hidden (never shows fake data).
+  // Fills the teal "Core Integrity" chip with the total Restoration Energy
+  // earned by the whole community so far - unrelated to any weekend event,
+  // always present.
   async function loadRestoration() {
     const el = document.getElementById("pixl-rest");
     if (!el) return null;
     try {
       const d = await api("/api/events/active");
-      const goal = (d.events || []).find(
-        (e) => e.type === "community_goal" && Number(e.target) > 0,
-      );
-      if (!goal) return null;
-      const pct = Math.max(0, Math.min(100, Math.round((goal.progress / goal.target) * 100)));
-      el.querySelector(".re").textContent = pct + "%";
+      if (!d.ok) return null;
+      el.querySelector(".re").textContent = Math.round(d.community_re).toLocaleString();
       el.removeAttribute("hidden");
-      return goal;
+      return d.community_re;
     } catch {
       return null;
     }

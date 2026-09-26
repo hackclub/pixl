@@ -13,7 +13,9 @@ import {
   toggleProjectPeak,
   sendProjectToAirtable,
   deflateProjectHours,
+  extendHoursCutoff,
 } from "@/app/actions";
+import { hackatimeCutoffUnix, hackatimeCutoffLabel } from "@/app/_generated/config";
 import { fetchAirtableRecord, JUSTIFICATION_DISPLAY_FIELDS } from "@/lib/airtable";
 import {
   LevelBadge,
@@ -97,6 +99,14 @@ export default async function ProjectPage({
   const airtable = project.airtable_record_id
     ? await fetchAirtableRecord(project.airtable_record_id)
     : null;
+  // Only meaningful while the project is actually in the review queue - see
+  // the status guard in extendHoursCutoff (app/actions.ts).
+  const canExtendCutoff =
+    canPeak && (project.status === "shipped" || project.status === "second_review");
+  // One day before the global cutoff, for the extend-hours date input's max.
+  const maxExtendDateStr = new Date((hackatimeCutoffUnix - 86_400) * 1000)
+    .toISOString()
+    .slice(0, 10);
 
   return (
     <div>
@@ -302,6 +312,65 @@ export default async function ProjectPage({
               {project.is_peak ? "Remove Beacon" : "★ Mark as Beacon"}
             </PendingButton>
           </form>
+        </Card>
+      )}
+
+      {(project.hours_extended_since || canExtendCutoff) && (
+        <Card className="p-4 mb-8 gap-0">
+          <div className="font-pixel text-xl mb-1">Hours cutoff</div>
+          {project.hours_extended_since && (
+            <div className="text-sm text-muted-foreground mb-3">
+              Counting hours from{" "}
+              <span className="font-medium text-foreground">
+                {new Date(project.hours_extended_since).toLocaleDateString()}
+              </span>{" "}
+              (before the {hackatimeCutoffLabel} cutoff) , set by{" "}
+              <span className="font-medium text-foreground">{project.hours_extended_by}</span>:{" "}
+              {project.hours_extended_note}
+            </div>
+          )}
+          {canExtendCutoff && (
+            <details className="rounded-xl bg-muted p-4">
+              <summary className="flex items-center gap-2 cursor-pointer text-sm font-semibold text-foreground select-none list-none">
+                <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground" />
+                Extend hours cutoff
+              </summary>
+              <p className="text-xs text-muted-foreground mt-2">
+                Normally only hours from {hackatimeCutoffLabel} onward count. If this project
+                genuinely started earlier and paused, pick how far back to count from , this
+                re-pulls their Hackatime spans and raises the credited total, it never lowers it.
+              </p>
+              <form action={extendHoursCutoff} className="mt-3 flex flex-col gap-2">
+                <input type="hidden" name="projectId" value={project.id} />
+                <input type="hidden" name="returnTo" value={`/projects/${project.id}`} />
+                <Input
+                  type="date"
+                  name="since"
+                  required
+                  max={maxExtendDateStr}
+                  defaultValue={
+                    project.hours_extended_since
+                      ? new Date(project.hours_extended_since).toISOString().slice(0, 10)
+                      : undefined
+                  }
+                />
+                <Textarea
+                  name="note"
+                  required
+                  rows={2}
+                  placeholder="Why count from this date (the player will see this in a DM)…"
+                  className="text-sm resize-y"
+                />
+                <PendingButton
+                  variant="secondary"
+                  pendingText="Extending…"
+                  confirm="Recount this project's hours from that date? This only ever raises the credited total, and the owner is notified."
+                >
+                  Extend cutoff
+                </PendingButton>
+              </form>
+            </details>
+          )}
         </Card>
       )}
 

@@ -2563,6 +2563,7 @@
       <div class="proj-hero" id="p-hero">${p.image_url ? `<img src="${Pixl.esc(p.image_url)}" alt="">` : `<span class="faint" style="font-size:13px">No thumbnail yet</span>`}</div>
       ${p.status === "needs_changes" && p.review_note ? `<div class="note-strip" style="margin-bottom:14px">REVIEWER: ${Pixl.esc(p.review_note)}</div>` : ""}
       ${p.rejected_at ? `<div class="note-strip" style="margin-bottom:14px">REJECTED${p.reject_reason ? ": " + Pixl.esc(p.reject_reason) : ""}, fix it up and ship again.</div>` : ""}
+      ${p.hours_extended_since ? `<div class="note-strip teal" style="margin-bottom:14px">Your hours cutoff was extended: we're counting your coding time from ${Pixl.esc(new Date(p.hours_extended_since).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }))} onward instead of the usual ${HT_CUTOFF_LABEL}.</div>` : ""}
       ${trialRewardHtml(p)}
       ${inReview ? "" : trialBriefHtml(trialForProject(p))}
       <div class="section-h" style="display:flex;align-items:center;gap:12px">

@@ -4,14 +4,13 @@ import { verifySessionToken } from "./auth/session.js";
 
 // Normalized roots (see normalize below): lowercase, leetspeak folded, symbols
 // stripped. Substring match, so common evasions like f.u-c_k or sh1t still hit.
+// Keep words here only if they're rarely a substring of an innocent word/name
+// - anything that collides with common English (see BLOCKED_WORD_BOUNDARY
+// below) belongs there instead, not here.
 const BLOCKED = [
   "fuck",
-  "shit",
   "bitch",
   "asshole",
-  "cunt",
-  "dick",
-  "cock",
   "pussy",
   "whore",
   "slut",
@@ -20,12 +19,10 @@ const BLOCKED = [
   "nigger",
   "nigga",
   "retard",
-  "rape",
   "nazi",
   "hitler",
   "kys",
   "chink",
-  "spic",
   "kike",
   "tranny",
   "wanker",
@@ -91,6 +88,17 @@ const BLOCKED_EXACT = [
   "mfers",
 ];
 
+// Words short/common enough to also spell out a piece of an innocent word or
+// name once folded ("shit" in Prokshith, "spic" in Suspicious, "rape" in
+// grape, "cunt" in Scunthorpe - the classic profanity-filter problem).
+// Matched only when they form a whole letter-run on their own (see foldRuns),
+// not as a substring of the whole flattened string like BLOCKED above. Trade-
+// off: unlike BLOCKED, spacing these out ("s h 1 t") no longer defeats the
+// separator between runs, so it won't be caught - acceptable given real
+// reports were all innocent words tripping the old substring check, not
+// anyone spacing these specific words out.
+const BLOCKED_WORD_BOUNDARY = ["shit", "spic", "rape", "cock", "dick", "cunt"];
+
 // Cyrillic/Greek lookalikes folded to the latin letters they imitate, so
 // "fατ" or "сунт" can't slip past the filter.
 const HOMOGLYPHS: Record<string, string> = {
@@ -129,9 +137,21 @@ export function normalize(raw: string): string {
   return out;
 }
 
+// Only collapses runs of 3+ identical letters ("fuuuck" -> "fuck"), not
+// ordinary doubled letters ("frappecchino" has "pp"/"cc" pairs that are just
+// normal English spelling, not stretching for evasion) - collapsing those
+// too used to slide unrelated letters next to each other and spell out a
+// blocked word that was never actually there ("frap|pe|cchino" -> "frapechino",
+// which contains "rape").
 function collapseRuns(flat: string): string {
   let out = "";
-  for (let i = 0; i < flat.length; i++) if (flat[i] !== flat[i - 1]) out += flat[i];
+  let i = 0;
+  while (i < flat.length) {
+    let j = i;
+    while (j < flat.length && flat[j] === flat[i]) j++;
+    out += j - i >= 3 ? flat[i] : flat.slice(i, j);
+    i = j;
+  }
   return out;
 }
 
@@ -141,10 +161,37 @@ function isExactBlocked(foldedToken: string): boolean {
   return BLOCKED_EXACT.includes(foldedToken) || BLOCKED_EXACT.includes(collapsed);
 }
 
+function isRunBlocked(foldedRun: string): boolean {
+  if (foldedRun === "") return false;
+  const collapsed = collapseRuns(foldedRun);
+  return BLOCKED_WORD_BOUNDARY.includes(foldedRun) || BLOCKED_WORD_BOUNDARY.includes(collapsed);
+}
+
+// Splits raw into the maximal runs of foldable letters within it - anything
+// foldChar treats as a separator (space, punctuation, a digit with no
+// leetspeak reading, ...) breaks a run. "i.do_random.shit" -> ["i", "do",
+// "random", "shit"], so a blocked word set off by a real separator still
+// gets caught even though it's buried inside an unbroken word when embedded
+// with no separator at all (see BLOCKED_WORD_BOUNDARY above).
+function foldRuns(raw: string): string[] {
+  const runs: string[] = [];
+  let cur = "";
+  for (const ch of raw) {
+    const f = foldChar(ch);
+    if (f === "") {
+      if (cur) runs.push(cur);
+      cur = "";
+    } else cur += f;
+  }
+  if (cur) runs.push(cur);
+  return runs;
+}
+
 export function containsBlocked(raw: string): boolean {
   const flat = normalize(raw);
   const collapsed = collapseRuns(flat);
   if (BLOCKED.some((bad) => flat.includes(bad) || collapsed.includes(bad))) return true;
+  if (foldRuns(raw).some(isRunBlocked)) return true;
   return raw
     .split(/\s+/)
     .some((token) => isExactBlocked(normalize(token)));
@@ -176,12 +223,26 @@ export function censorChat(text: string): string {
       idx += 1;
     }
   }
+  // Same 3+-run-only collapsing as collapseRuns above, kept separate here
+  // because this pass also needs each collapsed letter's original position
+  // (cStart) to star out the right span.
   const cFlat: string[] = [];
   const cStart: number[] = [];
-  for (let k = 0; k < flat.length; k++) {
-    if (k === 0 || flat[k] !== flat[k - 1]) {
-      cFlat.push(flat[k]);
-      cStart.push(k);
+  {
+    let k = 0;
+    while (k < flat.length) {
+      let m = k;
+      while (m < flat.length && flat[m] === flat[k]) m++;
+      if (m - k >= 3) {
+        cFlat.push(flat[k]);
+        cStart.push(k);
+      } else {
+        for (let n = k; n < m; n++) {
+          cFlat.push(flat[n]);
+          cStart.push(n);
+        }
+      }
+      k = m;
     }
   }
   const cStr = cFlat.join("");
@@ -194,12 +255,13 @@ export function censorChat(text: string): string {
       idx += 1;
     }
   }
-  // Exact-word insults: mark whole tokens (runs of foldable chars) whose
-  // folded form is on the exact list.
+  // Exact-word insults, plus the word-boundary list (see
+  // BLOCKED_WORD_BOUNDARY): mark whole runs of foldable chars whose folded
+  // form is on either list.
   let tokenStart = -1;
   let tokenFolded = "";
   const flushToken = (end: number) => {
-    if (tokenStart >= 0 && isExactBlocked(tokenFolded))
+    if (tokenStart >= 0 && (isExactBlocked(tokenFolded) || isRunBlocked(tokenFolded)))
       for (let i = tokenStart; i < end; i++) hit.add(i);
     tokenStart = -1;
     tokenFolded = "";
