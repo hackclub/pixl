@@ -272,10 +272,13 @@
         font-size: 40px;
         overflow: hidden;
       }
+      /* contain, not cover: banners are often wide screenshots, and cover
+         cropped their sides off. Letterboxes on the checkerboard instead,
+         same as .proj-hero. */
       .proj-thumb img {
         width: 100%;
         height: 100%;
-        object-fit: cover;
+        object-fit: contain;
       }
       .proj-name {
         font-size: 19px;
@@ -324,7 +327,7 @@
       .proj-row-thumb img {
         width: 100%;
         height: 100%;
-        object-fit: cover;
+        object-fit: contain;
       }
       /* the banner is the card's anchor, so an absent one says so rather than
          leaving a dead rectangle */
