@@ -2338,14 +2338,20 @@ export async function extendHoursCutoff(formData: FormData): Promise<void> {
 
   const { data: project } = await db
     .from("projects")
-    .select("user_id, name, status, hackatime_projects, hackatime_seconds")
+    .select("user_id, name, status, banned_at, hackatime_projects, hackatime_seconds")
     .eq("id", projectId)
     .single();
   if (!project) return;
   if (await isOwnProject(access, project.user_id))
     redirect(`${back}?error=${encodeURIComponent("You can't act on your own project.")}`);
-  if (project.status !== "shipped" && project.status !== "second_review")
-    redirect(`${back}?error=${encodeURIComponent("This project isn't in the review queue.")}`);
+  // Draft/shipped/second_review/needs_changes are all fair game - a reviewer
+  // may want to set this up before the player even ships. approved is too
+  // late (payout's already computed) and a banned/rejected project shouldn't
+  // be touched here at all.
+  if (project.status === "approved" || project.status === "rejected" || project.banned_at)
+    redirect(`${back}?error=${encodeURIComponent("This project has already been finalized.")}`);
+  if (((project.hackatime_projects as string[]) ?? []).length === 0)
+    redirect(`${back}?error=${encodeURIComponent("Link a Hackatime project to this project first.")}`);
 
   const { data: owner } = await db
     .from("users")

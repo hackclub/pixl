@@ -99,10 +99,16 @@ export default async function ProjectPage({
   const airtable = project.airtable_record_id
     ? await fetchAirtableRecord(project.airtable_record_id)
     : null;
-  // Only meaningful while the project is actually in the review queue - see
-  // the status guard in extendHoursCutoff (app/actions.ts).
+  // Mirrors the guard in extendHoursCutoff (app/actions.ts): allowed any time
+  // before the project is finalized (approved/rejected/banned), and only
+  // once a Hackatime project is actually linked - otherwise there's nothing
+  // to recount hours from.
   const canExtendCutoff =
-    canPeak && (project.status === "shipped" || project.status === "second_review");
+    canPeak &&
+    project.status !== "approved" &&
+    project.status !== "rejected" &&
+    !project.banned_at &&
+    (project.hackatime_projects?.length ?? 0) > 0;
   // One day before the global cutoff, for the extend-hours date input's max.
   const maxExtendDateStr = new Date((hackatimeCutoffUnix - 86_400) * 1000)
     .toISOString()
