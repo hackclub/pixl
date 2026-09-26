@@ -22,17 +22,23 @@
 -- normal payout path already does and that docs/150-rewards.md explains) -
 -- expect at most a fraction of a pixel of drift between a rescaled ledger row
 -- and its paired balance/order row, never more than it already tolerated.
--- Plain shop_items.price additionally rounds to the nearest 25px, the
--- catalog's standing convention (see 0104_raise_all_prices_10pct.sql) - but
--- an item with config_options (0058_shop_item_configurator.sql: Framework
--- 13/16 DIY, GTA6 editions, etc.) is NOT a plain price. base_price and every
--- groups[].choices[].price in there are precise pixel deltas converted
--- straight from a real vendor $ price, never rounded to a multiple of 25, so
--- they get the same plain round(x * 0.7) as base_price always had - forcing
--- them onto the nearest-25 grid would drift a laptop's price by real dollars.
--- The plain `price` column on a configurator item is then re-synced to the
--- new base_price, same invariant 0058 stated ("keep the flat price column in
--- sync with base_price").
+--
+-- shop_items.price is plain round(price * 0.7), same as everything else - NOT
+-- snapped to the catalog's nearest-25px convention (see
+-- 0104_raise_all_prices_10pct.sql). An earlier version of this migration did
+-- snap to that grid, which silently overwrote any item whose live price
+-- wasn't already a multiple of 25 - e.g. the "$10" grants, hand-priced at
+-- 160px at some point after the catalog's own formula (0062) already put them
+-- at 150px, got forced back down to 150px, quietly erasing that manual
+-- adjustment. Accuracy against whatever the price actually is beats forcing
+-- everything onto a grid.
+-- An item with config_options (0058_shop_item_configurator.sql: Framework
+-- 13/16 DIY, GTA6 editions, etc.) is NOT a plain price either - base_price and
+-- every groups[].choices[].price in there are precise pixel deltas converted
+-- straight from a real vendor $ price, handled the same plain-round way. The
+-- plain `price` column on a configurator item is then re-synced to the new
+-- base_price, same invariant 0058 stated ("keep the flat price column in sync
+-- with base_price").
 --
 -- pixorpheus must NOT announce this as a bulk shop price change, so the shop
 -- price update runs with session_replication_role = replica, same as 0104.
@@ -93,9 +99,9 @@ BEGIN
 END
 $$;
 
--- ── Shop catalog: every plain (non-configurator) item/region, nearest 25px ──
+-- ── Shop catalog: every plain (non-configurator) item/region ────────────────
 UPDATE shop_items
-SET price = (round(price * 0.7 / 25.0) * 25)::int
+SET price = round(price * 0.7)::int
 WHERE price > 0 AND config_options IS NULL;
 
 -- ── Player balances ─────────────────────────────────────────────────────────

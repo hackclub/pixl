@@ -75,9 +75,9 @@ BEGIN
 END
 $$;
 
--- ── Shop catalog: every plain (non-configurator) item/region, nearest 25px ──
+-- ── Shop catalog: every plain (non-configurator) item/region ────────────────
 UPDATE shop_items
-SET price = (round(price * 10.0 / 7.0 / 25.0) * 25)::int
+SET price = round(price * 10.0 / 7.0)::int
 WHERE price > 0 AND config_options IS NULL;
 
 -- ── Player balances ─────────────────────────────────────────────────────────
