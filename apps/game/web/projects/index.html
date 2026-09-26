@@ -2057,8 +2057,8 @@
         <div class="form-row" id="f-update-notes-row">
           <label>WHAT DID YOU CHANGE? *</label>
           <div class="ta-wrap">
-            <textarea class="field" id="f-update-notes" maxlength="2000" placeholder="Describe the new work (min 100 characters)."></textarea>
-            <span class="ta-count" id="f-update-count">0 / 2000</span>
+            <textarea class="field" id="f-update-notes" maxlength="8000" placeholder="Describe the new work (min 100 characters)."></textarea>
+            <span class="ta-count" id="f-update-count">0 / 8000</span>
           </div>
         </div>
       </div>`
@@ -2073,8 +2073,8 @@
         <div class="form-row" id="f-ai-notes-row" ${p.used_ai ? "" : "hidden"}>
           <label>WHAT DID YOU USE AI FOR? *</label>
           <div class="ta-wrap">
-            <textarea class="field" id="f-ai-notes" maxlength="500" placeholder="Which parts, which tools, how much…">${Pixl.esc(p.ai_notes || "")}</textarea>
-            <span class="ta-count" id="f-ai-count">${(p.ai_notes || "").length} / 500</span>
+            <textarea class="field" id="f-ai-notes" maxlength="2000" placeholder="Which parts, which tools, how much…">${Pixl.esc(p.ai_notes || "")}</textarea>
+            <span class="ta-count" id="f-ai-count">${(p.ai_notes || "").length} / 2000</span>
           </div>
         </div>
       </div>
@@ -2108,12 +2108,12 @@
         $("f-ai").addEventListener("change", () => {
           $("f-ai-notes-row").hidden = !$("f-ai").checked;
         });
-        wireCount("f-ai-notes", "f-ai-count", 500);
+        wireCount("f-ai-notes", "f-ai-count", 2000);
         if ($("f-update")) {
           $("f-update").addEventListener("change", () => {
             $("f-update-notes-row").hidden = !$("f-update").checked;
           });
-          wireCount("f-update-notes", "f-update-count", 2000);
+          wireCount("f-update-notes", "f-update-count", 8000);
         }
         $("s-ysws").addEventListener("change", () => {
           $("s-ysws-notes-row").hidden = !$("s-ysws").checked;

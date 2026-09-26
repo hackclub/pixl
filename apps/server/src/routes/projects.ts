@@ -334,7 +334,7 @@ export function parseProjectBody(
   const repoUrl = repoUrlResult.url;
   const demoUrl = demoUrlResult.url;
   const usedAi = body?.usedAi === true;
-  const aiNotes = String(body?.aiNotes ?? "").trim().slice(0, 500);
+  const aiNotes = String(body?.aiNotes ?? "").trim().slice(0, 2000);
   if (usedAi && aiNotes.length < 10) return { error: "ai_notes_required" };
   const projectType = PROJECT_TYPES.includes(String(body?.projectType))
     ? String(body?.projectType)
@@ -715,7 +715,7 @@ router.post("/api/projects/:id/ship", async (req, res) => {
   }
 
   const isUpdate = project.status === "approved" && !project.rejected_at;
-  const updateNotes = String(req.body?.updateNotes ?? "").trim().slice(0, 2000);
+  const updateNotes = String(req.body?.updateNotes ?? "").trim().slice(0, 8000);
   const shipNote = String(req.body?.shipNote ?? "").trim().slice(0, 2000);
   if (isUpdate && !updateNotes)
     return res.status(400).json({ ok: false, error: "update_notes_required" });
