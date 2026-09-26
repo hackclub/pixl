@@ -2833,6 +2833,22 @@ export async function heartbeatReview(projectId: number): Promise<void> {
     .eq("reviewing_by", access.session.slackId);
 }
 
+// Gives up an active review's claim early - called by ReviewHeartbeat once
+// the tab has been hidden/unfocused for 5+ minutes straight, rather than
+// waiting out the full REVIEW_LOCK_MS (30 min) of silence, so another
+// reviewer isn't blocked from picking up a project someone just isn't
+// actively looking at anymore. Same ownership guard as heartbeatReview: only
+// ever clears a claim the caller currently holds.
+export async function releaseReviewClaim(projectId: number): Promise<void> {
+  const access = await requirePerm("review");
+  if (!projectId) return;
+  await db
+    .from("projects")
+    .update({ reviewing_by: "", reviewing_at: null })
+    .eq("id", projectId)
+    .eq("reviewing_by", access.session.slackId);
+}
+
 export async function banIdea(formData: FormData): Promise<void> {
   const access = await requirePerm("ban");
   const by = actorName(access);
