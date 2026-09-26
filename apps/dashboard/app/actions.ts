@@ -74,7 +74,7 @@ import { generateAiReviewDraft, type AiReviewDraft } from "@/lib/aiReview";
 import { serializeGroups } from "@/lib/shopOptions";
 import { SHOP_REGIONS, type ShopRegion } from "@/lib/shopRegions";
 import { SHOP_CATEGORIES, type ShopCategory } from "@/lib/shopCategories";
-import { kickOnlinePlayer } from "@/lib/gameServer";
+import { kickOnlinePlayer, uploadSubmissionImage } from "@/lib/gameServer";
 import { dmOrEmail } from "@/lib/notify";
 import { assertSafeExternalUrl } from "@/lib/urlSafety";
 import { safeRedirectPath, isSafeUrl } from "@/lib/safeUrl";
@@ -1750,19 +1750,20 @@ export async function applySubmissionEdits(formData: FormData): Promise<void> {
 
   const editedName = String(formData.get("editedName") ?? "").trim().slice(0, 200);
   const editedDescription = String(formData.get("editedDescription") ?? "").trim().slice(0, 5000);
-  const editedImageUrl = String(formData.get("editedImageUrl") ?? "").trim();
   const editedRepoUrl = String(formData.get("editedRepoUrl") ?? "").trim();
   const editedDemoUrl = String(formData.get("editedDemoUrl") ?? "").trim();
   const edits: Record<string, string> = {};
   if (editedName && editedName !== current.name) edits.name = editedName;
   if (editedDescription && editedDescription !== current.description) edits.description = editedDescription;
-  if (editedImageUrl && editedImageUrl !== current.image_url) {
+  const editedImage = formData.get("editedImage");
+  if (editedImage instanceof File && editedImage.size > 0) {
+    if (editedImage.size > 15_000_000)
+      redirect(`${back}?error=${encodeURIComponent("Image: file too large (max 15MB).")}`);
     try {
-      await assertSafeExternalUrl(editedImageUrl);
+      edits.image_url = await uploadSubmissionImage(editedImage);
     } catch (e) {
-      redirect(`${back}?error=${encodeURIComponent(`Image URL: ${(e as Error).message}`)}`);
+      redirect(`${back}?error=${encodeURIComponent(`Image: ${(e as Error).message}`)}`);
     }
-    edits.image_url = editedImageUrl;
   }
   if (editedRepoUrl && editedRepoUrl !== current.repo_url) {
     try {

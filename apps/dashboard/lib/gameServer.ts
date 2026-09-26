@@ -61,6 +61,28 @@ export async function refreshBlackoutEvidence(entryId: number): Promise<boolean>
   }
 }
 
+// Proxies an image to the same Hack Club CDN a player's own project-banner
+// upload goes through (apps/server/src/routes/uploads.ts's /api/uploads) -
+// used by the dashboard's "Edit submission" panel, where the person
+// uploading is a reviewer rather than the project's owner, so there's no
+// player session token to send.
+export async function uploadSubmissionImage(file: File): Promise<string> {
+  const cfg = config();
+  if (!cfg) throw new Error("Image uploads aren't configured (PIXL_SERVER_URL/ADMIN_API_KEY missing).");
+  const buf = Buffer.from(await file.arrayBuffer());
+  const res = await fetch(`${cfg.url}/api/admin/uploads`, {
+    method: "POST",
+    headers: { "x-admin-key": cfg.key, "Content-Type": file.type || "image/png" },
+    body: buf,
+    signal: AbortSignal.timeout(20_000),
+  });
+  const json = (await res.json().catch(() => null)) as
+    | { ok?: boolean; url?: string; error?: string }
+    | null;
+  if (!json?.ok || !json.url) throw new Error(json?.error || "Image upload failed.");
+  return json.url;
+}
+
 export async function kickOnlinePlayer(userId: string, reason: string): Promise<boolean> {
   const cfg = config();
   if (!cfg) return false;

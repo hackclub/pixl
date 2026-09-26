@@ -6,8 +6,10 @@ import { refreshEntryEvidence } from "../operations/service.js";
 
 const router = Router();
 
-// Dashboard-to-server admin API, guarded by a shared secret.
-function authorized(req: Request): boolean {
+// Dashboard-to-server admin API, guarded by a shared secret. Exported so
+// other route files needing the same dashboard-only gate (e.g. uploads.ts's
+// /api/admin/uploads) can reuse it instead of re-implementing the check.
+export function authorized(req: Request): boolean {
   const key = process.env.ADMIN_API_KEY;
   const given = req.header("x-admin-key") ?? "";
   if (!key || !given) return false;

@@ -790,12 +790,22 @@ export function ReviewForm({
               />
             </Label>
             <Label className="flex flex-col gap-1.5 font-normal">
-              <span className="text-xs text-muted-foreground">Image URL</span>
-              <Input
-                name="editedImageUrl"
-                defaultValue={currentImageUrl ?? ""}
-                placeholder="https://…"
-                className="text-sm"
+              <span className="text-xs text-muted-foreground">
+                Replace image (optional , leave empty to keep the current one)
+              </span>
+              {currentImageUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={currentImageUrl}
+                  alt=""
+                  className="h-20 w-auto rounded border border-border object-cover"
+                />
+              )}
+              <input
+                name="editedImage"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:border-border file:bg-secondary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-secondary-foreground hover:file:bg-secondary/80"
               />
             </Label>
             <Label className="flex flex-col gap-1.5 font-normal">
