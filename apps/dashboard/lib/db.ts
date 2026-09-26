@@ -2261,6 +2261,11 @@ export interface ShopItemRow {
   // project (projects.is_peak) - see availableBeaconUnlocks in
   // apps/server/src/routes/shop.ts. Item-wide, propagated like manual_locked.
   beacon_locked: boolean;
+  // Item-wide percentage off every price component (base + config choices),
+  // 0 = no discount - see updateShopItem in app/actions.ts and buy_shop_item,
+  // which applies the exact same rounding so the displayed and charged price
+  // always match.
+  discount_percent: number;
   // Where this row's price was sourced from (a retailer product page, a
   // regional storefront, ...) - see updateShopItemRegionDetails in
   // app/actions.ts and the /shop-detail page. Empty string = not set.

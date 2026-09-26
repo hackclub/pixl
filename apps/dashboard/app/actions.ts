@@ -3972,6 +3972,11 @@ export async function updateShopItem(formData: FormData): Promise<void> {
   // (see availableBeaconUnlocks in apps/server/src/routes/shop.ts).
   // Item-wide, mirrored below the same way the Trial gate/manual lock are.
   const beaconLocked = formData.get("beacon_locked") === "1";
+  // A single percentage off every price component (base + config choices),
+  // the same for every region - not a per-region price like /shop-detail.
+  // Item-wide, mirrored below the same way the other gates are. Clamped so a
+  // stray negative/huge value can't reach buy_shop_item's math.
+  const discountPercent = Math.max(0, Math.min(100, Math.round(Number(formData.get("discount_percent") ?? 0)) || 0));
   // Saving silently skips telling pixorpheus about this change (e.g. a typo
   // fix that isn't worth a Slack ping), see notifyShopUpdates below.
   const silent = formData.get("silent") === "1";
@@ -3993,6 +3998,7 @@ export async function updateShopItem(formData: FormData): Promise<void> {
     manual_locked: manualLocked,
     lock_note: lockNote,
     beacon_locked: beaconLocked,
+    discount_percent: discountPercent,
   };
   const image = formData.get("image");
   if (image instanceof File && image.size > 0) {
@@ -4083,6 +4089,15 @@ export async function updateShopItem(formData: FormData): Promise<void> {
     .eq("name", gateName)
     .eq("unlock_xp", 0);
   if (beaconErr) console.error("updateShopItem (beacon lock)", beaconErr.message);
+
+  // Same for the discount , one percentage for every region, not a per-region
+  // price like /shop-detail.
+  const { error: discountErr } = await db
+    .from("shop_items")
+    .update({ discount_percent: discountPercent })
+    .eq("name", gateName)
+    .eq("unlock_xp", 0);
+  if (discountErr) console.error("updateShopItem (discount)", discountErr.message);
 
   if (applyAllRegions && originalName) {
     const { error: propErr } = await db

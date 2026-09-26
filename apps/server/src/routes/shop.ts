@@ -77,7 +77,7 @@ async function regionFor(userId: string): Promise<string> {
 // with 0106 , fall back gracefully before each is applied so the catalog
 // keeps loading.
 const ITEM_COLUMNS =
-  "id, name, description, price, image_url, options, unlock_xp, config_options, region, category, unlock_trial_ids, manual_locked, lock_note, beacon_locked, created_at";
+  "id, name, description, price, image_url, options, unlock_xp, config_options, region, category, unlock_trial_ids, manual_locked, lock_note, beacon_locked, discount_percent, created_at";
 const ITEM_COLUMNS_FALLBACK = "id, name, description, price, image_url, options";
 
 // How recently an item has to have been added to still be worth flagging as
@@ -144,6 +144,7 @@ async function fetchItems(filterIds?: number[], region?: string) {
         region: "US",
         category: "other",
         unlock_trial_ids: [],
+        discount_percent: 0,
         created_at: null,
       })),
     };
@@ -198,6 +199,39 @@ async function attachBuyerCounts(items: Record<string, unknown>[]): Promise<void
     item.buyers = buyers;
     item.show_buyers = shouldShowBuyerCount(buyers);
     item.is_new = isNewItem(item.created_at);
+  }
+}
+
+// Applies each item's discount_percent to every price component it displays
+// (base price, and for a configurator item its base_price + each choice's
+// price), rounding each one exactly the way buy_shop_item does - so whatever
+// combination of add-ons a player picks, the running total the client shows
+// always matches what they're actually charged. original_price is kept
+// alongside for a "was X" strikethrough; undiscounted items are untouched.
+function applyDiscount(items: Record<string, unknown>[]): void {
+  const scale = (n: unknown, pct: number): number => Math.round((Number(n) || 0) * (100 - pct) / 100);
+  for (const item of items) {
+    const pct = Math.max(0, Math.min(100, Number(item.discount_percent) || 0));
+    if (pct <= 0) continue;
+    item.original_price = item.price;
+    item.price = scale(item.price, pct);
+    const co = item.config_options as
+      | { base_price?: number; reference_url?: string; groups?: { name: string; type: string; choices: { label: string; price: number }[] }[] }
+      | null;
+    if (co && typeof co === "object") {
+      item.config_options = {
+        ...co,
+        base_price: scale(co.base_price, pct),
+        groups: Array.isArray(co.groups)
+          ? co.groups.map((g) => ({
+              ...g,
+              choices: Array.isArray(g.choices)
+                ? g.choices.map((c) => ({ ...c, price: scale(c.price, pct) }))
+                : g.choices,
+            }))
+          : co.groups,
+      };
+    }
   }
 }
 
@@ -379,6 +413,7 @@ router.get("/api/shop/items", async (req, res) => {
     }
   }
 
+  applyDiscount(items);
   res.json({ ok: true, items, xp, claimed, region, sessionExpired });
 });
 

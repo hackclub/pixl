@@ -219,6 +219,15 @@ export default async function ShopPage({
                     <Badge variant="secondary">
                       {SHOP_CATEGORY_LABELS[item.category] ?? SHOP_CATEGORY_LABELS.other}
                     </Badge>
+                    {item.discount_percent > 0 && (
+                      <Badge
+                        variant="warning"
+                        className="tabular-nums"
+                        title={`Effective price: ${Math.round((item.price * (100 - item.discount_percent)) / 100)} px`}
+                      >
+                        {item.discount_percent}% OFF
+                      </Badge>
+                    )}
                     {!item.active && <Badge variant="secondary">hidden</Badge>}
                   </div>
                   {item.description && (
@@ -454,6 +463,21 @@ export default async function ShopPage({
                           item in every region.
                         </span>
                       </label>
+                      <Label className="block font-normal">
+                        <span className="block text-xs font-medium text-muted-foreground mb-1">
+                          Discount % (0 = none) - one percentage for every region, off the base price
+                          and every config add-on
+                        </span>
+                        <Input
+                          name="discount_percent"
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="1"
+                          defaultValue={item.discount_percent || 0}
+                          className="w-24 text-sm"
+                        />
+                      </Label>
                       <label className="flex items-start gap-2 text-sm text-muted-foreground cursor-pointer">
                         <input
                           type="checkbox"

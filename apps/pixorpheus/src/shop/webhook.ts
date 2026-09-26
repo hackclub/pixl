@@ -29,6 +29,7 @@ type ShopRow = {
   manual_locked?: boolean | null;
   lock_note?: string | null;
   beacon_locked?: boolean | null;
+  discount_percent?: number | null;
 };
 
 type WebhookPayload = {
@@ -118,6 +119,10 @@ function diffLines(oldRow: ShopRow, newRow: ShopRow): string[] {
   }
   if (JSON.stringify(oldRow.unlock_trial_ids ?? []) !== JSON.stringify(newRow.unlock_trial_ids ?? [])) {
     lines.push("• Trial gate changed");
+  }
+  if ((oldRow.discount_percent ?? 0) !== (newRow.discount_percent ?? 0)) {
+    const pct = newRow.discount_percent ?? 0;
+    lines.push(pct > 0 ? `• 🏷️ discount: ${pct}% off` : "• discount removed");
   }
 
   return lines;
