@@ -1701,6 +1701,21 @@ export interface PixelTxRow {
   project_name: string | null;
 }
 
+// The actual total sitting in every wallet right now - NOT derived from
+// summing the ledger (pixel_transactions), which can silently drift from real
+// balances whenever a manual adjustment's logged delta doesn't exactly match
+// what it changed the balance to (seen in practice: two accounts alone were
+// off by hundreds of pixels from old, unrelated manual corrections). Reads
+// users.pixels directly so "Net in wallets" means what it says.
+export async function totalWalletPixels(): Promise<number> {
+  const { data, error } = await db.from("users").select("pixels");
+  if (error) {
+    console.error("totalWalletPixels", error.message);
+    return 0;
+  }
+  return (data ?? []).reduce((s, u) => s + (Number(u.pixels) || 0), 0);
+}
+
 // The pixel ledger, newest first: every credit (and, later, spend). amount is
 // signed , positive is pixels given out, negative is spent.
 export async function listPixelTransactions(limit = 1000): Promise<PixelTxRow[]> {

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requirePagePerm } from "@/lib/guard";
-import { listPixelTransactions } from "@/lib/db";
+import { listPixelTransactions, totalWalletPixels } from "@/lib/db";
 import { config } from "@/app/_generated/config";
 import { PixelAdjustForm } from "@/app/_components/PixelAdjustForm";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -66,7 +66,7 @@ export default async function PixelsPage({
 }) {
   const access = await requirePagePerm(["pixels"]);
   const { page, filter, user, error, adjusted } = await searchParams;
-  const all = await listPixelTransactions(1000);
+  const [all, net] = await Promise.all([listPixelTransactions(1000), totalWalletPixels()]);
 
   // amount is bigint in Postgres, which the driver hands back as a string , summing
   // it with plain `+` silently does string concatenation instead of addition.
@@ -76,7 +76,6 @@ export default async function PixelsPage({
   const spent = all
     .filter((t) => Number(t.amount) < 0)
     .reduce((s, t) => s + Number(t.amount), 0);
-  const net = issued + spent;
 
   const activeFilter = filter === "given" || filter === "spent" ? filter : "all";
   let rows = all;
