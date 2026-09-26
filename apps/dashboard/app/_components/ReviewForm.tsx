@@ -768,7 +768,7 @@ export function ReviewForm({
 
   return (
     <>
-      {secondPass && (
+      {(secondPass || isSuper) && (
         <details className="rounded-lg border p-4 mt-4">
           <summary className="cursor-pointer text-xs font-bold uppercase tracking-wide text-muted-foreground select-none">
             Edit submission , title, image, repo/demo links, description

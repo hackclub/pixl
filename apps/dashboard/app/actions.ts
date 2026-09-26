@@ -1738,8 +1738,8 @@ export async function applySubmissionEdits(formData: FormData): Promise<void> {
   const projectId = Number(formData.get("projectId") ?? 0);
   const back = `/review/${projectId}`;
   if (!projectId) return;
-  if (!access.canSecondPass)
-    redirect(`${back}?error=${encodeURIComponent("Only a final reviewer can edit the submission.")}`);
+  if (!access.canSecondPass && !access.isSuper)
+    redirect(`${back}?error=${encodeURIComponent("Only a final reviewer or a super admin can edit the submission.")}`);
 
   const { data: current } = await db
     .from("projects")
@@ -1791,7 +1791,7 @@ export async function applySubmissionEdits(formData: FormData): Promise<void> {
   await logModAction(
     current.user_id,
     "project_edited",
-    `${edits.name ?? current.name}: final reviewer edited ${Object.keys(edits).join(", ")}`,
+    `${edits.name ?? current.name}: ${access.canSecondPass ? "final reviewer" : "a super admin"} edited ${Object.keys(edits).join(", ")}`,
     by,
   );
   revalidatePath(`/review/${projectId}`);
