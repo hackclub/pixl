@@ -682,10 +682,21 @@
         // placeholder Trial for a region that hasn't launched) - nothing for
         // the player to actually go do, so this reads as "coming soon"
         // instead of a lock with a call to action.
+        // A locked item still shows its real price (with a lock icon) rather
+        // than hiding it behind "LOCKED" - players want to know what they're
+        // working toward. selected.price is 0 for a configurator item not
+        // sold in this region at all, hence the config_options.base_price
+        // fallback mirroring basePrice() on the list page.
+        const lockedPrice = selected.config_options
+          ? Number(selected.config_options.base_price)
+          : Number(selected.price);
         if (selected.locked && selected.unlockPending) {
           $("detail-options").innerHTML = "";
           $("detail-limited").innerHTML = "";
-          $("detail-price").innerHTML = "NOT AVAILABLE";
+          $("detail-price").innerHTML =
+            lockedPrice > 0
+              ? `<img src="/img/pixel.png" style="width:20px;height:20px" alt="">${lockedPrice.toLocaleString()} PIXELS`
+              : "NOT AVAILABLE";
           $("detail-price").classList.add("cant");
           $("buy-btn").textContent = "NOT AVAILABLE";
           $("buy-btn").disabled = true;
@@ -697,7 +708,10 @@
         if (selected.locked) {
           $("detail-options").innerHTML = "";
           $("detail-limited").innerHTML = "";
-          $("detail-price").innerHTML = "🔒 LOCKED";
+          $("detail-price").innerHTML =
+            lockedPrice > 0
+              ? `🔒 <img src="/img/pixel.png" style="width:20px;height:20px" alt="">${lockedPrice.toLocaleString()} PIXELS`
+              : "🔒 LOCKED";
           $("detail-price").classList.add("cant");
           $("buy-btn").textContent = "LOCKED";
           $("buy-btn").disabled = true;

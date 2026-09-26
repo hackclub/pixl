@@ -699,7 +699,7 @@
           item.locked && item.unlockPending
             ? `<div class="price-wrap"><span class="price cant">NOT AVAILABLE</span><span class="price-hours">Available soon</span></div>`
             : item.locked
-            ? `<div class="price-wrap"><span class="price cant">🔒 LOCKED</span><span class="price-hours">${
+            ? `<div class="price-wrap"><span class="price cant">🔒 <img src="/img/pixel.png" alt="">${item.config_options ? `FROM ${basePrice(item).toLocaleString()}` : basePrice(item).toLocaleString()} PX</span><span class="price-hours">${
                 item.lock_note
                   ? Pixl.esc(item.lock_note)
                   : item.beacon_locked
