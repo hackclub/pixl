@@ -452,7 +452,18 @@ export function ReviewForm({
   const demoSeconds = useRef<HTMLInputElement>(null);
   const totalSeconds = useRef<HTMLInputElement>(null);
   const away = useRef<{ kind: "repo" | "demo"; at: number } | null>(null);
-  const openedAt = useRef(Date.now());
+  // Review time only counts while this tab is actually the one the reviewer
+  // is looking at - a reviewer who opens a project then tabs away for an
+  // hour (or leaves it open overnight) shouldn't have that time counted as
+  // review time. activeMs accumulates each visible-and-focused stretch as it
+  // ends; visibleSince holds when the current stretch started (null while
+  // away). "Away" means either the tab isn't the visible one or the window
+  // itself lost focus - both, since a reviewer can alt-tab to another app
+  // while this tab stays the visible one in its own window.
+  const activeMs = useRef(0);
+  const visibleSince = useRef<number | null>(null);
+  const isActiveNow = () =>
+    typeof document !== "undefined" && document.visibilityState === "visible" && document.hasFocus();
   const submittedRef = useRef(false);
 
   const baseHours = defaultHours ?? claimedHours;
@@ -660,7 +671,21 @@ export function ReviewForm({
   };
 
   useEffect(() => {
-    openedAt.current = Date.now();
+    // Fresh accumulator for a freshly (re)mounted review - this component can
+    // remount without a full page load (e.g. the deflation revalidation
+    // above), and a stale activeMs from a previous mount would inflate this
+    // one's total.
+    activeMs.current = 0;
+    visibleSince.current = isActiveNow() ? Date.now() : null;
+    const trackActiveTime = () => {
+      const activeNow = isActiveNow();
+      if (activeNow && visibleSince.current === null) {
+        visibleSince.current = Date.now();
+      } else if (!activeNow && visibleSince.current !== null) {
+        activeMs.current += Date.now() - visibleSince.current;
+        visibleSince.current = null;
+      }
+    };
     const settle = () => {
       const a = away.current;
       if (!a || document.visibilityState !== "visible") return;
@@ -673,9 +698,15 @@ export function ReviewForm({
     };
     window.addEventListener("focus", settle);
     document.addEventListener("visibilitychange", settle);
+    window.addEventListener("focus", trackActiveTime);
+    window.addEventListener("blur", trackActiveTime);
+    document.addEventListener("visibilitychange", trackActiveTime);
     return () => {
       window.removeEventListener("focus", settle);
       document.removeEventListener("visibilitychange", settle);
+      window.removeEventListener("focus", trackActiveTime);
+      window.removeEventListener("blur", trackActiveTime);
+      document.removeEventListener("visibilitychange", trackActiveTime);
     };
   }, []);
 
@@ -849,10 +880,11 @@ export function ReviewForm({
     <form
       action={reviewProject}
       onSubmit={() => {
-        if (totalSeconds.current)
-          totalSeconds.current.value = String(
-            Math.round((Date.now() - openedAt.current) / 1000),
-          );
+        if (totalSeconds.current) {
+          const finalMs =
+            activeMs.current + (visibleSince.current !== null ? Date.now() - visibleSince.current : 0);
+          totalSeconds.current.value = String(Math.round(finalMs / 1000));
+        }
         // Don't clear the draft here - this fires the instant the button is
         // clicked, before the request even reaches the network. If the
         // server never responds (a redeploy killing the pod mid-request is
