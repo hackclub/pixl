@@ -2079,23 +2079,25 @@ export interface FulfillerStats {
 }
 
 export interface ShopEconomySummary {
-  // Total pixels players have redeemed in the shop, across every non-cancelled
-  // order (already quantity-inclusive - see v_price in buy_shop_item).
+  // Pixels players redeemed for orders that have actually been fulfilled -
+  // same cohort as totalActualCostUsd below (already quantity-inclusive, see
+  // v_price in buy_shop_item), not every order ever placed. Orders still
+  // sitting in New/Ordered aren't counted on either side yet.
   totalPx: number;
-  // Real dollars actually spent fulfilling orders so far - only orders that
-  // have reached "credited" or later carry an actual_cost_usd (see
-  // markOrderCredited in app/actions.ts), so this undercounts anything still
-  // sitting in New/Ordered.
+  // Real dollars actually spent fulfilling those same orders - only orders
+  // that have reached "credited" or later carry an actual_cost_usd (see
+  // markOrderCredited in app/actions.ts), which is what defines the cohort.
   totalActualCostUsd: number;
-  // How many orders that actual-cost total is drawn from, for context.
+  // How many orders both totals above are drawn from.
   ordersWithCost: number;
 }
 
 // Backs the fulfillment page's "how much we won overall" summary - pixels
-// redeemed (in px and $) vs. real dollars spent fulfilling them. Done as a
-// Postgres aggregate (shop_economy_summary(), see
-// drizzle/0192_shop_economy_summary.sql) rather than pulling every
-// shop_orders row over the wire, since the table only grows over time.
+// redeemed (in px and $) vs. real dollars spent fulfilling them, both scoped
+// to the same fulfilled-orders cohort so it's an apples-to-apples
+// comparison. Done as a Postgres aggregate (shop_economy_summary(), see
+// drizzle/0193_shop_economy_summary_fulfilled_only.sql) rather than pulling
+// every shop_orders row over the wire, since the table only grows over time.
 export async function shopEconomySummary(): Promise<ShopEconomySummary> {
   // shop_economy_summary() returns a 3-column table, so pgCompat's rpc()
   // hands back the raw row array rather than unwrapping a scalar - it's

@@ -72,17 +72,18 @@ function usdBudget(pricePx: number): string {
   return (pricePx * config.economy.pixelValueUsd).toFixed(2);
 }
 
-// Lifetime shop P&L: what players redeemed (in px and the $ that's worth) vs.
-// what actually went out the door fulfilling it. "Spent fulfilling" only
-// covers orders that reached credited-or-later (see ShopEconomySummary in
-// lib/db.ts), so it undercounts anything still sitting in New/Ordered - the
-// net figure is a running total, not a final one.
+// Lifetime shop P&L, fulfilled orders only - both sides are scoped to the
+// exact same cohort (orders with an actual_cost_usd on file, i.e. reached
+// credited-or-later), so it's a true fulfilled-vs-fulfilled comparison, not
+// all pixels ever redeemed against only some of the real spend. Orders still
+// sitting in New/Ordered aren't counted on either side yet.
 function ShopEconomyCard({ economy }: { economy: ShopEconomySummary }) {
   const redeemedUsd = economy.totalPx * config.economy.pixelValueUsd;
   const net = redeemedUsd - economy.totalActualCostUsd;
+  const orderNote = economy.ordersWithCost > 0 ? ` (${economy.ordersWithCost} orders)` : "";
   return (
     <Card className="p-4 mb-5 max-w-2xl">
-      <div className="text-xs text-muted-foreground mb-3">Shop economy, lifetime</div>
+      <div className="text-xs text-muted-foreground mb-3">Shop economy, fulfilled orders{orderNote}</div>
       <div className="grid grid-cols-3 gap-4">
         <div>
           <div className="text-xs text-muted-foreground mb-1">Redeemed by players</div>
@@ -90,9 +91,7 @@ function ShopEconomyCard({ economy }: { economy: ShopEconomySummary }) {
           <div className="text-xs text-muted-foreground tabular-nums">${redeemedUsd.toFixed(2)}</div>
         </div>
         <div>
-          <div className="text-xs text-muted-foreground mb-1">
-            Spent fulfilling{economy.ordersWithCost > 0 ? ` (${economy.ordersWithCost} orders)` : ""}
-          </div>
+          <div className="text-xs text-muted-foreground mb-1">Spent fulfilling them</div>
           <div className="text-lg font-semibold tabular-nums">${economy.totalActualCostUsd.toFixed(2)}</div>
         </div>
         <div>
