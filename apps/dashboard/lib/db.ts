@@ -2078,6 +2078,43 @@ export interface FulfillerStats {
   pixelsEarned: number;
 }
 
+export interface ShopEconomySummary {
+  // Total pixels players have redeemed in the shop, across every non-cancelled
+  // order (already quantity-inclusive - see v_price in buy_shop_item).
+  totalPx: number;
+  // Real dollars actually spent fulfilling orders so far - only orders that
+  // have reached "credited" or later carry an actual_cost_usd (see
+  // markOrderCredited in app/actions.ts), so this undercounts anything still
+  // sitting in New/Ordered.
+  totalActualCostUsd: number;
+  // How many orders that actual-cost total is drawn from, for context.
+  ordersWithCost: number;
+}
+
+// Backs the fulfillment page's "how much we won overall" summary - pixels
+// redeemed (in px and $) vs. real dollars spent fulfilling them. Done as a
+// Postgres aggregate (shop_economy_summary(), see
+// drizzle/0192_shop_economy_summary.sql) rather than pulling every
+// shop_orders row over the wire, since the table only grows over time.
+export async function shopEconomySummary(): Promise<ShopEconomySummary> {
+  // shop_economy_summary() returns a 3-column table, so pgCompat's rpc()
+  // hands back the raw row array rather than unwrapping a scalar - it's
+  // always exactly one row (a bare aggregate with no GROUP BY).
+  const { data, error } = await db.rpc<
+    { total_px: number | string; total_actual_cost_usd: number | string; orders_with_cost: number | string }[]
+  >("shop_economy_summary");
+  const row = data?.[0];
+  if (error || !row) {
+    if (error) console.error("shopEconomySummary", error.message);
+    return { totalPx: 0, totalActualCostUsd: 0, ordersWithCost: 0 };
+  }
+  return {
+    totalPx: Number(row.total_px) || 0,
+    totalActualCostUsd: Number(row.total_actual_cost_usd) || 0,
+    ordersWithCost: Number(row.orders_with_cost) || 0,
+  };
+}
+
 // Per-fulfiller order stats, keyed by claimed_by_slack , mirrors
 // reviewerStatsBySlackId's shape (one query, grouped client-side) so the
 // /fulfillers/[id] page can reuse the same Stat-card pattern as /reviewers/[id],

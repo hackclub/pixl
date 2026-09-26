@@ -5,10 +5,12 @@ import {
   listFulfillers,
   buyerDetailsByUserId,
   fulfillerStatsBySlackId,
+  shopEconomySummary,
   ORDER_STAGES,
   type ShopOrderRow,
   type OrderStatus,
   type BuyerDetails,
+  type ShopEconomySummary,
 } from "@/lib/db";
 import { slackHandles } from "@/lib/slack";
 import {
@@ -68,6 +70,40 @@ function slackLink(id: string): string {
 // badges always describe the same amount.
 function usdBudget(pricePx: number): string {
   return (pricePx * config.economy.pixelValueUsd).toFixed(2);
+}
+
+// Lifetime shop P&L: what players redeemed (in px and the $ that's worth) vs.
+// what actually went out the door fulfilling it. "Spent fulfilling" only
+// covers orders that reached credited-or-later (see ShopEconomySummary in
+// lib/db.ts), so it undercounts anything still sitting in New/Ordered - the
+// net figure is a running total, not a final one.
+function ShopEconomyCard({ economy }: { economy: ShopEconomySummary }) {
+  const redeemedUsd = economy.totalPx * config.economy.pixelValueUsd;
+  const net = redeemedUsd - economy.totalActualCostUsd;
+  return (
+    <Card className="p-4 mb-5 max-w-2xl">
+      <div className="text-xs text-muted-foreground mb-3">Shop economy, lifetime</div>
+      <div className="grid grid-cols-3 gap-4">
+        <div>
+          <div className="text-xs text-muted-foreground mb-1">Redeemed by players</div>
+          <div className="text-lg font-semibold tabular-nums">{economy.totalPx.toLocaleString()} px</div>
+          <div className="text-xs text-muted-foreground tabular-nums">${redeemedUsd.toFixed(2)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground mb-1">
+            Spent fulfilling{economy.ordersWithCost > 0 ? ` (${economy.ordersWithCost} orders)` : ""}
+          </div>
+          <div className="text-lg font-semibold tabular-nums">${economy.totalActualCostUsd.toFixed(2)}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground mb-1">Net</div>
+          <Badge variant={net >= 0 ? "success" : "destructive"} className="text-sm tabular-nums">
+            {net >= 0 ? "+" : "-"}${Math.abs(net).toFixed(2)}
+          </Badge>
+        </div>
+      </div>
+    </Card>
+  );
 }
 
 const TAB_KEYS = ["pending", "ordered", "credited", "shipped", "done", "cancelled", "flagged", "all", "leaderboard", "fulfillers"] as const;
@@ -212,6 +248,9 @@ export default async function FulfillmentPage({
   // the right thing without leaving the page - see the "Shipping info"
   // disclosure on each card.
   const buyerDetails = await buyerDetailsByUserId(orders.map((o) => o.user_id));
+  // Owner-only, since it's a financial rollup rather than a per-order
+  // fulfillment task - plain fulfillers don't need it to do their job.
+  const economy = access.isSuper ? await shopEconomySummary() : null;
 
   const tabs: { key: TabKey; label: string }[] = [
     { key: "pending", label: "New" },
@@ -255,6 +294,8 @@ export default async function FulfillmentPage({
         it for that or less. If the cheapest you can find is over budget, don&apos;t place the order:
         flag it with what you found and an owner picks it up from the Over budget tab.
       </p>
+
+      {economy && <ShopEconomyCard economy={economy} />}
 
       <div className="flex items-center gap-3 flex-wrap mb-4">
         {!mineOnly && (
