@@ -2555,6 +2555,7 @@
         <span class="chip ${cls}">${label}</span>
         <span class="chip teal tip-wrap" id="time-chip" tabindex="0"><span class="tip-main">${Pixl.hours(linkedSeconds(p) + (p.journal_seconds || 0))} TRACKED</span><span class="tip-pop">Hackatime: ${Pixl.hours(linkedSeconds(p))} · Journal: ${Pixl.hours(p.journal_seconds || 0)}</span></span>
         ${p.pixels_earned ? `<span class="chip gold">+${Math.round(p.pixels_earned)} PX EARNED</span>` : ""}
+        ${p.is_peak ? `<span class="chip gold" title="Nominated as a standout project by a reviewer">★ BEACON</span>` : ""}
         <span id="est-chips-wrap">${estimateChipsHtml(p, linkedSeconds(p), p.journal_seconds || 0)}</span>
         ${p.sidequest_name ? `<span class="chip teal">TRIAL: ${Pixl.esc(p.sidequest_name)}</span>` : ""}
         <span id="bo-head-chip">${blackoutChipHtml(p)}</span>
@@ -2889,6 +2890,7 @@
         <span class="chip ${cls}">${label}</span>
         <span class="chip muted">COLLABORATOR</span>
         <span class="chip teal tip-wrap" id="time-chip" tabindex="0"><span class="tip-main">… TRACKED</span></span>
+        ${p.is_peak ? `<span class="chip gold" title="Nominated as a standout project by a reviewer">★ BEACON</span>` : ""}
       </div>
       ${p.image_url ? `<div class="proj-hero"><img src="${Pixl.esc(p.image_url)}" alt=""></div>` : ""}
       ${p.description ? `<p style="margin-bottom:14px">${Pixl.esc(p.description)}</p>` : ""}

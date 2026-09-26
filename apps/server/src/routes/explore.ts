@@ -439,6 +439,10 @@ router.get("/api/explore/projects", async (req, res) => {
     .is("archived_at", null)
     .is("rejected_at", null)
     .is("banned_at", null)
+    // Beacon-nominated projects (is_peak) surface first, then newest-first
+    // within each group - a reviewer nomination is meant to get a project
+    // more eyes on Explore, not just a badge nobody sees.
+    .order("is_peak", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(limit);
   if (q) query = query.ilike("name", `%${q}%`);
