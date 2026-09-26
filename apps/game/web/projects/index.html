@@ -1810,9 +1810,11 @@
         if (linkedId && !opts.some((t) => Number(t.id) === linkedId))
           opts.push({ id: linkedId, name: p.sidequest_name || "Linked Trial", region: "" });
         if (!opts.length) return "";
-        // Default to the linked Trial, or auto-select the one accepted Trial.
-        const current =
-          linkedId != null ? linkedId : trials.length === 1 ? Number(trials[0].id) : "";
+        // Default to the linked Trial if this project is already tied to one -
+        // never auto-pick an accepted Trial just because it's the only one the
+        // player has, that guessed wrong for players shipping an unrelated
+        // project while sitting on one unfinished Trial (reported 2026-09-26).
+        const current = linkedId != null ? linkedId : "";
         const choices = [{ id: "", label: "Not for a Trial, my own idea" }].concat(
           opts.map((t) => ({
             id: Number(t.id),
@@ -4270,12 +4272,12 @@
           trials = [];
           allTrials = [];
         }
-        // The Trial the player arrived to build for: ?trial=<id> from the NPC, or
-        // the single accepted Trial if there's exactly one. Drives the brief panel.
+        // The Trial the player arrived to build for: only ?trial=<id> from the
+        // NPC counts - never guess from having exactly one accepted Trial,
+        // that wrongly flagged an unrelated new project as being for it
+        // (reported 2026-09-26). Drives the brief panel.
         const tid = Number(new URLSearchParams(location.search).get("trial"));
-        activeTrial =
-          (tid && trials.find((t) => Number(t.id) === tid)) ||
-          (trials.length === 1 ? trials[0] : null);
+        activeTrial = (tid && trials.find((t) => Number(t.id) === tid)) || null;
       }
 
       // "Building for this Trial" brief, shown atop the new-project form and the
