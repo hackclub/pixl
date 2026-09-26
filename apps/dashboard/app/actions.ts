@@ -4840,12 +4840,9 @@ export async function cancelOrder(formData: FormData): Promise<void> {
     .select("user_id, item_name, status")
     .eq("id", id)
     .maybeSingle();
-  if (
-    !order ||
-    order.status === "shipped" ||
-    order.status === "done" ||
-    order.status === "cancelled"
-  ) {
+  // Once a fulfiller claims it (pending -> ordered), it's no longer
+  // cancellable - only a still-unclaimed order can be refunded this way.
+  if (!order || order.status !== "pending") {
     revalidatePath("/fulfillment");
     return;
   }

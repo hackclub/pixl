@@ -661,8 +661,12 @@ function OrderActions({
   canManage: boolean;
 }) {
   // Reassign, cancel/refund, and the final "mark done" close stay owner-only ,
-  // fulfillers can work a claimed order but not override or refund one.
-  const cancelForm = canManage ? (
+  // fulfillers can work a claimed order but not override or refund one. Cancel
+  // is also only available before anyone's claimed it - once a fulfiller
+  // claims it (pending -> ordered) it can't be cancelled/refunded this way
+  // anymore (see cancelOrder in app/actions.ts, which enforces the same rule
+  // server-side).
+  const cancelForm = canManage && o.status === "pending" ? (
     <form action={cancelOrder}>
       <input type="hidden" name="id" value={o.id} />
       <PendingButton
