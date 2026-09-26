@@ -4011,16 +4011,23 @@ export async function updateShopItem(formData: FormData): Promise<void> {
   // trophies (unlock_xp > 0) since those aren't region-scoped.
   const applyAllRegions = String(formData.get("apply_all_regions") ?? "") === "1";
   const originalName = String(formData.get("original_name") ?? "").trim();
+  const gateName = originalName || name;
 
   // Snapshot every row this call may touch BEFORE writing, so pixorpheus can be
-  // handed an old → new diff. The sibling ids have to be resolved up front too:
-  // once the main row is renamed they no longer all share `originalName`.
+  // handed an old → new diff. Every sibling region row always gets pulled in
+  // here, not just when "apply_all_regions" is checked - the Trial gate,
+  // manual lock, Beacon lock, and discount are ALL mirrored item-wide below
+  // regardless of that checkbox (which only covers name/description/category),
+  // so leaving siblings out of the snapshot made an item-wide change that
+  // correctly reached all 8 regions get announced as if only one had. The
+  // sibling ids have to be resolved up front too: once the main row is
+  // renamed they no longer all share `gateName`.
   const affectedIds = [id];
-  if (applyAllRegions && originalName) {
+  if (gateName) {
     const { data: siblings } = await db
       .from("shop_items")
       .select("id")
-      .eq("name", originalName)
+      .eq("name", gateName)
       .eq("unlock_xp", 0)
       .neq("id", id);
     for (const s of siblings ?? []) affectedIds.push(s.id as number);
@@ -4064,9 +4071,9 @@ export async function updateShopItem(formData: FormData): Promise<void> {
   if (error) throw new Error(error.message);
 
   // A Trial gate is item-wide, so mirror it onto every region row of this item
-  // (matched by its name before any rename), never locked in one region and
-  // open in another. The edited row itself already got it via `patch`.
-  const gateName = originalName || name;
+  // (matched by its name before any rename, gateName above), never locked in
+  // one region and open in another. The edited row itself already got it via
+  // `patch`.
   const { error: gateErr } = await db
     .from("shop_items")
     .update({ unlock_trial_ids: unlockTrials })

@@ -222,6 +222,7 @@ function applyDiscount(items: Record<string, unknown>[]): void {
       item.config_options = {
         ...co,
         base_price: scale(co.base_price, pct),
+        original_base_price: co.base_price,
         groups: Array.isArray(co.groups)
           ? co.groups.map((g) => ({
               ...g,

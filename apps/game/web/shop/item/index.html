@@ -108,6 +108,22 @@
       }
       .price img { width: 20px; height: 20px; }
       .price.cant { color: var(--bad); }
+      .price-was {
+        font-family: var(--sans);
+        font-weight: 500;
+        font-size: 14px;
+        color: var(--faint);
+        text-decoration: line-through;
+      }
+      .discount-tag {
+        background: var(--bad);
+        color: var(--btn-ink);
+        font-family: var(--pixel);
+        font-size: 10px;
+        letter-spacing: 0.5px;
+        padding: 3px 6px;
+        border-radius: 0;
+      }
       .price-hours {
         display: block;
         width: 100%;
@@ -415,7 +431,12 @@
         updateConfigImage();
         const price = computeConfigPrice(selected, configPick);
         const afford = wallet && wallet.pixels >= price;
+        // Per-choice original prices aren't kept server-side, only the base
+        // price's - so a configurator item on sale gets the discount badge
+        // without a precise "was X" for whatever combination is picked.
+        const discounted = Number(selected.discount_percent) > 0;
         $("detail-price").innerHTML =
+          (discounted ? `<span class="discount-tag">-${Math.round(selected.discount_percent)}% OFF</span>` : "") +
           `<img src="/img/pixel.png" style="width:20px;height:20px" alt="">${price.toLocaleString()} PIXELS<span class="price-hours">${hoursOf(price)}</span>`;
         $("detail-price").classList.toggle("cant", !afford);
         if (!loggedIn) {
@@ -791,8 +812,16 @@
         const total = Number(selected.price) * quantity;
         const afford = wallet && wallet.pixels >= total;
         const inStock = stockOk();
+        // original_price only comes back from the server when discount_percent
+        // is active (see applyDiscount in apps/server/src/routes/shop.ts) - its
+        // presence IS the "on sale" flag.
+        const discounted = selected.original_price != null;
+        const wasTotal = discounted ? Number(selected.original_price) * quantity : 0;
         $("detail-price").innerHTML =
-          `<img src="/img/pixel.png" style="width:20px;height:20px" alt="">${total.toLocaleString()} PIXELS<span class="price-hours">${hoursOf(total)}</span>` +
+          (discounted ? `<span class="discount-tag">-${Math.round(selected.discount_percent)}% OFF</span>` : "") +
+          `<img src="/img/pixel.png" style="width:20px;height:20px" alt="">${total.toLocaleString()} PIXELS` +
+          (discounted ? `<span class="price-was">${wasTotal.toLocaleString()} PIXELS</span>` : "") +
+          `<span class="price-hours">${hoursOf(total)}</span>` +
           (quantity > 1 ? ` <span class="price-hours">(${Number(selected.price).toLocaleString()} × ${quantity})</span>` : "");
         $("detail-price").classList.toggle("cant", !afford);
         // Signed-out visitor: there's no wallet to check affordability against,

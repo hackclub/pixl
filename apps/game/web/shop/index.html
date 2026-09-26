@@ -196,6 +196,24 @@
       }
       .price img { width: 16px; height: 16px; }
       .price.cant { color: var(--bad); }
+      .price-was {
+        font-family: var(--sans);
+        font-weight: 500;
+        font-size: 11px;
+        color: var(--faint);
+        text-decoration: line-through;
+        margin-left: 5px;
+      }
+      .discount-tag {
+        align-self: flex-start;
+        background: var(--bad);
+        color: var(--btn-ink);
+        font-family: var(--pixel);
+        font-size: 9px;
+        letter-spacing: 0.5px;
+        padding: 2px 5px;
+        border-radius: 0;
+      }
       .price-hours {
         font-family: var(--sans);
         font-size: 10.5px;
@@ -506,6 +524,18 @@
         return item.config_options ? Number(item.config_options.base_price) : Number(item.price);
       }
 
+      // The server only sends original_price/original_base_price when an item
+      // has an active discount_percent (see applyDiscount in
+      // apps/server/src/routes/shop.ts) - their presence IS the "on sale" flag.
+      function isDiscounted(item) {
+        return item.original_price !== undefined && item.original_price !== null;
+      }
+      function originalBasePrice(item) {
+        return item.config_options
+          ? Number(item.config_options.original_base_price ?? item.original_price ?? 0)
+          : Number(item.original_price ?? 0);
+      }
+
       // Every price is set at the payout floor. Shows a range: hours needed at
       // that floor rate, then hours needed at the ceiling - your lifetime
       // Restoration Energy puts you somewhere between the two.
@@ -709,7 +739,10 @@
             : isPending(item)
             ? `<div class="price-wrap"><span class="price cant">NOT AVAILABLE</span><span class="price-hours">${item.name === "Food Grant" ? "Available soon" : "Coming soon to this region"}</span></div>`
             : `<div class="price-wrap">
-          <span class="price ${canAfford(item) ? "" : "cant"}"><img src="/img/pixel.png" alt="">${item.config_options ? `FROM ${basePrice(item).toLocaleString()}` : basePrice(item).toLocaleString()} PX</span>
+          ${isDiscounted(item) ? `<span class="discount-tag">-${Math.round(item.discount_percent)}% OFF</span>` : ""}
+          <span class="price ${canAfford(item) ? "" : "cant"}"><img src="/img/pixel.png" alt="">${item.config_options ? `FROM ${basePrice(item).toLocaleString()}` : basePrice(item).toLocaleString()} PX${
+            isDiscounted(item) ? `<span class="price-was">${originalBasePrice(item).toLocaleString()} PX</span>` : ""
+          }</span>
           <span class="price-hours">${hoursOf(basePrice(item))}</span>
         </div>
         <span class="dot ${canAfford(item) ? "on" : "off"}" title="${canAfford(item) ? "You can afford this" : "Keep shipping!"}"></span>`
