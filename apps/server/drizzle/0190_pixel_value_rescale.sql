@@ -1,3 +1,7 @@
+-- ⚠️  This migration turned out to miss three more pixel-bearing columns -
+-- see 0194_pixel_value_rescale_missed_columns.sql for what and why. Run that
+-- one too if you're using this file as a template for a future rescale.
+--
 -- Rescales the pixel economy from pixelValueUsd $0.07 -> $0.10 (see
 -- packages/config/pixl.json). $0.07 meant $4.00-$6.00/hr (base-cap) converted
 -- to 57.14-85.71 px/hr - never a whole number, so every payout's rounding to
