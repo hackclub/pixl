@@ -702,6 +702,8 @@
             ? `<div class="price-wrap"><span class="price cant">🔒 LOCKED</span><span class="price-hours">${
                 item.lock_note
                   ? Pixl.esc(item.lock_note)
+                  : item.beacon_locked
+                  ? "Get a project nominated as a Beacon to unlock this"
                   : `Ship ${item.unlock_trials && item.unlock_trials.length ? item.unlock_trials.map((t) => `“${Pixl.esc(t)}”`).join(" or ") : "the required Trial"} to unlock this`
               }</span></div>`
             : isPending(item)

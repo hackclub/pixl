@@ -25,6 +25,10 @@ type ShopRow = {
   created_by: string;
   region?: string | null;
   unlock_xp?: number | null;
+  unlock_trial_ids?: unknown[] | null;
+  manual_locked?: boolean | null;
+  lock_note?: string | null;
+  beacon_locked?: boolean | null;
 };
 
 type WebhookPayload = {
@@ -97,6 +101,23 @@ function diffLines(oldRow: ShopRow, newRow: ShopRow): string[] {
   }
   if ((oldRow.position ?? 0) !== (newRow.position ?? 0)) {
     lines.push(`• position: ${oldRow.position ?? 0} → ${newRow.position ?? 0}`);
+  }
+  if (!!oldRow.manual_locked !== !!newRow.manual_locked) {
+    lines.push(
+      newRow.manual_locked
+        ? `• 🔒 manually locked${newRow.lock_note ? ` - _${short(newRow.lock_note, 100)}_` : ""}`
+        : "• 🔓 manual lock removed",
+    );
+  }
+  if (!!oldRow.beacon_locked !== !!newRow.beacon_locked) {
+    lines.push(
+      newRow.beacon_locked
+        ? "• 🔒 Beacon-locked (needs an unspent Beacon-project unlock)"
+        : "• 🔓 Beacon lock removed",
+    );
+  }
+  if (JSON.stringify(oldRow.unlock_trial_ids ?? []) !== JSON.stringify(newRow.unlock_trial_ids ?? [])) {
+    lines.push("• Trial gate changed");
   }
 
   return lines;

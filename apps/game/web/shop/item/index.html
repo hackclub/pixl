@@ -705,6 +705,9 @@
           if (selected.lock_note) {
             $("afford-label").textContent = selected.lock_note;
             say(selected.lock_note.toUpperCase(), 5000);
+          } else if (selected.beacon_locked) {
+            $("afford-label").textContent = "Get a project nominated as a Beacon to unlock this.";
+            say("GET A BEACON NOMINATION TO UNLOCK THIS.", 5000);
           } else {
             const trials = (selected.unlock_trials || []).map((t) => `"${t}"`).join(" or ");
             $("afford-label").textContent = `Ship the ${trials || "required"} Trial to unlock this.`;
