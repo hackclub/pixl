@@ -11,6 +11,7 @@ import {
   listCollaboratorsForProject,
   lifetimeRe,
   getFirstPassAuditNote,
+  listProjectNotes,
 } from "@/lib/db";
 import { parseAuditNote } from "@/lib/auditNote";
 import { fetchCommits, attachCommitStats } from "@/lib/commits";
@@ -43,6 +44,7 @@ import { hackatimeCutoffUnix, hackatimeCutoffLabel } from "@/app/_generated/conf
 import { PendingButton } from "@/app/_components/PendingButton";
 import { ReviewDetailTabs } from "@/app/_components/ReviewDetailTabs";
 import { ReviewHeartbeat } from "@/app/_components/ReviewHeartbeat";
+import { ProjectNotes } from "@/app/_components/ProjectNotes";
 import { LevelBadge, TypeBadge, ShipBadges, StatusBadge, BeaconBadge, FundingBadge } from "@/app/_components/ProjectBadges";
 import { slackHandle } from "@/lib/slack";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -120,10 +122,11 @@ export default async function ReviewDetail({
   // getProject and listCollaboratorsForProject don't depend on each other
   // (the latter only needs projectId), so they run together instead of one
   // after the other.
-  const [data, allCollaborators, blackoutEntry] = await Promise.all([
+  const [data, allCollaborators, blackoutEntry, notes] = await Promise.all([
     getProject(projectId),
     listCollaboratorsForProject(projectId),
     getBlackoutEntry(projectId),
+    listProjectNotes(projectId),
   ]);
   if (!data) notFound();
   const { project: p, journals, reviewAudits } = data;
@@ -937,6 +940,8 @@ export default async function ReviewDetail({
                 logged.
               </Card>
             )}
+
+            <ProjectNotes projectId={p.id} notes={notes} />
 
             <Tabs defaultValue="review" className="gap-3">
               <TabsList className="w-full">

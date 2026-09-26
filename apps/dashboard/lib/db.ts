@@ -1066,6 +1066,31 @@ export async function listReviewAuditsForProject(projectId: number): Promise<Rev
   return (data ?? []).map((r) => ({ ...(r as ReviewAuditRow), player_name: "", project_name: "" }));
 }
 
+export interface ProjectNoteRow {
+  id: number;
+  project_id: number;
+  author: string;
+  body: string;
+  created_at: string;
+}
+
+// Free-form internal notes reviewers leave on a project - not tied to a
+// verdict, just context for whoever looks at it next (see
+// 0195_project_notes.sql). Shown on both the project detail page and the
+// review page.
+export async function listProjectNotes(projectId: number): Promise<ProjectNoteRow[]> {
+  const { data, error } = await db
+    .from("project_notes")
+    .select("*")
+    .eq("project_id", projectId)
+    .order("created_at", { ascending: false });
+  if (error) {
+    console.error("listProjectNotes", error.message);
+    return [];
+  }
+  return (data ?? []) as ProjectNoteRow[];
+}
+
 // The first pass's structured audit note for one project, so the final
 // reviewer's form can start from what the first reviewer already wrote
 // instead of a blank page. Null when there isn't one (a re-reviewed project,

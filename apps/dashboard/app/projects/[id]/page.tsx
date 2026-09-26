@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePerm, canView } from "@/lib/guard";
-import { getProject, listCollaboratorsForProject } from "@/lib/db";
+import { getProject, listCollaboratorsForProject, listProjectNotes } from "@/lib/db";
 import { fetchCommits } from "@/lib/commits";
 import {
   reReviewProject,
@@ -22,6 +22,7 @@ import {
   StatusBadge,
 } from "@/app/_components/ProjectBadges";
 import { CommitList } from "@/app/_components/CommitList";
+import { ProjectNotes } from "@/app/_components/ProjectNotes";
 import { PendingButton } from "@/app/_components/PendingButton";
 import { renderMarkdown } from "@/lib/markdown";
 import { isSafeUrl } from "@/lib/safeUrl";
@@ -50,6 +51,7 @@ export default async function ProjectPage({
   const data = await getProject(projectId);
   if (!data) notFound();
   const { project, journals, verdicts } = data;
+  const notes = await listProjectNotes(projectId);
   // The Trial this project was shipped for, if the player flagged one at ship
   // time (joined in getProject). null = they built their own idea.
   const trial = (
@@ -608,6 +610,8 @@ export default async function ProjectPage({
           </div>
         ))}
       </Card>
+
+      <ProjectNotes projectId={project.id} notes={notes} className="mb-8" />
 
       <h2 className="text-lg font-semibold text-foreground tracking-tight mb-3">
         Review history

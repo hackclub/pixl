@@ -1724,6 +1724,23 @@ export async function reReviewProject(formData: FormData): Promise<void> {
   revalidatePath("/", "layout");
 }
 
+// A free-form internal note on a project, unrelated to any verdict - just
+// context for whoever looks at this project next (see
+// drizzle/0195_project_notes.sql). Any reviewer can add one, on any project,
+// at any review stage.
+export async function addProjectNote(formData: FormData): Promise<void> {
+  const access = await requirePerm("review");
+  const projectId = Number(formData.get("projectId") ?? 0);
+  const body = String(formData.get("body") ?? "").trim().slice(0, 2000);
+  if (!projectId || !body) return;
+  const { error } = await db
+    .from("project_notes")
+    .insert({ project_id: projectId, author: actorName(access), body });
+  if (error) console.error("addProjectNote", error.message);
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath(`/review/${projectId}`);
+}
+
 // A final reviewer correcting the player-facing title/description/image ,
 // these are the exact same columns the player's own project page and the
 // YSWS/Airtable export CSV read live, so this is a fix everywhere with no
