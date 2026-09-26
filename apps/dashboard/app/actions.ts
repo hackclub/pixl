@@ -4662,8 +4662,10 @@ export async function markOrderCredited(formData: FormData): Promise<void> {
 }
 
 // Flat pixel payout to whoever ships an order - see shipOrder below and
-// creditFulfillerPixels in lib/db.ts.
-const FULFILLMENT_PAYOUT_PIXELS = 3;
+// creditFulfillerPixels in lib/db.ts. Was 3px ($0.21) at the old $0.07/px
+// rate; rescaled to keep the same $0.20ish intent after the $0.10 rescale
+// (see 0188_pixel_value_rescale.sql).
+const FULFILLMENT_PAYOUT_PIXELS = 2;
 
 // The order shipped: credited -> shipped with a tracking number. The number is
 // DM'd to the buyer by Pixo and also lands as an in-game notification. Only the

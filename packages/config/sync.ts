@@ -16,8 +16,13 @@
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = new URL("../../", import.meta.url).pathname;
+// fileURLToPath (not URL.pathname): pathname keeps a leading "/" before the
+// drive letter and %-encodes reserved characters (a space in this directory
+// name becomes %20) - neither of which readFile/writeFile accept as a literal
+// Windows path.
+const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const SOURCE = `${ROOT}packages/config/pixl.json`;
 
 const NOTE = "GENERATED from packages/config/pixl.json by `bun run config:sync` - do not edit";

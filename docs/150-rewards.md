@@ -14,17 +14,15 @@ Every approved hour pays at your current rate, which starts at {{basePx}}/hr and
 
 Finish a trial and you choose between its prize (plus pixels for hours past the minimum) or the whole thing as raw pixels. Either way an approved trial ship adds {{trialBonusRe}} bonus RE to your profile, which pushes your level along faster.
 
-## Why the totals don't divide out evenly
+## Why the totals don't always divide out evenly
 
 Pixels only come in whole numbers, nobody gets paid 57.14 of one. So every payout is rounded to the nearest whole pixel from the exact dollar amount you earned.
 
-At the very start ({{baseUsd}}/hr), one hour is worth {{baseExactPx}} px exactly, but you're paid **{{basePx}}** since it rounds down. At the {{maxUsd}}/hr cap, one hour is worth {{maxExactPx}} px exactly, and you're paid **{{maxPx}}** since it rounds up. Same rule both times, round to the nearest whole pixel, it just lands on opposite sides depending on where the decimal falls.
+At the very start ({{baseUsd}}/hr) and at the {{maxUsd}}/hr cap, that division comes out exact: one hour is worth **{{baseExactPx}} px** and **{{maxExactPx}} px** respectively, with nothing to round. In between, while your rate is still climbing with Restoration Energy, the exact rate for a given hour usually isn't a whole number of pixels, so it rounds to the nearest one - at most half a pixel either way.
 
-In other words, a one-hour project at the starting rate isn't actually paid {{baseUsd}}/hour, it's paid **{{baseRealUsd}}/hour** ({{basePx}} × {{pixelValueUsd}}). At the cap it flips the other way: not exactly {{maxUsd}}/hour but **{{maxRealUsd}}/hour** ({{maxPx}} × {{pixelValueUsd}}). Longer projects land closer to the sticker rate since the same rounding is spread over more hours.
+That's also why dividing a rounded total back into "pixels per dollar" can show a slightly different number if you check it mid-ramp: the underlying rate is always **{{pixelValueUsd}}** per pixel ({{pxPerDollar}} px per dollar), it never moves. What changes is only the rounded whole number you actually see for that particular project, never the rate itself. Once you're at the floor or the cap - where most players spend most of their time - there's no rounding drift left at all.
 
-That's also why dividing a rounded total back into "pixels per dollar" gives a slightly different number depending on which project you check: the underlying rate is always **{{pixelValueUsd}}** per pixel ({{pxPerDollar}} px per dollar), it never moves. What changes is only the rounded whole number you actually see, never the rate itself.
-
-Rounding this way means you can lose or gain a fraction of a pixel on any single project, at most half a pixel's worth, but it's never more than a cent or two, and it goes both ways. It is not a hidden cut and it does not favor higher rates over lower ones.
+Rounding this way means you can lose or gain at most a fraction of a pixel on any single mid-ramp project, never more than a cent or two, and it goes both ways. It is not a hidden cut and it does not favor higher rates over lower ones.
 
 ## What you can spend them on
 
