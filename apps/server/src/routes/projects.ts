@@ -975,9 +975,14 @@ router.post("/api/projects/:id/trial-reward", async (req, res) => {
     return res.json({ ok: true, choice, pixels: heldPx });
   }
 
-  // The prize itself: a $0 order, so it walks the same fulfilment pipeline as
-  // anything bought with pixels. Prefers the Trial's linked catalog item, falls
-  // back to its free-text reward as a custom order ops fulfils by hand.
+  // The prize itself walks the same fulfilment pipeline as anything bought
+  // with pixels - its price is prizePx, the pixels the player forfeits (never
+  // credited) by keeping the item instead of taking the "pixels" choice
+  // above, not 0. Fulfillment's budget math and the shop economy summary
+  // both read this column directly, so a literal 0 here would make the
+  // physical prize look free to source and undercount what was really
+  // redeemed. Prefers the Trial's linked catalog item, falls back to its
+  // free-text reward as a custom order ops fulfils by hand.
   let itemId: number | null = null;
   let itemName = (trial.reward as string) || (trial.name as string);
   if (trial.prize_shop_item_id) {
@@ -998,7 +1003,7 @@ router.post("/api/projects/:id/trial-reward", async (req, res) => {
       item_id: itemId,
       item_name: itemName,
       option: `Trial: ${trial.name}`,
-      price: 0,
+      price: prizePx,
       status: "pending",
     })
     .select("id")
