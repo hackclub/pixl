@@ -2427,6 +2427,13 @@ export interface ShopOrderRow {
   flag_note: string;
   player_name: string;
   player_slack: string | null;
+  // The item's own price_source_url (see shop_items, resolved via item_id) at
+  // the time this order was listed - the last URL a fulfiller actually bought
+  // this item/region from, kept fresh by markOrderCredited/
+  // updateOrderFulfillmentInfo in app/actions.ts so the next fulfiller has a
+  // known-working link instead of hunting for one. Only populated by
+  // listShopOrders (the fulfillment page's query); null elsewhere.
+  item_source_url: string | null;
 }
 
 // Shop orders players placed with pixels, newest first. Player name + Slack are
@@ -2450,9 +2457,17 @@ export async function listShopOrders(status?: string, limit = 500): Promise<Shop
   const names = new Map(
     (users.data ?? []).map((u) => [u.id as string, u as { display_name: string; real_name: string; slack_id: string | null }]),
   );
+  const itemIds = [...new Set(rows.map((r) => r.item_id).filter((id): id is number => id != null))];
+  const items = itemIds.length
+    ? await db.from("shop_items").select("id, price_source_url").in("id", itemIds)
+    : { data: [] };
+  const sourceUrls = new Map(
+    (items.data ?? []).map((i) => [i.id as number, (i.price_source_url as string | null) ?? null]),
+  );
   for (const r of rows) {
     r.player_name = playerLabel(names.get(r.user_id), r.user_id);
     r.player_slack = names.get(r.user_id)?.slack_id ?? null;
+    r.item_source_url = r.item_id != null ? (sourceUrls.get(r.item_id) ?? null) : null;
   }
   return rows;
 }
@@ -2475,6 +2490,7 @@ export async function getShopOrder(id: number): Promise<ShopOrderRow | null> {
     .maybeSingle();
   row.player_name = playerLabel(user as { display_name: string; real_name: string; slack_id: string | null } | null, row.user_id);
   row.player_slack = user?.slack_id ?? null;
+  row.item_source_url = null;
   return row;
 }
 
@@ -2551,6 +2567,7 @@ export async function listOrdersForFulfiller(slackId: string, limit = 100): Prom
   for (const r of rows) {
     r.player_name = playerLabel(names.get(r.user_id), r.user_id);
     r.player_slack = names.get(r.user_id)?.slack_id ?? null;
+    r.item_source_url = null;
   }
   return rows;
 }

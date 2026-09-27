@@ -4925,13 +4925,25 @@ export async function markOrderCredited(formData: FormData): Promise<void> {
   // What it actually cost, in real dollars - not just the pixel price /
   // derived budget ceiling.
   const actualCostUsd = Math.round(Number(formData.get("actualCostUsd") ?? NaN) * 100) / 100;
-  if (!hcbLink || !isSafeUrl(hcbLink) || !Number.isFinite(actualCostUsd) || actualCostUsd < 0) {
+  // Optional: where this was actually bought from. Kept on the item itself
+  // (shop_items.price_source_url, via item_id) rather than just this order,
+  // so the next fulfiller sourcing the same item/region sees a link that's
+  // known to actually work instead of a stale one - see the fulfillment
+  // page's "keep replacing the URLs as we fulfil" note.
+  const sourceUrl = String(formData.get("sourceUrl") ?? "").trim().slice(0, 500);
+  if (
+    !hcbLink ||
+    !isSafeUrl(hcbLink) ||
+    !Number.isFinite(actualCostUsd) ||
+    actualCostUsd < 0 ||
+    (sourceUrl && !isSafeUrl(sourceUrl))
+  ) {
     revalidatePath("/fulfillment");
     return;
   }
   const { data: order } = await db
     .from("shop_orders")
-    .select("status, claimed_by_slack")
+    .select("status, claimed_by_slack, item_id")
     .eq("id", id)
     .maybeSingle();
   if (!order || order.status !== "ordered" || !ownsOrder(access, order.claimed_by_slack)) {
@@ -4949,6 +4961,13 @@ export async function markOrderCredited(formData: FormData): Promise<void> {
     .eq("id", id)
     .eq("status", "ordered");
   if (error) throw new Error(error.message);
+  if (sourceUrl && order.item_id != null) {
+    const { error: sourceErr } = await db
+      .from("shop_items")
+      .update({ price_source_url: sourceUrl })
+      .eq("id", order.item_id);
+    if (sourceErr) console.error("markOrderCredited (source url)", sourceErr.message);
+  }
   await logOrderAction(id, "order_credited", "HCB credited the card", actorName(access));
   revalidatePath("/fulfillment");
 }
@@ -5073,13 +5092,22 @@ export async function updateOrderFulfillmentInfo(formData: FormData): Promise<vo
   const hcbLink = String(formData.get("hcbLink") ?? "").trim().slice(0, 300);
   const actualCostUsd = Math.round(Number(formData.get("actualCostUsd") ?? NaN) * 100) / 100;
   const tracking = String(formData.get("tracking") ?? "").trim().slice(0, 120);
-  if (!hcbLink || !isSafeUrl(hcbLink) || !Number.isFinite(actualCostUsd) || actualCostUsd < 0) {
+  // Same optional item-source-url handling as markOrderCredited above - this
+  // is the escape hatch for fixing/updating it after the fact too.
+  const sourceUrl = String(formData.get("sourceUrl") ?? "").trim().slice(0, 500);
+  if (
+    !hcbLink ||
+    !isSafeUrl(hcbLink) ||
+    !Number.isFinite(actualCostUsd) ||
+    actualCostUsd < 0 ||
+    (sourceUrl && !isSafeUrl(sourceUrl))
+  ) {
     revalidatePath("/fulfillment");
     return;
   }
   const { data: order } = await db
     .from("shop_orders")
-    .select("hcb_link, actual_cost_usd, tracking, status")
+    .select("hcb_link, actual_cost_usd, tracking, status, item_id")
     .eq("id", id)
     .maybeSingle();
   if (!order || order.status === "pending") {
@@ -5091,10 +5119,17 @@ export async function updateOrderFulfillmentInfo(formData: FormData): Promise<vo
     .update({ hcb_link: hcbLink, actual_cost_usd: actualCostUsd, tracking })
     .eq("id", id);
   if (error) throw new Error(error.message);
+  if (sourceUrl && order.item_id != null) {
+    const { error: sourceErr } = await db
+      .from("shop_items")
+      .update({ price_source_url: sourceUrl })
+      .eq("id", order.item_id);
+    if (sourceErr) console.error("updateOrderFulfillmentInfo (source url)", sourceErr.message);
+  }
   await logOrderAction(
     id,
     "order_info_corrected",
-    `HCB ${order.hcb_link || "(none)"} → ${hcbLink} , cost $${order.actual_cost_usd ?? "?"} → $${actualCostUsd} , tracking "${order.tracking || "(none)"}" → "${tracking || "(none)"}"`,
+    `HCB ${order.hcb_link || "(none)"} → ${hcbLink} , cost $${order.actual_cost_usd ?? "?"} → $${actualCostUsd} , tracking "${order.tracking || "(none)"}" → "${tracking || "(none)"}"${sourceUrl ? ` , source url → ${sourceUrl}` : ""}`,
     actorName(access),
   );
   revalidatePath("/fulfillment");

@@ -491,6 +491,23 @@ function OrderCard({
               </Link>
             </div>
           )}
+          {o.item_source_url && (
+            <div className="text-xs mt-1">
+              <span className="text-muted-foreground">Last bought from: </span>
+              {isSafeUrl(o.item_source_url) ? (
+                <a
+                  href={o.item_source_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-brand hover:underline break-all"
+                >
+                  {o.item_source_url}
+                </a>
+              ) : (
+                <span className="break-all">{o.item_source_url}</span>
+              )}
+            </div>
+          )}
           {o.claimed_by && o.status !== "pending" && (
             <div className="text-xs text-muted-foreground mt-1">
               {o.status === "cancelled"
@@ -570,7 +587,7 @@ function OrderCard({
 // the rest of updateOrderFulfillmentInfo's gate.
 function EditFulfillmentInfo({ order: o }: { order: ShopOrderRow }) {
   return (
-    <Disclosure summary="Edit HCB link / cost / tracking">
+    <Disclosure summary="Edit HCB link / cost / tracking / source URL">
       <form action={updateOrderFulfillmentInfo} className="flex items-end gap-2 flex-wrap pt-2">
         <input type="hidden" name="id" value={o.id} />
         <label className="block flex-1 min-w-64">
@@ -599,6 +616,19 @@ function EditFulfillmentInfo({ order: o }: { order: ShopOrderRow }) {
         <label className="block flex-1 min-w-48">
           <span className="block text-xs font-medium text-muted-foreground mb-1">Tracking</span>
           <Input name="tracking" maxLength={120} defaultValue={o.tracking} className="w-full text-sm" />
+        </label>
+        <label className="block flex-1 min-w-64">
+          <span className="block text-xs font-medium text-muted-foreground mb-1">
+            Bought from (saved onto the item for the next fulfiller)
+          </span>
+          <Input
+            name="sourceUrl"
+            type="url"
+            maxLength={500}
+            defaultValue={o.item_source_url ?? ""}
+            placeholder="https://…"
+            className="w-full text-sm"
+          />
         </label>
         <PendingButton variant="outline" pendingText="Saving…">
           Save
@@ -755,6 +785,19 @@ function OrderActions({
               step="0.01"
               required
               placeholder={usdBudget(o.price)}
+              className="w-full text-sm"
+            />
+          </label>
+          <label className="block flex-1 min-w-0">
+            <span className="block text-xs font-medium text-muted-foreground mb-1">
+              Bought from (optional , saved onto the item for the next fulfiller)
+            </span>
+            <Input
+              name="sourceUrl"
+              type="url"
+              maxLength={500}
+              defaultValue={o.item_source_url ?? ""}
+              placeholder="https://…"
               className="w-full text-sm"
             />
           </label>
