@@ -757,7 +757,11 @@ export function ReviewForm({
     }
     if (notesRef.current) notesRef.current.required = required;
 
-    if (deflated && !deflationReasonRef.current?.value.trim()) {
+    // Hours are only ever actually credited on an approve - needs_changes
+    // sends it back with nothing paid out, and ban never pays out either, so
+    // neither should demand an explanation for a lowered-hours number that's
+    // about to go unused.
+    if (verdict === "approved" && deflated && !deflationReasonRef.current?.value.trim()) {
       setStep(2);
       setStepError("Say why you're lowering the hours before deciding.");
       return false;

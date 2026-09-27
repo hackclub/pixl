@@ -964,7 +964,11 @@ export async function reviewProject(formData: FormData): Promise<void> {
     redirect(
       `${back}?error=${encodeURIComponent(`Describe concrete technical features you checked (min ${TECHNICAL_FEATURES_MIN} characters).`)}`,
     );
-  const deflated = approvedHours != null && approvedHours < claimedHours;
+  // Hours are only ever actually credited on an approve - needs_changes and
+  // ban never pay out, so a lowered-hours number sitting in the form when the
+  // reviewer picks one of those shouldn't need an explanation either (matches
+  // the same verdict-gated relaxation as auditSectionsRequired above).
+  const deflated = verdict === "approved" && approvedHours != null && approvedHours < claimedHours;
   const deflationReason = String(formData.get("deflationReason") ?? "").trim();
   if (deflated && !deflationReason)
     redirect(`${back}?error=${encodeURIComponent("Explain why the credited hours were lowered.")}`);
