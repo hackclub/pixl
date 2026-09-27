@@ -34,6 +34,7 @@ import { rateLimit } from "./rateLimit.js";
 import { enforceActiveBans } from "./moderation.js";
 import { enforceSessionRevocation } from "./auth/revocation.js";
 import { attachWebSocketServer } from "./ws/gameServer.js";
+import { startLittleGuyForwarder } from "./littleGuy.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -149,3 +150,5 @@ const HOST = "0.0.0.0";
 httpServer.listen(PORT, HOST, () => {
   console.log(`Server listening on ${HOST}:${PORT}`);
 });
+
+void startLittleGuyForwarder();
