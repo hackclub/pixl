@@ -1394,12 +1394,48 @@
       // this can no longer drift from it. Needed client-side so the UI can
       // explain *why* a linked project reads as 0h instead of just insisting
       // you link one.
-      const HT_CUTOFF_MS = new Date(Pixl.config.hackatimeCutoff).getTime();
-      const HT_CUTOFF_LABEL = new Intl.DateTimeFormat("en-US", {
-        month: "short",
-        day: "numeric",
-        timeZone: "UTC",
-      }).format(HT_CUTOFF_MS);
+      const HT_DEFAULT_CUTOFF_MS = new Date(Pixl.config.hackatimeCutoff).getTime();
+      const cutoffLabel = (ms) =>
+        new Intl.DateTimeFormat("en-US", {
+          month: "short",
+          day: "numeric",
+          timeZone: "UTC",
+        }).format(ms);
+      const HT_DEFAULT_CUTOFF_LABEL = cutoffLabel(HT_DEFAULT_CUTOFF_MS);
+      // Reassigned by useProjectCutoff() when a reviewer extended the open
+      // project's cutoff, so every "from Jul 18" line and count follows it.
+      let HT_CUTOFF_MS = HT_DEFAULT_CUTOFF_MS;
+      let HT_CUTOFF_LABEL = HT_DEFAULT_CUTOFF_LABEL;
+      const statsByCutoff = new Map();
+
+      function htStatsPath(cutoffMs) {
+        return cutoffMs === HT_DEFAULT_CUTOFF_MS
+          ? "/api/hackatime/stats"
+          : `/api/hackatime/stats?since=${Math.floor(cutoffMs / 1000)}`;
+      }
+
+      // A project with hours_extended_since counts Hackatime time from that
+      // earlier date (apps/server's projectCutoffUnix), so its page swaps in
+      // stats computed from there. The project page is its own load, so
+      // swapping the page-wide `stats` here doesn't leak into the list.
+      async function useProjectCutoff(p) {
+        const ms = p && p.hours_extended_since ? new Date(p.hours_extended_since).getTime() : NaN;
+        const cutoffMs = Number.isFinite(ms) && ms < HT_DEFAULT_CUTOFF_MS ? ms : HT_DEFAULT_CUTOFF_MS;
+        if (!statsByCutoff.has(HT_DEFAULT_CUTOFF_MS) && stats)
+          statsByCutoff.set(HT_DEFAULT_CUTOFF_MS, stats);
+        if (!statsByCutoff.has(cutoffMs)) {
+          try {
+            const d = await Pixl.api(htStatsPath(cutoffMs));
+            if (d.stats) statsByCutoff.set(cutoffMs, d.stats);
+          } catch {}
+        }
+        // Couldn't fetch the extended numbers: stay on the default cutoff
+        // rather than label default-cutoff hours with the extended date.
+        if (!statsByCutoff.has(cutoffMs)) return;
+        stats = statsByCutoff.get(cutoffMs);
+        HT_CUTOFF_MS = cutoffMs;
+        HT_CUTOFF_LABEL = cutoffLabel(cutoffMs);
+      }
 
       // <ship-checklist>
       function checkedHtBoxes() {
@@ -1502,8 +1538,9 @@
         const btn = $("f-ht-refresh");
         if (btn) btn.disabled = true;
         try {
-          const d = await Pixl.api("/api/hackatime/stats");
+          const d = await Pixl.api(htStatsPath(HT_CUTOFF_MS));
           stats = d.stats || stats;
+          statsByCutoff.set(HT_CUTOFF_MS, stats);
           const pick = $("f-ht-pick");
           if (pick) {
             const linked = new Set(checkedHtBoxes().map((c) => c.value));
@@ -2538,6 +2575,7 @@
         // Collaborators are view/log-hours only, they get a trimmed read-only
         // page instead of the owner's full editor.
         if (p.is_owner === false) return renderCollabProjectView(p);
+        await useProjectCutoff(p);
         const [label, cls] = statusInfo(p);
         const inReview = p.status === "shipped" || p.status === "fraud_review" || p.status === "second_review";
         const canShip =
@@ -2564,7 +2602,7 @@
       <div class="proj-hero" id="p-hero">${p.image_url ? `<img src="${Pixl.esc(p.image_url)}" alt="">` : `<span class="faint" style="font-size:13px">No thumbnail yet</span>`}</div>
       ${p.status === "needs_changes" && p.review_note ? `<div class="note-strip" style="margin-bottom:14px">REVIEWER: ${Pixl.esc(p.review_note)}</div>` : ""}
       ${p.rejected_at ? `<div class="note-strip" style="margin-bottom:14px">REJECTED${p.reject_reason ? ": " + Pixl.esc(p.reject_reason) : ""}, fix it up and ship again.</div>` : ""}
-      ${p.hours_extended_since ? `<div class="note-strip teal" style="margin-bottom:14px">Your hours cutoff was extended: we're counting your coding time from ${Pixl.esc(new Date(p.hours_extended_since).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }))} onward instead of the usual ${HT_CUTOFF_LABEL}.</div>` : ""}
+      ${p.hours_extended_since ? `<div class="note-strip teal" style="margin-bottom:14px">Your hours cutoff was extended: we're counting your coding time from ${Pixl.esc(new Date(p.hours_extended_since).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" }))} onward instead of the usual ${HT_DEFAULT_CUTOFF_LABEL}.</div>` : ""}
       ${trialRewardHtml(p)}
       ${inReview ? "" : trialBriefHtml(trialForProject(p))}
       <div class="section-h" style="display:flex;align-items:center;gap:12px">

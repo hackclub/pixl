@@ -4,7 +4,7 @@ import { supabase } from "../db/client.js";
 import { addNotification } from "./notifications.js";
 import { findAllInYswsArchive } from "../ysws/archive.js";
 import { buildDoubleDip, type TeamMember } from "../ysws/doubleDip.js";
-import { fetchHackatimeStats, fetchTrackedSecondsSince } from "../hackatime/api.js";
+import { fetchHackatimeStats, fetchTrackedSecondsSince, HACKATIME_CUTOFF } from "../hackatime/api.js";
 import { postShipToSlack } from "../shipNotify.js";
 import { shipEligibilityBlock, type HcaStateRow } from "../hcaEligibility.js";
 import { normalizeProjectUrl } from "./projectUrlSafety.js";
@@ -13,6 +13,13 @@ import { urlAlive } from "./urlLiveness.js";
 import { recordShipForOperations } from "../operations/service.js";
 
 const router = Router();
+
+// The date a project's Hackatime hours count from: the event cutoff, or the
+// earlier date a reviewer extended it to (projects.hours_extended_since).
+function projectCutoffUnix(extendedSince: string | null | undefined): number {
+  const ms = extendedSince ? new Date(extendedSince).getTime() : NaN;
+  return Number.isFinite(ms) && ms < HACKATIME_CUTOFF * 1000 ? Math.floor(ms / 1000) : HACKATIME_CUTOFF;
+}
 
 // Explicit allowlist of what a raw `projects` row hands back to its own
 // owner (or an accepted collaborator) - list/create/update/ship/unship all
@@ -634,8 +641,16 @@ router.post("/api/projects/:id/ship", async (req, res) => {
   if (!isHardware && !stats.connected && stats.error)
     return res.status(502).json({ ok: false, error: "hackatime_unavailable" });
   const linked = (project.hackatime_projects as string[]) ?? [];
-  // Only hours logged from the cutoff onward count , see HACKATIME_CUTOFF.
-  const htSeconds = await fetchTrackedSecondsSince(ownerSlackId, htToken, linked);
+  // Only hours logged from the cutoff onward count , see HACKATIME_CUTOFF -
+  // unless a reviewer extended this project's cutoff (dashboard's
+  // extendHoursCutoff), in which case recomputing from the default here would
+  // both block the ship and overwrite the extended hackatime_seconds below.
+  const htSeconds = await fetchTrackedSecondsSince(
+    ownerSlackId,
+    htToken,
+    linked,
+    projectCutoffUnix(project.hours_extended_since as string | null),
+  );
   // Hardware also counts journalled hours toward the tracked total, so journals
   // alone can carry a hardware ship; the total is journal + Hackatime. Software
   // stays Hackatime-only for its floor.
@@ -1102,7 +1117,7 @@ router.get("/api/projects/:id/hours", async (req, res) => {
 
   const { data: project } = await supabase
     .from("projects")
-    .select("user_id, hackatime_projects")
+    .select("user_id, hackatime_projects, hours_extended_since")
     .eq("id", id)
     .single();
   if (!project) return res.status(404).json({ ok: false });
@@ -1140,7 +1155,14 @@ router.get("/api/projects/:id/hours", async (req, res) => {
   }
 
   const [hackatimeSeconds, { data: jrows }] = await Promise.all([
-    fetchTrackedSecondsSince(hackatimeSlackId, hackatimeToken, linked),
+    fetchTrackedSecondsSince(
+      hackatimeSlackId,
+      hackatimeToken,
+      linked,
+      // The extension was granted on the owner's hours; collaborators keep
+      // the default cutoff for their own.
+      isOwner ? projectCutoffUnix(project.hours_extended_since as string | null) : undefined,
+    ),
     journalQuery,
   ]);
   const journalSeconds = Math.round(

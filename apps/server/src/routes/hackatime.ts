@@ -143,6 +143,15 @@ router.get("/api/hackatime/stats", async (req, res) => {
   const htToken = row?.hackatime_token ?? null;
   const slackId = row?.slack_id ?? null;
   const stats = await fetchHackatimeStats(htToken);
+  // A project whose hours cutoff a reviewer extended (projects.hours_extended_since)
+  // counts from that earlier date instead, so its page asks for ?since=<unix> to
+  // show the numbers it will actually be credited. Display-only (ship re-reads
+  // the stored date itself), and only ever earlier than the event cutoff.
+  const sinceRaw = Number(req.query.since);
+  const since =
+    Number.isFinite(sinceRaw) && sinceRaw > 0 && sinceRaw < HACKATIME_CUTOFF
+      ? Math.floor(sinceRaw)
+      : HACKATIME_CUTOFF;
   // Flag projects with any activity before the event cutoff so the picker can
   // warn "only time after the cutoff counts" before the player links one. Capped
   // to the top 40 by tracked time so a prolific account doesn't fan out into
@@ -150,7 +159,7 @@ router.get("/api/hackatime/stats", async (req, res) => {
   if (stats.connected && slackId) {
     const toCheck = [...stats.projects].sort((a, b) => b.seconds - a.seconds).slice(0, 40);
     const summaries = await Promise.all(
-      toCheck.map((p) => fetchProjectActivitySummary(slackId, htToken, p.name)),
+      toCheck.map((p) => fetchProjectActivitySummary(slackId, htToken, p.name, since)),
     );
     const byName = new Map(toCheck.map((p, i) => [p.name, summaries[i]]));
     stats.projects = stats.projects.map((p) => {
@@ -158,7 +167,7 @@ router.get("/api/hackatime/stats", async (req, res) => {
       if (!s) return p;
       return {
         ...p,
-        beforeCutoff: s.firstActivity != null && s.firstActivity < HACKATIME_CUTOFF,
+        beforeCutoff: s.firstActivity != null && s.firstActivity < since,
         secondsSinceCutoff: s.secondsSinceCutoff,
       };
     });
