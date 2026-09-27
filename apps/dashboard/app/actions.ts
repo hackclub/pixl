@@ -717,7 +717,14 @@ async function creditBeneficiary(
       .maybeSingle();
     if (claimed) {
       pxRate += REFERRAL_BOOST_PX_PER_HOUR;
-      referralNote += ` +${REFERRAL_BOOST_PX_PER_HOUR}px/hr referral boost (${referral.boosted_ships + 1}/${REFERRAL_BOOST_SHIP_CAP} ships used).`;
+      // Worded as "already included" and not just "+4px/hr referral boost"
+      // because this note is appended after "Your rate: ..." in the DM below
+      // - read on its own, a trailing "+4px/hr" reads like an additional
+      // bonus stacked on top of the rate already shown, when pxRate above
+      // already has it added in. That misreading is exactly what got
+      // reported as "math ain't mathing" (expecting rate+4 on top of a rate
+      // that already included it).
+      referralNote += ` Your rate above already includes a one-time +${REFERRAL_BOOST_PX_PER_HOUR}px/hr referral boost (${referral.boosted_ships + 1}/${REFERRAL_BOOST_SHIP_CAP} ships used).`;
     }
   }
 
