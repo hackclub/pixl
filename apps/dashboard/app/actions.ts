@@ -1372,10 +1372,18 @@ export async function reviewProject(formData: FormData): Promise<void> {
     ` this ship earned ${Math.round(shipRe)} RE` +
     (trialBonusRe > 0 ? ` (${trialBonusRe} of it a Trial bonus)` : "") +
     `, putting you at level ${levelForRe(xpBefore + shipRe)}.`;
-  if (deltaPx > 0 && !(holdForTrial && trialChoice === "item"))
+  if (deltaPx > 0 && !(holdForTrial && trialChoice === "item")) {
+    // Rounding pxRate to a whole number here while totalPx above is computed
+    // from the true unrounded rate made "rate x hours" not reconcile with the
+    // credited total (e.g. a true 48.8px/h rate displayed as "49", so 49x48
+    // looks like it should be 2352 when the real credit is round(48.8x48) =
+    // 2342) - round once to one decimal (matching the $X.XX precision below)
+    // and derive both displayed numbers from that same rounded rate so they
+    // always agree with each other.
+    const dispRate = Math.round(pxRate * 10) / 10;
     credited +=
-      ` Your rate: ${Math.round(pxRate)} px/h ($${(pxRate * config.economy.pixelValueUsd).toFixed(2)}/hr) ,${reLine}`;
-  else if (linkedTrial) credited += ` Either way,${reLine}`;
+      ` Your rate: ${dispRate} px/h ($${(dispRate * config.economy.pixelValueUsd).toFixed(2)}/hr) ,${reLine}`;
+  } else if (linkedTrial) credited += ` Either way,${reLine}`;
   if (goalNote && deltaPx > 0) credited += goalNote;
   if (referralNote && deltaPx > 0) credited += referralNote;
   if (fundingPx > 0)
@@ -1422,8 +1430,14 @@ export async function reviewProject(formData: FormData): Promise<void> {
     } else {
       cCredited = `\n\n${cPayout.totalPx} pixels credited for ${cCreditHours}h approved.`;
     }
-    if (cPayout.deltaPx > 0)
-      cCredited += ` Your rate: ${cPayout.pxRate} px/h ($${(cPayout.pxRate * config.economy.pixelValueUsd).toFixed(2)}/hr).`;
+    if (cPayout.deltaPx > 0) {
+      // Same rounded-once-and-derive-both approach as the owner's rate line
+      // above - keeps "rate x hours" reconciling with the credited total
+      // instead of showing raw float precision that may not even format
+      // consistently with the $ figure next to it.
+      const cDispRate = Math.round(cPayout.pxRate * 10) / 10;
+      cCredited += ` Your rate: ${cDispRate} px/h ($${(cDispRate * config.economy.pixelValueUsd).toFixed(2)}/hr).`;
+    }
     if (cPayout.goalNote && cPayout.deltaPx > 0) cCredited += cPayout.goalNote;
     if (cPayout.referralNote && cPayout.deltaPx > 0) cCredited += cPayout.referralNote;
     await notifyOwner(
