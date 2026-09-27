@@ -726,13 +726,17 @@ export async function nextReviewId(opts: {
   const { viewer, by, canSecondPass, isSuper, excludeId, prefer, reviewQueues } = opts;
   const kind = reviewQueues && reviewQueues !== "both" ? reviewQueues : undefined;
 
+  // A held project (hold_at set) blocks canReview for everyone, including a
+  // super admin - they'd have to release the hold first, a separate action -
+  // so it must never be what "next" jumps a reviewer onto.
   const firstPass = (await listShippedProjects(viewer, kind)).filter(
-    (p) => p.id !== excludeId && (isSuper || !p.own),
+    (p) => p.id !== excludeId && !p.hold_at && (isSuper || !p.own),
   );
   const finalPass = canSecondPass
     ? (await listSecondReviewProjects(viewer, kind)).filter(
         (p) =>
           p.id !== excludeId &&
+          !p.hold_at &&
           (isSuper || (p.users?.slack_id !== viewer && p.first_pass_by !== by)),
       )
     : [];
