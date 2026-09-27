@@ -67,6 +67,10 @@ const PLAYER_PROJECT_FIELDS = [
   "trial_prize_px",
   "join_code",
   "is_peak",
+  // The date a reviewer extended this project's hours cutoff to - the owner is
+  // already DMed it, and the project page needs it to count from there.
+  // hours_extended_by/_note stay internal.
+  "hours_extended_since",
 ] as const;
 
 export function toPlayerProject(p: Record<string, unknown>): Record<string, unknown> {

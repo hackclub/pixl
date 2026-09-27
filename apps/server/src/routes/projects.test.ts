@@ -50,7 +50,6 @@ const INTERNAL_ONLY_FIELDS = [
   "second_pass_telescreen_checked",
   "second_pass_hours_deflated",
   "second_pass_heartbeats_added",
-  "hours_extended_since",
   "hours_extended_by",
   "hours_extended_note",
   "imported_ysws_entry_id",
@@ -97,6 +96,15 @@ describe("toPlayerProject", () => {
     expect(safe.status).toBe("shipped");
     expect(safe.review_note).toBe("looks great, shipped it");
     expect("reject_reason" in safe).toBe(true);
+  });
+
+  // The project page counts Hackatime hours from this date, the reviewer's
+  // name and note behind it stay internal.
+  test("keeps the extended hours cutoff date but not who set it or why", () => {
+    const safe = toPlayerProject(fullRow({ hours_extended_since: "2026-01-01T00:00:00.000Z" }));
+    expect(safe.hours_extended_since).toBe("2026-01-01T00:00:00.000Z");
+    expect("hours_extended_by" in safe).toBe(false);
+    expect("hours_extended_note" in safe).toBe(false);
   });
 
   test("hides approved_hours and first_pass_hours unless status is approved", () => {
