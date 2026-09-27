@@ -134,6 +134,14 @@ const REDIRECT_URI = process.env.HCA_REDIRECT_URI!;
 const HCA_LOGIN_SCOPES = "openid profile slack_id birthdate basic_info";
 const HCA_ADDRESS_SCOPES =
   "openid profile slack_id phone birthdate address basic_info";
+// A player's first_name/last_name (HCA_LOGIN_SCOPES' "basic_info"/"profile")
+// is self-editable, exactly like a Slack display name - HCA separately tracks
+// a legal_first_name/legal_last_name, only ever set through HCA's own
+// identity-verification flow, under its own "legal_name" scope. Deliberately
+// its own tiny one-off request, not folded into HCA_LOGIN_SCOPES, so this is
+// only ever asked for when explicitly needed (see /auth/hackclub/legal-name
+// below), not on every normal login.
+const HCA_LEGAL_NAME_SCOPES = "openid legal_name";
 
 // Maps OAuth `state` -> when it stops being valid, plus the web game's URL to
 // redirect back to after login (only set when the login was started from a web
@@ -146,7 +154,7 @@ const HCA_ADDRESS_SCOPES =
 interface PendingLogin {
   expiresAt: number;
   webRedirect?: string;
-  purpose?: "verify_address" | "resync_hca";
+  purpose?: "verify_address" | "resync_hca" | "verify_legal_name";
   userId?: string;
   // F-8: apps/web-shell/app/api/login/route.ts's login-nonce cookie value,
   // opaque to us - round-tripped back onto the final redirect as `ln=` so
@@ -238,6 +246,11 @@ interface HackClubMeResponse {
     id: string;
     first_name?: string;
     last_name?: string;
+    // Only present when the "legal_name" scope was granted (see
+    // HCA_LEGAL_NAME_SCOPES/verify_legal_name below) - never requested on a
+    // normal login.
+    legal_first_name?: string;
+    legal_last_name?: string;
     primary_email?: string;
     slack_id?: string;
     // Confirmed against hackclub/auth's own jbuilder templates
@@ -434,6 +447,35 @@ router.get("/auth/hackclub/resync", (req, res) => {
   res.redirect(url.toString());
 });
 
+// One-off: pulls this player's HCA-verified legal name (legal_first_name/
+// legal_last_name), for the rare case their self-editable first_name/
+// last_name obviously isn't their real name. Same shape as /address and
+// /resync above (needs an already-logged-in player's own token, since it's a
+// re-auth of an existing account, not a fresh login), deliberately not
+// exposed anywhere in the game UI - a player is only ever sent this link
+// directly when asked to confirm their name.
+router.get("/auth/hackclub/legal-name", (req, res) => {
+  const token = typeof req.query.token === "string" ? req.query.token : "";
+  const session = token ? verifySessionToken(token) : null;
+  if (!session) return res.status(401).send("Not logged in");
+
+  const state = crypto.randomBytes(16).toString("hex");
+  pendingLogins.set(state, {
+    expiresAt: Date.now() + PENDING_LOGIN_TTL_MS,
+    purpose: "verify_legal_name",
+    userId: session.userId,
+  });
+
+  const url = new URL(`${HCA_BASE_URL}/oauth/authorize`);
+  url.searchParams.set("client_id", CLIENT_ID);
+  url.searchParams.set("redirect_uri", REDIRECT_URI);
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("scope", HCA_LEGAL_NAME_SCOPES);
+  url.searchParams.set("state", state);
+
+  res.redirect(url.toString());
+});
+
 router.get("/auth/hackclub/callback", async (req, res) => {
   const code = req.query.code as string | undefined;
   const state = req.query.state as string | undefined;
@@ -532,6 +574,50 @@ router.get("/auth/hackclub/callback", async (req, res) => {
     const dest = new URL(back);
     dest.searchParams.set("hca_synced", hcaSyncOutcome(fresh.hca_verification_status === undefined ? (row as HcaStateRow) : fresh));
     return res.redirect(dest.toString());
+  }
+
+  if (pending.purpose === "verify_legal_name") {
+    if (!pending.userId) return res.status(400).send("Invalid OAuth state");
+    const { data: row, error: rowError } = await supabase
+      .from("users")
+      .select("id, oauth_provider, oauth_id")
+      .eq("id", pending.userId)
+      .maybeSingle();
+    if (rowError || !row) {
+      console.error("HCA legal-name user lookup failed", rowError?.message);
+      return res.status(502).send("Something went wrong, try that link again");
+    }
+    // Same identity-binding check as resync_hca above , this writes a name
+    // onto an account, so it must be the same HCA identity that account is
+    // actually tied to, not whichever HCA account happened to be signed into
+    // the browser that clicked the link.
+    if (row.oauth_provider !== "hackclub" || row.oauth_id !== identity.id) {
+      return res
+        .status(403)
+        .send(
+          loginErrorPage(
+            "That's a different Hack Club account",
+            "Sign in to Hack Club Auth with the same account you used to join Pixl, then try that link again.",
+            config.urls.play,
+            "Back to Pixl",
+          ),
+        );
+    }
+    if (identity.legal_first_name || identity.legal_last_name) {
+      const { error: legalErr } = await supabase
+        .from("users")
+        .update({
+          legal_first_name: identity.legal_first_name ?? null,
+          legal_last_name: identity.legal_last_name ?? null,
+        })
+        .eq("id", pending.userId);
+      if (legalErr) console.error("Failed to save legal name from HCA", legalErr.message);
+    }
+    return res.send(
+      "<!doctype html><meta charset=\"utf-8\"><title>Pixl</title>" +
+        "<body style=\"font-family: sans-serif; padding: 2rem; text-align: center;\">" +
+        "<p>Thanks , that's all we needed. You can close this tab.</p></body>",
+    );
   }
 
   if (pending.purpose === "verify_address") {
