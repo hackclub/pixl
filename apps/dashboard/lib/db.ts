@@ -664,6 +664,14 @@ export async function claimReview(
 
 // Second-pass queue: projects that passed a first review and await a final
 // reviewer's sign-off, oldest-first, hiding anything another reviewer holds.
+// Ordered by shipped_at (when the player originally submitted it), the same
+// field/direction listShippedProjects uses for the first-pass queue - not
+// first_pass_at (when a first reviewer happened to get to it). A project
+// that sat a long time waiting for its first pass has already made its
+// player wait; a quick first pass on a project shipped more recently
+// shouldn't cut in front of it just because the first-pass verdict landed
+// sooner. shipped_at is set once at the initial ship and never touched again
+// (see the ship route), so it tracks total time waiting across both passes.
 export async function listSecondReviewProjects(
   viewer?: string,
   kind?: "software" | "hardware",
@@ -684,7 +692,7 @@ export async function listSecondReviewProjects(
     .is("banned_at", null);
   if (kind) q = q.eq("kind", kind);
   const { data, error } = await q
-    .order("first_pass_at", { ascending: true })
+    .order("shipped_at", { ascending: true })
     .limit(500);
   if (error) {
     console.error("listSecondReviewProjects", error.message);
@@ -914,7 +922,8 @@ export async function listSpotCheckProjects(kind?: "software" | "hardware"): Pro
     .is("rejected_at", null)
     .is("banned_at", null);
   if (kind) q = q.eq("kind", kind);
-  const { data, error } = await q.order("first_pass_at", { ascending: true }).limit(500);
+  // shipped_at, not first_pass_at - see listSecondReviewProjects above.
+  const { data, error } = await q.order("shipped_at", { ascending: true }).limit(500);
   if (error) {
     console.error("listSpotCheckProjects", error.message);
     return [];
@@ -956,7 +965,8 @@ export async function listProposedBanProjects(kind?: "software" | "hardware"): P
     .is("rejected_at", null)
     .is("banned_at", null);
   if (kind) q = q.eq("kind", kind);
-  const { data, error } = await q.order("first_pass_at", { ascending: true }).limit(500);
+  // shipped_at, not first_pass_at - see listSecondReviewProjects above.
+  const { data, error } = await q.order("shipped_at", { ascending: true }).limit(500);
   if (error) {
     console.error("listProposedBanProjects", error.message);
     return [];
