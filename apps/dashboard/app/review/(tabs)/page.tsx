@@ -3,6 +3,7 @@ import { requirePagePerm, requireGuidelinesAck } from "@/lib/guard";
 import {
   listShippedProjects,
   listSecondReviewProjects,
+  listSpotCheckProjects,
   listReviewAudits,
 } from "@/lib/db";
 import { slackHandles } from "@/lib/slack";
@@ -47,11 +48,14 @@ export default async function ReviewListPage({
     access.reviewQueues === "both" ? requestedKind : access.reviewQueues;
   const kindQ = kind === "hardware" ? "&kind=hardware" : "";
 
-  // None of these three depend on each other's result, so they run together
-  // instead of as a chain of sequential round-trips.
-  const [finalRowsAll, myRecent, rowsAll, blackoutIds] = await Promise.all([
+  // None of these depend on each other's result, so they run together instead
+  // of as a chain of sequential round-trips.
+  const [finalRowsAll, spotCheckRowsAll, myRecent, rowsAll, blackoutIds] = await Promise.all([
     access.canSecondPass
       ? listSecondReviewProjects(viewer, kind, { includeClaimed: true })
+      : Promise.resolve([]),
+    access.isSuper
+      ? listSpotCheckProjects(viewer, kind, { includeClaimed: true })
       : Promise.resolve([]),
     listReviewAudits(5, viewer),
     listShippedProjects(viewer, kind, { includeClaimed: true }),
@@ -60,8 +64,12 @@ export default async function ReviewListPage({
   const blackoutSet = new Set(blackoutIds);
   const blackoutCount =
     rowsAll.filter((p) => blackoutSet.has(Number(p.id))).length +
-    finalRowsAll.filter((p) => blackoutSet.has(Number(p.id))).length;
+    finalRowsAll.filter((p) => blackoutSet.has(Number(p.id))).length +
+    spotCheckRowsAll.filter((p) => blackoutSet.has(Number(p.id))).length;
   const finalRows = onlyBlackout ? finalRowsAll.filter((p) => blackoutSet.has(Number(p.id))) : finalRowsAll;
+  const spotCheckRows = onlyBlackout
+    ? spotCheckRowsAll.filter((p) => blackoutSet.has(Number(p.id)))
+    : spotCheckRowsAll;
   const rowsRaw = onlyBlackout ? rowsAll.filter((p) => blackoutSet.has(Number(p.id))) : rowsAll;
   let rows = rowsRaw;
   if (sort === "hours") rows = [...rows].sort((a, b) => b.hours - a.hours);
@@ -74,13 +82,18 @@ export default async function ReviewListPage({
   const slice = rows.slice(start, start + PER);
   // claimedBy is another reviewer's slack id, resolved through the same map
   // the maker column uses so the "being reviewed" tag can name them.
-  const [finalHandles, handles, finalHackatimeUserIds] = await Promise.all([
-    finalRows.length
-      ? slackHandles(finalRows.flatMap((p) => [p.users?.slack_id, p.claimedBy]))
-      : Promise.resolve(new Map<string, string>()),
-    slackHandles(slice.flatMap((p) => [p.users?.slack_id, p.claimedBy])),
-    hackatimeUserIdsFor(finalRows),
-  ]);
+  const [finalHandles, spotCheckHandles, handles, finalHackatimeUserIds, spotCheckHackatimeUserIds] =
+    await Promise.all([
+      finalRows.length
+        ? slackHandles(finalRows.flatMap((p) => [p.users?.slack_id, p.claimedBy]))
+        : Promise.resolve(new Map<string, string>()),
+      spotCheckRows.length
+        ? slackHandles(spotCheckRows.flatMap((p) => [p.users?.slack_id, p.claimedBy]))
+        : Promise.resolve(new Map<string, string>()),
+      slackHandles(slice.flatMap((p) => [p.users?.slack_id, p.claimedBy])),
+      hackatimeUserIdsFor(finalRows),
+      hackatimeUserIdsFor(spotCheckRows),
+    ]);
   const sortKey = SORTS.some((s) => s.key === sort) ? sort : "oldest";
   const blackoutQ = onlyBlackout ? "&blackout=1" : "";
   const qp = (p: number) =>
@@ -114,25 +127,55 @@ export default async function ReviewListPage({
           <div className="flex items-center gap-2 mb-3">
             <span className="w-1.5 h-1.5 rounded-full bg-violet-500" />
             <h2 className="text-sm font-semibold text-foreground">
-              Awaiting your final pass
+              Awaiting your fraud triage
               <Badge variant="violet" className="ml-2">
                 {finalRows.length}
               </Badge>
             </h2>
           </div>
           <p className="text-xs text-muted-foreground mb-3">
-            These passed a first review. Your approval credits pixels and ships them.
+            These passed a first review. Call Fraud or Not fraud with a note , Fraud bans
+            immediately, Not fraud sends it on to Spot check for the real verdict.
           </p>
           <details>
             <summary className="text-sm text-brand font-medium cursor-pointer select-none mb-3">
-              Show {finalRows.length} project{finalRows.length === 1 ? "" : "s"} awaiting final pass
+              Show {finalRows.length} project{finalRows.length === 1 ? "" : "s"} awaiting fraud triage
             </summary>
             <ReviewTable
               rows={finalRows}
               handles={finalHandles}
               hackatimeUserIds={finalHackatimeUserIds}
               blackoutIds={blackoutIds}
-              emptyLabel="Nothing waiting on a final pass."
+              emptyLabel="Nothing waiting on a fraud triage."
+            />
+          </details>
+        </div>
+      )}
+
+      {spotCheckRows.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+            <h2 className="text-sm font-semibold text-foreground">
+              Awaiting your spot check
+              <Badge variant="warning" className="ml-2">
+                {spotCheckRows.length}
+              </Badge>
+            </h2>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">
+            Triaged "not fraud" by a second-pass reviewer. Your approval credits pixels and ships them.
+          </p>
+          <details>
+            <summary className="text-sm text-brand font-medium cursor-pointer select-none mb-3">
+              Show {spotCheckRows.length} project{spotCheckRows.length === 1 ? "" : "s"} awaiting spot check
+            </summary>
+            <ReviewTable
+              rows={spotCheckRows}
+              handles={spotCheckHandles}
+              hackatimeUserIds={spotCheckHackatimeUserIds}
+              blackoutIds={blackoutIds}
+              emptyLabel="Nothing waiting on a spot check."
             />
           </details>
         </div>

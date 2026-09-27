@@ -22,6 +22,7 @@ import { renderMarkdown } from "@/lib/markdown";
 import { isSafeUrl } from "@/lib/safeUrl";
 import { db } from "@/lib/db";
 import { ReviewForm, type BountyOption } from "@/app/_components/ReviewForm";
+import { FraudTriageForm } from "@/app/_components/FraudTriageForm";
 import { BlackoutBadge } from "@/app/_components/BlackoutBadge";
 import { BlackoutSummary } from "@/app/_components/BlackoutSummary";
 import type { BlackoutReviewData } from "@/app/_components/BlackoutReviewSection";
@@ -36,7 +37,6 @@ import {
   holdReview,
   releaseReviewHold,
   updateFundingAmount,
-  markSpotChecked,
 } from "@/app/actions";
 import { ReviewPipelineSteps } from "@/app/_components/ReviewPipelineSteps";
 import { SecondPassChecklist } from "@/app/_components/SecondPassChecklist";
@@ -140,6 +140,19 @@ export default async function ReviewDetail({
   ).sidequests;
 
   const isFinalStage = p.status === "second_review";
+  // A first-pass reviewer proposing a ban is a separate, older flow the fraud
+  // triage redesign doesn't touch - it still goes straight to a full
+  // ReviewForm confirm/overturn by a different canSecondPass reviewer (see
+  // the isProposedBan gate in reviewProject, app/actions.ts), never through
+  // fraud triage.
+  const isProposedBan = isFinalStage && p.first_pass_verdict === "banned";
+  // Second pass is now a fraud triage step, not the real verdict - a project
+  // sits here untriaged (awaitingTriage) until a second-pass reviewer calls
+  // fraud (bans immediately) or not fraud (spotCheckStage: parked for a
+  // super's real approve/needs_changes/ban in Spot check). See
+  // submitFraudTriage/reviewProject in app/actions.ts.
+  const awaitingTriage = isFinalStage && !p.second_pass_verdict && !isProposedBan;
+  const spotCheckStage = isFinalStage && p.second_pass_verdict === "not_fraud";
   const isOwn = !!p.users?.slack_id && p.users.slack_id === viewer && !access.isSuper;
   const isHeld = !!p.hold_at;
   // hold_by is stored as "Name (SlackID)" (see holdReview in app/actions.ts) -
@@ -147,7 +160,10 @@ export default async function ReviewDetail({
   // since only they (or a super admin) may release it.
   const heldByMe = isHeld && p.hold_by?.match(/\(([^)]+)\)\s*$/)?.[1] === viewer;
   const canReview =
-    !isHeld && ((p.status === "shipped" && !isOwn) || (isFinalStage && canSecondPass));
+    !isHeld &&
+    ((p.status === "shipped" && !isOwn) ||
+      ((awaitingTriage || isProposedBan) && canSecondPass) ||
+      (spotCheckStage && access.isSuper));
   const shippedAt = (p as { shipped_at?: string | null }).shipped_at ?? null;
 
   // Everything below only depends on `p` (already resolved above), not on
@@ -302,7 +318,11 @@ export default async function ReviewDetail({
   // strict Number.isFinite check that fails on strings) while the payout math
   // elsewhere happened to still work via implicit numeric coercion on `*`/`-`.
   const formDefaultHours =
-    isFinalStage && p.first_pass_hours != null ? Number(p.first_pass_hours) : payoutHours;
+    spotCheckStage && p.second_pass_hours != null
+      ? Number(p.second_pass_hours)
+      : isFinalStage && p.first_pass_hours != null
+        ? Number(p.first_pass_hours)
+        : payoutHours;
 
   const firstPassAudit = firstPassAuditNote ? parseAuditNote(firstPassAuditNote) : null;
 
@@ -883,28 +903,12 @@ export default async function ReviewDetail({
               </Card>
             )}
 
-            {access.isSuper && isFinalStage && (
+            {spotCheckStage && p.second_pass_note && (
               <Card className="p-4 text-sm gap-1">
-                <div className="font-semibold text-foreground">Spot check</div>
-                {p.spot_checked_at ? (
-                  <p className="text-xs text-muted-foreground">
-                    Checked by {p.spot_checked_by || "a super admin"} on{" "}
-                    {new Date(p.spot_checked_at).toLocaleString()}.
-                  </p>
-                ) : (
-                  <>
-                    <p className="text-xs text-muted-foreground mb-2">
-                      Optional QA pass , mark this once you&apos;ve looked at how the first-pass
-                      reviewer handled it. Doesn&apos;t affect the project.
-                    </p>
-                    <form action={markSpotChecked}>
-                      <input type="hidden" name="projectId" value={p.id} />
-                      <PendingButton variant="outline" size="sm" pendingText="Marking…">
-                        Mark spot-checked
-                      </PendingButton>
-                    </form>
-                  </>
-                )}
+                <div className="font-semibold text-foreground">
+                  Fraud triage note ({p.second_pass_by || "a reviewer"})
+                </div>
+                <p className="text-xs text-muted-foreground whitespace-pre-wrap">{p.second_pass_note}</p>
               </Card>
             )}
 
@@ -1123,14 +1127,31 @@ export default async function ReviewDetail({
                 )}
                 {canReview ? (
                   <>
+                    {awaitingTriage ? (
+                      <Card className="p-5 gap-0">
+                        <div className="text-sm font-semibold mb-1">Second pass , fraud triage</div>
+                        <p className="text-xs text-muted-foreground mb-3">
+                          Call it Fraud or Not fraud, with a note either way explaining your call. You can
+                          lower the credited hours if a lot of this looks AI-generated. A super gives the
+                          real verdict afterward in Spot check , Not fraud doesn&apos;t credit anything yet.
+                        </p>
+                        <FraudTriageForm
+                          projectId={p.id}
+                          claimedHours={payoutHours}
+                          defaultHours={formDefaultHours}
+                        />
+                      </Card>
+                    ) : (
                     <Card className="p-5 gap-0">
                       <div className="text-sm font-semibold mb-1">
-                        {isFinalStage ? "Final pass" : "First pass"}
+                        {isProposedBan ? "Final pass" : spotCheckStage ? "Spot check" : "First pass"}
                       </div>
                       <p className="text-xs text-muted-foreground mb-3">
-                        {isFinalStage
-                          ? "Approving credits pixels at the player's level rate ($4–6/hr in px) and ships it. Every verdict needs a note. You can only lower the credited hours."
-                          : "Every verdict needs a note. Approving sends this to a final reviewer before pixels are credited , even you have final-reviewer rights, your own first look is still just a proposal. You can only lower the credited hours."}
+                        {isProposedBan
+                          ? "A first-pass reviewer proposed banning this , confirm it, or approve to overturn. Approving credits pixels at the player's level rate ($4–6/hr in px) and ships it. Every verdict needs a note. You can only lower the credited hours."
+                          : spotCheckStage
+                            ? "The real final verdict, after a second-pass reviewer's fraud triage (see their note below). Approving credits pixels at the player's level rate ($4–6/hr in px) and ships it. Every verdict needs a note. You can only lower the credited hours."
+                            : "Every verdict needs a note. Approving sends this to fraud triage before pixels are credited , even you have final-reviewer rights, your own first look is still just a proposal. You can only lower the credited hours."}
                       </p>
                       <ReviewForm
                         projectId={p.id}
@@ -1140,7 +1161,7 @@ export default async function ReviewDetail({
                         defaultHours={formDefaultHours}
                         journalDeflatedHours={journalDeflatedHours}
                         isSuper={access.isSuper}
-                        secondPass={isFinalStage}
+                        secondPass={spotCheckStage || isProposedBan}
                         bounties={bounties}
                         trial={
                           trial?.name ? { name: trial.name, minHours: trial.min_hours ?? null } : null
@@ -1175,6 +1196,7 @@ export default async function ReviewDetail({
                         }
                       />
                     </Card>
+                    )}
 
                     <details className="rounded-xl bg-card ring-1 ring-border p-4 text-card-foreground">
                       <summary className="flex items-center gap-2 cursor-pointer text-sm font-semibold text-foreground select-none list-none">

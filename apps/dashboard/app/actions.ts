@@ -136,6 +136,11 @@ async function nextReviewPath(
       excludeId: justReviewedId,
       prefer: stage === "second_review" ? "second_review" : "shipped",
       reviewQueues: access.reviewQueues,
+      // A real approve/needs_changes/ban verdict only ever fires at
+      // stage=second_review from Spot check now - fraud triage (the
+      // fraud/not_fraud verdicts) redirects through submitFraudTriage
+      // instead, never through here.
+      spotCheck: stage === "second_review",
     });
     return nextId ? `/review/${nextId}` : "/review";
   } catch {
@@ -874,7 +879,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
   const { data: current } = await db
     .from("projects")
     .select(
-      "status, user_id, name, description, image_url, first_pass_by, first_pass_hours, first_pass_verdict, shipped_at, sidequest_id, trial_reward_choice, needs_funding, funding_usd",
+      "status, user_id, name, description, image_url, first_pass_by, first_pass_hours, first_pass_verdict, second_pass_hours, second_pass_verdict, shipped_at, sidequest_id, trial_reward_choice, needs_funding, funding_usd",
     )
     .eq("id", projectId)
     .single();
@@ -887,6 +892,10 @@ export async function reviewProject(formData: FormData): Promise<void> {
   const ageFlag = turnedNineteenSinceShipping(submitter?.birthday ?? null, current.shipped_at);
   const stage = String(current.status);
   const back = `/review/${projectId}`;
+  // A real verdict at second_review is the Spot check step itself now, so
+  // giving one marks the project checked (see spot_checked_at on ProjectRow).
+  const spotCheckFields =
+    stage === "second_review" ? { spot_checked_at: new Date().toISOString(), spot_checked_by: by } : {};
 
   let linkedTrial: LinkedTrial | null = null;
   if (current.sidequest_id) {
@@ -907,6 +916,26 @@ export async function reviewProject(formData: FormData): Promise<void> {
     redirect(`${back}?error=${encodeURIComponent("You can't first-pass your own project , another reviewer has to take it.")}`);
   if (stage !== "shipped" && stage !== "second_review")
     redirect(`${back}?error=${encodeURIComponent("This project isn't awaiting review anymore.")}`);
+  // A first-pass reviewer proposing a ban is a separate, older flow the fraud
+  // triage redesign doesn't touch - it skips fraud triage entirely and goes
+  // straight to a different canSecondPass reviewer confirming or overturning
+  // it here, same as before this redesign.
+  const isProposedBan = stage === "second_review" && current.first_pass_verdict === "banned";
+  if (isProposedBan) {
+    if (!access.canSecondPass)
+      redirect(`${back}?error=${encodeURIComponent("You don't have second-pass review access.")}`);
+    if (!access.isSuper && current.first_pass_by === by)
+      redirect(`${back}?error=${encodeURIComponent("A different reviewer must confirm or overturn this ban proposal.")}`);
+  } else if (stage === "second_review") {
+    // A real approve/needs_changes/ban verdict at second_review is now the
+    // Spot check step - it only fires once a second-pass reviewer has
+    // triaged the project "not fraud" (submitFraudTriage), and only a super
+    // gives it, same as the rest of Spot check's gating.
+    if (current.second_pass_verdict !== "not_fraud")
+      redirect(`${back}?error=${encodeURIComponent("This still needs a fraud triage (Fraud / Not fraud) before a final verdict.")}`);
+    if (!access.isSuper)
+      redirect(`${back}?error=${encodeURIComponent("Only a super admin gives the final verdict, in Spot check.")}`);
+  }
   if (!note)
     redirect(`${back}?error=${encodeURIComponent("Feedback is required for every verdict.")}`);
 
@@ -1040,9 +1069,14 @@ export async function reviewProject(formData: FormData): Promise<void> {
         first_pass_hours: approvedHours,
         first_pass_verdict: proposedKey,
         // Fresh entry into the second-review pipeline - clear any spot-check
-        // mark left over from a previous cycle (see markSpotChecked below).
+        // mark and fraud-triage verdict left over from a previous cycle.
         spot_checked_at: null,
         spot_checked_by: "",
+        second_pass_by: "",
+        second_pass_at: null,
+        second_pass_note: "",
+        second_pass_hours: null,
+        second_pass_verdict: null,
         // A submitted verdict supersedes any in-progress shared draft.
         review_draft: null,
         review_draft_by: "",
@@ -1085,14 +1119,11 @@ export async function reviewProject(formData: FormData): Promise<void> {
     redirect(nextPath);
   }
 
-  // From here the project is in 'second_review' (a final reviewer confirming or
-  // overturning the first-pass proposal), or it's a first-pass "request changes"
-  // falling through to bounce straight back to the maker. These two guards only
-  // apply to the second_review case.
-  if (stage === "second_review" && !access.canSecondPass)
-    redirect(`${back}?error=${encodeURIComponent("Only a final reviewer can decide this stage.")}`);
-  if (stage === "second_review" && !access.isSuper && current.first_pass_by && current.first_pass_by === by)
-    redirect(`${back}?error=${encodeURIComponent("A different reviewer must do the final pass.")}`);
+  // From here the project is in 'second_review' (a super giving the Spot
+  // check final verdict on a not_fraud-triaged project) or it's a first-pass
+  // "request changes" falling through to bounce straight back to the maker.
+  // The second_review case is already fully gated above (isSuper required,
+  // second_pass_verdict must be "not_fraud").
 
   // Request changes , bounce back to the maker.
   if (verdict === "needs_changes") {
@@ -1109,6 +1140,11 @@ export async function reviewProject(formData: FormData): Promise<void> {
         first_pass_note: "",
         first_pass_hours: null,
         first_pass_verdict: null,
+        second_pass_by: "",
+        second_pass_at: null,
+        second_pass_note: "",
+        second_pass_hours: null,
+        second_pass_verdict: null,
         review_draft: null,
         review_draft_by: "",
         review_draft_at: null,
@@ -1171,6 +1207,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
         review_draft: null,
         review_draft_by: "",
         review_draft_at: null,
+        ...spotCheckFields,
       })
       .eq("id", projectId)
       .in("status", ["shipped", "second_review"])
@@ -1227,6 +1264,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
       review_draft: null,
       review_draft_by: "",
       review_draft_at: null,
+      ...spotCheckFields,
     })
     .eq("id", projectId)
     .in("status", ["shipped", "second_review"])
@@ -1530,6 +1568,140 @@ export async function reviewProject(formData: FormData): Promise<void> {
   redirect(nextPath);
 }
 
+// The second-pass fraud triage step: a reviewer picks fraud (bans
+// immediately - identical to reviewProject's own ban branch, just entered
+// from here instead) or not_fraud (records the call and parks the project
+// for a super to give the real verdict in Spot check - no status change, no
+// pixels move yet). Deliberately lighter than reviewProject's full form: no
+// tier grading, no structured technical-features/notes audit trail, no age
+// justification - those matter once a real verdict is being given, which now
+// only happens at Spot check.
+export async function submitFraudTriage(formData: FormData): Promise<void> {
+  const access = await requirePerm("review");
+  if (!access.canSecondPass) return;
+  const by = actorName(access);
+  const reviewer = await reviewerLabel(access.session.slackId, access.session.name);
+  const projectId = Number(formData.get("projectId") ?? 0);
+  const verdict = String(formData.get("verdict") ?? "");
+  const note = String(formData.get("note") ?? "").trim().slice(0, 1000);
+  const back = `/review/${projectId}`;
+  if (!projectId || !["fraud", "not_fraud"].includes(verdict)) return;
+
+  const { data: current } = await db
+    .from("projects")
+    .select("status, user_id, name, first_pass_by, second_pass_verdict")
+    .eq("id", projectId)
+    .single();
+  if (!current) return;
+  if (current.status !== "second_review" || current.second_pass_verdict)
+    redirect(`${back}?error=${encodeURIComponent("This project isn't awaiting fraud triage anymore.")}`);
+  if (!access.isSuper && current.first_pass_by && current.first_pass_by === by)
+    redirect(`${back}?error=${encodeURIComponent("A different reviewer must do the fraud triage.")}`);
+  if (!note)
+    redirect(`${back}?error=${encodeURIComponent("A note is required for either verdict.")}`);
+
+  const claimedHours = await claimedHoursFor(projectId);
+  const hoursRaw = String(formData.get("approvedHours") ?? "").trim();
+  let approvedHours: number | null = null;
+  if (hoursRaw !== "") {
+    const n = Number(hoursRaw);
+    if (!Number.isFinite(n) || n < 0)
+      redirect(`${back}?error=${encodeURIComponent("Credited hours must be a number of 0 or more.")}`);
+    approvedHours = Math.min(Math.round(n * 10) / 10, claimedHours);
+  }
+  // Only "not fraud" carries the hours forward to an eventual approval (see
+  // second_pass_hours below) - a lowered number on a fraud call never gets
+  // credited, so it doesn't need a paper trail the same way.
+  const deflated = verdict === "not_fraud" && approvedHours != null && approvedHours < claimedHours;
+  const deflationReason = String(formData.get("deflationReason") ?? "").trim();
+  if (deflated && !deflationReason)
+    redirect(`${back}?error=${encodeURIComponent("Explain why the hours were lowered.")}`);
+
+  if (verdict === "fraud") {
+    const { data: project, error } = await db
+      .from("projects")
+      .update({
+        banned_at: new Date().toISOString(),
+        ban_reason: note,
+        ban_by: reviewer,
+        reviewing_by: "",
+        reviewing_at: null,
+        first_pass_verdict: null,
+        review_draft: null,
+        review_draft_by: "",
+        review_draft_at: null,
+        second_pass_by: by,
+        second_pass_at: new Date().toISOString(),
+        second_pass_note: note,
+        second_pass_hours: approvedHours,
+        second_pass_verdict: "fraud",
+      })
+      .eq("id", projectId)
+      .eq("status", "second_review")
+      .select("id, name, user_id")
+      .single();
+    if (error || !project) {
+      console.error("submitFraudTriage (fraud) failed", error?.message);
+      return;
+    }
+    await insertReviewAudit(formData, projectId, project.user_id, by, "banned", note, claimedHours, approvedHours);
+    await operationRpc.onBan(projectId);
+    await voidFirstPassPayouts(projectId, "flagged as fraud on second pass");
+    const banBody = `Your project "${project.name}" was permanently banned by ${reviewer} and can no longer be shipped to Pixl.\n\nReason: ${note}\n\nIf you think this is a mistake, contact the Pixl team.`;
+    await db.from("notifications").insert({ user_id: project.user_id, title: "Project banned", body: banBody });
+    await dmOrEmail(project.user_id, "Project banned", banBody);
+    const collabBanBody = `A project you collaborate on, "${project.name}", was permanently banned by ${reviewer} and can no longer be shipped to Pixl.\n\nReason: ${note}\n\nIf you think this is a mistake, contact the Pixl team.`;
+    for (const collaboratorId of await acceptedCollaboratorUserIds(projectId)) {
+      await db.from("notifications").insert({ user_id: collaboratorId, title: "Project banned", body: collabBanBody });
+      await dmOrEmail(collaboratorId, "Project banned", collabBanBody);
+    }
+    await logModAction(project.user_id, "project_banned", `${project.name}: fraud on second pass , ${note}`, by);
+  } else {
+    const { data: project, error } = await db
+      .from("projects")
+      .update({
+        reviewing_by: "",
+        reviewing_at: null,
+        review_draft: null,
+        review_draft_by: "",
+        review_draft_at: null,
+        second_pass_by: by,
+        second_pass_at: new Date().toISOString(),
+        second_pass_note: note,
+        second_pass_hours: approvedHours ?? claimedHours,
+        second_pass_verdict: "not_fraud",
+      })
+      .eq("id", projectId)
+      .eq("status", "second_review")
+      .select("id, name, user_id")
+      .single();
+    if (error || !project) {
+      console.error("submitFraudTriage (not_fraud) failed", error?.message);
+      return;
+    }
+    await insertReviewAudit(formData, projectId, project.user_id, by, "not_fraud", note, claimedHours, approvedHours);
+  }
+
+  let nextPath = "/review";
+  try {
+    const nextId = await nextReviewId({
+      viewer: access.session.slackId,
+      by,
+      canSecondPass: access.canSecondPass,
+      isSuper: access.isSuper,
+      excludeId: projectId,
+      prefer: "second_review",
+      reviewQueues: access.reviewQueues,
+      spotCheck: false,
+    });
+    if (nextId) nextPath = `/review/${nextId}`;
+  } catch {
+    // fall back to /review
+  }
+  revalidatePath("/review");
+  redirect(nextPath);
+}
+
 // Reviewers can re-grade the difficulty level (L1–L4) a maker self-assigned.
 export async function setProjectLevel(formData: FormData): Promise<void> {
   const access = await requirePerm("review");
@@ -1737,9 +1909,21 @@ export async function addProjectNote(formData: FormData): Promise<void> {
   const projectId = Number(formData.get("projectId") ?? 0);
   const body = String(formData.get("body") ?? "").trim().slice(0, 2000);
   if (!projectId || !body) return;
+  // Optional screenshot - same Hack Club CDN upload every other
+  // dashboard-originated image goes through (see "Edit submission" above).
+  let imageUrl: string | null = null;
+  const image = formData.get("image");
+  if (image instanceof File && image.size > 0) {
+    if (image.size > 15_000_000) throw new Error("Image too large (max 15MB).");
+    try {
+      imageUrl = await uploadSubmissionImage(image);
+    } catch (e) {
+      console.error("addProjectNote image upload failed", (e as Error).message);
+    }
+  }
   const { error } = await db
     .from("project_notes")
-    .insert({ project_id: projectId, author: actorName(access), body });
+    .insert({ project_id: projectId, author: actorName(access), body, image_url: imageUrl });
   if (error) console.error("addProjectNote", error.message);
   revalidatePath(`/projects/${projectId}`);
   revalidatePath(`/review/${projectId}`);
@@ -2650,29 +2834,6 @@ export async function saveReviewDraft(
     .eq("id", projectId)
     .in("status", ["shipped", "second_review"]);
   if (error) console.error("saveReviewDraft failed", error.message);
-}
-
-// Marks a second_review project as spot-checked (the super-admin-only
-// optional QA pass over how first-pass reviewers are handling projects - see
-// listSpotCheckProjects in lib/db.ts). Purely a dismissal from that audit
-// list - doesn't touch status, doesn't count as a real second-pass verdict.
-// Global once set: any super checking it clears it for every super, not just
-// the one who clicked.
-export async function markSpotChecked(formData: FormData): Promise<void> {
-  const access = await requireSuper();
-  const by = actorName(access);
-  const projectId = Number(formData.get("projectId") ?? 0);
-  if (!projectId) return;
-
-  const { error } = await db
-    .from("projects")
-    .update({ spot_checked_at: new Date().toISOString(), spot_checked_by: by })
-    .eq("id", projectId)
-    .eq("status", "second_review");
-  if (error) console.error("markSpotChecked failed", error.message);
-
-  revalidatePath("/review/spot-check");
-  revalidatePath(`/review/${projectId}`);
 }
 
 // Accept/reject a public form submission (pixl.hackclub.com/form/*, see

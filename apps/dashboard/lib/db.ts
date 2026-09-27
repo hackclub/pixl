@@ -142,6 +142,16 @@ export interface ProjectRow {
   first_pass_note: string;
   first_pass_hours: number | null;
   first_pass_verdict: string | null;
+  // Second-pass fraud triage (submitFraudTriage in app/actions.ts) - a
+  // reviewer picks fraud (bans immediately, doesn't need these) or not_fraud
+  // (parks it here for a super to give the real verdict in Spot check).
+  // Same shape as first_pass_* above, one stage later. null verdict = not
+  // yet triaged, still in the Second pass queue.
+  second_pass_by: string;
+  second_pass_at: string | null;
+  second_pass_note: string;
+  second_pass_hours: number | null;
+  second_pass_verdict: string | null;
   shipped_at: string | null;
   created_at: string;
   sidequest_id: number | null;
@@ -662,8 +672,10 @@ export async function claimReview(
   return { ok: true };
 }
 
-// Second-pass queue: projects that passed a first review and await a final
-// reviewer's sign-off, oldest-first, hiding anything another reviewer holds.
+// Second-pass queue: projects that passed a first review and await fraud
+// triage (submitFraudTriage in app/actions.ts) - a "not_fraud" triage moves a
+// project on to Spot check instead of leaving it here, so this only ever
+// shows untriaged ones. Oldest-first, hiding anything another reviewer holds.
 // Ordered by shipped_at (when the player originally submitted it), the same
 // field/direction listShippedProjects uses for the first-pass queue - not
 // first_pass_at (when a first reviewer happened to get to it). A project
@@ -681,6 +693,7 @@ export async function listSecondReviewProjects(
     .from("projects")
     .select("*, users(id, display_name, real_name, slack_id)")
     .eq("status", "second_review")
+    .is("second_pass_verdict", null)
     // A first-pass "ban" verdict is only a proposal (see reviewProject) -
     // it belongs in the dedicated Proposed bans tab (listProposedBanProjects),
     // not mixed into the general second-pass queue where a final reviewer
@@ -722,8 +735,12 @@ export async function nextReviewId(opts: {
   // lib/guard.ts) must only ever be advanced within that queue - "both"
   // (or omitted) means no restriction, same as before this param existed.
   reviewQueues?: "software" | "hardware" | "both";
+  // true when the project just closed was a spot-check final verdict, not a
+  // fraud triage - "next" should then advance within Spot check (only ever
+  // populated for a super) instead of the fraud-triage queue.
+  spotCheck?: boolean;
 }): Promise<number | null> {
-  const { viewer, by, canSecondPass, isSuper, excludeId, prefer, reviewQueues } = opts;
+  const { viewer, by, canSecondPass, isSuper, excludeId, prefer, reviewQueues, spotCheck } = opts;
   const kind = reviewQueues && reviewQueues !== "both" ? reviewQueues : undefined;
 
   // A held project (hold_at set) blocks canReview for everyone, including a
@@ -732,14 +749,19 @@ export async function nextReviewId(opts: {
   const firstPass = (await listShippedProjects(viewer, kind)).filter(
     (p) => p.id !== excludeId && !p.hold_at && (isSuper || !p.own),
   );
-  const finalPass = canSecondPass
-    ? (await listSecondReviewProjects(viewer, kind)).filter(
-        (p) =>
-          p.id !== excludeId &&
-          !p.hold_at &&
-          (isSuper || (p.users?.slack_id !== viewer && p.first_pass_by !== by)),
-      )
-    : [];
+  const finalPass =
+    spotCheck && isSuper
+      ? (await listSpotCheckProjects(viewer, kind)).filter(
+          (p) => p.id !== excludeId && !p.hold_at && p.users?.slack_id !== viewer,
+        )
+      : canSecondPass
+        ? (await listSecondReviewProjects(viewer, kind)).filter(
+            (p) =>
+              p.id !== excludeId &&
+              !p.hold_at &&
+              (isSuper || (p.users?.slack_id !== viewer && p.first_pass_by !== by)),
+          )
+        : [];
 
   const order =
     prefer === "second_review" ? [finalPass, firstPass] : [firstPass, finalPass];
@@ -859,8 +881,10 @@ export async function countSecondPassReviews(): Promise<number> {
     .select("id", { count: "exact", head: true })
     .eq("status", "second_review")
     // Kept in sync with listSecondReviewProjects - a proposed ban belongs in
-    // the Proposed bans tab/count, not this one.
+    // the Proposed bans tab/count, not this one, and an already-triaged
+    // "not fraud" project belongs in the Spot check tab/count, not this one.
     .neq("first_pass_verdict", "banned")
+    .is("second_pass_verdict", null)
     .is("archived_at", null)
     .is("rejected_at", null)
     .is("banned_at", null);
@@ -882,6 +906,7 @@ export async function sumSecondPassHours(): Promise<number> {
     .select("id, hackatime_seconds")
     .eq("status", "second_review")
     .neq("first_pass_verdict", "banned")
+    .is("second_pass_verdict", null)
     .is("archived_at", null)
     .is("rejected_at", null)
     .is("banned_at", null);
@@ -911,17 +936,24 @@ export async function sumSecondPassHours(): Promise<number> {
   return Math.round(total * 10) / 10;
 }
 
-// Super-admin-only optional QA pass - every second_review project nobody has
-// spot-checked yet (see spot_checked_at on ProjectRow above). Unlike
-// listSecondReviewProjects this doesn't filter out projects another reviewer
-// is actively holding/claimed - it's a read-only audit list, not an action
-// queue, so an in-progress claim elsewhere doesn't matter here.
-export async function listSpotCheckProjects(kind?: "software" | "hardware"): Promise<ShippedProject[]> {
+// Super-admin-only final-verdict queue: projects a second-pass reviewer
+// already triaged "not fraud" (see submitFraudTriage in app/actions.ts),
+// waiting on a super to actually approve & credit, request changes, or ban -
+// the real second_pass_verdict === "fraud" case bans immediately and never
+// reaches here. This used to be a read-only QA audit over every second_review
+// project; now that spot check IS the final verdict step, it behaves like
+// listSecondReviewProjects (hides anything another reviewer is actively
+// holding, unless includeClaimed).
+export async function listSpotCheckProjects(
+  viewer?: string,
+  kind?: "software" | "hardware",
+  opts?: { includeClaimed?: boolean },
+): Promise<ShippedProject[]> {
   let q = db
     .from("projects")
     .select("*, users(id, display_name, real_name, slack_id)")
     .eq("status", "second_review")
-    .is("spot_checked_at", null)
+    .eq("second_pass_verdict", "not_fraud")
     .is("archived_at", null)
     .is("rejected_at", null)
     .is("banned_at", null);
@@ -932,7 +964,11 @@ export async function listSpotCheckProjects(kind?: "software" | "hardware"): Pro
     console.error("listSpotCheckProjects", error.message);
     return [];
   }
-  return hydrateHours((data ?? []) as ShippedProject[]);
+  const rows = (data ?? []) as ShippedProject[];
+  const visible = opts?.includeClaimed
+    ? annotateClaims(rows, viewer)
+    : rows.filter((p) => !claimedByOther(p, viewer));
+  return hydrateHours(visible);
 }
 
 export async function countSpotCheckProjects(): Promise<number> {
@@ -940,7 +976,7 @@ export async function countSpotCheckProjects(): Promise<number> {
     .from("projects")
     .select("id", { count: "exact", head: true })
     .eq("status", "second_review")
-    .is("spot_checked_at", null)
+    .eq("second_pass_verdict", "not_fraud")
     .is("archived_at", null)
     .is("rejected_at", null)
     .is("banned_at", null);
@@ -1085,6 +1121,7 @@ export interface ProjectNoteRow {
   project_id: number;
   author: string;
   body: string;
+  image_url: string | null;
   created_at: string;
 }
 
