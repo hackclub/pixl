@@ -1589,7 +1589,7 @@ export async function submitFraudTriage(formData: FormData): Promise<void> {
 
   const { data: current } = await db
     .from("projects")
-    .select("status, user_id, name, first_pass_by, second_pass_verdict")
+    .select("status, user_id, name, first_pass_by, second_pass_verdict, shipped_at")
     .eq("id", projectId)
     .single();
   if (!current) return;
@@ -1599,6 +1599,13 @@ export async function submitFraudTriage(formData: FormData): Promise<void> {
     redirect(`${back}?error=${encodeURIComponent("A different reviewer must do the fraud triage.")}`);
   if (!note)
     redirect(`${back}?error=${encodeURIComponent("A note is required for either verdict.")}`);
+
+  const { data: submitter } = await db
+    .from("users")
+    .select("birthday")
+    .eq("id", current.user_id)
+    .maybeSingle();
+  const ageFlag = turnedNineteenSinceShipping(submitter?.birthday ?? null, current.shipped_at);
 
   const claimedHours = await claimedHoursFor(projectId);
   const hoursRaw = String(formData.get("approvedHours") ?? "").trim();
@@ -1616,6 +1623,34 @@ export async function submitFraudTriage(formData: FormData): Promise<void> {
   const deflationReason = String(formData.get("deflationReason") ?? "").trim();
   if (deflated && !deflationReason)
     redirect(`${back}?error=${encodeURIComponent("Explain why the hours were lowered.")}`);
+
+  // Same structured internal audit note as reviewProject - the FraudTriageForm
+  // starts these prefilled from the first pass's own audit note, still fully
+  // editable, so the reviewer can correct/extend the justification while
+  // triaging instead of it being carried forward unread.
+  const technicalFeatures = String(formData.get("technicalFeatures") ?? "").trim();
+  if (technicalFeatures.length < TECHNICAL_FEATURES_MIN)
+    redirect(
+      `${back}?error=${encodeURIComponent(`Describe concrete technical features you checked (min ${TECHNICAL_FEATURES_MIN} characters).`)}`,
+    );
+  const ageJustification = String(formData.get("ageJustification") ?? "").trim();
+  if (ageFlag && !ageJustification)
+    redirect(
+      `${back}?error=${encodeURIComponent("This submitter turns 19 between shipping and review , document that before deciding.")}`,
+    );
+  const auditNotes = String(formData.get("notes") ?? "").trim();
+  if (!auditNotes)
+    redirect(`${back}?error=${encodeURIComponent("Additional notes are required.")}`);
+  formData.set(
+    "auditNote",
+    buildAuditNote({
+      "TECHNICAL FEATURES": technicalFeatures,
+      "HACKATIME EVIDENCE": String(formData.get("hackatimeEvidence") ?? "").trim(),
+      "DEFLATION REASON": deflationReason,
+      "AGE JUSTIFICATION": ageJustification,
+      NOTES: auditNotes,
+    }),
+  );
 
   if (verdict === "fraud") {
     const { data: project, error } = await db

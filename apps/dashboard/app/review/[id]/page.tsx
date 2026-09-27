@@ -1139,6 +1139,18 @@ export default async function ReviewDetail({
                           projectId={p.id}
                           claimedHours={payoutHours}
                           defaultHours={formDefaultHours}
+                          hackatimeSeconds={p.hackatime_seconds ?? 0}
+                          ageFlag={ageFlag}
+                          firstPass={
+                            firstPassAudit
+                              ? {
+                                  technicalFeatures: firstPassAudit["TECHNICAL FEATURES"],
+                                  hackatimeEvidence: firstPassAudit["HACKATIME EVIDENCE"],
+                                  ageJustification: firstPassAudit["AGE JUSTIFICATION"],
+                                  notes: firstPassAudit["NOTES"],
+                                }
+                              : undefined
+                          }
                         />
                       </Card>
                     ) : (
