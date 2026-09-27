@@ -432,6 +432,27 @@
 
       function updateConfigPriceUI() {
         updateConfigImage();
+        // Beacon-locked items stay fully configurable (see renderDetail), but
+        // never actually buyable until the player has a Beacon nomination to
+        // spend - this function is also called directly by every configurator
+        // click (see renderConfigurator below), so the lock has to be
+        // re-applied here too, or picking an option would silently re-enable
+        // BUY based on affordability alone.
+        if (selected.locked && selected.beacon_locked && !selected.manual_locked) {
+          const lockedPrice = Number(selected.config_options.base_price);
+          $("detail-price").innerHTML =
+            lockedPrice > 0
+              ? `🔒 <img src="/img/pixel.png" style="width:20px;height:20px" alt="">${lockedPrice.toLocaleString()} PIXELS`
+              : "🔒 LOCKED";
+          $("detail-price").classList.add("cant");
+          $("buy-btn").textContent = "LOCKED";
+          $("buy-btn").disabled = true;
+          $("buy-btn").classList.remove("teal");
+          $("afford-fill").style.width = "0%";
+          $("afford-label").textContent =
+            selected.lock_note || "Get a project nominated as a Beacon to unlock this.";
+          return;
+        }
         const price = computeConfigPrice(selected, configPick);
         const afford = wallet && wallet.pixels >= price;
         // Per-choice original prices aren't kept server-side, only the base
@@ -730,6 +751,56 @@
         }
 
         if (selected.locked) {
+          // Beacon-locked items are still fully browsable - a player can pick
+          // through the configurator/options same as if it were unlocked, they
+          // just can't complete the purchase until they've got a Beacon
+          // nomination to spend. Trial-gated and manual locks below still hide
+          // the options entirely, since there's nothing useful to configure
+          // toward yet.
+          if (selected.beacon_locked && !selected.manual_locked) {
+            say((selected.lock_note || "GET A BEACON NOMINATION TO UNLOCK THIS.").toUpperCase(), 5000);
+            if (selected.config_options && Number(selected.price) > 0) {
+              configPick = { ...(selected.saved_config || {}) };
+              renderConfigurator();
+              // updateConfigPriceUI re-applies the lock itself (it's also
+              // called directly by every configurator click), so it's the
+              // single source of truth for the price/buy-button state below.
+              updateConfigPriceUI();
+              $("note-row").hidden = false;
+              $("detail-limited").innerHTML =
+                `<span class="chip gold">FULLY CUSTOM, PRICE UPDATES AS YOU PICK</span>`;
+              return;
+            }
+            if (!selected.config_options) {
+              optionPick = {};
+              renderOptions();
+              $("note-row").hidden = false;
+              $("qty-row").hidden = false;
+              $("qty-input").value = quantity;
+              $("qty-minus").disabled = quantity <= 1;
+              $("qty-plus").disabled = quantity >= 999;
+              // Same self-reapplying lock as updateConfigPriceUI above.
+              updatePlainPriceUI();
+              $("detail-limited").innerHTML = "";
+              return;
+            }
+            // Configurable item not sold in this region at all (price 0) -
+            // nothing to actually browse toward yet.
+            $("detail-options").innerHTML = "";
+            $("detail-limited").innerHTML = "";
+            $("detail-price").innerHTML =
+              lockedPrice > 0
+                ? `🔒 <img src="/img/pixel.png" style="width:20px;height:20px" alt="">${lockedPrice.toLocaleString()} PIXELS`
+                : "🔒 LOCKED";
+            $("detail-price").classList.add("cant");
+            $("buy-btn").textContent = "LOCKED";
+            $("buy-btn").disabled = true;
+            $("buy-btn").classList.remove("teal");
+            $("afford-fill").style.width = "0%";
+            $("afford-label").textContent =
+              selected.lock_note || "Get a project nominated as a Beacon to unlock this.";
+            return;
+          }
           $("detail-options").innerHTML = "";
           $("detail-limited").innerHTML = "";
           $("detail-price").innerHTML =
@@ -802,6 +873,25 @@
       // item, pulled out of renderDetail() so the stock-poll refresh and the
       // qty stepper can update it without resetting the picked option/note.
       function updatePlainPriceUI() {
+        // Same re-applied lock as updateConfigPriceUI above - this is also
+        // called directly by every option-chip click (see renderOptions
+        // below), so the buy button can't quietly re-enable itself once a
+        // beacon-locked item's options are being browsed.
+        if (selected.locked && selected.beacon_locked && !selected.manual_locked) {
+          const lockedPrice = Number(selected.price);
+          $("detail-price").innerHTML =
+            lockedPrice > 0
+              ? `🔒 <img src="/img/pixel.png" style="width:20px;height:20px" alt="">${lockedPrice.toLocaleString()} PIXELS`
+              : "🔒 LOCKED";
+          $("detail-price").classList.add("cant");
+          $("buy-btn").textContent = "LOCKED";
+          $("buy-btn").disabled = true;
+          $("buy-btn").classList.remove("teal");
+          $("afford-fill").style.width = "0%";
+          $("afford-label").textContent =
+            selected.lock_note || "Get a project nominated as a Beacon to unlock this.";
+          return;
+        }
         if (Number(selected.price) <= 0) {
           $("detail-price").innerHTML = "NOT AVAILABLE";
           $("detail-price").classList.add("cant");
