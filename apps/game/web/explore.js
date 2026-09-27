@@ -12,13 +12,10 @@
 const view = document.getElementById("view");
 const cache = {};
 
-function levelBadge(p) {
-  return p.level != null ? `<span class="chip gold">LV ${p.level}</span>` : "";
-}
-
 // Only ever point an <img> at a real web url. A player picks their own
 // avatar_url, so it is attacker controlled all the way down to here.
 function safeImageUrl(raw) {
+  if (!raw) return "";
   try {
     const u = new URL(String(raw), location.href);
     return u.protocol === "https:" || u.protocol === "http:" ? u.href : "";
@@ -86,39 +83,39 @@ document.addEventListener(
 function statusChip(p) {
   const s = String(p.status || "draft");
   const LABELS = {
-    approved: ["SHIPPED", "green"],
-    shipped: ["IN REVIEW", "teal"],
-    second_review: ["IN REVIEW", "teal"],
-    needs_changes: ["NEEDS CHANGES", "red"],
+    approved: ["SHIPPED", "shipped", "check"],
+    shipped: ["IN REVIEW", "review", "review"],
+    second_review: ["IN REVIEW", "review", "review"],
+    needs_changes: ["NEEDS CHANGES", "changes", "warning"],
   };
-  const [label, tone] = LABELS[s] || [s.replace("_", " "), ""];
-  return `<span class="chip status-chip ${tone}">${Pixl.esc(label)}</span>`;
+  const [label, tone, icon] = LABELS[s] || [s.replace("_", " "), "draft", "draft"];
+  return `<div class="pc-status pc-${tone}"><img src="${cardIcon(icon)}" alt=""><span>${Pixl.esc(label)}</span></div>`;
 }
 
-// Reviewer-nominated standout project - cosmetic only, no payout effect.
-function beaconChip(p) {
-  return p.is_peak
-    ? `<span class="chip gold" title="Nominated as a standout project by a reviewer">★ BEACON</span>`
-    : "";
+const cardIcon = (name) => `/img/pixl-ui/icon_${name}.png`;
+
+function cardPill(cls, icon, text, title = "") {
+  return `<div class="pc-pill ${cls}${text ? "" : " off"}"${title ? ` title="${title}"` : ""}><img src="${cardIcon(icon)}" alt=""><span>${text ? Pixl.esc(text) : ""}</span></div>`;
 }
 
 function projCard(p) {
+  const owner = p.owner || { display_name: p.owner_name };
   return `
-    <a class="card panel proj-card" href="/project/${Number(p.id)}">
-      <div class="proj-thumb">${p.image_url ? `<img src="${Pixl.esc(p.image_url)}" alt="" loading="lazy" onerror="this.remove()">` : ""}</div>
-      <div class="proj-name">${Pixl.esc(p.name)}${p.is_peak ? " ★" : ""}</div>
-      <div class="proj-meta">
-        <span>by ${Pixl.esc(p.owner_name || "?")}</span>
-        <span>${Pixl.timeAgo(p.created_at)}</span>
-      </div>
-      <div class="proj-foot">
-        <span>${statusChip(p)}${levelBadge(p)}${beaconChip(p)}${p.hackatime_seconds ? ` <span class="chip teal">${Pixl.hours(p.hackatime_seconds)}</span>` : ""}</span>
-        ${Pixl.hasToken
-          ? upvoteBtn(p)
-          /* A guest reaching these through a shared profile can't vote, and a
-             live button would only send them into the sign-in gate. */
-          : `<span class="chip">▲ ${p.upvotes || 0}</span>`}
-      </div>
+    <a class="proj-card" href="/project/${Number(p.id)}">
+      <div class="pc-photo">${p.image_url ? `<img src="${Pixl.esc(p.image_url)}" alt="" loading="lazy" onerror="this.remove()">` : ""}</div>
+      <div class="pc-avatar">${avatarHtml(owner)}</div>
+      <img class="pc-frame" src="/img/pixl-ui/card_template.png" alt="">
+      <div class="pc-title">${Pixl.esc(p.name)}</div>
+      ${p.is_peak ? `<img class="pc-star" src="${cardIcon("star")}" alt="Beacon">` : ""}
+      <div class="pc-by">by <b>${Pixl.esc(p.owner_name || "?")}</b></div>
+      <div class="pc-date"><img src="${cardIcon("calendar")}" alt=""><span>${Pixl.timeAgo(p.created_at)}</span></div>
+      ${statusChip(p)}
+      ${cardPill("pc-level", "level", p.level != null ? `LV ${p.level}` : "")}
+      ${cardPill("pc-beacon", "beacon", p.is_peak ? "BEACON" : "", p.is_peak ? "Nominated as a standout project by a reviewer" : "")}
+      ${cardPill("pc-hours", "clock", p.hackatime_seconds ? Pixl.hours(p.hackatime_seconds) : "")}
+      ${Pixl.hasToken
+        ? upvoteBtn(p)
+        : `<span class="pc-vote"><img src="${cardIcon("upvote")}" alt=""><span>${p.upvotes || 0}</span></span>`}
     </a>`;
 }
 
@@ -146,7 +143,7 @@ window.copyPlayerLink = async function (e, id) {
 
 // Upvote pill. Click again to remove your vote.
 function upvoteBtn(p) {
-  return `<button class="upvote-btn${p.has_upvoted ? " on" : ""}" onclick="return castVote(event,${Number(p.id)})" aria-label="Upvote this project" title="${p.has_upvoted ? "Remove your upvote" : "Upvote this project"}">▲ <span class="uv-count">${p.upvotes || 0}</span></button>`;
+  return `<button class="pc-vote${p.has_upvoted ? " on" : ""}" onclick="return castVote(event,${Number(p.id)})" aria-label="Upvote this project" title="${p.has_upvoted ? "Remove your upvote" : "Upvote this project"}"><img src="${cardIcon("upvote")}" alt=""><span class="uv-count">${p.upvotes || 0}</span></button>`;
 }
 
 // Cast or remove an upvote without following the card link (click an
@@ -463,7 +460,7 @@ async function showPlayer(id) {
           <div class="dash-h">PROJECTS (${projects.length})</div>
           ${projects.length === 0
             ? `<div class="empty-note">NO PROJECTS YET.</div>`
-            : `<div class="ship-grid">${projects.map((pr) => projCard({ ...pr, owner_name: p.display_name })).join("")}</div>`}
+            : `<div class="ship-grid">${projects.map((pr) => projCard({ ...pr, owner_name: p.display_name, owner: p })).join("")}</div>`}
         </div>
       </div>
     </div>`;

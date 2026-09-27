@@ -42,28 +42,71 @@
   .avatar img { width: 100%; height: 100%; object-fit: cover; }
   .pcard .pname { font-size: 18px; color: var(--ink); word-break: break-word; }
   .pcard .pmeta { font-size: 13.5px; color: var(--faint); }
-  .proj-card { display: flex; flex-direction: column; gap: 10px; padding: 14px 14px 16px; }
-  .proj-thumb {
-    height: 140px;
-    border: var(--bw) solid var(--stroke); border-radius: 0;
-    background:
-      repeating-conic-gradient(rgba(22, 22, 30, 0.05) 0% 25%, transparent 0% 50%) 0 0 / 22px 22px,
-      var(--panel-deep);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 40px;
-    overflow: hidden;
+  .proj-card {
+    --u: calc(100cqw / 196);
+    position: relative; display: block; aspect-ratio: 196 / 244; container-type: inline-size;
+    color: #16161e; font-family: var(--pixel); font-weight: 700; text-decoration: none;
+    transition: transform .08s ease;
   }
-  .proj-thumb img { width: 100%; height: 100%; object-fit: cover; }
-  .proj-name { font-size: 18px; color: var(--ink); }
-  .proj-meta { font-size: 13.5px; color: var(--faint); display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-  .proj-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; }
-  .upvote-btn { display: inline-flex; align-items: center; gap: 5px; font-family: var(--pixel, inherit); font-size: 13px; font-weight: 600;
-    color: var(--dim); background: var(--panel-2); border: var(--bw) solid var(--stroke); border-radius: 0; padding: 4px 11px; cursor: pointer;
-    transition: color .12s ease, border-color .12s ease, background .12s ease, transform .08s ease; }
-  .upvote-btn:hover:not(:disabled) { color: var(--gold); border-color: var(--gold); transform: translateY(-1px); }
-  .upvote-btn.on { color: var(--btn-ink); background: var(--gold); border-color: var(--gold); }
-  .upvote-btn:disabled { cursor: default; }
-  .status-chip { text-transform: uppercase; }
+  .proj-card:hover { transform: translateY(-2px); }
+  .proj-card:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+  .proj-card > * {
+    position: absolute; box-sizing: border-box; margin: 0;
+    left: calc(var(--x) * var(--u)); top: calc(var(--y) * var(--u));
+    width: calc(var(--w) * var(--u)); height: calc(var(--h) * var(--u));
+  }
+  .proj-card img { image-rendering: pixelated; }
+  .proj-card .pc-frame { --x: 0; --y: 0; --w: 196; --h: 244; pointer-events: none; }
+  .pc-photo {
+    --x: 10; --y: 10; --w: 172; --h: 100; overflow: hidden;
+    background:
+      url(/img/pixl-ui/pixel_sparkle.png) calc(152 * var(--u)) calc(6 * var(--u)) / calc(8 * var(--u)) no-repeat,
+      url(/img/pixl-ui/pixel_sparkle_dim.png) calc(4 * var(--u)) calc(20 * var(--u)) / calc(8 * var(--u)) no-repeat,
+      url(/img/pixl-ui/pixel_sparkle_dim.png) calc(124 * var(--u)) calc(10 * var(--u)) / calc(8 * var(--u)) no-repeat,
+      url(/img/pixl-ui/pixel_sparkle_dim.png) calc(154 * var(--u)) calc(52 * var(--u)) / calc(8 * var(--u)) no-repeat,
+      repeating-linear-gradient(90deg, #24324f 0 var(--u), transparent 0 calc(12 * var(--u))),
+      repeating-linear-gradient(0deg, #24324f 0 var(--u), transparent 0 calc(12 * var(--u))),
+      #1b2640;
+  }
+  .pc-photo img { width: 100%; height: 100%; object-fit: cover; image-rendering: auto; }
+  .pc-title, .pc-by, .pc-date span, .pc-status span, .pc-pill span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pc-title { --x: 12; --y: 114; --w: 150; --h: 18; font-size: calc(13 * var(--u)); line-height: calc(18 * var(--u)); }
+  .proj-card .pc-star { --x: 165; --y: 115; --w: 16; --h: 16; }
+  .pc-avatar { --x: 18; --y: 136; --w: 18; --h: 18; overflow: hidden; }
+  .pc-avatar .avatar { width: 100%; height: 100%; border: 0; font-size: calc(10 * var(--u)); background: #ece0bd; color: #16161e; }
+  .pc-by { --x: 44; --y: 138; --w: 86; --h: 14; font-size: calc(9 * var(--u)); line-height: calc(14 * var(--u)); color: #6f6f78; }
+  .pc-by b { color: #16161e; }
+  .pc-date {
+    --x: 130; --y: 138; --w: 52; --h: 14; display: flex; align-items: center; justify-content: flex-end; gap: calc(2 * var(--u));
+    font-size: calc(8 * var(--u)); color: #6f6f78;
+  }
+  .pc-date img { width: calc(10 * var(--u)); height: calc(10 * var(--u)); flex: none; opacity: .7; }
+  .pc-status, .pc-pill, .pc-vote {
+    display: flex; align-items: center; gap: calc(3 * var(--u)); padding: 0 calc(4 * var(--u)) calc(2 * var(--u));
+    color: #fff; font-size: calc(9 * var(--u)); letter-spacing: .04em; text-shadow: var(--u) var(--u) 0 rgba(22, 22, 30, .45);
+  }
+  .pc-status img, .pc-pill img { width: calc(12 * var(--u)); height: calc(12 * var(--u)); flex: none; }
+  .pc-pill { gap: calc(2 * var(--u)); padding-left: calc(3 * var(--u)); padding-right: calc(2 * var(--u)); letter-spacing: 0; }
+  .pc-pill img { width: calc(10 * var(--u)); height: calc(10 * var(--u)); }
+  .pc-status { --x: 12; --y: 166; --w: 168; --h: 14; text-transform: uppercase; }
+  .pc-review { background: #52aeb9; box-shadow: inset 0 calc(-2 * var(--u)) #3b8a94; }
+  .pc-shipped { background: #3faa5f; box-shadow: inset 0 calc(-2 * var(--u)) #2f8248; }
+  .pc-draft { background: #9a9aa2; box-shadow: inset 0 calc(-2 * var(--u)) #7a7a82; }
+  .pc-pill { --y: 190; --h: 14; }
+  .pc-level { --x: 12; --w: 48; }
+  .pc-beacon { --x: 68; --w: 60; }
+  .pc-hours { --x: 136; --w: 44; }
+  .pc-pill.off { background: #ece0bd; box-shadow: inset 0 calc(-2 * var(--u)) #dccb9c; }
+  .pc-pill.off img { opacity: .3; }
+  .pc-vote {
+    --x: 144; --y: 220; --w: 36; --h: 12; justify-content: center; border: 0; background: none; font: inherit;
+    font-size: calc(9 * var(--u)); color: #16161e; text-shadow: none; cursor: pointer;
+  }
+  span.pc-vote { cursor: default; }
+  .pc-vote img { width: calc(8 * var(--u)); height: calc(8 * var(--u)); }
+  button.pc-vote:hover:not(:disabled) { background: #ece0bd; box-shadow: inset 0 calc(-2 * var(--u)) #dccb9c; }
+  .pc-vote.on { background: #ff8c37; box-shadow: inset 0 calc(-2 * var(--u)) #d96f1f; }
+  .pc-vote:disabled { cursor: default; }
   .board { display: flex; flex-direction: column; gap: 8px; }
   .board-row {
     display: flex; align-items: center; gap: 16px;
