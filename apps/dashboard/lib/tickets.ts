@@ -137,6 +137,50 @@ export async function ticketActivity(): Promise<ActivityPoint[]> {
   }
 }
 
+export interface ResolverRow {
+  slackId: string;
+  total: number;
+  last7d: number;
+  last30d: number;
+}
+
+// Who resolved the most tickets, all-time plus the trailing 7 and 30 days. Tickets
+// resolved before closed_by_slack_id existed (or reopened, which nulls it)
+// just don't count toward anyone.
+export async function resolverLeaderboard(): Promise<ResolverRow[]> {
+  try {
+    const weekAgo = Date.now() - 7 * 86400_000;
+    const monthAgo = Date.now() - 30 * 86400_000;
+    const counts = new Map<string, ResolverRow>();
+    // Paged since PostgREST caps a single select at 1000 rows.
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await db
+        .from("tickets")
+        .select("closed_by_slack_id, closed_at")
+        .eq("status", "closed")
+        .not("closed_by_slack_id", "is", null)
+        .order("msg_ts", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) throw error;
+      for (const t of data ?? []) {
+        const id = t.closed_by_slack_id as string;
+        const row = counts.get(id) ?? { slackId: id, total: 0, last7d: 0, last30d: 0 };
+        row.total++;
+        const closedAt = t.closed_at ? new Date(t.closed_at).getTime() : 0;
+        if (closedAt >= weekAgo) row.last7d++;
+        if (closedAt >= monthAgo) row.last30d++;
+        counts.set(id, row);
+      }
+      if (!data || data.length < PAGE) break;
+    }
+    return [...counts.values()].sort((a, b) => b.total - a.total || b.last7d - a.last7d);
+  } catch (e) {
+    console.error("resolverLeaderboard", (e as Error).message);
+    return [];
+  }
+}
+
 // Form-encoded, not JSON , users.info in particular silently fails to read
 // its `user` param from a JSON body. Complex values (arrays/objects, e.g.
 // chat.postMessage's `blocks`) get JSON-stringified into their form field,

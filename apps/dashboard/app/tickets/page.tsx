@@ -1,10 +1,18 @@
 import { requireHelper } from "@/lib/guard";
-import { ticketStats, ticketActivity } from "@/lib/tickets";
+import { ticketStats, ticketActivity, resolverLeaderboard } from "@/lib/tickets";
 import { listHelpers } from "@/lib/db";
 import { slackHandles } from "@/lib/slack";
 import { addHelperAction, removeHelperAction } from "@/app/actions";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { PendingButton } from "@/app/_components/PendingButton";
 import { TicketsClient } from "./TicketsClient";
 import { TicketsActivityChart } from "./TicketsActivityChart";
@@ -70,6 +78,44 @@ async function HelperManager() {
   );
 }
 
+async function ResolverLeaderboard() {
+  const rows = (await resolverLeaderboard()).slice(0, 15);
+  const handles = await slackHandles(rows.map((r) => r.slackId));
+  return (
+    <Card className="p-5 mb-6 gap-3">
+      <div className="text-sm font-semibold">Top resolvers</div>
+      {rows.length === 0 ? (
+        <div className="text-sm text-muted-foreground">No resolved tickets yet.</div>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-10">#</TableHead>
+              <TableHead>Helper</TableHead>
+              <TableHead className="text-right">Last 7 days</TableHead>
+              <TableHead className="text-right">Last 30 days</TableHead>
+              <TableHead className="text-right">All time</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((r, i) => (
+              <TableRow key={r.slackId}>
+                <TableCell className="tabular-nums text-muted-foreground">{i + 1}</TableCell>
+                <TableCell className="font-medium">
+                  {handles.get(r.slackId) ?? `@${r.slackId}`}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">{r.last7d}</TableCell>
+                <TableCell className="text-right tabular-nums">{r.last30d}</TableCell>
+                <TableCell className="text-right tabular-nums font-semibold">{r.total}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </Card>
+  );
+}
+
 export default async function TicketsPage() {
   const access = await requireHelper();
   const [stats, activity] = await Promise.all([ticketStats(), ticketActivity()]);
@@ -92,6 +138,8 @@ export default async function TicketsPage() {
       <Card className="p-5 mb-6">
         <TicketsActivityChart points={activity} />
       </Card>
+
+      <ResolverLeaderboard />
 
       <TicketsClient />
     </div>
