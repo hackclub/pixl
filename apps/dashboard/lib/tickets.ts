@@ -211,6 +211,24 @@ async function slackFetch(
   return (await res.json()) as Record<string, unknown> & { ok: boolean; error?: string };
 }
 
+export class SlackApiError extends Error {
+  constructor(
+    readonly method: string,
+    readonly code: string | undefined,
+  ) {
+    super(`Slack ${method} failed: ${code}`);
+  }
+}
+
+// What Slack answers once a ticket's root message has been deleted. Retrying
+// never helps, so callers should treat the thread as gone, not as failing.
+export function isMissingThread(e: unknown): boolean {
+  return (
+    e instanceof SlackApiError &&
+    (e.code === "thread_not_found" || e.code === "message_not_found")
+  );
+}
+
 async function slackCall(
   method: string,
   body: Record<string, unknown>,
@@ -223,7 +241,7 @@ async function slackCall(
     const joined = await slackFetch("conversations.join", { channel: body.channel });
     if (joined.ok) json = await slackFetch(method, body);
   }
-  if (!json.ok) throw new Error(`Slack ${method} failed: ${json.error}`);
+  if (!json.ok) throw new SlackApiError(method, json.error);
   return json;
 }
 

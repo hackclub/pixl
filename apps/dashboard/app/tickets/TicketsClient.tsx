@@ -53,6 +53,9 @@ function fmtSlack(t: string): string {
     .replace(/\n/g, "<br>");
 }
 
+const THREAD_POLL_MS = 5000;
+const THREAD_POLL_MAX_MS = 5 * 60 * 1000;
+
 const TABS: { key: Status; label: string }[] = [
   { key: "open", label: "Open" },
   { key: "all", label: "All" },
@@ -65,6 +68,7 @@ export function TicketsClient() {
   const [tickets, setTickets] = useState<Ticket[] | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [thread, setThread] = useState<ThreadMsg[] | null>(null);
+  const [threadIssue, setThreadIssue] = useState<"gone" | "error" | null>(null);
   const [draft, setDraft] = useState("");
   const [rowStatus, setRowStatus] = useState<{ msg: string; kind: "ok" | "err" | "" }>({
     msg: "",
@@ -99,21 +103,83 @@ export function TicketsClient() {
     return () => clearInterval(id);
   }, [loadTickets]);
 
-  const loadThread = useCallback(async (ts: string, silent = false) => {
-    if (!silent) setThread(null);
+  // Resolves to the HTTP status (0 on a network error) so the poller can tell
+  // "gone for good" (4xx) apart from "try again later" (5xx).
+  const loadThread = useCallback(async (ts: string, silent = false): Promise<number> => {
+    if (!silent) {
+      setThread(null);
+      setThreadIssue(null);
+    }
     try {
       const res = await fetch(`/api/tickets/${ts}/thread`);
+      if (res.status === 401) {
+        location.href = "/login";
+        return res.status;
+      }
+      if (res.status === 404) {
+        setThread([]);
+        setThreadIssue("gone");
+        return res.status;
+      }
+      if (!res.ok) {
+        // Keep whatever was already on screen during a polling hiccup.
+        if (!silent) {
+          setThread([]);
+          setThreadIssue("error");
+        }
+        return res.status;
+      }
       const data = await res.json();
       setThread(data.messages ?? []);
+      setThreadIssue(null);
+      return res.status;
     } catch {
-      setThread([]);
+      if (!silent) {
+        setThread([]);
+        setThreadIssue("error");
+      }
+      return 0;
     }
   }, []);
 
   useEffect(() => {
     if (!expanded) return;
-    const id = setInterval(() => loadThread(expanded, true), 5000);
-    return () => clearInterval(id);
+    let delay = THREAD_POLL_MS;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let inFlight = false;
+    let stopped = false;
+
+    const schedule = () => {
+      if (!stopped && !document.hidden) timer = setTimeout(tick, delay);
+    };
+    const tick = async () => {
+      timer = undefined;
+      inFlight = true;
+      const status = await loadThread(expanded, true);
+      inFlight = false;
+      if (status >= 400 && status < 500) {
+        stopped = true;
+        return;
+      }
+      delay = status >= 200 && status < 300 ? THREAD_POLL_MS : Math.min(delay * 2, THREAD_POLL_MAX_MS);
+      schedule();
+    };
+    const onVisibility = () => {
+      if (document.hidden) {
+        clearTimeout(timer);
+        timer = undefined;
+      } else if (!timer && !inFlight && !stopped) {
+        tick();
+      }
+    };
+
+    schedule();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [expanded, loadThread]);
 
   function toggle(ts: string) {
@@ -263,6 +329,12 @@ export function TicketsClient() {
                     <div className="max-h-72 overflow-y-auto space-y-3 mb-3">
                       {thread === null ? (
                         <div className="text-xs text-muted-foreground">Loading…</div>
+                      ) : threadIssue === "gone" ? (
+                        <div className="text-xs text-muted-foreground">
+                          This ticket&apos;s Slack thread was deleted.
+                        </div>
+                      ) : threadIssue === "error" && thread.length === 0 ? (
+                        <div className="text-xs text-destructive">Couldn&apos;t load the thread.</div>
                       ) : thread.length === 0 ? (
                         <div className="text-xs text-muted-foreground">No messages yet.</div>
                       ) : (
