@@ -463,12 +463,21 @@
           (discounted ? `<span class="discount-tag">-${Math.round(selected.discount_percent)}% OFF</span>` : "") +
           `<img src="/img/pixel.png" style="width:20px;height:20px" alt="">${price.toLocaleString()} PIXELS<span class="price-hours">${hoursOf(price)}</span>`;
         $("detail-price").classList.toggle("cant", !afford);
+        // A beacon_locked item that's NOT selected.locked means this player
+        // currently has a spare Beacon-project unlock to spend on it - buying
+        // it consumes that shared, one-per-Beacon-project pool (see
+        // availableBeaconUnlocks in apps/server/src/routes/shop.ts), same as
+        // any other purchase otherwise, so it's easy to spend it on something
+        // you didn't mean to without a heads-up here.
+        const beaconNote = selected.beacon_locked
+          ? ` · Uses a Beacon unlock (${selected.beaconAvailable ?? 0} available)`
+          : "";
         if (!loggedIn) {
           $("buy-btn").disabled = false;
           $("buy-btn").textContent = "LOG IN TO BUY";
           $("buy-btn").classList.add("teal");
           $("afford-fill").style.width = "0%";
-          $("afford-label").textContent = "Log in to see your balance and buy.";
+          $("afford-label").textContent = "Log in to see your balance and buy." + beaconNote;
           return;
         }
         $("buy-btn").disabled = !afford;
@@ -481,7 +490,7 @@
             ? "var(--good)"
             : "repeating-linear-gradient(90deg,var(--gold) 0 7px,var(--gold-soft) 7px 14px)";
         $("afford-label").textContent =
-          `YOU HAVE ${Math.round(have)} / ${price.toLocaleString()} PX` + (pct >= 100 ? ", EASY." : "");
+          `YOU HAVE ${Math.round(have)} / ${price.toLocaleString()} PX` + (pct >= 100 ? ", EASY." : "") + beaconNote;
       }
 
       function optionGroups(item) {
@@ -920,11 +929,15 @@
         // Signed-out visitor: there's no wallet to check affordability against,
         // so send them to log in instead of a "BUY" button that's really just
         // permanently disabled for a reason they can't see.
+        // Same beacon-unlock heads-up as updateConfigPriceUI above.
+        const beaconNote = selected.beacon_locked
+          ? ` · Uses a Beacon unlock (${selected.beaconAvailable ?? 0} available)`
+          : "";
         if (!loggedIn) {
           $("buy-btn").textContent = !inStock ? "SOLD OUT" : "LOG IN TO BUY";
           $("buy-btn").disabled = !inStock;
           $("buy-btn").classList.toggle("teal", inStock);
-          $("afford-label").textContent = "Log in to see your balance and buy.";
+          $("afford-label").textContent = "Log in to see your balance and buy." + beaconNote;
           $("afford-fill").style.width = "0%";
           return;
         }
@@ -939,7 +952,7 @@
             : "repeating-linear-gradient(90deg,var(--gold) 0 7px,var(--gold-soft) 7px 14px)";
         $("afford-label").textContent =
           `YOU HAVE ${Math.round(have)} / ${total.toLocaleString()} PX` +
-          (pct >= 100 ? ", EASY." : "");
+          (pct >= 100 ? ", EASY." : "") + beaconNote;
       }
 
       function updateSaveBtn() {
@@ -1136,7 +1149,7 @@
         }
       }
 
-      $("buy-btn").addEventListener("click", () => {
+      $("buy-btn").addEventListener("click", async () => {
         if (!selected) return;
         if (!loggedIn) {
           location.href = Pixl.loginUrl();
@@ -1159,6 +1172,22 @@
           say("SHIP A FEW MORE PROJECTS\nAND COME BACK!", 4000);
           nudgeKeeper();
           return;
+        }
+        // selected.locked is already false here (a locked buy-btn is
+        // disabled), so beacon_locked at this point means the player has a
+        // spare Beacon-project unlock and is about to spend it on this -
+        // that's a real, un-refundable choice from a shared pool (see
+        // availableBeaconUnlocks in apps/server/src/routes/shop.ts), so it
+        // gets its own explicit confirm rather than relying on the player
+        // having noticed the note in the price area.
+        if (selected.beacon_locked) {
+          const ok = await Pixl.confirm({
+            title: "This uses a Beacon unlock",
+            body: `Buying "${selected.name}" spends one of your Beacon-project unlocks (${selected.beaconAvailable ?? 0} available). This can't be undone.`,
+            confirmText: "Yes, use it",
+            cancelText: "Cancel",
+          });
+          if (!ok) return;
         }
         confirmAddressThenBuy(selected.id);
       });

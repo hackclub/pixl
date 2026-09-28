@@ -222,6 +222,13 @@
         color: var(--faint);
         max-width: 170px;
       }
+      /* A beacon_locked item that's currently buyable (the player has a
+         spare Beacon unlock) still needs a heads-up here, or buying it looks
+         no different from any normal purchase - see the shop/item detail
+         page's matching note for why this matters. */
+      .price-hours.beacon-note {
+        color: var(--gold);
+      }
       .limited-tag {
         position: absolute;
         top: -9px;
@@ -747,6 +754,11 @@
             isDiscounted(item) ? `<span class="price-was">${originalBasePrice(item).toLocaleString()} PX</span>` : ""
           }</span>
           <span class="price-hours">${hoursOf(basePrice(item))}</span>
+          ${
+            item.beacon_locked
+              ? `<span class="price-hours beacon-note">🔆 Uses a Beacon unlock (${item.beaconAvailable ?? 0} available)</span>`
+              : ""
+          }
         </div>
         <span class="dot ${canAfford(item) ? "on" : "off"}" title="${canAfford(item) ? "You can afford this" : "Keep shipping!"}"></span>`
         }
