@@ -27,16 +27,10 @@ function safeImageUrl(raw) {
 function avatarHtml(p) {
   const letter = Pixl.esc(String(p.display_name || "?").trim().charAt(0).toUpperCase() || "?");
   const avatarUrl = safeImageUrl(p.avatar_url || "");
-  const pixifySrc =
-    p.id && p.card_pixelate !== false
-      ? Pixl.apiUrl(`/api/pixify?user=${encodeURIComponent(p.id)}&size=48`)
-      : "";
-  const src = pixifySrc || avatarUrl;
-  if (!src) return `<div class="avatar">${letter}</div>`;
-  // Pixify pulls from Slack and can 404/503 (no Slack photo, service down);
-  // fall back to the player's own uploaded pfp (avatar_url - player-set via
-  // POST /api/profile/card-image, only required to start with "https://",
-  // otherwise free text) before giving up on a letter.
+  if (!avatarUrl) return `<div class="avatar">${letter}</div>`;
+  // avatar_url is player-set via POST /api/profile/card-image, only required
+  // to start with "https://", otherwise free text - falls back to the letter
+  // if it fails to load.
   //
   // This used to build the fallback as an inline onerror="..." JS-string
   // with avatar_url spliced into a single-quoted literal. That's unsafe even
@@ -50,8 +44,7 @@ function avatarHtml(p) {
   // a real "error" listener (below) with .src/.textContent assignment
   // sidesteps that whole class of bug - those are DOM property writes, never
   // re-parsed as HTML or JS.
-  const fallbackSrc = pixifySrc && avatarUrl ? Pixl.esc(avatarUrl) : "";
-  return `<div class="avatar"><img class="avatar-img" src="${Pixl.esc(src)}" alt="" loading="lazy" data-fallback-src="${fallbackSrc}" data-fallback-letter="${letter}"></div>`;
+  return `<div class="avatar"><img class="avatar-img" src="${Pixl.esc(avatarUrl)}" alt="" loading="lazy" data-fallback-letter="${letter}"></div>`;
 }
 
 // error events don't bubble, so avatarHtml()'s fallback chain needs a

@@ -31,8 +31,8 @@ router.get("/api/explore/players", async (req, res) => {
     return query;
   };
   // card_pixelate arrives with migration 0030 , fall back gracefully before it.
-  // slack_id is deliberately not selected , /api/pixify takes our internal
-  // user id now, so player Slack member IDs never need to reach the client.
+  // slack_id is deliberately not selected , player Slack member IDs never
+  // need to reach the client.
   const first = await buildQuery(
     "id, display_name, skin, created_at, avatar_url, card_pixelate",
   );
@@ -246,46 +246,6 @@ router.get("/api/explore/leaderboard/upvotes", async (req, res) => {
   }));
   const yourRank = players.find((p) => p.you)?.rank ?? 0;
   res.json({ ok: true, players, yourRank, yourValue: byOwner.get(session.userId) ?? 0 });
-});
-
-// Proxy to Pixo's avatar pixelator so the API key never reaches the client.
-// Returns the player's Slack avatar as an already-pixelated PNG.
-// No fallback domain here on purpose , see the same call in moderation.ts;
-// player Slack IDs and avatar traffic must never silently route to whatever
-// domain happens to be baked in as a default.
-const EXTERNAL_PIXIFY_URL = process.env.EXTERNAL_PIXIFY_URL;
-
-router.get("/api/pixify", async (req, res) => {
-  const token = typeof req.query.token === "string" ? req.query.token : "";
-  const session = token ? verifySessionToken(token) : null;
-  if (!session) return res.status(401).json({ ok: false });
-
-  // Takes our own internal user id, not a raw Slack member ID , the client
-  // never needs to see anyone's slack_id, this route resolves it itself.
-  const userId = typeof req.query.user === "string" ? req.query.user : "";
-  const size = Math.min(Math.max(Number(req.query.size) || 32, 2), 64);
-  const key = process.env.EXTERNAL_API_KEY;
-  if (!userId) return res.status(400).json({ ok: false });
-  if (!key || !EXTERNAL_PIXIFY_URL) return res.status(503).json({ ok: false, error: "pixify_not_configured" });
-
-  const { data: target } = await supabase.from("users").select("slack_id").eq("id", userId).maybeSingle();
-  const slackId = (target?.slack_id as string) ?? "";
-  if (!slackId || !/^[A-Z0-9]{5,20}$/.test(slackId)) return res.status(400).json({ ok: false });
-
-  try {
-    const r = await fetch(
-      `${EXTERNAL_PIXIFY_URL}?userId=${encodeURIComponent(slackId)}&size=${size}`,
-      { headers: { "x-api-key": key }, signal: AbortSignal.timeout(10_000) },
-    );
-    if (!r.ok) return res.status(r.status === 404 ? 404 : 502).json({ ok: false });
-    const buf = Buffer.from(await r.arrayBuffer());
-    res
-      .set("Content-Type", "image/png")
-      .set("Cache-Control", "public, max-age=3600")
-      .send(buf);
-  } catch {
-    res.status(502).json({ ok: false });
-  }
 });
 
 router.get("/api/explore/showcase", async (req, res) => {

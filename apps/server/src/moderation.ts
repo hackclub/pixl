@@ -298,10 +298,9 @@ export function censorChat(text: string): string {
 const WARN_AFTER = 3;
 const BAN_AFTER = 7;
 
-// No fallback here on purpose, a hardcoded default would silently route
-// player Slack IDs and violation text to whatever domain happens to be
-// baked in if the env var is ever unset, rather than failing closed.
-const EXTERNAL_DM_URL = process.env.EXTERNAL_DM_URL;
+// Defaults to Pixorpheus's own DM endpoint (a domain we run, unlike the
+// personal-domain fallback removed in 8d3d133), same URL the dashboard uses.
+const EXTERNAL_DM_URL = process.env.EXTERNAL_DM_URL || "https://pixo.pixl.rsvp/api/external/dm";
 
 // Slack DM as Pixo (same external API the dashboard uses). Fire-and-forget:
 // moderation must never fail because the DM did.
