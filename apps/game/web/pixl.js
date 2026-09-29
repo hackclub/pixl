@@ -695,9 +695,9 @@ const Pixl = (() => {
       (_m, n, inner) => `<span style="font-size:${Math.min(Math.max(Number(n), 8), 64)}px">${inner}</span>`],
     [/\[url\](https?:\/\/[^\[\s]+)\[\/url\]/g,
       (_m, u) => bbSafeUrl(u) ? `<a href="${u}" target="_blank" rel="noopener">${u}</a>` : u],
-    [/\[url=([^\[\]]+)\]([\s\S]*?)\[\/url\]/g,
+    [/\[url=([^\]]+)\]([\s\S]*?)\[\/url\]/g,
       (_m, u, inner) => bbSafeUrl(u) ? `<a href="${bbSafeUrl(u)}" target="_blank" rel="noopener">${inner}</a>` : inner],
-    [/\[img(?:[^\[\]]*)\](https?:\/\/[^\[\]\s]+)\[\/img\]/g,
+    [/\[img(?:[^\]]*)\](https?:\/\/[^\[\s]+)\[\/img\]/g,
       (_m, u) => bbSafeUrl(u) ? `<img class="bb-img" src="${u}" alt="" loading="lazy" onerror="this.remove()">` : ""],
     [/\[wave(?:[^\]]*)\]([\s\S]*?)\[\/wave\]/g, (_m, inner) => bbChars("bb-wave", inner)],
     [/\[shake(?:[^\]]*)\]([\s\S]*?)\[\/shake\]/g, (_m, inner) => bbChars("bb-shake", inner)],
@@ -730,9 +730,9 @@ const Pixl = (() => {
   function mdInline(raw) {
     return esc(raw)
       .replace(/`([^`]+)`/g, "<code>$1</code>")
-      .replace(/!\[([^\[\]]*)\]\((https?:\/\/[^)\s\[\]]+)\)/g,
+      .replace(/!\[([^\]]*)\]\((https?:\/\/[^)\s]+)\)/g,
         (_m, a, u) => (bbSafeUrl(u) ? `<img class="md-img" src="${u}" alt="${a}" loading="lazy" onerror="this.remove()">` : ""))
-      .replace(/\[([^\[\]]+)\]\((https?:\/\/[^)\s\[\]]+)\)/g,
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
         (_m, t, u) => (bbSafeUrl(u) ? `<a href="${u}" target="_blank" rel="noopener">${t}</a>` : t))
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
       .replace(/__([^_]+)__/g, "<strong>$1</strong>")
