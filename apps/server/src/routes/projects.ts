@@ -299,7 +299,12 @@ function isVideoUrl(url: string): boolean {
 
 // A demo must be a playable page, not the source. A bare github.com/<user>/<repo>
 // link is rejected; github *releases* pages are allowed (they host builds).
-function normalizeDemoUrl(raw: string): { error: string } | { url: string } {
+// Hardware ships are the exception: there's often no playable web page at
+// all, so the repo itself (build photos, schematics, docs) is the natural
+// stand-in - the stricter isDesign/finished_build checks right after this
+// call still enforce a real Kicanvas link or video where those genuinely
+// matter, this only lifts the generic "that's just source" rejection.
+function normalizeDemoUrl(raw: string, isHardware: boolean): { error: string } | { url: string } {
   const normalized = normalizeProjectUrl(raw);
   if (!normalized.ok) return { error: "demo_invalid" };
   const s = normalized.url;
@@ -312,7 +317,7 @@ function normalizeDemoUrl(raw: string): { error: string } | { url: string } {
   }
   if (u.protocol !== "https:" && u.protocol !== "http:") return { error: "demo_invalid" };
   const host = u.hostname.replace(/^www\./, "");
-  if (host === "github.com" && !/\/releases(\/|$)/.test(u.pathname))
+  if (!isHardware && host === "github.com" && !/\/releases(\/|$)/.test(u.pathname))
     return { error: "demo_is_repo" };
   return { url: u.toString() };
 }
@@ -585,7 +590,8 @@ router.post("/api/projects/:id/ship", async (req, res) => {
   // URLs are only validated here, at ship time (save accepts anything).
   if (!(await isGitRepoUrl(project.repo_url as string)))
     return res.status(400).json({ ok: false, error: "repo_not_git" });
-  const demoCheck = normalizeDemoUrl(project.demo_url as string);
+  const isHardware = project.kind === "hardware";
+  const demoCheck = normalizeDemoUrl(project.demo_url as string, isHardware);
   if ("error" in demoCheck)
     return res.status(400).json({ ok: false, error: demoCheck.error });
 
@@ -597,8 +603,6 @@ router.post("/api/projects/:id/ship", async (req, res) => {
     return res.status(400).json({ ok: false, error: "repo_not_found" });
   if (!demoAlive)
     return res.status(400).json({ ok: false, error: "demo_unreachable" });
-
-  const isHardware = project.kind === "hardware";
 
   // A funded hardware ship needs the reviewer to be able to verify the ask:
   // what it's for (BOM), what it costs (cart screenshots, with shipping),
