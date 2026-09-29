@@ -138,4 +138,44 @@ describe("toPlayerProject", () => {
     expect(safe.status).toBe("draft");
     expect(safe.approved_hours).toBeNull();
   });
+
+  // A first-pass "ban" is only a proposal - the maker must see this as if
+  // it's still an ordinary in-review ship, not that a review already
+  // happened, until a different final reviewer confirms or overturns it.
+  // fullRow() deliberately overwrites every INTERNAL_ONLY_FIELDS entry
+  // (first_pass_verdict included) with a placeholder, so these use a plain
+  // row instead to actually control that field's value.
+  test("masks a proposed-ban project's status as still shipped", () => {
+    for (const status of ["second_review", "fraud_review"]) {
+      const safe = toPlayerProject({ id: 3, status, first_pass_verdict: "banned" });
+      expect(safe.status).toBe("shipped");
+    }
+  });
+
+  test("does not mask status for an ordinary (non-banned) second/fraud review", () => {
+    for (const status of ["second_review", "fraud_review"]) {
+      const safe = toPlayerProject({ id: 3, status, first_pass_verdict: "approved" });
+      expect(safe.status).toBe(status);
+    }
+  });
+
+  // Once a final reviewer confirms or overturns the proposal, first_pass_verdict
+  // is cleared (see reviewProject in the dashboard) - the mask lifts on its own.
+  test("stops masking once first_pass_verdict is cleared", () => {
+    const safe = toPlayerProject({ id: 3, status: "second_review", first_pass_verdict: null });
+    expect(safe.status).toBe("second_review");
+  });
+
+  // banProject (the standalone "Ban project" admin button) sets banned_at
+  // without clearing first_pass_verdict - the mask must not survive a real,
+  // already-confirmed ban just because that column was left stale.
+  test("does not mask once banned_at is set, even if first_pass_verdict is still banned", () => {
+    const safe = toPlayerProject({
+      id: 3,
+      status: "second_review",
+      first_pass_verdict: "banned",
+      banned_at: "2026-09-17T14:44:54.819Z",
+    });
+    expect(safe.status).toBe("second_review");
+  });
 });

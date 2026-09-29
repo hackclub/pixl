@@ -82,6 +82,29 @@ export function toPlayerProject(p: Record<string, unknown>): Record<string, unkn
   const approved = p.status === "approved";
   safe.approved_hours = approved ? (p.approved_hours ?? null) : null;
   safe.first_pass_hours = approved ? (p.first_pass_hours ?? null) : null;
+  // A first-pass "ban" verdict is only a PROPOSAL - it parks the project in
+  // second_review (or fraud_review) for a different final reviewer to
+  // confirm or overturn, the exact same status column value an ordinary
+  // approved-and-awaiting-final ship sits in. The maker must not see any
+  // sign that a ban is even on the table until it's actually confirmed
+  // (banned_at gets set) or overturned, so this reports the status they'd
+  // see for a still-in-review ship instead. See the matching event filter
+  // in the /timeline route.
+  //
+  // !p.banned_at matters: reviewProject's ban-confirm branch clears
+  // first_pass_verdict back to null, but banProject (the standalone "Ban
+  // project" button, usable at any stage) sets banned_at without touching
+  // first_pass_verdict at all - without this check, a project banned that
+  // way would stay masked forever even though it's genuinely, permanently
+  // banned. banned_at itself is never masked (see PLAYER_PROJECT_FIELDS
+  // above), so this only ever widens what still counts as "not yet decided".
+  if (
+    (p.status === "second_review" || p.status === "fraud_review") &&
+    p.first_pass_verdict === "banned" &&
+    !p.banned_at
+  ) {
+    safe.status = "shipped";
+  }
   return safe;
 }
 
@@ -1201,7 +1224,7 @@ router.get("/api/projects/:id/timeline", async (req, res) => {
     supabase
       .from("projects")
       .select(
-        "created_at, shipped_at, status, joe_project_id, joe_submitted_at, joe_reviewed_at",
+        "created_at, shipped_at, status, first_pass_verdict, banned_at, joe_project_id, joe_submitted_at, joe_reviewed_at",
       )
       .eq("id", id)
       .single(),
@@ -1212,9 +1235,19 @@ router.get("/api/projects/:id/timeline", async (req, res) => {
       .order("created_at", { ascending: true }),
   ]);
 
+  // Same masking as toPlayerProject above - a proposed ban must look exactly
+  // like an ordinary still-in-review ship until a different final reviewer
+  // confirms or overturns it, not like a review already happened. !banned_at
+  // matters here too - see the matching comment in toPlayerProject.
+  const banProposalPending =
+    (proj?.status === "second_review" || proj?.status === "fraud_review") &&
+    proj?.first_pass_verdict === "banned" &&
+    !proj?.banned_at;
+
   const events: Record<string, unknown>[] = [];
   if (proj?.created_at) events.push({ kind: "created", at: proj.created_at });
-  for (const a of audits ?? [])
+  for (const a of audits ?? []) {
+    if (banProposalPending && a.verdict === "first_pass_banned") continue;
     events.push({
       kind: "review",
       at: a.created_at,
@@ -1230,6 +1263,7 @@ router.get("/api/projects/:id/timeline", async (req, res) => {
       approvedHours:
         a.verdict === "approved" ? (a.approved_hours ?? null) : null,
     });
+  }
   if (proj?.shipped_at && ["shipped", "fraud_review", "second_review"].includes(proj.status))
     events.push({ kind: "shipped", at: proj.shipped_at });
 
@@ -1239,12 +1273,12 @@ router.get("/api/projects/:id/timeline", async (req, res) => {
   res.json({
     ok: true,
     events,
-    status: proj?.status ?? null,
+    status: banProposalPending ? "shipped" : (proj?.status ?? null),
     // Joe (the fraud pass) is optional per event , a project only ever goes
     // through it if it was actually submitted there.
-    joeUsed: Boolean(proj?.joe_project_id),
-    fraudReviewAt: proj?.joe_submitted_at ?? null,
-    fraudReviewDoneAt: proj?.joe_reviewed_at ?? null,
+    joeUsed: banProposalPending ? false : Boolean(proj?.joe_project_id),
+    fraudReviewAt: banProposalPending ? null : (proj?.joe_submitted_at ?? null),
+    fraudReviewDoneAt: banProposalPending ? null : (proj?.joe_reviewed_at ?? null),
   });
 });
 
