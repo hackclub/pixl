@@ -1020,7 +1020,6 @@ export async function reviewProject(formData: FormData): Promise<void> {
     "auditNote",
     buildAuditNote({
       "TECHNICAL FEATURES": technicalFeatures,
-      "HACKATIME EVIDENCE": String(formData.get("hackatimeEvidence") ?? "").trim(),
       "DEFLATION REASON": deflationReason,
       "AGE JUSTIFICATION": ageJustification,
       NOTES: notes,
@@ -1088,6 +1087,9 @@ export async function reviewProject(formData: FormData): Promise<void> {
         review_draft: null,
         review_draft_by: "",
         review_draft_at: null,
+        // A real verdict resolves whatever a prior revert was waiting on -
+        // clear the queue-jump so a later revert-back-to-shipped starts fresh.
+        reverted_at: null,
       })
       .eq("id", projectId)
       .eq("status", "shipped")
@@ -1155,6 +1157,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
         review_draft: null,
         review_draft_by: "",
         review_draft_at: null,
+        reverted_at: null,
       })
       .eq("id", projectId)
       .in("status", ["shipped", "second_review"])
@@ -1666,7 +1669,6 @@ export async function submitFraudTriage(formData: FormData): Promise<void> {
     "auditNote",
     buildAuditNote({
       "TECHNICAL FEATURES": technicalFeatures,
-      "HACKATIME EVIDENCE": String(formData.get("hackatimeEvidence") ?? "").trim(),
       "DEFLATION REASON": deflationReason,
       "AGE JUSTIFICATION": ageJustification,
       NOTES: auditNotes,
@@ -1885,7 +1887,16 @@ export async function reReviewProject(formData: FormData): Promise<void> {
 
   const { data: project, error } = await db
     .from("projects")
-    .update({ status: "shipped", review_note: "", review_note_by: "", approved_hours: null })
+    .update({
+      status: "shipped",
+      review_note: "",
+      review_note_by: "",
+      approved_hours: null,
+      // Jumps the first-pass queue instead of sorting by the original
+      // shipped_at like everything else - see listShippedProjects, which
+      // orders reverted_at first (oldest revert first), then shipped_at.
+      reverted_at: new Date().toISOString(),
+    })
     .eq("id", projectId)
     .in("status", ["approved", "needs_changes"])
     .select("id, name, user_id")

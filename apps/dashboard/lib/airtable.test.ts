@@ -20,7 +20,6 @@ const baseInput = {
   zip: "SW1A 1AA",
   auditSections: {
     "TECHNICAL FEATURES": "Custom WebSocket sync, no framework.",
-    "HACKATIME EVIDENCE": "spoon-knife-game 8/1/2026-8/10/2026",
     "DEFLATION REASON": "",
     "AGE JUSTIFICATION": "",
     NOTES: "Clean ship, approved as claimed.",
@@ -89,9 +88,6 @@ describe("buildAirtableFields", () => {
     );
     expect(fields["Justification - Additional Justification"]).toBe(
       "Clean ship, approved as claimed.",
-    );
-    expect(fields["Optional - Override Hours Spent Justification"]).toBe(
-      "spoon-knife-game 8/1/2026-8/10/2026",
     );
   });
 

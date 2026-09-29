@@ -7,7 +7,6 @@
 // agree on the exact header text.
 export const AUDIT_HEADERS = [
   "TECHNICAL FEATURES",
-  "HACKATIME EVIDENCE",
   "DEFLATION REASON",
   "AGE JUSTIFICATION",
   "NOTES",

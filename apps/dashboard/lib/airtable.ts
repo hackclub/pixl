@@ -28,7 +28,6 @@ export function githubUsernameFromRepoUrl(repoUrl: string): string {
 
 export interface AuditSections {
   "TECHNICAL FEATURES": string;
-  "HACKATIME EVIDENCE": string;
   "DEFLATION REASON": string;
   "AGE JUSTIFICATION": string;
   NOTES: string;
@@ -93,7 +92,6 @@ type AirtableFieldName =
   | "Justification - Deflation Justification"
   | "Optional - Override Age Justification"
   | "Justification - Additional Justification"
-  | "Optional - Override Hours Spent Justification"
   | "Optional - Override Hours Spent"
   | "Screenshot"
   | "Optional - Override Duplicate Justification"
@@ -126,8 +124,6 @@ export function buildAirtableFields(
     "Justification - Deflation Justification": input.auditSections["DEFLATION REASON"],
     "Optional - Override Age Justification": input.auditSections["AGE JUSTIFICATION"],
     "Justification - Additional Justification": input.auditSections.NOTES,
-    // Closest match for Pixl's freeform Hackatime evidence prose.
-    "Optional - Override Hours Spent Justification": input.auditSections["HACKATIME EVIDENCE"],
   };
   if (input.approvedHours !== null) fields["Optional - Override Hours Spent"] = input.approvedHours;
   if (input.imageUrl) fields["Screenshot"] = [{ url: input.imageUrl }];
@@ -153,7 +149,6 @@ export type PushResult =
 // comparing Pixl's own approved_hours against.
 export const JUSTIFICATION_DISPLAY_FIELDS: AirtableFieldName[] = [
   "Optional - Override Hours Spent",
-  "Optional - Override Hours Spent Justification",
   "Justification - Specific Technical Features",
   "Justification - Deflation Justification",
   "Optional - Override Age Justification",

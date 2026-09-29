@@ -34,7 +34,6 @@ const VERDICT_LABEL: Record<
 // in lib/auditNote.ts), same mapping as the Audit notes page.
 const SECTION_LABEL: Record<AuditHeader, string> = {
   "TECHNICAL FEATURES": "Technical features",
-  "HACKATIME EVIDENCE": "Hackatime evidence",
   "DEFLATION REASON": "Deflation reason",
   "AGE JUSTIFICATION": "Age justification",
   NOTES: "Additional notes",

@@ -16,7 +16,6 @@ const MODEL = process.env.AI_REVIEW_MODEL || "anthropic/claude-sonnet-4.5";
 export interface AiReviewDraft {
   summary: string;
   technicalFeatures: string;
-  hackatimeEvidence: string;
   notes: string;
   redFlags: string[];
   strengths: string[];
@@ -114,7 +113,6 @@ Respond with ONLY a JSON object, no markdown fences, matching exactly:
 {
   "summary": "one or two sentences on what this project actually is/does",
   "technicalFeatures": "concrete technical features you can verify from the README/commits - specific, not generic",
-  "hackatimeEvidence": "a sentence or two sanity-checking claimed hours against commits/journals/Hackatime data - note any mismatch",
   "notes": "anything else worth flagging - beginner signals, AI-disclosure consistency, etc",
   "redFlags": ["short phrase per concern - thin commit history, hour mismatch, etc - empty array if none"],
   "strengths": ["short phrase per notable strength - empty array if none"]
@@ -160,7 +158,6 @@ export async function generateAiReviewDraft(input: AiReviewInput): Promise<AiRev
   return {
     summary: String(parsed.summary ?? ""),
     technicalFeatures: String(parsed.technicalFeatures ?? ""),
-    hackatimeEvidence: String(parsed.hackatimeEvidence ?? ""),
     notes: String(parsed.notes ?? ""),
     redFlags: Array.isArray(parsed.redFlags) ? parsed.redFlags.map(String) : [],
     strengths: Array.isArray(parsed.strengths) ? parsed.strengths.map(String) : [],

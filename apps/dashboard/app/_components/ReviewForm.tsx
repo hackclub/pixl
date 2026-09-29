@@ -379,8 +379,6 @@ export function ReviewForm({
   secondPass = false,
   bounties = [],
   trial,
-  hackatimeProjects = [],
-  hackatimeSeconds = 0,
   ageFlag = false,
   collaborators = [],
   blackout = null,
@@ -406,8 +404,6 @@ export function ReviewForm({
   secondPass?: boolean;
   bounties?: BountyOption[];
   trial?: TrialInfo | null;
-  hackatimeProjects?: string[];
-  hackatimeSeconds?: number;
   ageFlag?: boolean;
   collaborators?: CollaboratorHours[];
   /** Operation Blackout entry awaiting a ruling, when this project has one. */
@@ -422,7 +418,6 @@ export function ReviewForm({
    * starts from what was already written instead of a blank form. */
   firstPass?: {
     technicalFeatures: string;
-    hackatimeEvidence: string;
     deflationReason: string;
     ageJustification: string;
     notes: string;
@@ -494,7 +489,6 @@ export function ReviewForm({
   // error, so a stale draft never resurrects itself on the next review.
   const draftKey = `pixl-review-draft-${projectId}`;
   const technicalFeaturesRef = useRef<HTMLTextAreaElement>(null);
-  const hackatimeEvidenceRef = useRef<HTMLTextAreaElement>(null);
   const deflationReasonRef = useRef<HTMLTextAreaElement>(null);
   const ageJustificationRef = useRef<HTMLTextAreaElement>(null);
   const notesRef = useRef<HTMLTextAreaElement>(null);
@@ -539,8 +533,6 @@ export function ReviewForm({
       technicalFeaturesRef.current.value = draft.technicalFeatures;
       setFeaturesLen(draft.technicalFeatures.trim().length);
     }
-    if (typeof draft.hackatimeEvidence === "string" && hackatimeEvidenceRef.current)
-      hackatimeEvidenceRef.current.value = draft.hackatimeEvidence;
     if (typeof draft.ageJustification === "string" && ageJustificationRef.current)
       ageJustificationRef.current.value = draft.ageJustification;
     if (typeof draft.notes === "string" && notesRef.current) notesRef.current.value = draft.notes;
@@ -584,7 +576,6 @@ export function ReviewForm({
       baseHours,
       tier: overrides?.tier ?? tierState,
       technicalFeatures: technicalFeaturesRef.current?.value ?? "",
-      hackatimeEvidence: hackatimeEvidenceRef.current?.value ?? "",
       deflationReason: deflationReasonRef.current?.value ?? "",
       ageJustification: ageJustificationRef.current?.value ?? "",
       notes: notesRef.current?.value ?? "",
@@ -637,25 +628,13 @@ export function ReviewForm({
     });
   };
 
-  const insertAiText = (field: "technicalFeatures" | "hackatimeEvidence" | "notes", text: string) => {
-    const ref =
-      field === "technicalFeatures"
-        ? technicalFeaturesRef
-        : field === "hackatimeEvidence"
-          ? hackatimeEvidenceRef
-          : notesRef;
+  const insertAiText = (field: "technicalFeatures" | "notes", text: string) => {
+    const ref = field === "technicalFeatures" ? technicalFeaturesRef : notesRef;
     if (!ref.current || !text) return;
     ref.current.value = text;
     if (field === "technicalFeatures") setFeaturesLen(text.trim().length);
     saveDraft();
   };
-
-  const hackatimeDefault = useMemo(() => {
-    if (hackatimeSeconds <= 0) return "";
-    const h = Math.round((hackatimeSeconds / 3600) * 10) / 10;
-    const names = hackatimeProjects.length ? hackatimeProjects.join(", ") : "(unnamed)";
-    return `${names} , ${h}h tracked (see the Hackatime tab for the date range).`;
-  }, [hackatimeProjects, hackatimeSeconds]);
 
   const [featuresLen, setFeaturesLen] = useState(0);
 
@@ -1088,9 +1067,6 @@ export function ReviewForm({
               <Button type="button" size="sm" variant="outline" onClick={() => insertAiText("technicalFeatures", aiDraft.technicalFeatures)}>
                 Insert into Technical features
               </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => insertAiText("hackatimeEvidence", aiDraft.hackatimeEvidence)}>
-                Insert into Hackatime evidence
-              </Button>
               <Button type="button" size="sm" variant="outline" onClick={() => insertAiText("notes", aiDraft.notes)}>
                 Insert into Notes
               </Button>
@@ -1132,21 +1108,6 @@ export function ReviewForm({
             </span>
           </div>
         </div>
-        {hackatimeSeconds > 0 && (
-          <div>
-            <Label className="text-xs font-normal text-muted-foreground mb-1.5 block">
-              Hackatime evidence
-            </Label>
-            <Textarea
-              name="hackatimeEvidence"
-              defaultValue={hackatimeDefault}
-              ref={hackatimeEvidenceRef}
-              onChange={() => saveDraft()}
-              className="w-full text-sm"
-              rows={3}
-            />
-          </div>
-        )}
         {deflated && (
           <div>
             <Label className="text-xs font-normal text-muted-foreground mb-1.5 block">

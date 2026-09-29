@@ -635,6 +635,10 @@ export async function listShippedProjects(
     .is("banned_at", null);
   if (kind) q = q.eq("kind", kind);
   const { data, error } = await q
+    // Reverted (reReviewProject, app/actions.ts) jumps the queue instead of
+    // sorting by its original shipped_at like everything else - oldest
+    // revert first, then every non-reverted project in normal ship order.
+    .order("reverted_at", { ascending: true, nullsFirst: false })
     .order("shipped_at", { ascending: true })
     .limit(500);
   if (error) {

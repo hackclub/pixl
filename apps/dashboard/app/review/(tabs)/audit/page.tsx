@@ -14,7 +14,6 @@ export const dynamic = "force-dynamic";
 // in one undifferentiated paragraph.
 const SECTION_LABEL: Record<AuditHeader, string> = {
   "TECHNICAL FEATURES": "Technical features",
-  "HACKATIME EVIDENCE": "Hackatime evidence",
   "DEFLATION REASON": "Deflation reason",
   "AGE JUSTIFICATION": "Age justification",
   NOTES: "Additional notes",

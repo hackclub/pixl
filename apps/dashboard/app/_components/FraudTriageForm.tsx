@@ -11,28 +11,25 @@ import { TECHNICAL_FEATURES_MIN } from "@/lib/auditNote";
 // The second-pass fraud triage step - deliberately lighter than the full
 // review form (no tier, no player-facing verdict copy): a note, an optional
 // hours deflation if there's a lot of AI use, the first pass's own internal
-// audit note (technical features / Hackatime evidence / age justification /
-// additional notes) prefilled but still fully editable, and a Fraud / Not
-// fraud call. Fraud bans immediately; Not fraud parks it for a super's real
-// verdict in Spot check - see submitFraudTriage in app/actions.ts.
+// audit note (technical features / age justification / additional notes)
+// prefilled but still fully editable, and a Fraud / Not fraud call. Fraud
+// bans immediately; Not fraud parks it for a super's real verdict in Spot
+// check - see submitFraudTriage in app/actions.ts.
 export function FraudTriageForm({
   projectId,
   claimedHours,
   defaultHours,
-  hackatimeSeconds = 0,
   ageFlag = false,
   firstPass,
 }: {
   projectId: number;
   claimedHours: number;
   defaultHours: number;
-  hackatimeSeconds?: number;
   ageFlag?: boolean;
   /** The first pass's own audit note, so the fraud-triage reviewer starts
    * from what was already written instead of a blank form. */
   firstPass?: {
     technicalFeatures: string;
-    hackatimeEvidence: string;
     ageJustification: string;
     notes: string;
   };
@@ -137,17 +134,6 @@ export function FraudTriageForm({
             </span>
           </div>
         </Label>
-        {hackatimeSeconds > 0 && (
-          <Label className="flex flex-col gap-1.5 font-normal">
-            <span className="text-xs text-muted-foreground">Hackatime evidence</span>
-            <Textarea
-              name="hackatimeEvidence"
-              defaultValue={firstPass?.hackatimeEvidence}
-              rows={3}
-              className="text-sm"
-            />
-          </Label>
-        )}
         {ageFlag && (
           <Label className="flex flex-col gap-1.5 font-normal">
             <span className="text-xs text-muted-foreground">

@@ -1139,13 +1139,11 @@ export default async function ReviewDetail({
                           projectId={p.id}
                           claimedHours={payoutHours}
                           defaultHours={formDefaultHours}
-                          hackatimeSeconds={p.hackatime_seconds ?? 0}
                           ageFlag={ageFlag}
                           firstPass={
                             firstPassAudit
                               ? {
                                   technicalFeatures: firstPassAudit["TECHNICAL FEATURES"],
-                                  hackatimeEvidence: firstPassAudit["HACKATIME EVIDENCE"],
                                   ageJustification: firstPassAudit["AGE JUSTIFICATION"],
                                   notes: firstPassAudit["NOTES"],
                                 }
@@ -1178,8 +1176,6 @@ export default async function ReviewDetail({
                         trial={
                           trial?.name ? { name: trial.name, minHours: trial.min_hours ?? null } : null
                         }
-                        hackatimeProjects={hackatimeProjects}
-                        hackatimeSeconds={p.hackatime_seconds ?? 0}
                         ageFlag={ageFlag}
                         collaborators={collaboratorHours}
                         blackout={blackoutForReview}
@@ -1193,7 +1189,6 @@ export default async function ReviewDetail({
                           firstPassAudit
                             ? {
                                 technicalFeatures: firstPassAudit["TECHNICAL FEATURES"],
-                                hackatimeEvidence: firstPassAudit["HACKATIME EVIDENCE"],
                                 deflationReason: firstPassAudit["DEFLATION REASON"],
                                 ageJustification: firstPassAudit["AGE JUSTIFICATION"],
                                 notes: firstPassAudit["NOTES"],
