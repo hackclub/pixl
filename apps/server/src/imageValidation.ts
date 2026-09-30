@@ -6,14 +6,31 @@ const MIME_TO_FORMAT: Record<string, string> = {
   "image/webp": "webp",
 };
 
-// full decode, catches truncation too
-export async function isRealImage(buf: Buffer, mime: string): Promise<boolean> {
+export type SanitizeResult =
+  | { ok: true; buffer: Buffer }
+  | { ok: false; buffer?: undefined };
+
+// Full decode + re-encode - catches truncation/format mismatches (a
+// malformed or mismatched file throws or fails the format check) and, as a
+// side effect, strips EXIF/ICC/XMP metadata: sharp only carries that through
+// to its output when withMetadata() is explicitly called, which this never
+// does. That matters because a phone-camera photo's EXIF commonly embeds GPS
+// coordinates - every caller MUST upload the returned buffer, never the
+// original bytes, or the metadata (and any location) survives untouched.
+export async function sanitizeImage(buf: Buffer, mime: string): Promise<SanitizeResult> {
   const expected = MIME_TO_FORMAT[mime];
-  if (!expected) return false;
+  if (!expected) return { ok: false };
   try {
-    const { info } = await sharp(buf, { failOn: "error" }).toBuffer({ resolveWithObject: true });
-    return info.format === expected;
+    const { data, info } = await sharp(buf, { failOn: "error" }).toBuffer({ resolveWithObject: true });
+    if (info.format !== expected) return { ok: false };
+    return { ok: true, buffer: data };
   } catch {
-    return false;
+    return { ok: false };
   }
+}
+
+// Boolean-only convenience wrapper, kept for callers that just need the
+// validity check (see sanitizeImage above for the metadata-stripped bytes).
+export async function isRealImage(buf: Buffer, mime: string): Promise<boolean> {
+  return (await sanitizeImage(buf, mime)).ok;
 }

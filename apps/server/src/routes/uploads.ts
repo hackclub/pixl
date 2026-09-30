@@ -1,7 +1,7 @@
 import express, { Router } from "express";
 import { verifySessionToken } from "../auth/session.js";
 import { supabase } from "../db/client.js";
-import { isRealImage } from "../imageValidation.js";
+import { sanitizeImage } from "../imageValidation.js";
 import { consumeRateLimit, type RateLimitOptions } from "../rateLimit.js";
 import { validateBomCsv, sanitizeBomCsv } from "./bomCsv.js";
 import { CDN_UPLOAD_QUOTA, reserveCdnUploadQuota, releaseCdnUploadQuota } from "./cdnQuota.js";
@@ -97,11 +97,17 @@ router.post(
 
     const type = String(req.headers["content-type"] ?? "image/png");
 
-    if (!(await isRealImage(buf, type))) {
+    // The re-encoded buffer, not the original bytes, is what actually gets
+    // uploaded below - sanitizeImage strips EXIF/ICC/XMP metadata (GPS
+    // coordinates included) as a side effect of the same decode this route
+    // already needed for validation.
+    const sanitized = await sanitizeImage(buf, type);
+    if (!sanitized.ok) {
       return res.status(400).json({ ok: false, error: "invalid_image" });
     }
+    const safeBuf = sanitized.buffer;
 
-    const quota = await reserveCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, buf.length);
+    const quota = await reserveCdnUploadQuota(CDN_UPLOAD_QUOTA, session.userId, safeBuf.length);
     if (!quota.ok) {
       if (quota.reason === "quota_exceeded") {
         res.setHeader("Retry-After", quota.retryAfterSeconds);
@@ -114,13 +120,13 @@ router.post(
     const form = new FormData();
     form.append(
       "file",
-      new Blob([new Uint8Array(buf)], { type }),
+      new Blob([new Uint8Array(safeBuf)], { type }),
       `journal-${Date.now()}.${ext}`,
     );
 
     const outcome = await uploadToCdn(form, key);
     if (!outcome.ok) {
-      if (!outcome.ambiguous) await releaseCdnUploadQuota(session.userId, buf.length, quota.windowId);
+      if (!outcome.ambiguous) await releaseCdnUploadQuota(session.userId, safeBuf.length, quota.windowId);
       return res.status(502).json({ ok: false, error: "cdn_failed" });
     }
     res.json({ ok: true, url: outcome.url });
@@ -156,15 +162,19 @@ router.post(
     }
 
     const type = String(req.headers["content-type"] ?? "image/png");
-    if (!(await isRealImage(buf, type))) {
+    // Same EXIF/ICC/XMP stripping as /api/uploads above - upload the
+    // sanitized buffer, never the original.
+    const sanitized = await sanitizeImage(buf, type);
+    if (!sanitized.ok) {
       return res.status(400).json({ ok: false, error: "invalid_image" });
     }
+    const safeBuf = sanitized.buffer;
 
     const ext = type === "image/jpeg" ? "jpg" : (type.split("/")[1] ?? "png");
     const form = new FormData();
     form.append(
       "file",
-      new Blob([new Uint8Array(buf)], { type }),
+      new Blob([new Uint8Array(safeBuf)], { type }),
       `submission-${Date.now()}.${ext}`,
     );
 
