@@ -1640,13 +1640,10 @@ export async function submitFraudTriage(formData: FormData): Promise<void> {
       redirect(`${back}?error=${encodeURIComponent("Credited hours must be a number of 0 or more.")}`);
     approvedHours = Math.min(Math.round(n * 10) / 10, claimedHours);
   }
-  // Only "not fraud" carries the hours forward to an eventual approval (see
-  // second_pass_hours below) - a lowered number on a fraud call never gets
-  // credited, so it doesn't need a paper trail the same way.
-  const deflated = verdict === "not_fraud" && approvedHours != null && approvedHours < claimedHours;
+  // Explaining a further hours cut lives in the note to the super doing Spot
+  // check now, not a dedicated required field - deflationReason here is just
+  // the first pass's own reasoning, prefilled and still editable.
   const deflationReason = String(formData.get("deflationReason") ?? "").trim();
-  if (deflated && !deflationReason)
-    redirect(`${back}?error=${encodeURIComponent("Explain why the hours were lowered.")}`);
 
   // Same structured internal audit note as reviewProject - the FraudTriageForm
   // starts these prefilled from the first pass's own audit note, still fully

@@ -1144,6 +1144,7 @@ export default async function ReviewDetail({
                             firstPassAudit
                               ? {
                                   technicalFeatures: firstPassAudit["TECHNICAL FEATURES"],
+                                  deflationReason: firstPassAudit["DEFLATION REASON"],
                                   ageJustification: firstPassAudit["AGE JUSTIFICATION"],
                                   notes: firstPassAudit["NOTES"],
                                 }

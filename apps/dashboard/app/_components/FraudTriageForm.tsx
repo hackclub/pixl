@@ -11,10 +11,12 @@ import { TECHNICAL_FEATURES_MIN } from "@/lib/auditNote";
 // The second-pass fraud triage step - deliberately lighter than the full
 // review form (no tier, no player-facing verdict copy): a note, an optional
 // hours deflation if there's a lot of AI use, the first pass's own internal
-// audit note (technical features / age justification / additional notes)
-// prefilled but still fully editable, and a Fraud / Not fraud call. Fraud
-// bans immediately; Not fraud parks it for a super's real verdict in Spot
-// check - see submitFraudTriage in app/actions.ts.
+// audit note (technical features / deflation reason / age justification /
+// additional notes) prefilled but still fully editable, and a Fraud / Not
+// fraud call. Lowering the hours further doesn't need its own justification
+// field - that reasoning belongs in the note to the super doing Spot check.
+// Fraud bans immediately; Not fraud parks it for a super's real verdict in
+// Spot check - see submitFraudTriage in app/actions.ts.
 export function FraudTriageForm({
   projectId,
   claimedHours,
@@ -30,6 +32,7 @@ export function FraudTriageForm({
    * from what was already written instead of a blank form. */
   firstPass?: {
     technicalFeatures: string;
+    deflationReason: string;
     ageJustification: string;
     notes: string;
   };
@@ -38,7 +41,6 @@ export function FraudTriageForm({
   const [featuresLen, setFeaturesLen] = useState(firstPass?.technicalFeatures.trim().length ?? 0);
   const [error, setError] = useState("");
   const noteRef = useRef<HTMLTextAreaElement>(null);
-  const deflationReasonRef = useRef<HTMLTextAreaElement>(null);
   const technicalFeaturesRef = useRef<HTMLTextAreaElement>(null);
   const ageJustificationRef = useRef<HTMLTextAreaElement>(null);
   const notesRef = useRef<HTMLTextAreaElement>(null);
@@ -66,10 +68,6 @@ export function FraudTriageForm({
       setError("A note is required for either verdict.");
       return false;
     }
-    if (verdict === "not_fraud" && deflated && !deflationReasonRef.current?.value.trim()) {
-      setError("Explain why the hours were lowered.");
-      return false;
-    }
     setError("");
     return true;
   };
@@ -93,19 +91,9 @@ export function FraudTriageForm({
         />
       </Label>
       {deflated && (
-        <Label className="flex flex-col gap-1.5 font-normal">
-          <span className="text-xs text-muted-foreground">
-            Why lower the hours? ({claimedHours}h claimed → {hours}h)
-          </span>
-          <Textarea
-            name="deflationReason"
-            ref={deflationReasonRef}
-            required
-            rows={2}
-            placeholder="e.g. a lot of this looks AI-generated, tracked time doesn't match the diff…"
-            className="text-sm"
-          />
-        </Label>
+        <p className="text-xs text-muted-foreground -mt-1">
+          Lowering below what first pass credited , explain why in your note to the super below.
+        </p>
       )}
       <div className="rounded-lg border p-3 flex flex-col gap-3">
         <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground leading-relaxed">
@@ -133,6 +121,16 @@ export function FraudTriageForm({
               {featuresLen}/{TECHNICAL_FEATURES_MIN}
             </span>
           </div>
+        </Label>
+        <Label className="flex flex-col gap-1.5 font-normal">
+          <span className="text-xs text-muted-foreground">Deflation reason (from the first pass)</span>
+          <Textarea
+            name="deflationReason"
+            defaultValue={firstPass?.deflationReason}
+            placeholder="Why the first pass lowered the hours, if they did."
+            rows={2}
+            className="text-sm"
+          />
         </Label>
         {ageFlag && (
           <Label className="flex flex-col gap-1.5 font-normal">
@@ -170,7 +168,7 @@ export function FraudTriageForm({
           ref={noteRef}
           required
           rows={3}
-          placeholder="What did you check, and why this call?"
+          placeholder="What did you check, and why this call? If you lowered the hours further, explain why here."
           className="text-sm"
         />
       </Label>
