@@ -22,7 +22,6 @@
     <!-- <pixl-preview:end> -->
     <link rel="icon" href="/index.icon.png" />
     <link rel="stylesheet" href="/pixl.css?v=4" />
-    <link rel="stylesheet" href="/pixl-card.css?v=1" />
     <style>
       .hero {
         padding: 24px 28px;
@@ -291,6 +290,93 @@
         display: flex;
         gap: 14px;
         flex-wrap: wrap;
+      }
+      /* full-width project rows */
+      .proj-rows {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .proj-row {
+        display: flex;
+        gap: 20px;
+        align-items: stretch;
+        padding: 16px 18px;
+        width: 100%;
+      }
+      .proj-row-thumb {
+        width: 280px;
+        flex-shrink: 0;
+        align-self: stretch;
+        min-height: 120px;
+        border: var(--bw) solid var(--stroke);
+        border-radius: 0;
+        background:
+          repeating-conic-gradient(
+              rgba(22, 22, 30, 0.05) 0% 25%,
+              transparent 0% 50%
+            )
+            0 0 / 22px 22px,
+          var(--panel-deep);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 44px;
+        overflow: hidden;
+      }
+      .proj-row-thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+      /* the banner is the card's anchor, so an absent one says so rather than
+         leaving a dead rectangle */
+      .thumb-none {
+        font-family: var(--pixel);
+        font-size: 13px;
+        letter-spacing: 1.5px;
+        color: var(--muted);
+      }
+      .proj-row-body {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+      }
+      .proj-row-head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .proj-row-head .proj-name {
+        font-size: 22px;
+      }
+      .proj-row-arrow {
+        align-self: center;
+        color: var(--faint);
+        font-size: 30px;
+        flex-shrink: 0;
+      }
+      .proj-row:hover .proj-row-arrow {
+        color: var(--gold);
+      }
+      .proj-row .note-strip {
+        margin-top: 2px;
+      }
+      @media (max-width: 560px) {
+        .proj-row {
+          flex-direction: column;
+          gap: 12px;
+        }
+        .proj-row-thumb {
+          width: 100%;
+          height: 160px;
+        }
+        .proj-row-arrow {
+          display: none;
+        }
       }
       /* status legend, sits opposite the page title */
       /* capped so the four states wrap into a 2x2 block beside the button
@@ -1133,7 +1219,6 @@
     </main>
 
     <script src="/pixl.js?v=6"></script>
-    <script src="/pixl-card.js?v=1"></script>
     <script>
       // /project/<id> is the canonical URL for a single project, and it's this
       // same page (web/api/project-meta.ts serves this HTML for it, with the
@@ -1622,57 +1707,6 @@
         }
       }
 
-      const CARD_TONES = { "status-needs": "changes", "status-approved": "shipped", "status-shipped": "review" };
-      let myAvatar = null;
-
-      function projectCardHtml(p) {
-        const [label, cls] = statusInfo(p);
-        const htSecs = linkedSeconds(p);
-        const jSecs = Number(p.journal_seconds) || 0;
-        const ht = (p.hackatime_projects || []).join(", ");
-        const extra = [
-          blackoutChipHtml(p),
-          p.trial_reward_choice === "pending" ? `<span class="chip gold">TRIAL REWARD WAITING</span>` : "",
-          p.status === "needs_changes" && p.review_note ? `<div class="note-strip">${Pixl.esc(p.review_note)}</div>` : "",
-          p.rejected_at && p.reject_reason ? `<div class="note-strip">${Pixl.esc(p.reject_reason)}</div>` : "",
-        ].join("");
-        const card = PixlCard.render({
-          tag: "div",
-          href: `/project/${Number(p.id)}`,
-          image: p.image_url,
-          title: p.name,
-          star: p.is_peak,
-          byline: p.pixels_earned
-            ? `<b>+${Math.round(p.pixels_earned)} px</b> earned`
-            : ht ? `Hackatime: <b>${Pixl.esc(ht)}</b>` : "no hackatime linked",
-          date: Pixl.timeAgo(p.created_at),
-          status: label,
-          tone: CARD_TONES[cls] || "draft",
-          pills: [
-            { cls: "pc-level", icon: "level", text: `T${p.level || 1}`, title: LEVELS[(p.level || 1) - 1][0] },
-            { cls: "pc-beacon", icon: "beacon", text: p.is_peak ? "BEACON" : "" },
-            { cls: "pc-hours", icon: "clock", text: htSecs + jSecs ? Pixl.hours(htSecs + jSecs) : "", title: `Hackatime: ${Pixl.hours(htSecs)} · Journal: ${Pixl.hours(jSecs)}` },
-          ],
-          links: `<div class="pc-links">
-            ${Pixl.safeHref(p.repo_url) ? `<a href="${Pixl.esc(p.repo_url)}" target="_blank" rel="noopener">CODE</a>` : ""}
-            ${Pixl.safeHref(p.demo_url) ? `<a href="${Pixl.esc(p.demo_url)}" target="_blank" rel="noopener">DEMO</a>` : ""}
-            <a href="#" data-copy="${Number(p.id)}">COPY</a>
-          </div>`,
-          corner: `<span class="pc-vote">OPEN ›</span>`,
-        });
-        return extra ? `<div class="pc-cell">${card}<div class="pc-extra">${extra}</div></div>` : card;
-      }
-
-      async function fillMyAvatar() {
-        if (myAvatar === null) {
-          const r = await Pixl.api("/api/profile/card").catch(() => null);
-          const url = r && Pixl.safeHref(r.avatar_url);
-          myAvatar = url ? `<div class="avatar"><img src="${Pixl.esc(url)}" alt="" onerror="this.remove()"></div>` : "";
-        }
-        if (!myAvatar) return;
-        document.querySelectorAll("#view .pc-avatar").forEach((el) => { el.innerHTML = myAvatar; });
-      }
-
       function renderList() {
         $("new-btn").style.display = "";
         const view = $("view");
@@ -1690,8 +1724,31 @@
         }
         view.innerHTML = `
     <div class="section-h">MY PROJECTS · ${projects.length}</div>
-    <div class="grid">
-      ${projects.map(projectCardHtml).join("")}
+    <div class="proj-rows">
+      ${projects
+        .map((p) => {
+          const [label, cls] = statusInfo(p);
+          return `
+        <div class="card panel proj-row" data-href="/project/${p.id}">
+          <div class="proj-row-thumb">${p.image_url ? `<img src="${Pixl.esc(p.image_url)}" alt="" loading="lazy" onerror="this.remove()">` : `<span class="thumb-none">NO IMAGE</span>`}</div>
+          <div class="proj-row-body">
+            <div class="proj-row-head">
+              <a class="proj-name" href="/project/${p.id}">${Pixl.esc(p.name)}</a>
+              <span class="chip ${cls}">${label}</span>
+              <span class="chip">${LEVELS[(p.level || 1) - 1][0]}</span>
+              ${trackedChipHtml(p)}
+              ${blackoutChipHtml(p)}
+              ${p.trial_reward_choice === "pending" ? `<span class="chip gold">TRIAL REWARD WAITING</span>` : ""}
+            </div>
+            ${p.description ? `<div class="proj-meta"><span>${Pixl.esc(p.description)}</span></div>` : ""}
+            ${projLinksHtml(p)}
+            ${p.status === "needs_changes" && p.review_note ? `<div class="note-strip">${Pixl.esc(p.review_note)}</div>` : ""}
+            ${p.rejected_at && p.reject_reason ? `<div class="note-strip">${Pixl.esc(p.reject_reason)}</div>` : ""}
+          </div>
+          <div class="proj-row-arrow">›</div>
+        </div>`;
+        })
+        .join("")}
     </div>
     <div class="list-actions">
       <a class="btn" href="/projects/new">+ NEW PROJECT</a>
@@ -1699,7 +1756,6 @@
     </div>
     <div class="panel-grid" id="feeds"></div>`;
         renderFeeds();
-        fillMyAvatar();
       }
 
       // The card is a div rather than an anchor so the repo and demo links can
@@ -1715,7 +1771,7 @@
           return;
         }
         if (e.target.closest("a")) return;
-        const card = e.target.closest(".proj-card[data-href]");
+        const card = e.target.closest(".proj-row[data-href]");
         if (card) location.href = card.dataset.href;
       });
 
