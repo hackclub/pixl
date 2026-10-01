@@ -852,6 +852,14 @@ router.post("/api/projects/:id/ship", async (req, res) => {
     .update({
       status: "shipped",
       shipped_at: new Date().toISOString(),
+      // A fix-and-reship after needs_changes already went through a first
+      // pass once - it jumps the queue instead of sorting by this fresh
+      // shipped_at like a brand-new submission would (same reverted_at
+      // priority the dashboard's "send back to review" admin action uses,
+      // see listShippedProjects in apps/dashboard/lib/db.ts). A first-ever
+      // ship (draft) or an update to an already-approved project waits its
+      // turn normally.
+      reverted_at: project.status === "needs_changes" ? new Date().toISOString() : null,
       review_note: "",
       review_note_by: "",
       rejected_at: null,
