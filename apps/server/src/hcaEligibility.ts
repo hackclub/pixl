@@ -3,6 +3,21 @@ export interface HcaClaims {
   ysws_eligible?: unknown;
 }
 
+// One-off exceptions for a specific player's own account, never a general
+// escape hatch - each entry needs its own comment explaining why, since this
+// bypasses a real eligibility check. Deliberately a hardcoded allowlist here
+// rather than a DB column: a DB flag would get silently overwritten back to
+// whatever HCA reports on that player's very next login (see hcaStatePatch/
+// persistHcaState in routes/auth.ts, which re-syncs hca_ysws_eligible from
+// HCA on every login), while this survives that.
+export const MANUAL_ELIGIBILITY_OVERRIDE_USER_IDS = new Set<string>([
+  // Oluwajubeelo Lawal (project 621, "ArgueIt") - HCA has this identity as
+  // verification_status "verified" but has never set a ysws_eligible flag at
+  // all (confirmed via a fresh re-sync, not stale Pixl-side data) - a gap on
+  // HCA's own side, not a real rejection. Approved by Gabin, 2026-10-01.
+  "a893cc19-1b35-42c9-86df-1e0ffbf1cc50",
+]);
+
 export interface HcaStateRow {
   hca_verification_status?: string | null;
   hca_ysws_eligible?: boolean | null;

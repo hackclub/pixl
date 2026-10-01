@@ -6,7 +6,11 @@ import { findAllInYswsArchive } from "../ysws/archive.js";
 import { buildDoubleDip, type TeamMember } from "../ysws/doubleDip.js";
 import { fetchHackatimeStats, fetchTrackedSecondsSince, HACKATIME_CUTOFF } from "../hackatime/api.js";
 import { postShipToSlack } from "../shipNotify.js";
-import { shipEligibilityBlock, type HcaStateRow } from "../hcaEligibility.js";
+import {
+  shipEligibilityBlock,
+  MANUAL_ELIGIBILITY_OVERRIDE_USER_IDS,
+  type HcaStateRow,
+} from "../hcaEligibility.js";
 import { normalizeProjectUrl } from "./projectUrlSafety.js";
 import { isGitRepoUrl } from "./gitRepoUrl.js";
 import { urlAlive } from "./urlLiveness.js";
@@ -572,7 +576,7 @@ router.post("/api/projects/:id/ship", async (req, res) => {
     return res.status(500).json({ ok: false });
   }
   const hcaBlock = shipEligibilityBlock(hcaRow as HcaStateRow | null);
-  if (hcaBlock)
+  if (hcaBlock && !MANUAL_ELIGIBILITY_OVERRIDE_USER_IDS.has(session.userId))
     return res
       .status(403)
       .json({ ok: false, error: hcaBlock.error, message: hcaBlock.message, hca_status: hcaBlock.status });
