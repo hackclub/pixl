@@ -142,11 +142,13 @@ export interface ProjectRow {
   first_pass_note: string;
   first_pass_hours: number | null;
   first_pass_verdict: string | null;
-  // Second-pass fraud triage (submitFraudTriage in app/actions.ts) - a
-  // reviewer picks fraud (bans immediately, doesn't need these) or not_fraud
-  // (parks it here for a super to give the real verdict in Spot check).
-  // Same shape as first_pass_* above, one stage later. null verdict = not
-  // yet triaged, still in the Second pass queue.
+  // Second pass is now Robert's fraud review (lib/robertSync.ts), not a
+  // human triage step - a landed review always writes second_pass_by
+  // "Robert" and verdict "not_fraud" (parking it for a super's real verdict
+  // in Spot check), carrying Robert's own note here. second_pass_hours is
+  // unused by Robert (null) - kept for the Spot check reviewer to still see
+  // what a verdict's hours were historically. null verdict = still parked
+  // in fraud_review, awaiting Robert (see the Second pass tab).
   second_pass_by: string;
   second_pass_at: string | null;
   second_pass_note: string;
@@ -160,16 +162,20 @@ export interface ProjectRow {
   // Reviewer-only cosmetic flag, see toggleProjectPeak in actions.ts. Never
   // player-set, never affects payout.
   is_peak: boolean;
-  // Joe fraud review (joe.fraud.hackclub.com), the second pass. joe_error holds
-  // the last submission failure so a stuck project explains itself in the UI.
-  joe_project_id: string;
-  joe_submitted_at: string | null;
-  joe_trust_score: number | null;
-  joe_outcome: string;
-  joe_reason: string;
-  joe_reviewed_at: string | null;
-  joe_reviewer: string;
-  joe_error: string;
+  // Robert fraud review (telescreen.hackclub.com), the fraud determination
+  // now - see lib/robert.ts/robertSync.ts. robert_error holds the last
+  // submission failure so a stuck project explains itself in the UI.
+  // robert_state is Robert's own project state at last sync (awaiting_review
+  // / awaiting_outcome / rejected_fraud / decided).
+  robert_project_id: string | null;
+  robert_submitted_at: string | null;
+  robert_trust_score: number | null;
+  robert_note: string | null;
+  robert_reviewed_at: string | null;
+  robert_state: string | null;
+  robert_outcome: string | null;
+  robert_outcome_at: string | null;
+  robert_error: string;
   // Airtable YSWS push (see sendProjectToAirtable in app/actions.ts) - the
   // Airtable record id once this project has been pushed, so a re-send
   // updates the existing row instead of creating a duplicate.
@@ -676,18 +682,21 @@ export async function claimReview(
   return { ok: true };
 }
 
-// Second-pass queue: projects that passed a first review and await fraud
-// triage (submitFraudTriage in app/actions.ts) - a "not_fraud" triage moves a
-// project on to Spot check instead of leaving it here, so this only ever
-// shows untriaged ones. Oldest-first, hiding anything another reviewer holds.
-// Ordered by shipped_at (when the player originally submitted it), the same
-// field/direction listShippedProjects uses for the first-pass queue - not
-// first_pass_at (when a first reviewer happened to get to it). A project
-// that sat a long time waiting for its first pass has already made its
-// player wait; a quick first pass on a project shipped more recently
-// shouldn't cut in front of it just because the first-pass verdict landed
-// sooner. shipped_at is set once at the initial ship and never touched again
-// (see the ship route), so it tracks total time waiting across both passes.
+// Second pass tab: projects that passed a first review and are parked
+// awaiting Robert's fraud review (lib/robertSync.ts) - read-only now, no
+// human fraud/not_fraud triage anymore (see 0206_robert_fraud_review.sql).
+// A landed review moves a project on to Spot check (status becomes
+// second_review, second_pass_verdict "not_fraud") instead of leaving it
+// here, so this only ever shows projects still waiting on Robert. Oldest-
+// first, hiding anything another reviewer holds. Ordered by shipped_at
+// (when the player originally submitted it), the same field/direction
+// listShippedProjects uses for the first-pass queue - not first_pass_at
+// (when a first reviewer happened to get to it). A project that sat a long
+// time waiting for its first pass has already made its player wait; a quick
+// first pass on a project shipped more recently shouldn't cut in front of
+// it just because the first-pass verdict landed sooner. shipped_at is set
+// once at the initial ship and never touched again (see the ship route),
+// so it tracks total time waiting across both passes.
 export async function listSecondReviewProjects(
   viewer?: string,
   kind?: "software" | "hardware",
@@ -696,13 +705,10 @@ export async function listSecondReviewProjects(
   let q = db
     .from("projects")
     .select("*, users(id, display_name, real_name, slack_id)")
-    .eq("status", "second_review")
-    .is("second_pass_verdict", null)
+    .eq("status", "fraud_review")
     // A first-pass "ban" verdict is only a proposal (see reviewProject) -
     // it belongs in the dedicated Proposed bans tab (listProposedBanProjects),
-    // not mixed into the general second-pass queue where a final reviewer
-    // could accidentally approve/reject it as an ordinary review instead of
-    // confirming or overturning the ban through the proper flow.
+    // not mixed into this tab, even though it also parks in fraud_review.
     .neq("first_pass_verdict", "banned")
     .is("archived_at", null)
     .is("rejected_at", null)
@@ -940,11 +946,11 @@ export async function sumSecondPassHours(): Promise<number> {
   return Math.round(total * 10) / 10;
 }
 
-// Super-admin-only final-verdict queue: projects a second-pass reviewer
-// already triaged "not fraud" (see submitFraudTriage in app/actions.ts),
-// waiting on a super to actually approve & credit, request changes, or ban -
-// the real second_pass_verdict === "fraud" case bans immediately and never
-// reaches here. This used to be a read-only QA audit over every second_review
+// Super-admin-only final-verdict queue: projects Robert already reviewed as
+// "not fraud" (see lib/robertSync.ts - every real score lands here now,
+// Robert's own "Fraud" range included, just with an owner alert attached),
+// waiting on a super to actually approve & credit, request changes, or ban.
+// This used to be a read-only QA audit over every second_review
 // project; now that spot check IS the final verdict step, it behaves like
 // listSecondReviewProjects (hides anything another reviewer is actively
 // holding, unless includeClaimed).

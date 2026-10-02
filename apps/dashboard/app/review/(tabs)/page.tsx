@@ -127,26 +127,26 @@ export default async function ReviewListPage({
           <div className="flex items-center gap-2 mb-3">
             <span className="w-1.5 h-1.5 rounded-full bg-violet-500" />
             <h2 className="text-sm font-semibold text-foreground">
-              Awaiting your fraud triage
+              Awaiting Robert
               <Badge variant="violet" className="ml-2">
                 {finalRows.length}
               </Badge>
             </h2>
           </div>
           <p className="text-xs text-muted-foreground mb-3">
-            These passed a first review. Call Fraud or Not fraud with a note , Fraud bans
-            immediately, Not fraud sends it on to Spot check for the real verdict.
+            These passed a first review and are parked awaiting Robert&apos;s fraud review , read-only,
+            nothing to action. They move on to Spot check automatically once Robert&apos;s score lands.
           </p>
           <details>
             <summary className="text-sm text-brand font-medium cursor-pointer select-none mb-3">
-              Show {finalRows.length} project{finalRows.length === 1 ? "" : "s"} awaiting fraud triage
+              Show {finalRows.length} project{finalRows.length === 1 ? "" : "s"} awaiting Robert
             </summary>
             <ReviewTable
               rows={finalRows}
               handles={finalHandles}
               hackatimeUserIds={finalHackatimeUserIds}
               blackoutIds={blackoutIds}
-              emptyLabel="Nothing waiting on a fraud triage."
+              emptyLabel="Nothing waiting on Robert right now."
             />
           </details>
         </div>

@@ -64,8 +64,7 @@ import {
 import { buildAuditNote, parseAuditNote, TECHNICAL_FEATURES_MIN } from "@/lib/auditNote";
 import { decryptPII } from "@/lib/crypto";
 import { buildAirtableFields, pushProjectRecord } from "@/lib/airtable";
-import { joeEnabled } from "@/lib/joe";
-import { submitToJoe } from "@/lib/joeSync";
+import { submitToRobert, recordRobertOutcome } from "@/lib/robertSync";
 import { slackHandle, dmUser, slackAvatars, DM_EXCLUDED_SLACK_IDS } from "@/lib/slack";
 import { fetchHackatimeReport, fetchTrackedSecondsSince, fetchTrustFactor } from "@/lib/hackatime";
 import { fetchCommits, attachCommitStats } from "@/lib/commits";
@@ -137,9 +136,9 @@ async function nextReviewPath(
       prefer: stage === "second_review" ? "second_review" : "shipped",
       reviewQueues: access.reviewQueues,
       // A real approve/needs_changes/ban verdict only ever fires at
-      // stage=second_review from Spot check now - fraud triage (the
-      // fraud/not_fraud verdicts) redirects through submitFraudTriage
-      // instead, never through here.
+      // stage=second_review from Spot check now - Robert's fraud review
+      // (lib/robertSync.ts) happens out of band while a project sits in
+      // fraud_review, never through here.
       spotCheck: stage === "second_review",
     });
     return nextId ? `/review/${nextId}` : "/review";
@@ -886,7 +885,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
   const { data: current } = await db
     .from("projects")
     .select(
-      "status, user_id, name, description, image_url, first_pass_by, first_pass_hours, first_pass_verdict, second_pass_hours, second_pass_verdict, shipped_at, sidequest_id, trial_reward_choice, needs_funding, funding_usd",
+      "status, user_id, name, description, image_url, first_pass_by, first_pass_hours, first_pass_verdict, second_pass_hours, second_pass_verdict, shipped_at, sidequest_id, trial_reward_choice, needs_funding, funding_usd, robert_project_id, robert_state",
     )
     .eq("id", projectId)
     .single();
@@ -936,7 +935,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
   } else if (stage === "second_review") {
     // A real approve/needs_changes/ban verdict at second_review is now the
     // Spot check step - it only fires once a second-pass reviewer has
-    // triaged the project "not fraud" (submitFraudTriage), and only a super
+    // triaged the project "not fraud" (Robert's fraud review), and only a super
     // gives it, same as the rest of Spot check's gating.
     if (current.second_pass_verdict !== "not_fraud")
       redirect(`${back}?error=${encodeURIComponent("This still needs a fraud triage (Fraud / Not fraud) before a final verdict.")}`);
@@ -1063,7 +1062,16 @@ export async function reviewProject(formData: FormData): Promise<void> {
     const { data: project, error } = await db
       .from("projects")
       .update({
-        status: joeEnabled() ? "fraud_review" : "second_review",
+        // A proposed ban skips Robert entirely, straight to second_review
+        // for a different reviewer to confirm/overturn in Proposed bans -
+        // same carve-out the fraud-triage redesign already established (see
+        // isProposedBan below). An approval always parks in fraud_review
+        // now, whether or not ROBERT_API_KEY is set yet - manual fraud
+        // triage is retired, not just conditional on Robert being
+        // configured (see 0206_robert_fraud_review.sql). Submission below is
+        // a no-op while unconfigured; the project just sits un-actionable
+        // (see the Second pass tab) until it is.
+        status: proposedKey === "banned" ? "second_review" : "fraud_review",
         review_note: note,
         review_note_by: reviewer,
         approved_hours: approvedHours,
@@ -1122,7 +1130,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
       }
     }
     await logModAction(project.user_id, "project_first_pass", `${project.name}: proposed ${proposedKey.replace("_", " ")} , ${note}`, by);
-    await submitToJoe(projectId);
+    if (proposedKey === "approved") await submitToRobert(projectId);
     const nextPath = await nextReviewPath(access, by, stage, projectId);
     revalidatePath("/review");
     redirect(nextPath);
@@ -1229,8 +1237,10 @@ export async function reviewProject(formData: FormData): Promise<void> {
     }
     await insertReviewAudit(formData, projectId, project.user_id, by, "banned", note, claimedHours, approvedHours);
     await operationRpc.onBan(projectId);
-    if (stage === "second_review")
+    if (stage === "second_review") {
       await voidFirstPassPayouts(projectId, "final verdict was a ban, not an approval");
+      await recordRobertOutcome(current.robert_project_id, current.robert_state, "rejected", note);
+    }
     const banBody =`Your project "${project.name}" was permanently banned by ${reviewer} and can no longer be shipped to Pixl.\n\nReason: ${note}\n\nIf you think this is a mistake, contact the Pixl team.`;
     await db.from("notifications").insert({ user_id: project.user_id, title: "Project banned", body: banBody });
     await dmOrEmail(project.user_id, "Project banned", banBody);
@@ -1286,7 +1296,10 @@ export async function reviewProject(formData: FormData): Promise<void> {
   }
   await insertReviewAudit(formData, projectId, project.user_id, by, "approved", note, claimedHours, approvedHours);
 
-  if (stage === "second_review") await settleFirstPassPayouts(projectId, project.name);
+  if (stage === "second_review") {
+    await settleFirstPassPayouts(projectId, project.name);
+    await recordRobertOutcome(current.robert_project_id, current.robert_state, "approved");
+  }
   if (!own) await recordSettledPayout(projectId, access, "approved", project.name);
 
   // Collected up front so each beneficiary's referral check can see who else
@@ -1588,171 +1601,6 @@ export async function reviewProject(formData: FormData): Promise<void> {
     console.error(`reviewProject: Airtable push threw for project ${projectId}`, (err as Error).message);
   }
   const nextPath = await nextReviewPath(access, by, stage, projectId);
-  revalidatePath("/review");
-  redirect(nextPath);
-}
-
-// The second-pass fraud triage step: a reviewer picks fraud (bans
-// immediately - identical to reviewProject's own ban branch, just entered
-// from here instead) or not_fraud (records the call and parks the project
-// for a super to give the real verdict in Spot check - no status change, no
-// pixels move yet). Deliberately lighter than reviewProject's full form: no
-// tier grading, no structured technical-features/notes audit trail, no age
-// justification - those matter once a real verdict is being given, which now
-// only happens at Spot check.
-export async function submitFraudTriage(formData: FormData): Promise<void> {
-  const access = await requirePerm("review");
-  if (!access.canSecondPass) return;
-  const by = actorName(access);
-  const reviewer = await reviewerLabel(access.session.slackId, access.session.name);
-  const projectId = Number(formData.get("projectId") ?? 0);
-  const verdict = String(formData.get("verdict") ?? "");
-  const note = String(formData.get("note") ?? "").trim().slice(0, 1000);
-  const back = `/review/${projectId}`;
-  if (!projectId || !["fraud", "not_fraud"].includes(verdict)) return;
-
-  const { data: current } = await db
-    .from("projects")
-    .select("status, user_id, name, first_pass_by, second_pass_verdict, shipped_at")
-    .eq("id", projectId)
-    .single();
-  if (!current) return;
-  if (current.status !== "second_review" || current.second_pass_verdict)
-    redirect(`${back}?error=${encodeURIComponent("This project isn't awaiting fraud triage anymore.")}`);
-  if (!access.isSuper && current.first_pass_by && current.first_pass_by === by)
-    redirect(`${back}?error=${encodeURIComponent("A different reviewer must do the fraud triage.")}`);
-  if (!note)
-    redirect(`${back}?error=${encodeURIComponent("A note is required for either verdict.")}`);
-
-  const { data: submitter } = await db
-    .from("users")
-    .select("birthday")
-    .eq("id", current.user_id)
-    .maybeSingle();
-  const ageFlag = turnedNineteenSinceShipping(submitter?.birthday ?? null, current.shipped_at);
-
-  const claimedHours = await claimedHoursFor(projectId);
-  const hoursRaw = String(formData.get("approvedHours") ?? "").trim();
-  let approvedHours: number | null = null;
-  if (hoursRaw !== "") {
-    const n = Number(hoursRaw);
-    if (!Number.isFinite(n) || n < 0)
-      redirect(`${back}?error=${encodeURIComponent("Credited hours must be a number of 0 or more.")}`);
-    approvedHours = Math.min(Math.round(n * 10) / 10, claimedHours);
-  }
-  // Explaining a further hours cut lives in the note to the super doing Spot
-  // check now, not a dedicated required field - deflationReason here is just
-  // the first pass's own reasoning, prefilled and still editable.
-  const deflationReason = String(formData.get("deflationReason") ?? "").trim();
-
-  // Same structured internal audit note as reviewProject - the FraudTriageForm
-  // starts these prefilled from the first pass's own audit note, still fully
-  // editable, so the reviewer can correct/extend the justification while
-  // triaging instead of it being carried forward unread.
-  const technicalFeatures = String(formData.get("technicalFeatures") ?? "").trim();
-  if (technicalFeatures.length < TECHNICAL_FEATURES_MIN)
-    redirect(
-      `${back}?error=${encodeURIComponent(`Describe concrete technical features you checked (min ${TECHNICAL_FEATURES_MIN} characters).`)}`,
-    );
-  const ageJustification = String(formData.get("ageJustification") ?? "").trim();
-  if (ageFlag && !ageJustification)
-    redirect(
-      `${back}?error=${encodeURIComponent("This submitter turns 19 between shipping and review , document that before deciding.")}`,
-    );
-  const auditNotes = String(formData.get("notes") ?? "").trim();
-  if (!auditNotes)
-    redirect(`${back}?error=${encodeURIComponent("Additional notes are required.")}`);
-  formData.set(
-    "auditNote",
-    buildAuditNote({
-      "TECHNICAL FEATURES": technicalFeatures,
-      "DEFLATION REASON": deflationReason,
-      "AGE JUSTIFICATION": ageJustification,
-      NOTES: auditNotes,
-    }),
-  );
-
-  if (verdict === "fraud") {
-    const { data: project, error } = await db
-      .from("projects")
-      .update({
-        banned_at: new Date().toISOString(),
-        ban_reason: note,
-        ban_by: reviewer,
-        reviewing_by: "",
-        reviewing_at: null,
-        first_pass_verdict: null,
-        review_draft: null,
-        review_draft_by: "",
-        review_draft_at: null,
-        second_pass_by: by,
-        second_pass_at: new Date().toISOString(),
-        second_pass_note: note,
-        second_pass_hours: approvedHours,
-        second_pass_verdict: "fraud",
-      })
-      .eq("id", projectId)
-      .eq("status", "second_review")
-      .select("id, name, user_id")
-      .single();
-    if (error || !project) {
-      console.error("submitFraudTriage (fraud) failed", error?.message);
-      return;
-    }
-    await insertReviewAudit(formData, projectId, project.user_id, by, "banned", note, claimedHours, approvedHours);
-    await operationRpc.onBan(projectId);
-    await voidFirstPassPayouts(projectId, "flagged as fraud on second pass");
-    const banBody = `Your project "${project.name}" was permanently banned by ${reviewer} and can no longer be shipped to Pixl.\n\nReason: ${note}\n\nIf you think this is a mistake, contact the Pixl team.`;
-    await db.from("notifications").insert({ user_id: project.user_id, title: "Project banned", body: banBody });
-    await dmOrEmail(project.user_id, "Project banned", banBody);
-    const collabBanBody = `A project you collaborate on, "${project.name}", was permanently banned by ${reviewer} and can no longer be shipped to Pixl.\n\nReason: ${note}\n\nIf you think this is a mistake, contact the Pixl team.`;
-    for (const collaboratorId of await acceptedCollaboratorUserIds(projectId)) {
-      await db.from("notifications").insert({ user_id: collaboratorId, title: "Project banned", body: collabBanBody });
-      await dmOrEmail(collaboratorId, "Project banned", collabBanBody);
-    }
-    await logModAction(project.user_id, "project_banned", `${project.name}: fraud on second pass , ${note}`, by);
-  } else {
-    const { data: project, error } = await db
-      .from("projects")
-      .update({
-        reviewing_by: "",
-        reviewing_at: null,
-        review_draft: null,
-        review_draft_by: "",
-        review_draft_at: null,
-        second_pass_by: by,
-        second_pass_at: new Date().toISOString(),
-        second_pass_note: note,
-        second_pass_hours: approvedHours ?? claimedHours,
-        second_pass_verdict: "not_fraud",
-      })
-      .eq("id", projectId)
-      .eq("status", "second_review")
-      .select("id, name, user_id")
-      .single();
-    if (error || !project) {
-      console.error("submitFraudTriage (not_fraud) failed", error?.message);
-      return;
-    }
-    await insertReviewAudit(formData, projectId, project.user_id, by, "not_fraud", note, claimedHours, approvedHours);
-  }
-
-  let nextPath = "/review";
-  try {
-    const nextId = await nextReviewId({
-      viewer: access.session.slackId,
-      by,
-      canSecondPass: access.canSecondPass,
-      isSuper: access.isSuper,
-      excludeId: projectId,
-      prefer: "second_review",
-      reviewQueues: access.reviewQueues,
-      spotCheck: false,
-    });
-    if (nextId) nextPath = `/review/${nextId}`;
-  } catch {
-    // fall back to /review
-  }
   revalidatePath("/review");
   redirect(nextPath);
 }

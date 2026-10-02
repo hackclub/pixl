@@ -4,7 +4,7 @@ import { db } from "../db/pgCompat.js";
 import { PUBLIC_PROJECT_COLUMNS } from "./explore.js";
 
 // Same catalog projects.ts's toPlayerProject keeps off player-facing
-// responses - reviewer identity/notes, ban/hold, Joe/fraud, internal IDs,
+// responses - reviewer identity/notes, ban/hold, Robert/fraud, internal IDs,
 // review drafts. This is the actual "sensitive field" list for the
 // projects table, not a list invented for this test.
 const SENSITIVE_PROJECT_FIELDS = [
@@ -25,14 +25,15 @@ const SENSITIVE_PROJECT_FIELDS = [
   "review_draft_by",
   "review_draft_at",
   "airtable_record_id",
-  "joe_project_id",
-  "joe_submitted_at",
-  "joe_trust_score",
-  "joe_outcome",
-  "joe_reason",
-  "joe_reviewed_at",
-  "joe_reviewer",
-  "joe_error",
+  "robert_project_id",
+  "robert_submitted_at",
+  "robert_trust_score",
+  "robert_note",
+  "robert_reviewed_at",
+  "robert_state",
+  "robert_outcome",
+  "robert_outcome_at",
+  "robert_error",
 ];
 
 // build() is private to TypeScript only; at runtime it's an ordinary method

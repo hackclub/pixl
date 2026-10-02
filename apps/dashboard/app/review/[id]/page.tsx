@@ -22,7 +22,7 @@ import { renderMarkdown } from "@/lib/markdown";
 import { isSafeUrl } from "@/lib/safeUrl";
 import { db } from "@/lib/db";
 import { ReviewForm, type BountyOption } from "@/app/_components/ReviewForm";
-import { FraudTriageForm } from "@/app/_components/FraudTriageForm";
+import { FRAUD_SCORE_THRESHOLD as ROBERT_FRAUD_THRESHOLD } from "@/lib/robertOutcome";
 import { BlackoutBadge } from "@/app/_components/BlackoutBadge";
 import { BlackoutSummary } from "@/app/_components/BlackoutSummary";
 import type { BlackoutReviewData } from "@/app/_components/BlackoutReviewSection";
@@ -140,18 +140,17 @@ export default async function ReviewDetail({
   ).sidequests;
 
   const isFinalStage = p.status === "second_review";
-  // A first-pass reviewer proposing a ban is a separate, older flow the fraud
-  // triage redesign doesn't touch - it still goes straight to a full
-  // ReviewForm confirm/overturn by a different canSecondPass reviewer (see
-  // the isProposedBan gate in reviewProject, app/actions.ts), never through
-  // fraud triage.
+  // A first-pass reviewer proposing a ban skips Robert entirely - it goes
+  // straight to a full ReviewForm confirm/overturn by a different
+  // canSecondPass reviewer (see the isProposedBan gate in reviewProject,
+  // app/actions.ts), never through fraud review.
   const isProposedBan = isFinalStage && p.first_pass_verdict === "banned";
-  // Second pass is now a fraud triage step, not the real verdict - a project
-  // sits here untriaged (awaitingTriage) until a second-pass reviewer calls
-  // fraud (bans immediately) or not fraud (spotCheckStage: parked for a
-  // super's real approve/needs_changes/ban in Spot check). See
-  // submitFraudTriage/reviewProject in app/actions.ts.
-  const awaitingTriage = isFinalStage && !p.second_pass_verdict && !isProposedBan;
+  // Fraud review now happens at Robert (p.status "fraud_review", shown
+  // read-only on the Second pass tab - see listSecondReviewProjects) - a
+  // project only ever reaches second_review once Robert's score has already
+  // landed, carrying second_pass_verdict "not_fraud" with it (see
+  // robertSync.ts), so spotCheckStage is the only thing isFinalStage can
+  // mean here besides a proposed ban.
   const spotCheckStage = isFinalStage && p.second_pass_verdict === "not_fraud";
   const isOwn = !!p.users?.slack_id && p.users.slack_id === viewer && !access.isSuper;
   const isHeld = !!p.hold_at;
@@ -162,7 +161,7 @@ export default async function ReviewDetail({
   const canReview =
     !isHeld &&
     ((p.status === "shipped" && !isOwn) ||
-      ((awaitingTriage || isProposedBan) && canSecondPass) ||
+      (isProposedBan && canSecondPass) ||
       (spotCheckStage && access.isSuper));
   const shippedAt = (p as { shipped_at?: string | null }).shipped_at ?? null;
 
@@ -925,10 +924,10 @@ export default async function ReviewDetail({
               </Card>
             )}
 
-            {isFinalStage && p.joe_outcome === "rejected" && (
+            {isFinalStage && p.robert_trust_score != null && p.robert_trust_score <= ROBERT_FRAUD_THRESHOLD && (
               <Card className="p-5 text-sm gap-0 ring-rose-300 dark:ring-rose-500/30 text-rose-700 dark:text-rose-300">
-                <strong>Joe rejected this on fraud review.</strong>{" "}
-                {p.joe_reason || "No reason given."} You can still approve it, but document
+                <strong>Robert scored this {p.robert_trust_score}/10 , its &quot;Fraud&quot; range.</strong>{" "}
+                {p.robert_note || "No note given."} You can still approve it, but document
                 why in your notes.
               </Card>
             )}
@@ -1127,32 +1126,20 @@ export default async function ReviewDetail({
                 )}
                 {canReview ? (
                   <>
-                    {awaitingTriage ? (
+                    {spotCheckStage && p.robert_trust_score != null && (
                       <Card className="p-5 gap-0">
-                        <div className="text-sm font-semibold mb-1">Second pass , fraud triage</div>
-                        <p className="text-xs text-muted-foreground mb-3">
-                          Call it Fraud or Not fraud, with a note either way explaining your call. You can
-                          lower the credited hours if a lot of this looks AI-generated. A super gives the
-                          real verdict afterward in Spot check , Not fraud doesn&apos;t credit anything yet.
+                        <div className="text-sm font-semibold mb-1">Robert fraud review</div>
+                        <p className="text-xs text-muted-foreground">
+                          Trust score <strong>{p.robert_trust_score}/10</strong>
+                          {p.robert_trust_score <= ROBERT_FRAUD_THRESHOLD ? " , Robert's \"Fraud\" range" : ""}
                         </p>
-                        <FraudTriageForm
-                          projectId={p.id}
-                          claimedHours={payoutHours}
-                          defaultHours={formDefaultHours}
-                          ageFlag={ageFlag}
-                          firstPass={
-                            firstPassAudit
-                              ? {
-                                  technicalFeatures: firstPassAudit["TECHNICAL FEATURES"],
-                                  deflationReason: firstPassAudit["DEFLATION REASON"],
-                                  ageJustification: firstPassAudit["AGE JUSTIFICATION"],
-                                  notes: firstPassAudit["NOTES"],
-                                }
-                              : undefined
-                          }
-                        />
+                        {p.robert_note && (
+                          <p className="mt-2 text-sm whitespace-pre-wrap break-words text-foreground/80">
+                            {p.robert_note}
+                          </p>
+                        )}
                       </Card>
-                    ) : (
+                    )}
                     <Card className="p-5 gap-0">
                       <div className="text-sm font-semibold mb-1">
                         {isProposedBan ? "Final pass" : spotCheckStage ? "Spot check" : "First pass"}
@@ -1161,8 +1148,8 @@ export default async function ReviewDetail({
                         {isProposedBan
                           ? "A first-pass reviewer proposed banning this , confirm it, or approve to overturn. Approving credits pixels at the player's level rate ($4–6/hr in px) and ships it. Every verdict needs a note. You can only lower the credited hours."
                           : spotCheckStage
-                            ? "The real final verdict, after a second-pass reviewer's fraud triage (see their note below). Approving credits pixels at the player's level rate ($4–6/hr in px) and ships it. Every verdict needs a note. You can only lower the credited hours."
-                            : "Every verdict needs a note. Approving sends this to fraud triage before pixels are credited , even you have final-reviewer rights, your own first look is still just a proposal. You can only lower the credited hours."}
+                            ? "The real final verdict, after Robert's fraud review (see above). Approving credits pixels at the player's level rate ($4–6/hr in px) and ships it. Every verdict needs a note. You can only lower the credited hours."
+                            : "Every verdict needs a note. Approving sends this to Robert for fraud review before pixels are credited , even you have final-reviewer rights, your own first look is still just a proposal. You can only lower the credited hours."}
                       </p>
                       <ReviewForm
                         projectId={p.id}
@@ -1204,7 +1191,6 @@ export default async function ReviewDetail({
                         }
                       />
                     </Card>
-                    )}
 
                     <details className="rounded-xl bg-card ring-1 ring-border p-4 text-card-foreground">
                       <summary className="flex items-center gap-2 cursor-pointer text-sm font-semibold text-foreground select-none list-none">
@@ -1317,7 +1303,17 @@ export default async function ReviewDetail({
                     </details>
                     )}
                   </>
-                ) : isOwn ? null : isFinalStage ? (
+                ) : isOwn ? null : p.status === "fraud_review" ? (
+                  <Card className="p-5 text-sm text-muted-foreground">
+                    Passed the first review , awaiting Robert&apos;s fraud review. Nothing to action here
+                    until it comes back.
+                    {p.robert_error && (
+                      <span className="mt-2 block text-rose-600 dark:text-rose-400">
+                        Last submission to Robert failed: {p.robert_error} , the reconcile job will retry it.
+                      </span>
+                    )}
+                  </Card>
+                ) : isFinalStage ? (
                   <Card className="p-5 text-sm text-muted-foreground">
                     Passed the first review , waiting on a final reviewer to sign off before pixels are
                     credited.

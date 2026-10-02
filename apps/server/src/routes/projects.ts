@@ -1240,7 +1240,7 @@ router.get("/api/projects/:id/timeline", async (req, res) => {
     supabase
       .from("projects")
       .select(
-        "created_at, shipped_at, status, first_pass_verdict, banned_at, joe_project_id, joe_submitted_at, joe_reviewed_at",
+        "created_at, shipped_at, status, first_pass_verdict, banned_at, robert_project_id, robert_submitted_at, robert_reviewed_at",
       )
       .eq("id", id)
       .single(),
@@ -1290,11 +1290,11 @@ router.get("/api/projects/:id/timeline", async (req, res) => {
     ok: true,
     events,
     status: banProposalPending ? "shipped" : (proj?.status ?? null),
-    // Joe (the fraud pass) is optional per event , a project only ever goes
-    // through it if it was actually submitted there.
-    joeUsed: banProposalPending ? false : Boolean(proj?.joe_project_id),
-    fraudReviewAt: banProposalPending ? null : (proj?.joe_submitted_at ?? null),
-    fraudReviewDoneAt: banProposalPending ? null : (proj?.joe_reviewed_at ?? null),
+    // Robert (the fraud pass) is optional per event , a project only ever
+    // goes through it if it was actually submitted there.
+    robertUsed: banProposalPending ? false : Boolean(proj?.robert_project_id),
+    fraudReviewAt: banProposalPending ? null : (proj?.robert_submitted_at ?? null),
+    fraudReviewDoneAt: banProposalPending ? null : (proj?.robert_reviewed_at ?? null),
   });
 });
 

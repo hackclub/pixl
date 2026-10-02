@@ -8,13 +8,12 @@ import { ReviewTable } from "@/app/_components/ReviewTable";
 
 export const dynamic = "force-dynamic";
 
-// Super-admin-only final-verdict queue: projects a second-pass reviewer
-// already triaged "not fraud" (see submitFraudTriage in app/actions.ts),
-// waiting on the real approve & credit / request changes / ban decision -
-// each row's project page shows the triaging reviewer's note and hours call
-// alongside the full review form. Used to be a read-only QA audit over every
-// second_review project; now that spot check IS the final verdict step, it's
-// an action queue like Second pass, oldest-first.
+// Super-admin-only final-verdict queue: projects Robert already reviewed as
+// "not fraud" (see lib/robertSync.ts), waiting on the real approve & credit /
+// request changes / ban decision - each row's project page shows Robert's
+// trust score and note alongside the full review form. Used to be a
+// read-only QA audit over every second_review project; now that spot check
+// IS the final verdict step, it's an action queue, oldest-first.
 export default async function SpotCheckPage() {
   const access = await requirePagePerm(["review"]);
   await requireGuidelinesAck(access);
