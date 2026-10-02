@@ -283,7 +283,7 @@ async function showLeaderboard(sub) {
     <div id="lbBody"><div class="spin"></div></div>`;
   document.querySelectorAll("#lbTabs [data-lb]").forEach((b) =>
     b.addEventListener("click", () => {
-      location.href = b.dataset.lb === "pixels" ? "/leaderboard/" : "/leaderboard/" + b.dataset.lb;
+      location.href = b.dataset.lb === "pixels" ? "/explore/leaderboard/" : "/explore/leaderboard/" + b.dataset.lb;
     }));
   const body = document.getElementById("lbBody");
 
