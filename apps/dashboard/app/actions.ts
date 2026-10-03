@@ -310,11 +310,16 @@ async function insertReviewAudit(
 // overturned first pass, or a sharp hours correction (removed 2026-09-05: a
 // reviewer's payout should never depend on how the case turned out later).
 // First-pass payouts stay pending until the final verdict settles.
-function payoutVerdictKey(verdict: string): "approved" | "needs_changes" | null {
+function payoutVerdictKey(verdict: string): "approved" | "needs_changes" | "banned" | null {
   if (verdict === "approved" || verdict === "first_pass_approved") return "approved";
   if (verdict === "needs_changes") return "needs_changes";
+  if (verdict === "banned") return "banned";
   return null;
 }
+
+// A confirmed ban pays the reviewer a flat rate, not admin-configurable like
+// the other verdicts , banning is still a full review of the project.
+const BAN_PAYOUT_PIXELS = 2;
 
 // During a Review Blitz event every review's base payout is multiplied, so
 // full_pixels is locked in at review time and settlement math uses the row.
@@ -326,6 +331,7 @@ async function payoutBasePixels(
 ): Promise<{ full: number; blitzApplied: boolean }> {
   const key = payoutVerdictKey(verdict);
   if (!key) return { full: 0, blitzApplied: false };
+  if (key === "banned") return { full: BAN_PAYOUT_PIXELS, blitzApplied: false };
   const settings = await getReviewPayoutSettings();
   const base = key === "approved" ? settings.approvedPixels : settings.needsChangesPixels;
   const [blitz] = await activeDashEvents(["review_blitz"]);
@@ -1244,6 +1250,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
     }
     await insertReviewAudit(formData, projectId, project.user_id, by, "banned", note, claimedHours, approvedHours);
     await operationRpc.onBan(projectId);
+    if (!own) await recordSettledPayout(projectId, access, "banned", project.name);
     if (stage === "second_review") {
       await voidFirstPassPayouts(projectId, "final verdict was a ban, not an approval");
       await recordRobertOutcome(current.robert_project_id, current.robert_state, "rejected", note);
