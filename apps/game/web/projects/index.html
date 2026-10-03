@@ -1318,6 +1318,7 @@
         journal_images_required:
           "Add at least one image to this entry, more for longer sessions.",
         not_in_review: "This project isn't in review.",
+        project_in_review: "This project is in review, so its journal is locked until the review is done.",
         trial_hours_below_minimum: "This Trial needs more tracked hours before you can ship it.",
         eligibility_attestation_required: "Confirm this isn't a school assignment or paid Hack Club work before shipping.",
         hca_verification_required:
@@ -2794,6 +2795,7 @@
         loadTimeline(p.id);
         updateJournalHint();
         autoGrow($("j-content"));
+        journalLocked = inReview;
         loadJournal(p.id);
         renderCollaborators(p);
         wireBlackout(p);
@@ -2994,6 +2996,7 @@
         $("j-hours").addEventListener("input", saveJournalDraft);
         updateJournalHint();
         autoGrow($("j-content"));
+        journalLocked = ["shipped", "second_review", "fraud_review"].includes(p.status);
         loadJournal(p.id);
         renderCollaborators(p);
         renderMyHackatime(p);
@@ -3789,6 +3792,23 @@
         list.innerHTML = html;
       }
 
+      // True while the project is in review: the journal is read-only then
+      // (the server refuses writes with project_in_review as well).
+      let journalLocked = false;
+
+      function lockJournalComposer() {
+        const composer = document.querySelector(".composer");
+        if (!composer) return;
+        composer.querySelectorAll("input, textarea, button").forEach((el) => (el.disabled = true));
+        if (!composer.querySelector(".j-locked")) {
+          const note = document.createElement("div");
+          note.className = "j-locked faint";
+          note.style.cssText = "font-size:13px;margin-top:8px";
+          note.textContent = "In review: the journal is locked until the review is done.";
+          composer.appendChild(note);
+        }
+      }
+
       let journalEditingId = null; // entry id currently expanded into an inline editor, if any
 
       function journalViewRow(e) {
@@ -3798,8 +3818,8 @@
           <span>${Pixl.timeAgo(e.created_at)}</span>
           ${e.edited_at ? `<span class="faint">(edited)</span>` : ""}
           ${e.hours ? `<span class="teal">${Number(e.hours).toFixed(1)}h</span>` : ""}
-          <button class="jedit" data-id="${e.id}">edit</button>
-          <button class="jdel" data-id="${e.id}">delete</button>
+          ${journalLocked ? "" : `<button class="jedit" data-id="${e.id}">edit</button>
+          <button class="jdel" data-id="${e.id}">delete</button>`}
         </div>
         ${e.title ? `<div class="jtitle" style="font-weight:700;margin-bottom:4px">${Pixl.esc(e.title)}</div>` : ""}
         <div class="jbody md">${Pixl.markdown(e.content)}</div>
@@ -3942,6 +3962,7 @@
         );
 
         updateTrackedChip(id);
+        if (journalLocked) lockJournalComposer();
 
         const editRow = list.querySelector(".jeditor");
         if (!editRow) return;

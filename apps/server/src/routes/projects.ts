@@ -1298,6 +1298,18 @@ router.get("/api/projects/:id/timeline", async (req, res) => {
   });
 });
 
+// Journals are what a reviewer reads to judge the hours, so they freeze the
+// moment a project is in review (same set as IN_REVIEW in operations/domain.ts)
+// and open back up on needs_changes/approved/draft.
+async function journalLockedForReview(projectId: number): Promise<boolean> {
+  const { data } = await supabase
+    .from("projects")
+    .select("status")
+    .eq("id", projectId)
+    .maybeSingle();
+  return ["shipped", "second_review", "fraud_review"].includes(String(data?.status ?? ""));
+}
+
 // How many images a journal entry's content needs, by the hours logged: at
 // least 1 always (even a 0h entry), plus one more per 4h on top of that.
 function journalImagesNeeded(hours: number): number {
@@ -1321,6 +1333,8 @@ router.post("/api/projects/:id/journal", async (req, res) => {
   if (!Number.isFinite(id)) return res.status(400).json({ ok: false });
   if (!(await canAccessProject(session.userId, id)))
     return res.status(404).json({ ok: false });
+  if (await journalLockedForReview(id))
+    return res.status(409).json({ ok: false, error: "project_in_review" });
 
   const content = String(req.body?.content ?? "").trim().slice(0, 5000);
   if (!content)
@@ -1366,6 +1380,8 @@ router.patch("/api/projects/:id/journal/:entryId", async (req, res) => {
   const entryId = Number(req.params.entryId);
   if (!Number.isFinite(id) || !Number.isFinite(entryId))
     return res.status(400).json({ ok: false });
+  if (await journalLockedForReview(id))
+    return res.status(409).json({ ok: false, error: "project_in_review" });
 
   const content = String(req.body?.content ?? "").trim().slice(0, 5000);
   if (!content)
@@ -1413,6 +1429,8 @@ router.delete("/api/projects/:id/journal/:entryId", async (req, res) => {
   const entryId = Number(req.params.entryId);
   if (!Number.isFinite(id) || !Number.isFinite(entryId))
     return res.status(400).json({ ok: false });
+  if (await journalLockedForReview(id))
+    return res.status(409).json({ ok: false, error: "project_in_review" });
 
   const { error } = await supabase
     .from("project_journals")
