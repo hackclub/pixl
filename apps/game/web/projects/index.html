@@ -2022,16 +2022,18 @@
           <option value="">None - my own idea</option>
           ${(() => {
             const linkedId = p.sidequest_id != null ? Number(p.sidequest_id) : null;
-            const accepted = allTrials.filter((t) => t.unlocked && !t.completed);
-            const locked = allTrials.filter((t) => !t.unlocked);
+            const isLinked = (t) => linkedId != null && Number(t.id) === linkedId;
+            // A Trial that's been shipped and approved is completed, so it
+            // fails the "unlocked && !completed" test and isn't "locked"
+            // either - it would land in no group and the <select> would fall
+            // back to "None" (and the next save would unlink it). The linked
+            // Trial always stays listed, even once completed.
+            const accepted = allTrials.filter((t) => isLinked(t) || (t.unlocked && !t.completed));
+            const locked = allTrials.filter((t) => !t.unlocked && !isLinked(t));
             let html = "";
-            // The linked Trial can be completed (or otherwise missing from
-            // allTrials) by the time this form re-renders , without its own
-            // option here the <select> silently falls back to "None" and the
-            // next save wipes sidequest_id, unlinking a Trial nothing actually
-            // changed about. Keep it selectable/selected regardless.
-            const linkedInList = linkedId != null && allTrials.some((t) => Number(t.id) === linkedId);
-            if (linkedId != null && !linkedInList)
+            // The linked Trial can also be missing from allTrials entirely
+            // (inactive/removed); give it its own option so it stays selected.
+            if (linkedId != null && !allTrials.some(isLinked))
               html += `<option value="${linkedId}" selected>${Pixl.esc(p.sidequest_name || "Linked Trial")}</option>`;
             if (accepted.length)
               html += `<optgroup label="Accepted - ready to build">${accepted
