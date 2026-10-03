@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { normalizeProjectUrl } from "./projectUrlSafety.js";
+import { normalizeProjectUrl, MAX_DEMO_URL_LENGTH } from "./projectUrlSafety.js";
 
 const DANGEROUS_URLS = [
   "javascript://alert(1)",
@@ -66,4 +66,13 @@ test("truncates to 500 characters like the old ensureProtocol did", () => {
   const result = normalizeProjectUrl(long);
   expect(result.ok).toBe(true);
   if (result.ok) expect(result.url.length).toBe(500);
+});
+
+test("a higher maxLength lets long links like strudel.cc through, still capped", () => {
+  const long = "https://strudel.cc/#" + "a".repeat(9000);
+  const ok = normalizeProjectUrl(long, MAX_DEMO_URL_LENGTH);
+  expect(ok).toEqual({ ok: true, url: long });
+  const tooLong = normalizeProjectUrl("https://strudel.cc/#" + "a".repeat(11000), MAX_DEMO_URL_LENGTH);
+  expect(tooLong.ok).toBe(true);
+  if (tooLong.ok) expect(tooLong.url.length).toBe(MAX_DEMO_URL_LENGTH);
 });

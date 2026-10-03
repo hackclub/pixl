@@ -1953,7 +1953,7 @@
         </div>
         <div class="form-row">
           <label>DEMO / PLAYABLE LINK ${Pixl.safeHref(p.demo_url) ? `<a class="open-link" href="${Pixl.esc(p.demo_url)}" target="_blank" rel="noopener">↗ open</a>` : ""}</label>
-          <input class="field" id="f-demo" maxlength="500" value="${Pixl.esc(p.demo_url || "")}" placeholder="https://…">
+          <input class="field" id="f-demo" maxlength="10000" value="${Pixl.esc(p.demo_url || "")}" placeholder="https://…">
         </div>
       </div>
       <div class="form-row">
