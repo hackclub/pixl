@@ -5,7 +5,7 @@ import { addNotification } from "./notifications.js";
 import { findAllInYswsArchive } from "../ysws/archive.js";
 import { buildDoubleDip, type TeamMember } from "../ysws/doubleDip.js";
 import { fetchHackatimeStats, fetchTrackedSecondsBetween, fetchTrackedSecondsSince, HACKATIME_CUTOFF } from "../hackatime/api.js";
-import { postShipToSlack } from "../shipNotify.js";
+import { dmReviewerOfResubmit, postShipToSlack } from "../shipNotify.js";
 import {
   shipEligibilityBlock,
   MANUAL_ELIGIBILITY_OVERRIDE_USER_IDS,
@@ -864,6 +864,7 @@ router.post("/api/projects/:id/ship", async (req, res) => {
       // ship (draft) or an update to an already-approved project waits its
       // turn normally.
       reverted_at: project.status === "needs_changes" ? new Date().toISOString() : null,
+      notify_reviewer_slack_id: "",
       review_note: "",
       review_note_by: "",
       rejected_at: null,
@@ -904,6 +905,8 @@ router.post("/api/projects/:id/ship", async (req, res) => {
     `"${project.name}" is in the review queue. You'll hear back here once it's reviewed.`,
   );
   void postShipToSlack(data, ownerSlackId, trackedSeconds, isUpdate);
+  if (project.status === "needs_changes" && project.notify_reviewer_slack_id)
+    void dmReviewerOfResubmit(project.notify_reviewer_slack_id as string, data);
   res.json({ ok: true, project: toPlayerProject(data) });
 });
 

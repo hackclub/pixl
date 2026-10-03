@@ -1179,6 +1179,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
         review_draft_by: "",
         review_draft_at: null,
         reverted_at: null,
+        notify_reviewer_slack_id: formData.get("notifyOnResubmit") === "1" ? access.session.slackId : "",
       })
       .eq("id", projectId)
       .in("status", ["shipped", "second_review"])

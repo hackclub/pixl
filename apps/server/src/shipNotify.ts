@@ -123,3 +123,30 @@ export async function postShipToSlack(
     console.error("postShipToSlack failed", e);
   }
 }
+
+// DMs the reviewer who asked for changes (and opted in) once the maker ships
+// the project again. Posting to a user ID as the channel opens a DM.
+export async function dmReviewerOfResubmit(
+  reviewerSlackId: string,
+  project: { id: number; name: string },
+): Promise<void> {
+  const token = process.env.SLACK_BOT_TOKEN;
+  if (!token || !/^[A-Z0-9]{2,32}$/.test(reviewerSlackId)) return;
+  try {
+    const r = await fetch("https://slack.com/api/chat.postMessage", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        channel: reviewerSlackId,
+        text: `"${escapeMrkdwn(project.name)}", which you asked changes on, was just re-shipped. Review it: ${DASH_URL}/review/${project.id}`,
+        unfurl_links: false,
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+    const json = (await r.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+    if (!json?.ok)
+      console.error("dmReviewerOfResubmit: slack rejected the message", json?.error ?? "no response body");
+  } catch (e) {
+    console.error("dmReviewerOfResubmit failed", e);
+  }
+}

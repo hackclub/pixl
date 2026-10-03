@@ -1213,6 +1213,18 @@ export function ReviewForm({
           changes) , unticked sends it as &quot;the review team&quot; instead.
         </span>
       </label>
+      <label className="flex items-start gap-2 text-sm cursor-pointer">
+        <input
+          type="checkbox"
+          name="notifyOnResubmit"
+          value="1"
+          className="mt-0.5 h-4 w-4 rounded border-border accent-brand"
+        />
+        <span className="text-muted-foreground">
+          If you request changes: DM me on Slack when the player ships this project again, so I
+          can re-review it while I still remember it.
+        </span>
+      </label>
       <div className="flex flex-wrap gap-2 items-center">
         <Button type="button" variant="outline" onClick={() => goToStep(2)}>
           ← Back
