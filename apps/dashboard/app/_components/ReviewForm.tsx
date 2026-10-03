@@ -465,6 +465,17 @@ export function ReviewForm({
   const [hours, setHours] = useState(baseHours);
   const [tierState, setTierState] = useState(tier);
   const deflated = hours < claimedHours;
+  // claimedHours is already post-journal-deflation (see claimedHours/
+  // defaultHours wiring in review/[id]/page.tsx - both are payoutHours,
+  // which already folds in each journal entry's approved_hours override).
+  // So deflating a journal entry alone, with no further in-form lowering,
+  // left `deflated` false and the "Why lower the hours?" box never
+  // appeared - the journal-level deflation_reason it already required (see
+  // setJournalHours in app/actions.ts) never made it into this review's own
+  // submitted audit note. Treat journal-level deflation as deflation here
+  // too, and show the true pre-journal-deflation total in the label below.
+  const needsDeflationReason = deflated || journalDeflatedHours > 0;
+  const rawClaimedHours = Math.round((claimedHours + journalDeflatedHours) * 10) / 10;
 
   // Deflating a journal entry (Journals tab, setJournalHours) revalidates
   // this same page without a full reload/remount - React keeps this
@@ -563,7 +574,7 @@ export function ReviewForm({
       deflationReasonRef.current.value = draft.deflationReason;
       pendingDraft.current = null;
     }
-  }, [deflated]);
+  }, [needsDeflationReason]);
 
   // hours/tier come from React state, which hasn't updated yet inside the same
   // handler that just called setHours/setTierState (state updates apply on the
@@ -748,7 +759,7 @@ export function ReviewForm({
     // sends it back with nothing paid out, and ban never pays out either, so
     // neither should demand an explanation for a lowered-hours number that's
     // about to go unused.
-    if (verdict === "approved" && deflated && !deflationReasonRef.current?.value.trim()) {
+    if (verdict === "approved" && needsDeflationReason && !deflationReasonRef.current?.value.trim()) {
       setStep(2);
       setStepError("Say why you're lowering the hours before deciding.");
       return false;
@@ -1077,7 +1088,7 @@ export function ReviewForm({
               <Button type="button" size="sm" variant="outline" onClick={() => insertAiText("technicalFeatures", aiDraft.technicalFeatures)}>
                 Insert into Technical features
               </Button>
-              {deflated && aiDraft.deflationReason && (
+              {needsDeflationReason && aiDraft.deflationReason && (
                 <Button type="button" size="sm" variant="outline" onClick={() => insertAiText("deflationReason", aiDraft.deflationReason)}>
                   Insert into Why lower the hours?
                 </Button>
@@ -1123,10 +1134,10 @@ export function ReviewForm({
             </span>
           </div>
         </div>
-        {deflated && (
+        {needsDeflationReason && (
           <div>
             <Label className="text-xs font-normal text-muted-foreground mb-1.5 block">
-              Why lower the hours? ({claimedHours}h claimed → {hours}h credited)
+              Why lower the hours? ({rawClaimedHours}h claimed → {hours}h credited)
             </Label>
             <Textarea
               name="deflationReason"
