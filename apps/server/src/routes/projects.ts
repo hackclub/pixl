@@ -4,7 +4,7 @@ import { supabase } from "../db/client.js";
 import { addNotification } from "./notifications.js";
 import { findAllInYswsArchive } from "../ysws/archive.js";
 import { buildDoubleDip, type TeamMember } from "../ysws/doubleDip.js";
-import { fetchHackatimeStats, fetchTrackedSecondsSince, HACKATIME_CUTOFF } from "../hackatime/api.js";
+import { fetchHackatimeStats, fetchTrackedSecondsBetween, fetchTrackedSecondsSince, HACKATIME_CUTOFF } from "../hackatime/api.js";
 import { postShipToSlack } from "../shipNotify.js";
 import {
   shipEligibilityBlock,
@@ -1160,10 +1160,16 @@ router.get("/api/projects/:id/hours", async (req, res) => {
 
   const { data: project } = await supabase
     .from("projects")
-    .select("user_id, hackatime_projects, hours_extended_since")
+    .select("user_id, hackatime_projects, hours_extended_since, status, shipped_at")
     .eq("id", id)
     .single();
   if (!project) return res.status(404).json({ ok: false });
+  // Time logged after the ship doesn't count while it's in review: the
+  // reviewer judges the snapshot taken at ship, so stop the clock there.
+  const shippedUnix =
+    ["shipped", "second_review", "fraud_review"].includes(String(project.status)) && project.shipped_at
+      ? Math.floor(new Date(project.shipped_at as string).getTime() / 1000)
+      : null;
 
   const isOwner = project.user_id === session.userId;
   let linked: string[];
@@ -1197,15 +1203,17 @@ router.get("/api/projects/:id/hours", async (req, res) => {
     journalQuery = journalQuery.eq("user_id", session.userId);
   }
 
+  // The extension was granted on the owner's hours; collaborators keep the
+  // default cutoff for their own.
+  const sinceUnix = isOwner
+    ? projectCutoffUnix(project.hours_extended_since as string | null)
+    : HACKATIME_CUTOFF;
   const [hackatimeSeconds, { data: jrows }] = await Promise.all([
-    fetchTrackedSecondsSince(
-      hackatimeSlackId,
-      hackatimeToken,
-      linked,
-      // The extension was granted on the owner's hours; collaborators keep
-      // the default cutoff for their own.
-      isOwner ? projectCutoffUnix(project.hours_extended_since as string | null) : undefined,
-    ),
+    shippedUnix === null
+      ? fetchTrackedSecondsSince(hackatimeSlackId, hackatimeToken, linked, sinceUnix)
+      : fetchTrackedSecondsBetween(hackatimeSlackId, hackatimeToken, linked, [
+          { startUnix: sinceUnix, endUnix: shippedUnix },
+        ]).then((r) => r.seconds[0] ?? 0),
     journalQuery,
   ]);
   const journalSeconds = Math.round(

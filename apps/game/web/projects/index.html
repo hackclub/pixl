@@ -1369,6 +1369,13 @@
       }
 
       function linkedSeconds(p) {
+        // In review the clock is stopped: show the snapshot taken at ship, not
+        // live Hackatime (hardware's snapshot already folds the journal in).
+        if (["shipped", "second_review", "fraud_review"].includes(p.status) && p.hackatime_seconds != null)
+          return Math.max(
+            Number(p.hackatime_seconds) - (p.kind === "hardware" ? Number(p.journal_seconds) || 0 : 0),
+            0,
+          );
         if (!stats || !stats.connected) return 0;
         const linked = new Set(p.hackatime_projects || []);
         // secondsSinceCutoff (when the server has computed it) so this matches
