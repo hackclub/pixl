@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { decryptPII } from "./crypto";
 import { reForProject } from "@/app/_generated/config";
+import { parseAuditNote } from "./auditNote";
 
 // Orchard Postgres over DATABASE_URL. pgCompat connects lazily, so this module
 // stays importable while Next prerenders static pages (e.g. /_not-found)
@@ -1124,6 +1125,35 @@ export async function listReviewAuditsForProject(projectId: number): Promise<Rev
     return [];
   }
   return (data ?? []).map((r) => ({ ...(r as ReviewAuditRow), player_name: "", project_name: "" }));
+}
+
+// House-style examples for the AI review draft (see generateAiReviewDraftAction
+// in app/actions.ts) - real reviewers' own technical-features/notes text from
+// projects that actually reached a final, credited approval (verdict exactly
+// "approved", never "first_pass_approved" - that's only ever a proposal, not
+// a real reviewer's settled judgment). Most recent first, so the style stays
+// current with however the team is actually writing these today.
+export async function recentApprovedJustifications(
+  limit = 6,
+): Promise<{ technicalFeatures: string; notes: string }[]> {
+  const { data, error } = await db
+    .from("review_audits")
+    .select("audit_note")
+    .eq("verdict", "approved")
+    .not("audit_note", "is", null)
+    .neq("audit_note", "")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) {
+    console.error("recentApprovedJustifications", error.message);
+    return [];
+  }
+  return ((data ?? []) as { audit_note: string }[])
+    .map((r) => {
+      const parsed = parseAuditNote(r.audit_note);
+      return { technicalFeatures: parsed["TECHNICAL FEATURES"], notes: parsed["NOTES"] };
+    })
+    .filter((ex) => ex.technicalFeatures || ex.notes);
 }
 
 export interface ProjectNoteRow {

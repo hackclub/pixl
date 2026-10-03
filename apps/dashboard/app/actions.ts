@@ -59,6 +59,7 @@ import {
   type DashEventRow,
   getReviewPayoutSettings,
   ensureJournalShareToken,
+  recentApprovedJustifications,
   type JournalRow,
 } from "@/lib/db";
 import { buildAuditNote, parseAuditNote, TECHNICAL_FEATURES_MIN } from "@/lib/auditNote";
@@ -837,7 +838,7 @@ export async function generateAiReviewDraftAction(projectId: number): Promise<Ai
     .select("id, project_id, user_id, title, content, hours, approved_hours, created_at, edited_at")
     .eq("project_id", projectId);
 
-  const [commits, hackatime, trust, claimedHours, yswsMatches] = await Promise.all([
+  const [commits, hackatime, trust, claimedHours, yswsMatches, styleExamples] = await Promise.all([
     (async () => {
       const c = await fetchCommits(p.repo_url as string | null);
       await attachCommitStats(c);
@@ -851,6 +852,7 @@ export async function generateAiReviewDraftAction(projectId: number): Promise<Ai
     yswsShipsFor(slackId, p.repo_url as string | null, p.demo_url as string | null).then((rows) =>
       rows.filter((s) => s.urlMatch),
     ),
+    recentApprovedJustifications(),
   ]);
 
   return generateAiReviewDraft({
@@ -866,6 +868,7 @@ export async function generateAiReviewDraftAction(projectId: number): Promise<Ai
     hackatime,
     trust,
     yswsMatches,
+    styleExamples,
   });
 }
 

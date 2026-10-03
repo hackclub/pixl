@@ -35,6 +35,10 @@ export interface AiReviewInput {
   hackatime: HackatimeReport | null;
   trust: TrustFactor | null;
   yswsMatches: YswsShip[];
+  // Real technicalFeatures/notes text from recently, fully approved projects
+  // (see recentApprovedJustifications in lib/db.ts) - the house style the
+  // draft should match, not a generic AI voice. Most recent first.
+  styleExamples: { technicalFeatures: string; notes: string }[];
 }
 
 // Best-effort README fetch, single call, never blocks the draft on failure -
@@ -82,9 +86,24 @@ function buildPrompt(input: AiReviewInput, readme: string): string {
     .map((s) => `- ${s.ysws}, ${s.hours}h${s.approvedAt ? `, approved ${s.approvedAt.slice(0, 10)}` : ""}: ${s.description}`)
     .join("\n");
 
+  // Real reviewers' own text, verbatim, from projects that were actually
+  // approved - capped per field so a handful of examples can't dominate the
+  // prompt over the actual project facts above/below.
+  const styleBlock = input.styleExamples
+    .slice(0, 5)
+    .map(
+      (ex, i) =>
+        `Example ${i + 1}:\nTECHNICAL FEATURES:\n${ex.technicalFeatures.slice(0, 500) || "(none written)"}\n\nNOTES:\n${ex.notes.slice(0, 500) || "(none written)"}`,
+    )
+    .join("\n\n");
+
+  const styleSection = styleBlock
+    ? `HOUSE STYLE - real reviewers' own technicalFeatures/notes text from recently APPROVED projects. Match this tone, length, and level of detail exactly: terse, concrete, specific to what was actually checked, no filler or generic praise, no restating the obvious. Write like these, not like a generic AI assistant.\n\n${styleBlock}\n\n`
+    : "";
+
   return `You are assisting a human reviewer on Pixl, a Hack Club program where teens ship real software/hardware projects for rewards. Draft review notes for them to read and edit - you are NOT deciding the verdict, tier, or credited hours, only helping them look faster.
 
-PROJECT
+${styleSection}PROJECT
 Name: ${input.projectName}
 Kind: ${input.kind}
 Description: ${input.description || "(none given)"}
@@ -112,8 +131,8 @@ ${yswsLines || "(no matches - not previously shipped elsewhere)"}
 Respond with ONLY a JSON object, no markdown fences, matching exactly:
 {
   "summary": "one or two sentences on what this project actually is/does",
-  "technicalFeatures": "concrete technical features you can verify from the README/commits - specific, not generic",
-  "notes": "anything else worth flagging - beginner signals, AI-disclosure consistency, etc",
+  "technicalFeatures": "concrete technical features you can verify from the README/commits - specific, not generic${styleBlock ? ", written in the exact voice of the TECHNICAL FEATURES examples above" : ""}",
+  "notes": "anything else worth flagging - beginner signals, AI-disclosure consistency, etc${styleBlock ? ", written in the exact voice of the NOTES examples above" : ""}",
   "redFlags": ["short phrase per concern - thin commit history, hour mismatch, etc - empty array if none"],
   "strengths": ["short phrase per notable strength - empty array if none"]
 }`;
