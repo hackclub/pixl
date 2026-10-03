@@ -25,6 +25,9 @@
 export type ProjectUrlResult = { ok: true; url: string } | { ok: false };
 
 const MAX_URL_LENGTH = 500;
+// Demo links get a far higher cap: strudel.cc (and similar) encode the whole
+// piece in the URL, so a perfectly normal demo link runs to thousands of chars.
+export const MAX_DEMO_URL_LENGTH = 10000;
 
 // Players routinely paste a link without a scheme ("foo.itch.io/game") - this
 // must still normalize to "https://foo.itch.io/game" so the ship-time
@@ -37,14 +40,14 @@ const MAX_URL_LENGTH = 500;
 // detail: prepending https:// to those must keep working exactly as before.
 const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i;
 
-export function normalizeProjectUrl(raw: unknown): ProjectUrlResult {
+export function normalizeProjectUrl(raw: unknown, maxLength = MAX_URL_LENGTH): ProjectUrlResult {
   const s = String(raw ?? "").trim();
   if (!s) return { ok: true, url: "" };
 
   if (!HAS_SCHEME.test(s)) {
     // No scheme at all - always safe to prepend https://, since whatever
     // follows can never be interpreted as a different scheme by the browser.
-    return { ok: true, url: `https://${s}`.slice(0, MAX_URL_LENGTH) };
+    return { ok: true, url: `https://${s}`.slice(0, maxLength) };
   }
 
   // Already looks like scheme://... - the one case that can carry a
@@ -61,5 +64,5 @@ export function normalizeProjectUrl(raw: unknown): ProjectUrlResult {
     return { ok: false };
   }
   if (u.protocol !== "http:" && u.protocol !== "https:") return { ok: false };
-  return { ok: true, url: s.slice(0, MAX_URL_LENGTH) };
+  return { ok: true, url: s.slice(0, maxLength) };
 }

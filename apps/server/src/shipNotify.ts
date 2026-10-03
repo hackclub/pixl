@@ -36,12 +36,22 @@ export async function postShipToSlack(
   const hours = (trackedSeconds / 3600).toFixed(2);
   const reviewUrl = `${DASH_URL}/review/${project.id}`;
 
+  // Demo links can be thousands of chars (strudel.cc encodes the whole piece in
+  // the URL). Slack rejects the entire message if a section field exceeds 2000
+  // chars or a button url exceeds 3000, so over-long links are left out of the
+  // alert and the reviewer opens them from the review page instead.
+  const SLACK_FIELD_MAX = 2000;
+  const SLACK_BUTTON_URL_MAX = 3000;
   const repoLink = slackLinkUrl(project.repo_url);
   const demoLink = slackLinkUrl(project.demo_url);
   const imageUrl = safeHttpUrl(project.image_url);
-  const viewUrl = safeHttpUrl(project.demo_url) ?? reviewUrl;
-  const linkField = (raw: string | null, link: string | null, label: string) =>
-    link ? `<${link}|${label}>` : raw ? "Invalid link" : "Not provided";
+  const demoHref = safeHttpUrl(project.demo_url);
+  const viewUrl = demoHref && demoHref.length <= SLACK_BUTTON_URL_MAX ? demoHref : reviewUrl;
+  const linkField = (raw: string | null, link: string | null, label: string) => {
+    if (!link) return raw ? "Invalid link" : "Not provided";
+    const text = `<${link}|${label}>`;
+    return text.length <= SLACK_FIELD_MAX - 100 ? text : "Link too long to preview, see review page";
+  };
 
   // project.name/description are typed by the shipping player, not staff -
   // escaped so a project can't mass-ping this channel via <!channel>/<!here>

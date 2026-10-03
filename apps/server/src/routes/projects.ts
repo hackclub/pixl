@@ -11,7 +11,7 @@ import {
   MANUAL_ELIGIBILITY_OVERRIDE_USER_IDS,
   type HcaStateRow,
 } from "../hcaEligibility.js";
-import { normalizeProjectUrl } from "./projectUrlSafety.js";
+import { normalizeProjectUrl, MAX_DEMO_URL_LENGTH } from "./projectUrlSafety.js";
 import { isGitRepoUrl } from "./gitRepoUrl.js";
 import { urlAlive } from "./urlLiveness.js";
 import { recordShipForOperations } from "../operations/service.js";
@@ -309,7 +309,7 @@ function isVideoUrl(url: string): boolean {
 // call still enforce a real Kicanvas link or video where those genuinely
 // matter, this only lifts the generic "that's just source" rejection.
 function normalizeDemoUrl(raw: string, isHardware: boolean): { error: string } | { url: string } {
-  const normalized = normalizeProjectUrl(raw);
+  const normalized = normalizeProjectUrl(raw, MAX_DEMO_URL_LENGTH);
   if (!normalized.ok) return { error: "demo_invalid" };
   const s = normalized.url;
   if (!s) return { url: "" };
@@ -372,7 +372,7 @@ export function parseProjectBody(
   // outright instead of storing them.
   const repoUrlResult = normalizeProjectUrl(body?.repoUrl);
   if (!repoUrlResult.ok) return { error: "repo_invalid" };
-  const demoUrlResult = normalizeProjectUrl(body?.demoUrl);
+  const demoUrlResult = normalizeProjectUrl(body?.demoUrl, MAX_DEMO_URL_LENGTH);
   if (!demoUrlResult.ok) return { error: "demo_invalid" };
   const repoUrl = repoUrlResult.url;
   const demoUrl = demoUrlResult.url;
