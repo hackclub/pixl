@@ -813,7 +813,10 @@ async function creditBeneficiary(
 // passes actually generate a draft - this never proposes a verdict or
 // credited hours, and nothing it returns is saved/submitted on its own, the
 // reviewer copies whatever they want into the real form fields themselves.
-export async function generateAiReviewDraftAction(projectId: number): Promise<AiReviewDraft> {
+export async function generateAiReviewDraftAction(
+  projectId: number,
+  reviewerHours?: number,
+): Promise<AiReviewDraft> {
   await requireSuper();
   if (!projectId) throw new Error("Missing project id");
 
@@ -863,6 +866,7 @@ export async function generateAiReviewDraftAction(projectId: number): Promise<Ai
     kind: p.kind as string,
     aiNotes: (p.ai_notes as string | null) ?? "",
     claimedHours,
+    reviewerHours: reviewerHours ?? claimedHours,
     commits,
     journals: (journalRows ?? []) as unknown as JournalRow[],
     hackatime,

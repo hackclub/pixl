@@ -1135,7 +1135,7 @@ export async function listReviewAuditsForProject(projectId: number): Promise<Rev
 // current with however the team is actually writing these today.
 export async function recentApprovedJustifications(
   limit = 6,
-): Promise<{ technicalFeatures: string; notes: string }[]> {
+): Promise<{ technicalFeatures: string; notes: string; deflationReason: string }[]> {
   const { data, error } = await db
     .from("review_audits")
     .select("audit_note")
@@ -1151,7 +1151,11 @@ export async function recentApprovedJustifications(
   return ((data ?? []) as { audit_note: string }[])
     .map((r) => {
       const parsed = parseAuditNote(r.audit_note);
-      return { technicalFeatures: parsed["TECHNICAL FEATURES"], notes: parsed["NOTES"] };
+      return {
+        technicalFeatures: parsed["TECHNICAL FEATURES"],
+        notes: parsed["NOTES"],
+        deflationReason: parsed["DEFLATION REASON"],
+      };
     })
     .filter((ex) => ex.technicalFeatures || ex.notes);
 }

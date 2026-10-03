@@ -620,7 +620,10 @@ export function ReviewForm({
     setAiError(null);
     startAiTransition(async () => {
       try {
-        const draft = await generateAiReviewDraftAction(projectId);
+        // Pass the hours currently typed in the form, not just claimedHours -
+        // the deflationReason draft explains whatever the reviewer has
+        // already decided to credit, it never picks that number itself.
+        const draft = await generateAiReviewDraftAction(projectId, hours);
         setAiDraft(draft);
       } catch (e) {
         setAiError(e instanceof Error ? e.message : "Failed to generate a draft.");
@@ -628,8 +631,13 @@ export function ReviewForm({
     });
   };
 
-  const insertAiText = (field: "technicalFeatures" | "notes", text: string) => {
-    const ref = field === "technicalFeatures" ? technicalFeaturesRef : notesRef;
+  const insertAiText = (field: "technicalFeatures" | "deflationReason" | "notes", text: string) => {
+    const ref =
+      field === "technicalFeatures"
+        ? technicalFeaturesRef
+        : field === "deflationReason"
+          ? deflationReasonRef
+          : notesRef;
     if (!ref.current || !text) return;
     ref.current.value = text;
     if (field === "technicalFeatures") setFeaturesLen(text.trim().length);
@@ -1041,7 +1049,9 @@ export function ReviewForm({
         </div>
         <p className="text-xs text-muted-foreground -mt-1">
           Reads the repo, commits, journals and Hackatime data and drafts the fields below for
-          you to check and edit. It never picks a verdict or hours , that&apos;s still on you.
+          you to check and edit. It never picks a verdict or hours , that&apos;s still on you. If
+          you&apos;ve already lowered the hours above, it&apos;ll draft the explanation for that
+          number too , set hours first for the best deflation draft.
         </p>
         {aiError && (
           <div className="text-xs text-rose-600 dark:text-rose-400">{aiError}</div>
@@ -1067,6 +1077,11 @@ export function ReviewForm({
               <Button type="button" size="sm" variant="outline" onClick={() => insertAiText("technicalFeatures", aiDraft.technicalFeatures)}>
                 Insert into Technical features
               </Button>
+              {deflated && aiDraft.deflationReason && (
+                <Button type="button" size="sm" variant="outline" onClick={() => insertAiText("deflationReason", aiDraft.deflationReason)}>
+                  Insert into Why lower the hours?
+                </Button>
+              )}
               <Button type="button" size="sm" variant="outline" onClick={() => insertAiText("notes", aiDraft.notes)}>
                 Insert into Notes
               </Button>
