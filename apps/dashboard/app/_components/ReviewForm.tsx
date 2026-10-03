@@ -1141,7 +1141,6 @@ export function ReviewForm({
             </Label>
             <Textarea
               name="deflationReason"
-              required
               ref={deflationReasonRef}
               onChange={() => saveDraft()}
               placeholder="Mismatched experience/features, missing commits, etc."
