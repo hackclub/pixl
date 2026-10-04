@@ -34,18 +34,36 @@ interface AuditLike {
 // by Slack id when the label has one (so a renamed "Name (ID)" label is still
 // one person) and counts only if they submitted a bucketed outcome verdict,
 // so an unship or revert alone doesn't make someone an active reviewer.
+export interface ReviewerCount {
+  name: string;
+  reviews: number;
+}
+
+// "Name (U0ABC123)" -> "Name" for display; the id stays out of the UI.
+function displayName(label: string): string {
+  return label.replace(/\s*\([^()]*\)\s*$/, "").trim() || label;
+}
+
+// `audits` is expected newest first (as the stats page queries it), so the
+// first label seen for a Slack id is that reviewer's most recent name.
 export function summarizeWindow(
   audits: AuditLike[],
   since: number | null,
-): { counts: VerdictCounts; reviewers: number } {
+): { counts: VerdictCounts; reviewers: number; reviewerList: ReviewerCount[] } {
   const counts = emptyCounts();
-  const reviewers = new Set<string>();
+  const byReviewer = new Map<string, ReviewerCount>();
   for (const a of audits) {
     if (since !== null && new Date(a.created_at).getTime() < since) continue;
     const bucket = bucketFor(a.verdict);
     if (!bucket) continue;
     counts[bucket]++;
-    reviewers.add(slackIdFromLabel(a.reviewer) ?? a.reviewer);
+    const key = slackIdFromLabel(a.reviewer) ?? a.reviewer;
+    const entry = byReviewer.get(key);
+    if (entry) entry.reviews++;
+    else byReviewer.set(key, { name: displayName(a.reviewer), reviews: 1 });
   }
-  return { counts, reviewers: reviewers.size };
+  const reviewerList = [...byReviewer.values()].sort(
+    (a, b) => b.reviews - a.reviews || a.name.localeCompare(b.name),
+  );
+  return { counts, reviewers: reviewerList.length, reviewerList };
 }

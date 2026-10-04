@@ -76,6 +76,46 @@ describe("summarizeWindow", () => {
     expect(summarizeWindow([], null)).toEqual({
       counts: { approved: 0, firstPass: 0, changes: 0, rejected: 0 },
       reviewers: 0,
+      reviewerList: [],
     });
+  });
+
+  test("lists each reviewer by name with their review count, most active first", () => {
+    const s = summarizeWindow(audits, null);
+    expect(s.reviewerList).toEqual([
+      { name: "Ada", reviews: 2 },
+      { name: "Bo", reviews: 1 },
+      { name: "Cy", reviews: 1 },
+    ]);
+  });
+
+  test("names are shown without the Slack id", () => {
+    const names = summarizeWindow(audits, null).reviewerList.map((r) => r.name);
+    expect(names.join(" ")).not.toContain("U1");
+    expect(names.join(" ")).not.toContain("(");
+  });
+
+  test("a renamed reviewer shows under their most recent name (rows are newest first)", () => {
+    const s = summarizeWindow(
+      [
+        row("Ada L. (U1)", "approved", d("2026-10-04T11:00:00Z")),
+        row("Ada (U1)", "approved", d("2026-10-04T10:00:00Z")),
+      ],
+      null,
+    );
+    expect(s.reviewerList).toEqual([{ name: "Ada L.", reviews: 2 }]);
+  });
+
+  test("ties are ordered alphabetically so the list is stable", () => {
+    const s = summarizeWindow(
+      [row("Zed (U9)", "approved", d("2026-10-04T10:00:00Z")), row("Amy (U8)", "approved", d("2026-10-04T10:00:00Z"))],
+      null,
+    );
+    expect(s.reviewerList.map((r) => r.name)).toEqual(["Amy", "Zed"]);
+  });
+
+  test("the list only covers the window and only outcome verdicts", () => {
+    const s = summarizeWindow(audits, Date.UTC(2026, 9, 4));
+    expect(s.reviewerList).toEqual([{ name: "Ada", reviews: 2 }]);
   });
 });
