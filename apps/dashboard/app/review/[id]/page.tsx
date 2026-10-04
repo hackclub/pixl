@@ -38,6 +38,7 @@ import {
   holdReview,
   releaseReviewHold,
   updateFundingAmount,
+  skipRobertPass,
 } from "@/app/actions";
 import { ReviewPipelineSteps } from "@/app/_components/ReviewPipelineSteps";
 import { SecondPassChecklist } from "@/app/_components/SecondPassChecklist";
@@ -1374,6 +1375,19 @@ export default async function ReviewDetail({
                       <span className="mt-2 block text-rose-600 dark:text-rose-400">
                         Last submission to Robert failed: {p.robert_error} , the reconcile job will retry it.
                       </span>
+                    )}
+                    {canSecondPass && (
+                      <form action={skipRobertPass} className="mt-3">
+                        <input type="hidden" name="projectId" value={p.id} />
+                        <PendingButton
+                          variant="secondary"
+                          size="sm"
+                          pendingText="Skipping…"
+                          confirm="Skip Robert's fraud review and send this project straight to Spot check?"
+                        >
+                          Skip Robert pass
+                        </PendingButton>
+                      </form>
                     )}
                   </Card>
                 ) : isFinalStage ? (

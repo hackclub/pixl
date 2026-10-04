@@ -1867,6 +1867,43 @@ export async function addProjectNote(formData: FormData): Promise<void> {
 // submit , split out so a reviewer doesn't have to also decide a verdict
 // just to fix a typo in the title). Optional: absent or unchanged fields are
 // left alone.
+//
+// Manually skips Robert's fraud review for a project parked in fraud_review
+// (e.g. no Hackatime data for Robert to score) and moves it straight to Spot
+// check, same shape as robertOutcome.ts's reviewPatch but with no score.
+export async function skipRobertPass(formData: FormData): Promise<void> {
+  const access = await requirePerm("review");
+  const by = actorName(access);
+  const projectId = Number(formData.get("projectId") ?? 0);
+  const back = `/review/${projectId}`;
+  if (!projectId) return;
+  if (!access.canSecondPass && !access.isSuper)
+    redirect(`${back}?error=${encodeURIComponent("Only a final reviewer or a super admin can skip Robert's review.")}`);
+
+  const { data: project, error } = await db
+    .from("projects")
+    .update({
+      status: "second_review",
+      second_pass_by: by,
+      second_pass_at: new Date().toISOString(),
+      second_pass_note: `Robert's fraud review skipped manually by ${by}.`,
+      second_pass_hours: null,
+      second_pass_verdict: "not_fraud",
+      robert_error: "",
+    })
+    .eq("id", projectId)
+    .eq("status", "fraud_review")
+    .select("id, name, user_id")
+    .maybeSingle();
+  if (error) console.error("skipRobertPass failed", projectId, error.message);
+  if (!project)
+    redirect(`${back}?error=${encodeURIComponent("This project isn't waiting on Robert anymore.")}`);
+
+  await logModAction(project.user_id as string, "project_robert_skipped", `${project.name}: skipped Robert's fraud review`, by);
+  revalidatePath("/review");
+  redirect(back);
+}
+
 export async function applySubmissionEdits(formData: FormData): Promise<void> {
   const access = await requirePerm("review");
   const by = actorName(access);
