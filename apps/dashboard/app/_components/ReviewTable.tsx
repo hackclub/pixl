@@ -6,6 +6,7 @@ import type { ShippedProject } from "@/lib/db";
 import { LevelBadge, StatusBadge, FundingBadge } from "@/app/_components/ProjectBadges";
 import { Badge } from "@/components/ui/badge";
 import { BlackoutBadge } from "@/app/_components/BlackoutBadge";
+import { useLiveMode } from "@/app/_components/LiveMode";
 import { Card } from "@/components/ui/card";
 import {
   Table,
@@ -63,6 +64,7 @@ export function ReviewTable({
 }) {
   const blackoutSet = new Set(blackoutIds);
   const router = useRouter();
+  const live = useLiveMode();
   if (rows.length === 0) {
     return (
       <Card className="p-10 text-center text-muted-foreground">{emptyLabel}</Card>
@@ -104,12 +106,13 @@ export function ReviewTable({
         </TableHeader>
         <TableBody>
           {rows.map((p) => {
-            const maker =
-              p.users?.real_name ||
-              (p.users?.slack_id && handles.get(p.users.slack_id)) ||
-              p.users?.display_name ||
-              p.users?.slack_id ||
-              p.user_id;
+            const maker = live
+              ? "Builder"
+              : p.users?.real_name ||
+                (p.users?.slack_id && handles.get(p.users.slack_id)) ||
+                p.users?.display_name ||
+                p.users?.slack_id ||
+                p.user_id;
             const href = `/review/${p.id}`;
             return (
               <TableRow
@@ -217,7 +220,7 @@ export function ReviewTable({
 
                 {hackatimeUserIds && (
                   <TableCell className="py-3.5">
-                    {hackatimeUserIds.get(p.id) ? (
+                    {!live && hackatimeUserIds.get(p.id) ? (
                       <a
                         href={`https://telescreen.hackclub.com/workbench/hackatime/overview?u=${encodeURIComponent(hackatimeUserIds.get(p.id)!)}`}
                         target="_blank"

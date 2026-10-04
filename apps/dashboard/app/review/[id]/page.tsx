@@ -47,6 +47,9 @@ import { ReviewHeartbeat } from "@/app/_components/ReviewHeartbeat";
 import { ProjectNotes } from "@/app/_components/ProjectNotes";
 import { LevelBadge, TypeBadge, ShipBadges, StatusBadge, BeaconBadge, FundingBadge } from "@/app/_components/ProjectBadges";
 import { slackHandle } from "@/lib/slack";
+import { getLiveMode } from "@/lib/liveModeServer";
+import { liveAlias, redactBuilderDetails } from "@/lib/liveMode";
+import { LiveModeToggle } from "@/app/_components/LiveModeToggle";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -118,6 +121,9 @@ export default async function ReviewDetail({
   const { error } = await searchParams;
   const projectId = Number(id);
   if (!Number.isFinite(projectId)) notFound();
+  // Live mode (screen-share safe): builder identity is swapped out here on the
+  // server, so none of it reaches the browser. See lib/liveMode.ts.
+  const live = await getLiveMode();
 
   // getProject and listCollaboratorsForProject don't depend on each other
   // (the latter only needs projectId), so they run together instead of one
@@ -244,6 +250,9 @@ export default async function ReviewDetail({
   // claimedHoursFor() in actions.ts uses for the owner, kept consistent so
   // the cap shown here matches what reviewProject actually enforces.
   const acceptedCollaborators = allCollaborators.filter((c) => c.status === "accepted");
+  const collaboratorIds = acceptedCollaborators.map((c) => c.user_id);
+  const displayName = (userId: string, real: string): string =>
+    live ? liveAlias(userId, p.user_id, collaboratorIds) : real;
   const collaboratorHours = acceptedCollaborators.map((c) => {
     const cJournalHours =
       Math.round(
@@ -255,7 +264,7 @@ export default async function ReviewDetail({
     return {
       id: c.id,
       userId: c.user_id,
-      name: c.users?.real_name || c.users?.display_name || c.users?.slack_id || c.user_id,
+      name: displayName(c.user_id, c.users?.real_name || c.users?.display_name || c.users?.slack_id || c.user_id),
       hackatimeHours: cHackatimeHours,
       journalHours: cJournalHours,
       claimedHours: cHackatimeHours > 0 ? cHackatimeHours : cJournalHours,
@@ -286,7 +295,7 @@ export default async function ReviewDetail({
               : null,
           people: blackoutEntry.contributors.map((c) => ({
             userId: c.userId,
-            name: c.name,
+            name: displayName(c.userId, c.name),
             role: c.role,
             hackatimeBaseSeconds: c.hackatimeBaseSeconds,
             journalBaseSeconds: c.journalBaseSeconds,
@@ -390,8 +399,10 @@ export default async function ReviewDetail({
     hackatimeReportPromise,
     p.bom_url ? fetchBomRows(p.bom_url) : Promise.resolve(null),
   ]);
-  const ownerName =
-    p.users?.real_name || ownerHandle || p.users?.display_name || p.users?.slack_id || p.user_id;
+  const ownerName = displayName(
+    p.user_id,
+    p.users?.real_name || ownerHandle || p.users?.display_name || p.users?.slack_id || p.user_id,
+  );
   // Per-person time, only meaningful once there's more than one contributor.
   // The "Logged hours" card pools everyone together, so on a collaborative
   // ship it can't answer "who actually did what" on its own.
@@ -415,9 +426,12 @@ export default async function ReviewDetail({
   return (
     <div>
       {claim.ok && canReview && <ReviewHeartbeat projectId={projectId} />}
-      <Link href="/review" className="text-sm text-brand font-medium hover:underline">
-        ← Needs review
-      </Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link href="/review" className="text-sm text-brand font-medium hover:underline">
+          ← Needs review
+        </Link>
+        <LiveModeToggle live={live} />
+      </div>
 
       {error && (
         <Alert variant="destructive" className="mt-4">
@@ -659,7 +673,7 @@ export default async function ReviewDetail({
                 <Link href={`/players/${p.user_id}`} className="font-medium hover:text-brand truncate block">
                   {ownerName}
                 </Link>
-                {p.users?.slack_id && (
+                {!live && p.users?.slack_id && (
                   <a
                     href={`https://hackclub.slack.com/team/${p.users.slack_id}`}
                     target="_blank"
@@ -676,7 +690,9 @@ export default async function ReviewDetail({
               <div className="text-xs text-muted-foreground">
                 with{" "}
                 {acceptedCollaborators
-                  .map((c) => c.users?.real_name || c.users?.display_name || c.users?.slack_id || c.user_id)
+                  .map((c) =>
+                    displayName(c.user_id, c.users?.real_name || c.users?.display_name || c.users?.slack_id || c.user_id),
+                  )
                   .join(", ")}
               </div>
             )}
@@ -734,7 +750,7 @@ export default async function ReviewDetail({
                 project's heartbeats instead of the whole-account overview -
                 falls back to a single unscoped link when nothing's linked
                 yet. */}
-            {isFinalStage && hackatimeReport?.hackatimeUserId && (() => {
+            {!live && isFinalStage && hackatimeReport?.hackatimeUserId && (() => {
               const linkedProjects = hackatimeReport.projects.filter((hp) => hp.linked);
               const telescreenUrl = (projectName?: string) => {
                 const url = new URL("https://telescreen.hackclub.com/workbench/hackatime/overview");
@@ -782,15 +798,25 @@ export default async function ReviewDetail({
               | undefined;
             // PII (name/email/birthday/address) is encrypted at rest; decryptPII
             // also passes legacy plaintext through unchanged.
-            const dec = (v: string | null | undefined) => decryptPII(v) || "";
+            // In live mode nothing is decrypted at all - the real values never
+            // leave this block (see redactBuilderDetails).
+            const dec = (v: string | null | undefined) => (live ? "" : decryptPII(v) || "");
             const birthday = dec(u?.birthday);
             const builderAge = ageFrom(birthday);
-            const fullName = [dec(u?.first_name), dec(u?.last_name)].filter(Boolean).join(" ") || u?.real_name || "-";
             const country = dec(u?.address_country);
-            const address =
-              [dec(u?.address_line1), dec(u?.address_line2), dec(u?.address_city), dec(u?.address_state), dec(u?.address_postal), country]
-                .filter(Boolean)
-                .join(", ") || "-";
+            const details = redactBuilderDetails(live, {
+              fullName: [dec(u?.first_name), dec(u?.last_name)].filter(Boolean).join(" ") || u?.real_name || "-",
+              email: dec(u?.email) || "-",
+              ageLabel:
+                builderAge != null
+                  ? `${builderAge}${isFinalStage && birthday ? ` (born ${birthday})` : ""}`
+                  : "-",
+              country: country || "-",
+              address:
+                [dec(u?.address_line1), dec(u?.address_line2), dec(u?.address_city), dec(u?.address_state), dec(u?.address_postal), country]
+                  .filter(Boolean)
+                  .join(", ") || "-",
+            });
             return (
               <div className="rounded-xl border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 p-4 text-sm space-y-2">
                 <div className="font-semibold text-amber-800 dark:text-amber-300">Eligibility check</div>
@@ -807,23 +833,20 @@ export default async function ReviewDetail({
                   </summary>
                   <div className="mt-2 grid gap-1 sm:grid-cols-2">
                     <div>
-                      <span className="text-muted-foreground">Name:</span> {fullName}
+                      <span className="text-muted-foreground">Name:</span> {details.fullName}
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Email:</span> {dec(u?.email) || "-"}
+                      <span className="text-muted-foreground">Email:</span> {details.email}
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Age:</span>{" "}
-                      {builderAge != null
-                        ? `${builderAge}${isFinalStage && birthday ? ` (born ${birthday})` : ""}`
-                        : "-"}
+                      <span className="text-muted-foreground">Age:</span> {details.ageLabel}
                     </div>
                     <div>
-                      <span className="text-muted-foreground">Country:</span> {country || "-"}
+                      <span className="text-muted-foreground">Country:</span> {details.country}
                     </div>
                     {isFinalStage && (
                       <div className="sm:col-span-2">
-                        <span className="text-muted-foreground">Address:</span> {address}
+                        <span className="text-muted-foreground">Address:</span> {details.address}
                       </div>
                     )}
                   </div>
@@ -862,7 +885,7 @@ export default async function ReviewDetail({
                   }
                 : null
             }
-            hackatime={hackatimeReport}
+            hackatime={live && hackatimeReport ? { ...hackatimeReport, hackatimeUserId: "" } : hackatimeReport}
             repoUrl={p.repo_url ?? null}
             projectKind={p.kind}
           />
