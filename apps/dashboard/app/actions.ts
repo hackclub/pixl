@@ -2678,7 +2678,7 @@ export async function banProject(formData: FormData): Promise<void> {
   if (!reason)
     redirect(`${returnTo}${returnTo.includes("?") ? "&" : "?"}error=${encodeURIComponent("A reason is required to ban a project.")}`);
 
-  const { data: target } = await db.from("projects").select("user_id").eq("id", projectId).single();
+  const { data: target } = await db.from("projects").select("user_id, banned_at").eq("id", projectId).single();
   if (target && (await isOwnProject(access, target.user_id)))
     redirect(`${returnTo}${returnTo.includes("?") ? "&" : "?"}error=${encodeURIComponent("You can't act on your own project.")}`);
 
@@ -2700,6 +2700,10 @@ export async function banProject(formData: FormData): Promise<void> {
   }
   await logModAction(project.user_id, "project_banned", `${project.name}: ${reason}`, by);
   await operationRpc.onBan(projectId);
+  // A ban pays the banning reviewer the flat ban rate, same as a ban verdict
+  // in reviewProject - but only the first time, so re-submitting the form on
+  // an already-banned project (which just rewrites the reason) can't pay twice.
+  if (!target?.banned_at) await recordSettledPayout(projectId, access, "banned", project.name);
 
   const body = `Your project "${project.name}" was permanently banned by ${reviewer} and can no longer be shipped to Pixl.\n\nReason: ${reason}\n\nIf you think this is a mistake, contact the Pixl team.`;
   const { error: notifyError } = await db.from("notifications").insert({
