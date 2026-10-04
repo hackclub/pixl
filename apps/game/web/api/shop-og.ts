@@ -10,6 +10,7 @@ import { safeFetch } from "./_lib/safeFetch.ts";
 import pixl from "../../pixl.json" with { type: "json" };
 
 const SERVER = pixl.urls.server;
+const SITE_HOST = pixl.urls.site.replace(/^https?:\/\//, "");
 
 interface MinimalReq {
   url?: string;
@@ -38,17 +39,17 @@ export default async function handler(req: MinimalReq, res: MinimalRes): Promise
   };
 
   if (!id || !/^\d+$/.test(id)) {
-    return send(renderItemCard({ name: "Pixl Shop", price: 0, imageBytes: null }), 3600);
+    return send(renderItemCard({ name: "Pixl Shop", price: 0, imageBytes: null, siteHost: SITE_HOST }), 3600);
   }
 
   try {
     const itemRes = await fetch(`${SERVER}/api/shop/item/${id}/public`);
     if (!itemRes.ok) {
-      return send(renderItemCard({ name: "Pixl Shop", price: 0, imageBytes: null }), 60);
+      return send(renderItemCard({ name: "Pixl Shop", price: 0, imageBytes: null, siteHost: SITE_HOST }), 60);
     }
     const body = (await itemRes.json()) as { ok: boolean; item?: PublicItem };
     if (!body.ok || !body.item) {
-      return send(renderItemCard({ name: "Pixl Shop", price: 0, imageBytes: null }), 60);
+      return send(renderItemCard({ name: "Pixl Shop", price: 0, imageBytes: null, siteHost: SITE_HOST }), 60);
     }
 
     let imageBytes: Uint8Array | null = null;
@@ -64,9 +65,9 @@ export default async function handler(req: MinimalReq, res: MinimalRes): Promise
       }
     }
 
-    send(renderItemCard({ name: body.item.name, price: body.item.price, imageBytes }), 3600);
+    send(renderItemCard({ name: body.item.name, price: body.item.price, imageBytes, siteHost: SITE_HOST }), 3600);
   } catch (err) {
     console.error("[shop-og] failed", err);
-    send(renderItemCard({ name: "Pixl Shop", price: 0, imageBytes: null }), 60);
+    send(renderItemCard({ name: "Pixl Shop", price: 0, imageBytes: null, siteHost: SITE_HOST }), 60);
   }
 }

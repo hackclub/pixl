@@ -32,9 +32,11 @@ export interface ItemCardInput {
   // Raw bytes of the item's image_url response, or null if it couldn't be
   // fetched/decoded - the card still renders fine without it.
   imageBytes: Uint8Array | null;
+  /** Canonical host for the footer, e.g. "pixl.hackclub.com". */
+  siteHost: string;
 }
 
-export function renderItemCard({ name, price, imageBytes }: ItemCardInput): Uint8Array {
+export function renderItemCard({ name, price, imageBytes, siteHost }: ItemCardInput): Uint8Array {
   const canvas = new Canvas(W, H, BG);
 
   const pad = 48;
@@ -90,7 +92,7 @@ export function renderItemCard({ name, price, imageBytes }: ItemCardInput): Uint
   drawText(canvas, priceText, left, priceY, 6, GOLD);
 
   canvas.fill(left, footY, maxWidth, 2, STROKE);
-  drawText(canvas, "PIXL.RSVP/SHOP", left, footY + 26, 3, DIM, 2);
+  drawText(canvas, `${siteHost}/shop`.toUpperCase(), left, footY + 26, 3, DIM, 2);
 
   return canvas.encode();
 }
