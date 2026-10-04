@@ -1108,8 +1108,10 @@ export function ReviewForm({
         </div>
         <div>
           <Label className="text-xs font-normal text-muted-foreground mb-1.5 block leading-relaxed">
-            Technical features , concrete accomplishments, not generic (&quot;OAuth
-            auth, REST API, self-hosted Postgres&quot;, not &quot;React&quot;)
+            Technical features , a detailed explanation of what the project is, to
+            show you actually checked it. Use specific technical terms (&quot;OAuth
+            app&quot;, not generic words). If you can&apos;t find any, describe in
+            detail what it looks like and does.
           </Label>
           <div className="relative">
             <Textarea
@@ -1121,7 +1123,9 @@ export function ReviewForm({
                 setFeaturesLen(e.target.value.trim().length);
                 saveDraft();
               }}
-              placeholder="What did you actually check in the repo/demo?"
+              placeholder={
+                "Example: The demo features a light-mode landing page with an action button labeled \"Encode some data\" and a secondary \"Decode an image\". The encoding page has a drag-and-drop box that shows the image's resolution, total pixels and size, and lets you encode text, image, audio or a file into it. The repository has a broad README with screenshots and sections (Features, Tech Stack, How to use, Run locally). Written with React.\n\nThen cover the README (is it clear, does it explain how to run locally and how it was made) and the demo (how it is hosted)."
+              }
               className="w-full text-sm pb-5"
               rows={3}
             />
@@ -1137,13 +1141,18 @@ export function ReviewForm({
         {needsDeflationReason && (
           <div>
             <Label className="text-xs font-normal text-muted-foreground mb-1.5 block">
-              Why lower the hours? ({rawClaimedHours}h claimed → {hours}h credited)
+              Why lower the hours? ({rawClaimedHours}h claimed → {hours}h credited) , a
+              short justification: what made you deflate (suspected AI use, too few
+              proofs such as few commits and no journal) and how much you deflated
+              and approved.
             </Label>
             <Textarea
               name="deflationReason"
               ref={deflationReasonRef}
               onChange={() => saveDraft()}
-              placeholder="Mismatched experience/features, missing commits, etc."
+              placeholder={
+                "Example: The HTML has AI comments like <!-- Open Graph tags -->, the CSS and JS do not and look handwritten. The commits are numerous and consistent but not descriptive (\"added css\" for all of them), so they do not show progress. I deflate 2h from the 10h submitted to approve 8h."
+              }
               className="w-full text-sm"
               rows={3}
             />
@@ -1167,15 +1176,22 @@ export function ReviewForm({
           </div>
         )}
         <div>
-          <Label className="text-xs font-normal text-muted-foreground mb-1.5 block">
-            Additional notes
+          <Label className="text-xs font-normal text-muted-foreground mb-1.5 block leading-relaxed">
+            Additional notes , required. Show your thinking during the review: the
+            user&apos;s level (check their repo count) and how it affects the hours
+            (a beginner gets more hours approved than an advanced user for the same
+            project), why you did not deflate if you did not (commit count and
+            whether they are descriptive and show steady progress, journals), and
+            any other proof that supports the time.
           </Label>
           <Textarea
             name="notes"
             required
             ref={notesRef}
             onChange={() => saveDraft()}
-            placeholder="Anything else , suspicious commits, AI usage, experience mismatch…"
+            placeholder={
+              "Example: User is advanced, several ships in HC, active in many channels, 37 repos. 38 descriptive commits showing steady progress, like 002793b adding a loading state to the delete button (22 lines in 6 minutes) or 3af0c0b adding 200 lines in 1.2h for custom artwork. The longest gap between commits is 1.2h, which is consistent. There is 1 detailed journal adding 8h of unlapsed art made in Krita; it is their first time doing art and it looks legit. The 8h for the whole site is legit, but I still deflate to respect the guidelines."
+            }
             className="w-full text-sm"
             rows={3}
           />
@@ -1197,7 +1213,9 @@ export function ReviewForm({
         required
         ref={noteRef}
         onChange={() => saveDraft()}
-        placeholder="Feedback for the player (required)"
+        placeholder={
+          "Note to the player (required). Be nice and personal, show their work is good. If the site was a restaurant menu, play along and talk like you are ordering before telling them it is a great project. Finish with a short motivation like \"Keep it up!\"."
+        }
         className="w-full text-sm"
         rows={3}
       />
