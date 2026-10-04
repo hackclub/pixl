@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { LIVE_MODE_COOKIE } from "@/lib/liveMode";
+import { unshipResetFields } from "@/lib/unship";
 import {
   config,
   levelForRe,
@@ -2010,6 +2011,82 @@ export async function sendBackToFirstPass(formData: FormData): Promise<void> {
     by,
   );
   revalidatePath("/review");
+  redirect("/review");
+}
+
+// A final reviewer sends a second_review project back to its owner as an
+// editable draft (the reviewer-side counterpart of the player's own unship,
+// which the server only allows at "shipped"). Unlike sendBackToFirstPass the
+// project leaves the queue entirely - the player has to fix and reship - so
+// every review field is wiped (see unshipResetFields) and the player and any
+// accepted collaborators are told. The first-pass reviewer's payout follows
+// the same rule as a send-back: paid in full unless this was their mistake.
+export async function unshipProject(formData: FormData): Promise<void> {
+  const access = await requirePerm("review");
+  const by = actorName(access);
+  const projectId = Number(formData.get("projectId") ?? 0);
+  const reason = String(formData.get("reason") ?? "").trim().slice(0, 1000);
+  const voidPayout = formData.get("voidPayout") === "1";
+  const back = `/review/${projectId}`;
+  if (!projectId) return;
+  if (!access.canSecondPass)
+    redirect(`${back}?error=${encodeURIComponent("Only a final reviewer can unship a project.")}`);
+  if (!reason)
+    redirect(`${back}?error=${encodeURIComponent("Say why you're unshipping this project.")}`);
+
+  const { data: current } = await db
+    .from("projects")
+    .select("status")
+    .eq("id", projectId)
+    .single();
+  if (!current) return;
+  if (current.status !== "second_review")
+    redirect(`${back}?error=${encodeURIComponent("This project isn't awaiting a final pass.")}`);
+
+  const { data: project, error } = await db
+    .from("projects")
+    .update(unshipResetFields())
+    .eq("id", projectId)
+    .eq("status", "second_review")
+    .select("id, name, user_id")
+    .single();
+  if (error || !project) {
+    console.error("unshipProject failed", error?.message);
+    return;
+  }
+
+  if (voidPayout) await voidFirstPassPayouts(projectId);
+  else await settleFirstPassPayouts(projectId, project.name);
+
+  const claimedHours = await claimedHoursFor(projectId);
+  const { error: auditError } = await db.from("review_audits").insert({
+    project_id: projectId,
+    user_id: project.user_id,
+    reviewer: by,
+    verdict: "unshipped",
+    note: reason,
+    audit_note: "",
+    claimed_hours: claimedHours,
+  });
+  if (auditError) console.error("unship audit insert failed", auditError.message);
+
+  const body = `Your project "${project.name}" was sent back to draft by a final reviewer so you can make changes. Edit it and ship it again when it's ready.\n\nReason: ${reason}`;
+  await notifyOwner(project.user_id, "Project sent back to draft", body);
+  for (const collaboratorId of await acceptedCollaboratorUserIds(projectId))
+    await notifyOwner(
+      collaboratorId,
+      "Project sent back to draft",
+      `A project you collaborate on, "${project.name}", was sent back to draft by a final reviewer. The owner needs to edit and reship it.\n\nReason: ${reason}`,
+    );
+
+  await logModAction(
+    project.user_id,
+    "project_unshipped",
+    `${project.name}: sent back to draft, first-pass payout ${voidPayout ? "voided" : "paid in full"} , ${reason}`,
+    by,
+  );
+  revalidatePath("/review");
+  revalidatePath(`/projects/${projectId}`);
   redirect("/review");
 }
 

@@ -32,6 +32,7 @@ import {
   banProject,
   setProjectLevel,
   sendBackToFirstPass,
+  unshipProject,
   toggleProjectPeak,
   extendHoursCutoff,
   holdReview,
@@ -1290,6 +1291,45 @@ export default async function ReviewDetail({
                           confirm="Send this back to first pass?"
                         >
                           Send back to first pass
+                        </PendingButton>
+                      </form>
+                    </details>
+                    )}
+
+                    {isFinalStage && canSecondPass && (
+                    <details className="rounded-xl bg-card ring-1 ring-amber-300 dark:ring-amber-500/30 p-4 text-card-foreground">
+                      <summary className="flex items-center gap-2 cursor-pointer text-sm font-semibold text-amber-700 dark:text-amber-400 select-none list-none">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-600" />
+                        Unship to draft
+                      </summary>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Takes this out of the queue and hands it back to the owner as an editable draft.
+                        They fix it and reship, and it starts review from scratch: the first-pass verdict
+                        (including a ban proposal), notes and second-pass checklist are all cleared. The
+                        owner and any collaborators are notified with your reason.
+                      </p>
+                      <form action={unshipProject} className="mt-3 flex flex-col gap-2">
+                        <input type="hidden" name="projectId" value={p.id} />
+                        <Textarea
+                          name="reason"
+                          required
+                          rows={2}
+                          placeholder="Why unship this (shown to the owner)…"
+                          className="text-sm resize-y"
+                        />
+                        <Label className="flex items-start gap-2 text-sm py-0.5 font-normal">
+                          <Checkbox name="voidPayout" value="1" className="mt-0.5" />
+                          <span>
+                            This was the first-pass reviewer&apos;s mistake , void their pending payout
+                            instead of paying it in full
+                          </span>
+                        </Label>
+                        <PendingButton
+                          className="bg-amber-700 text-white border-transparent hover:bg-amber-800"
+                          pendingText="Unshipping…"
+                          confirm="Unship this project back to a draft? The owner is notified and it leaves the queue."
+                        >
+                          Unship to draft
                         </PendingButton>
                       </form>
                     </details>

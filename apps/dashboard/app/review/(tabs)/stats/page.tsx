@@ -45,8 +45,9 @@ function emptyCounts(): VerdictCounts {
 }
 
 // Only the four verdicts a chart reader actually thinks of as "the outcome" -
-// first_pass_needs_changes/first_pass_banned, sent_to_first_pass, reverted,
-// and hours_deflated are review-pipeline housekeeping, not a review verdict.
+// first_pass_needs_changes/first_pass_banned, sent_to_first_pass, unshipped,
+// reverted, and hours_deflated are review-pipeline housekeeping, not a review
+// verdict.
 function bucketFor(verdict: string): keyof VerdictCounts | null {
   if (verdict === "approved") return "approved";
   if (verdict === "first_pass_approved") return "firstPass";
