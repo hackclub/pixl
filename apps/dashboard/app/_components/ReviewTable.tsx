@@ -237,7 +237,7 @@ export function ReviewTable({
                 )}
 
                 <TableCell className="px-5 py-3.5 text-right">
-                  <div className="text-foreground/70">{waited(p.shipped_at)}</div>
+                  <div className="text-foreground/70">{waited(p.first_shipped_at ?? p.shipped_at)}</div>
                   <div className="text-xs text-muted-foreground">
                     {fmtHM(p.hours)} logged
                   </div>

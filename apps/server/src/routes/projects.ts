@@ -856,6 +856,9 @@ router.post("/api/projects/:id/ship", async (req, res) => {
     .update({
       status: "shipped",
       shipped_at: new Date().toISOString(),
+      // Set once on the first ship and never reset, so the review table can
+      // show the total wait (shipped_at restarts on every reship).
+      first_shipped_at: (project.first_shipped_at as string | null) ?? new Date().toISOString(),
       // A fix-and-reship after needs_changes already went through a first
       // pass once - it jumps the queue instead of sorting by this fresh
       // shipped_at like a brand-new submission would (same reverted_at

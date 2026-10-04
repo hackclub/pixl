@@ -156,6 +156,8 @@ export interface ProjectRow {
   second_pass_hours: number | null;
   second_pass_verdict: string | null;
   shipped_at: string | null;
+  // First ever ship; shipped_at restarts on every reship (migration 0208).
+  first_shipped_at?: string | null;
   created_at: string;
   sidequest_id: number | null;
   trial_prize_order_id: number | null;
