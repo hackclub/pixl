@@ -9,7 +9,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ReviewVerdictChart, type VerdictCounts, type VerdictWindow } from "@/app/_components/ReviewVerdictChart";
+import { ReviewVerdictChart, type VerdictWindow } from "@/app/_components/ReviewVerdictChart";
+import { slackIdFromLabel, summarizeWindow } from "@/lib/reviewStats";
 
 export const dynamic = "force-dynamic";
 
@@ -31,29 +32,6 @@ function fmtDur(secs: number): string {
   if (secs < 60) return `${Math.round(secs)}s`;
   if (secs < 3600) return `${Math.round(secs / 60)}m`;
   return `${(secs / 3600).toFixed(1)}h`;
-}
-
-// "Name (U0ABC123)" -> "U0ABC123", the format actorName() stamps into
-// review_audits.reviewer, mod_actions.actor, etc. across the dashboard.
-function slackIdFromLabel(label: string): string | null {
-  const m = label.match(/\(([^()]+)\)\s*$/);
-  return m ? m[1] : null;
-}
-
-function emptyCounts(): VerdictCounts {
-  return { approved: 0, firstPass: 0, changes: 0, rejected: 0 };
-}
-
-// Only the four verdicts a chart reader actually thinks of as "the outcome" -
-// first_pass_needs_changes/first_pass_banned, sent_to_first_pass, unshipped,
-// reverted, and hours_deflated are review-pipeline housekeeping, not a review
-// verdict.
-function bucketFor(verdict: string): keyof VerdictCounts | null {
-  if (verdict === "approved") return "approved";
-  if (verdict === "first_pass_approved") return "firstPass";
-  if (verdict === "needs_changes") return "changes";
-  if (verdict === "banned") return "rejected";
-  return null;
 }
 
 export default async function ReviewStatsPage() {
@@ -87,15 +65,11 @@ export default async function ReviewStatsPage() {
     { key: "week", label: "This week", since: weekStart },
     { key: "month", label: "This month", since: monthStart },
   ];
-  const verdictWindows: VerdictWindow[] = windowDefs.map((w) => {
-    const counts = emptyCounts();
-    for (const a of audits) {
-      if (w.since !== null && new Date(a.created_at).getTime() < w.since) continue;
-      const bucket = bucketFor(a.verdict);
-      if (bucket) counts[bucket]++;
-    }
-    return { key: w.key, label: w.label, counts };
-  });
+  const verdictWindows: VerdictWindow[] = windowDefs.map((w) => ({
+    key: w.key,
+    label: w.label,
+    ...summarizeWindow(audits, w.since),
+  }));
 
   const byReviewer = new Map<string, ReviewAuditRow[]>();
   for (const a of audits) {
