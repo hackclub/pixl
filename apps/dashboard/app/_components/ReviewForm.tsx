@@ -1180,9 +1180,9 @@ export function ReviewForm({
             Additional notes , required. Show your thinking during the review: the
             user&apos;s level (check their repo count) and how it affects the hours
             (a beginner gets more hours approved than an advanced user for the same
-            project), why you did not deflate if you did not (commit count and
-            whether they are descriptive and show steady progress, journals), and
-            any other proof that supports the time.
+            project), why you didn&apos;t deflate (commit count and whether they are
+            descriptive and show steady progress, journals), and any other proof
+            that supports the time.
           </Label>
           <Textarea
             name="notes"
