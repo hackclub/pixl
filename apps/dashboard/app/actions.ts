@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { LIVE_MODE_COOKIE } from "@/lib/liveMode";
 import {
   config,
   levelForRe,
@@ -2694,6 +2696,17 @@ export async function holdReview(formData: FormData): Promise<void> {
   await logModAction(project.user_id, "review_held", `${project.name}: ${reason}`, by);
   revalidatePath(`/review/${projectId}`);
   revalidatePath("/review");
+}
+
+// Per-reviewer "live mode" (see lib/liveMode.ts): hides builder identity on
+// the review pages so a review can be screen-shared. A cookie, not a DB flag,
+// so it only ever affects the reviewer who flipped it.
+export async function setLiveMode(formData: FormData): Promise<void> {
+  await requirePerm("review");
+  const on = formData.get("on") === "1";
+  const jar = await cookies();
+  jar.set(LIVE_MODE_COOKIE, on ? "1" : "0", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 12 });
+  revalidatePath("/review", "layout");
 }
 
 // Extracts the Slack id from an actorName()-formatted string ("Name (SlackID)"),

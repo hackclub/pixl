@@ -774,9 +774,36 @@ export async function nextReviewId(opts: {
           )
         : [];
 
+  // Advance to the project right after the one just closed, not the head of
+  // the queue - otherwise a reviewer on #14 gets bounced back to #1. The
+  // closed project has already left the queue, so locate its slot by the same
+  // sort key the lists use (reverted_at first, then shipped_at).
+  const { data: closed } = await db
+    .from("projects")
+    .select("shipped_at, reverted_at")
+    .eq("id", excludeId)
+    .maybeSingle();
+  const sortKey = (p: { shipped_at?: string | null; reverted_at?: string | null }): [number, number] =>
+    p.reverted_at
+      ? [0, new Date(p.reverted_at).getTime()]
+      : [1, p.shipped_at ? new Date(p.shipped_at).getTime() : 0];
+  const pickAfter = (list: ShippedProject[]): ShippedProject | undefined => {
+    if (!closed) return list[0];
+    const [cg, ct] = sortKey(closed as { shipped_at?: string | null; reverted_at?: string | null });
+    const after = list.find((p) => {
+      const [g, t] = sortKey(p);
+      return g > cg || (g === cg && t > ct);
+    });
+    // Nothing later in the queue: wrap to the oldest instead of dead-ending.
+    return after ?? list[0];
+  };
+
   const order =
     prefer === "second_review" ? [finalPass, firstPass] : [firstPass, finalPass];
-  for (const list of order) if (list[0]) return list[0].id;
+  for (const list of order) {
+    const next = pickAfter(list);
+    if (next) return next.id;
+  }
   return null;
 }
 
