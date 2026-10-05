@@ -7,9 +7,6 @@ import {
   countProposedBanProjects,
 } from "@/lib/db";
 import { ReviewTabs } from "@/app/_components/ReviewTabs";
-import { LiveModeProvider } from "@/app/_components/LiveMode";
-import { LiveModeToggle } from "@/app/_components/LiveModeToggle";
-import { getLiveMode } from "@/lib/liveModeServer";
 
 export const dynamic = "force-dynamic";
 
@@ -36,12 +33,8 @@ export default async function ReviewLayout({
     access.isSuper ? countSpotCheckProjects() : Promise.resolve(undefined),
     access.isSuper ? countProposedBanProjects() : Promise.resolve(undefined),
   ]);
-  const live = await getLiveMode();
   return (
-    <LiveModeProvider live={live}>
-      <div className="flex justify-end mb-2">
-        <LiveModeToggle live={live} />
-      </div>
+    <>
       <ReviewTabs
         isSuper={access.isSuper}
         canSecondPass={access.canSecondPass}
@@ -52,6 +45,6 @@ export default async function ReviewLayout({
         proposedBanCount={proposedBanCount}
       />
       {children}
-    </LiveModeProvider>
+    </>
   );
 }

@@ -50,7 +50,6 @@ import { LevelBadge, TypeBadge, ShipBadges, StatusBadge, BeaconBadge, FundingBad
 import { slackHandle } from "@/lib/slack";
 import { getLiveMode } from "@/lib/liveModeServer";
 import { liveAlias, redactBuilderDetails } from "@/lib/liveMode";
-import { LiveModeToggle } from "@/app/_components/LiveModeToggle";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -431,7 +430,6 @@ export default async function ReviewDetail({
         <Link href="/review" className="text-sm text-brand font-medium hover:underline">
           ← Needs review
         </Link>
-        <LiveModeToggle live={live} />
       </div>
 
       {error && (

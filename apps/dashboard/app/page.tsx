@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireAdmin, canView } from "@/lib/guard";
+import { getLiveMode } from "@/lib/liveModeServer";
+import { liveName } from "@/lib/liveMode";
 import {
   getStats,
   getGrowthSeries,
@@ -35,6 +37,7 @@ export default async function Overview({
   searchParams: Promise<{ range?: string }>;
 }) {
   const access = await requireAdmin();
+  const live = await getLiveMode();
   // Reviewers / sub-admins don't get the owner Overview; their home is their own
   // reviewer stats. Only owners (isSuper) see the full dashboard overview.
   if (!access.isSuper && access.perms.has("review")) redirect("/review/stats");
@@ -272,7 +275,7 @@ export default async function Overview({
                     href={`/players/${v.user_id}`}
                     className="font-medium hover:text-brand"
                   >
-                    {v.users?.real_name || v.users?.display_name || v.user_id}
+                    {liveName(live, v.users, v.users?.real_name || v.users?.display_name || v.user_id)}
                   </Link>
                   <div className="text-sm text-muted-foreground truncate">
                     “{v.content}”

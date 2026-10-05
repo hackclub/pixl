@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { requirePagePerm } from "@/lib/guard";
+import { getLiveMode } from "@/lib/liveModeServer";
+import { liveName } from "@/lib/liveMode";
 import { listIdeas } from "@/lib/db";
 import { IdeaBanForm, IdeaUnbanForm } from "@/app/_components/Moderate";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +25,7 @@ export default async function IdeasPage({
   searchParams: Promise<{ q?: string; error?: string }>;
 }) {
   await requirePagePerm(["ideas"]);
+  const live = await getLiveMode();
   const { q, error } = await searchParams;
   const ideas = await listIdeas(q);
 
@@ -83,7 +86,7 @@ export default async function IdeasPage({
                       href={`/players/${idea.user_id}`}
                       className="font-bold hover:text-brand"
                     >
-                      {idea.users?.real_name || idea.users?.display_name || idea.user_id}
+                      {liveName(live, idea.users, idea.users?.real_name || idea.users?.display_name || idea.user_id)}
                     </Link>
                   </TableCell>
                   <TableCell className="p-3">

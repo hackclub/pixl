@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { requirePagePerm, canView } from "@/lib/guard";
+import { getLiveMode } from "@/lib/liveModeServer";
+import { liveName } from "@/lib/liveMode";
 import { listProjects, collaboratorsByProject } from "@/lib/db";
 import { StatusBadge, BeaconBadge } from "@/app/_components/ProjectBadges";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +26,7 @@ export default async function ProjectsPage({
   searchParams: Promise<{ q?: string; view?: string }>;
 }) {
   const access = await requirePagePerm(["review", "warn", "ban"]);
+  const live = await getLiveMode();
   // Admins (ban perm) see archived projects mixed into the main list; plain
   // reviewers only see active ones.
   const isAdmin = canView(access, ["ban"]);
@@ -101,10 +104,14 @@ export default async function ProjectsPage({
                 <TableCell className="p-3">
                   {p.users ? (
                     <Link href={`/players/${p.user_id}`} className="font-bold hover:text-brand">
-                      {p.users.real_name ||
-                        (p.users.slack_id && handles.get(p.users.slack_id)) ||
-                        p.users.display_name ||
-                        p.users.slack_id}
+                      {liveName(
+                        live,
+                        p.users,
+                        p.users.real_name ||
+                          (p.users.slack_id && handles.get(p.users.slack_id)) ||
+                          p.users.display_name ||
+                          p.users.slack_id,
+                      )}
                     </Link>
                   ) : (
                     <span className="text-muted-foreground">{p.user_id}</span>

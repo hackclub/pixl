@@ -2,9 +2,10 @@
 
 import { createContext, useContext } from "react";
 
-// Lets client components under /review (the queue table) see live mode without
-// every page threading a prop through. The flag itself is read from the cookie
-// on the server (see getLiveMode in lib/liveModeServer.ts).
+// Lets client components (the review queue table, ...) see live mode without
+// every page threading a prop through. Mounted once in the root layout; the
+// flag itself is read from the cookie on the server (see getLiveMode in
+// lib/liveModeServer.ts).
 const LiveModeContext = createContext(false);
 
 export function LiveModeProvider({ live, children }: { live: boolean; children: React.ReactNode }) {

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePerm, canView } from "@/lib/guard";
+import { getLiveMode } from "@/lib/liveModeServer";
+import { liveName } from "@/lib/liveMode";
 import { getProject, listCollaboratorsForProject, listProjectNotes } from "@/lib/db";
 import { fetchCommits } from "@/lib/commits";
 import {
@@ -46,6 +48,7 @@ export default async function ProjectPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   const access = await requirePagePerm(["review", "warn", "ban"]);
+  const live = await getLiveMode();
   const { id } = await params;
   const { error } = await searchParams;
   const projectId = Number(id);
@@ -160,10 +163,14 @@ export default async function ProjectPage({
                   href={`/players/${project.user_id}`}
                   className="font-bold hover:text-brand"
                 >
-                  {project.users.real_name ||
-                    ownerHandle ||
-                    project.users.display_name ||
-                    project.users.slack_id}
+                  {liveName(
+                    live,
+                    project.users,
+                    project.users.real_name ||
+                      ownerHandle ||
+                      project.users.display_name ||
+                      project.users.slack_id,
+                  )}
                 </Link>
               ) : (
                 project.user_id
@@ -180,7 +187,7 @@ export default async function ProjectPage({
                         href={`/players/${c.user_id}`}
                         className="font-bold hover:text-brand"
                       >
-                        {c.users.real_name || c.users.display_name || c.users.slack_id}
+                        {liveName(live, c.users, c.users.real_name || c.users.display_name || c.users.slack_id)}
                       </Link>
                     ) : (
                       c.user_id
