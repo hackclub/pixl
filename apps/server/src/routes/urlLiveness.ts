@@ -92,6 +92,7 @@ export interface SafeResponse {
   location: string | null;
   contentType: string | null;
   bodyPrefix: string;
+  setCookies: string[];
 }
 
 export interface SafeRequestOptions {
@@ -151,21 +152,49 @@ export function safeRequest(u: URL, options: SafeRequestOptions, deps: UrlLivene
       const status = res.statusCode ?? 0;
       const location = res.headers.location ?? null;
       const contentType = res.headers["content-type"] ?? null;
+      const setCookies = res.headers["set-cookie"] ?? [];
       if (options.readBodyPrefix) {
-        readBodyPrefix(res).then((bodyPrefix) => resolve({ status, location, contentType, bodyPrefix }));
+        readBodyPrefix(res).then((bodyPrefix) => resolve({ status, location, contentType, bodyPrefix, setCookies }));
         return;
       }
       res.resume(); // discard body
-      resolve({ status, location, contentType, bodyPrefix: "" });
+      resolve({ status, location, contentType, bodyPrefix: "", setCookies });
     });
     req.on("error", reject);
     req.end();
   });
 }
 
+// Minimal per-host cookie jar for one urlAlive call. Streamlit Community Cloud
+// (and similar) bounce through an auth hop that sets a session cookie and
+// redirects back; without replaying it the chain loops until the hop cap.
+// Exact-host match only, attributes ignored, never sent to another host.
+type CookieJar = Map<string, Map<string, string>>;
+
+function storeCookies(jar: CookieJar, host: string, setCookies: string[]): void {
+  for (const raw of setCookies) {
+    const pair = raw.split(";", 1)[0];
+    const eq = pair.indexOf("=");
+    if (eq <= 0) continue;
+    const name = pair.slice(0, eq).trim();
+    const value = pair.slice(eq + 1).trim();
+    const hostJar = jar.get(host) ?? new Map<string, string>();
+    if (!value || /;\s*max-age=0\b/i.test(raw)) hostJar.delete(name);
+    else hostJar.set(name, value);
+    jar.set(host, hostJar);
+  }
+}
+
+function cookieHeader(jar: CookieJar, host: string): Record<string, string> | undefined {
+  const hostJar = jar.get(host);
+  if (!hostJar || hostJar.size === 0) return undefined;
+  return { cookie: [...hostJar].map(([k, v]) => `${k}=${v}`).join("; ") };
+}
+
 export async function urlAlive(url: string, deps: UrlLivenessDeps = {}): Promise<boolean> {
   // re-validate host on every hop
   const resolved = resolveDeps(deps);
+  const jar: CookieJar = new Map();
   let current = url;
   for (let hop = 0; hop < 5; hop++) {
     let u: URL;
@@ -178,8 +207,10 @@ export async function urlAlive(url: string, deps: UrlLivenessDeps = {}): Promise
     if (!(await hostIsPublic(u.hostname, resolved))) return false;
     if (isTrustedUnfetchableHost(u.hostname)) return true;
     try {
-      let r = await safeRequest(u, { method: "HEAD" }, resolved);
-      if (r.status === 405 || r.status === 501) r = await safeRequest(u, { method: "GET" }, resolved);
+      const headers = cookieHeader(jar, u.host);
+      let r = await safeRequest(u, { method: "HEAD", headers }, resolved);
+      if (r.status === 405 || r.status === 501) r = await safeRequest(u, { method: "GET", headers }, resolved);
+      storeCookies(jar, u.host, r.setCookies);
       if (r.status >= 300 && r.status < 400) {
         if (!r.location) return false;
         current = new URL(r.location, current).toString();

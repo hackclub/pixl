@@ -207,6 +207,42 @@ describe("urlAlive - redirects", () => {
       await close();
     }
   });
+
+  // Streamlit Community Cloud: / bounces through an auth hop to /-/login, which
+  // sets a session cookie and sends you back to /. Without carrying the cookie
+  // it loops forever and every Streamlit demo read as unreachable.
+  test("carries cookies across hops so a cookie-gated auth bounce resolves", async () => {
+    const { port, close } = await startServer((req, res) => {
+      if (req.url === "/-/auth") return void res.writeHead(303, { location: "/-/login" }).end();
+      if (req.url === "/-/login")
+        return void res.writeHead(303, { location: "/", "set-cookie": "session=abc; Path=/; HttpOnly" }).end();
+      if (req.headers.cookie?.includes("session=abc")) return void res.writeHead(200).end("ok");
+      res.writeHead(303, { location: "/-/auth", "set-cookie": "session=; Path=/; Max-Age=0" }).end();
+    });
+    try {
+      const lookupImpl = lookupOf({ address: "127.0.0.1", family: 4 });
+      expect(await urlAlive(`http://cookie-bounce.test:${port}/`, { lookupImpl, isBlockedIp: allowAll })).toBe(true);
+    } finally {
+      await close();
+    }
+  });
+
+  test("cookies set by one host are not sent to a different host", async () => {
+    const cookiesSeen: (string | undefined)[] = [];
+    const { port, close } = await startServer((req, res) => {
+      if (req.headers.host?.startsWith("first.test"))
+        return void res.writeHead(302, { location: `http://second.test:${port}/`, "set-cookie": "secret=1" }).end();
+      cookiesSeen.push(req.headers.cookie);
+      res.writeHead(200).end("ok");
+    });
+    try {
+      const lookupImpl = lookupOf({ address: "127.0.0.1", family: 4 });
+      expect(await urlAlive(`http://first.test:${port}/`, { lookupImpl, isBlockedIp: allowAll })).toBe(true);
+      expect(cookiesSeen).toEqual([undefined]);
+    } finally {
+      await close();
+    }
+  });
 });
 
 describe("urlAlive - address selection (IPv4/IPv6/multi-address)", () => {
