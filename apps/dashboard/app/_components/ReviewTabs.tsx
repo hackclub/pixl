@@ -46,6 +46,9 @@ export function ReviewTabs({
       // ships or five 40-hour builds.
       extra: secondPassHours ? `${secondPassHours}h` : undefined,
     });
+    // Every score Robert's fraud reviewer has given, newest first, including
+    // projects that already left Spot check.
+    tabs.push({ href: "/review/fraud-reviews", label: "Fraud reviews" });
   }
   if (isSuper) {
     // A first-pass reviewer's "ban" verdict is only a proposal (see

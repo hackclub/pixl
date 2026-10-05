@@ -41,8 +41,26 @@ export async function GET(req: Request) {
   }
 
   const known = rows.filter((r) => r.robert_project_id);
+
+  // A review that landed through the webhook has no note when Robert's
+  // outcome.reason is empty (it carries the outcome, not the fraud reviewer's
+  // review.note), so backfill those from Robert's list below.
+  const { data: noteless } = await db
+    .from("projects")
+    .select("id, shipped_at, second_pass_by, second_pass_note")
+    .not("robert_trust_score", "is", null)
+    .or("robert_note.is.null,robert_note.eq.")
+    .limit(200);
+  const notelessRows = (noteless ?? []) as {
+    id: number;
+    shipped_at: string | null;
+    second_pass_by: string | null;
+    second_pass_note: string | null;
+  }[];
+
   let applied = 0;
-  if (known.length > 0) {
+  let notesBackfilled = 0;
+  if (known.length > 0 || notelessRows.length > 0) {
     const scored = await fetchScoredProjects();
     // Matched by externalId (our own "pixl-<id>-<shippedAtSeconds>" scheme)
     // rather than robert_project_id, since that's what Robert's list
@@ -60,7 +78,19 @@ export async function GET(req: Request) {
       });
       if (result.applied) applied += 1;
     }
+
+    for (const row of notelessRows) {
+      const note = byExternalId.get(robertExternalId(row.id, row.shipped_at))?.review?.note?.trim();
+      if (!note) continue;
+      const patch: Record<string, string> = { robert_note: note };
+      // Only Robert's own pass should have its note mirrored into the
+      // second-pass note, never a human second-pass reviewer's.
+      if (row.second_pass_by === "Robert" && !row.second_pass_note) patch.second_pass_note = note;
+      const { error: noteError } = await db.from("projects").update(patch).eq("id", row.id);
+      if (noteError) console.error("robert note backfill failed", row.id, noteError.message);
+      else notesBackfilled += 1;
+    }
   }
 
-  return NextResponse.json({ ok: true, waiting: rows.length, resubmitted, applied });
+  return NextResponse.json({ ok: true, waiting: rows.length, resubmitted, applied, notesBackfilled });
 }

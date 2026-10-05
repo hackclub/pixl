@@ -191,7 +191,10 @@ export async function submitProject(
 export async function fetchScoredProjects(): Promise<RobertProject[]> {
   const cfg = robertConfig();
   if (!cfg) return [];
-  const states = ["awaiting_outcome", "rejected_fraud"] as const;
+  // "decided" too: a score of 5-10 that a human already approved in Robert's
+  // own UI lands here, and the webhook for that carries no review note (only
+  // outcome.reason), so the reconcile cron reads it from this list instead.
+  const states = ["awaiting_outcome", "rejected_fraud", "decided"] as const;
   const out: RobertProject[] = [];
   for (const state of states) {
     try {

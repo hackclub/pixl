@@ -1070,6 +1070,39 @@ export async function countProposedBanProjects(): Promise<number> {
   return count ?? 0;
 }
 
+export interface RobertReviewRow {
+  id: number;
+  name: string;
+  status: string;
+  approved_hours: number | null;
+  hackatime_seconds: number | null;
+  banned_at: string | null;
+  robert_trust_score: number;
+  robert_note: string | null;
+  robert_reviewed_at: string | null;
+  robert_state: string | null;
+  users: { display_name: string | null; real_name: string | null; slack_id: string | null } | null;
+}
+
+// Every project Robert's fraud reviewer has scored, newest review first -
+// the "Fraud reviews" tab. Includes projects that already left Spot check
+// (approved, banned), unlike the Spot check queue.
+export async function listRobertReviews(limit = 300): Promise<RobertReviewRow[]> {
+  const { data, error } = await db
+    .from("projects")
+    .select(
+      "id, name, status, approved_hours, hackatime_seconds, banned_at, robert_trust_score, robert_note, robert_reviewed_at, robert_state, users(display_name, real_name, slack_id)",
+    )
+    .not("robert_trust_score", "is", null)
+    .order("robert_reviewed_at", { ascending: false, nullsFirst: false })
+    .limit(limit);
+  if (error) {
+    console.error("listRobertReviews", error.message);
+    return [];
+  }
+  return (data ?? []) as unknown as RobertReviewRow[];
+}
+
 async function attachPlayerNames(rows: (ModActionRow & { player_name?: string })[]) {
   const ids = [...new Set(rows.map((r) => r.user_id))];
   if (ids.length === 0) return;
