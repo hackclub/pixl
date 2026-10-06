@@ -9,6 +9,7 @@ import {
 import { slackHandles } from "@/lib/slack";
 import { hackatimeUserIdsFor } from "@/lib/hackatime";
 import { listBlackoutQueueProjectIds } from "@/lib/operations";
+import { getLiveMode } from "@/lib/liveModeServer";
 import { ReviewTable } from "@/app/_components/ReviewTable";
 import { LiveReview } from "@/app/_components/LiveReview";
 import { Badge } from "@/components/ui/badge";
@@ -47,11 +48,14 @@ export default async function ReviewListPage({
   const kind: "software" | "hardware" =
     access.reviewQueues === "both" ? requestedKind : access.reviewQueues;
   const kindQ = kind === "hardware" ? "&kind=hardware" : "";
+  // Live mode (lib/liveMode.ts) hides the "Awaiting Robert" section entirely -
+  // it's read-only and names the fraud pipeline, nothing to show on stream.
+  const live = await getLiveMode();
 
   // None of these depend on each other's result, so they run together instead
   // of as a chain of sequential round-trips.
   const [finalRowsAll, spotCheckRowsAll, myRecent, rowsAll, blackoutIds] = await Promise.all([
-    access.canSecondPass
+    access.canSecondPass && !live
       ? listSecondReviewProjects(viewer, kind, { includeClaimed: true })
       : Promise.resolve([]),
     access.isSuper

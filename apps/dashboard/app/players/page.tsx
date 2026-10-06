@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { requirePagePerm } from "@/lib/guard";
+import { getLiveMode } from "@/lib/liveModeServer";
+import { liveName } from "@/lib/liveMode";
 import { listPlayers } from "@/lib/db";
 import { slackHandles } from "@/lib/slack";
 import { massPlayerAction, syncSlackAvatars } from "@/app/actions";
@@ -43,6 +45,7 @@ export default async function PlayersPage({
   searchParams: Promise<{ q?: string; page?: string; done?: string; error?: string }>;
 }) {
   const access = await requirePagePerm(["warn", "ban"]);
+  const live = await getLiveMode();
   const { q, page, done, error } = await searchParams;
   const all = await listPlayers(q);
 
@@ -174,11 +177,11 @@ export default async function PlayersPage({
               {players.map((p) => (
                 <TableRow key={p.id}>
                   <TableCell className="p-3">
-                    <RowSelect id={p.id} label={`Select ${p.real_name || p.display_name || p.id}`} />
+                    <RowSelect id={p.id} label={`Select ${liveName(live, p, p.real_name || p.display_name || p.id)}`} />
                   </TableCell>
                   <TableCell className="p-3">
                     <Link href={`/players/${p.id}`} className="font-bold hover:text-brand">
-                      {p.real_name || (p.slack_id && handles.get(p.slack_id)) || p.display_name || "Unknown"}
+                      {liveName(live, p, p.real_name || (p.slack_id && handles.get(p.slack_id)) || p.display_name || "Unknown")}
                     </Link>
                     <div className="text-xs text-muted-foreground">
                       {p.slack_id ?? "no slack id"} · {p.oauth_provider}

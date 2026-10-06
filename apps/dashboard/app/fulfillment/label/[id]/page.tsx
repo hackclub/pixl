@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
 import { requireFulfiller } from "@/lib/guard";
+import { getLiveMode } from "@/lib/liveModeServer";
+import { LiveBlocked } from "@/app/_components/LiveBlocked";
 import { getShopOrder, buyerDetailsByUserId } from "@/lib/db";
 import { PrintButton } from "./PrintButton";
 
@@ -16,6 +18,7 @@ export default async function ShippingLabelPage({
   params: Promise<{ id: string }>;
 }) {
   await requireFulfiller();
+  if (await getLiveMode()) return <LiveBlocked what="Shipping labels" />;
   const { id } = await params;
   const orderId = Number(id);
   if (!Number.isFinite(orderId)) notFound();

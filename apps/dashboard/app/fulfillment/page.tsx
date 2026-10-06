@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { requireFulfiller } from "@/lib/guard";
+import { getLiveMode } from "@/lib/liveModeServer";
+import { LiveBlocked } from "@/app/_components/LiveBlocked";
 import {
   listShopOrders,
   listFulfillers,
@@ -209,6 +211,7 @@ export default async function FulfillmentPage({
   searchParams: Promise<{ status?: string; mine?: string }>;
 }) {
   const access = await requireFulfiller();
+  if (await getLiveMode()) return <LiveBlocked what="Fulfillment" />;
   const me = access.session.slackId;
   const { status, mine } = await searchParams;
   const active: TabKey = TAB_KEYS.includes(status as TabKey) ? (status as TabKey) : "pending";

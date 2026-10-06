@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { requirePagePerm, canView } from "@/lib/guard";
+import { getLiveMode } from "@/lib/liveModeServer";
+import { liveName } from "@/lib/liveMode";
 import { listBans, listBanLog, listBanProposals, banIsActive } from "@/lib/db";
 import { LiftBanForm } from "@/app/_components/Moderate";
 import { confirmBanProposal, rejectBanProposal } from "@/app/actions";
@@ -23,6 +25,7 @@ export default async function BansPage({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const access = await requirePagePerm(["warn", "ban"]);
+  const live = await getLiveMode();
   const canConfirm = canView(access, ["ban"]);
   const { tab } = await searchParams;
   const active = tab === "logs" ? "logs" : tab === "proposed" ? "proposed" : "bans";
@@ -88,7 +91,7 @@ export default async function BansPage({
                     <TableRow key={b.id}>
                       <TableCell className="p-3">
                         <Link href={`/players/${b.user_id}`} className="font-bold hover:text-brand">
-                          {b.users?.real_name || b.users?.display_name || b.user_id}
+                          {liveName(live, b.users, b.users?.real_name || b.users?.display_name || b.user_id)}
                         </Link>
                       </TableCell>
                       <TableCell className="p-3 max-w-64">
@@ -134,7 +137,7 @@ export default async function BansPage({
             <div key={p.id} className="p-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
               <div className="flex-1 min-w-48">
                 <Link href={`/players/${p.user_id}`} className="font-bold hover:text-brand">
-                  {p.users?.real_name || p.users?.display_name || p.user_id}
+                  {liveName(live, p.users, p.users?.real_name || p.users?.display_name || p.user_id)}
                 </Link>
                 <div className="text-foreground/70 break-words">{p.reason}</div>
                 <div className="text-xs text-muted-foreground mt-0.5">
@@ -150,7 +153,7 @@ export default async function BansPage({
                       type="submit"
                       size="sm"
                       pendingText="Confirming…"
-                      confirm={`Confirm the ban on ${p.users?.real_name || p.users?.display_name || p.user_id}?`}
+                      confirm={`Confirm the ban on ${liveName(live, p.users, p.users?.real_name || p.users?.display_name || p.user_id)}?`}
                       className="bg-brand text-white border-transparent"
                     >
                       Confirm ban

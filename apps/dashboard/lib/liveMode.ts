@@ -1,6 +1,9 @@
-// "Live mode" for the review pages: lets a reviewer screen-share or stream a
-// review without leaking builder identity. The flag is a per-reviewer cookie
-// (no DB), set by the setLiveMode action in app/actions.ts.
+// Global "live mode": lets anyone on the team screen-share or stream the
+// dashboard without leaking players' real identities (real names, emails,
+// addresses, shipping details). The flag is a per-viewer cookie (no DB), set
+// by the setLiveMode action in app/actions.ts and read on the server so the
+// real values never reach the browser. Sections that are nothing but PII
+// (fulfillment, Slack lookup, the CSV export) are blocked outright.
 
 export const LIVE_MODE_COOKIE = "pixl_live_mode";
 
@@ -36,4 +39,15 @@ export function redactBuilderDetails(live: boolean, d: BuilderDetails): BuilderD
     country: LIVE_HIDDEN,
     address: LIVE_HIDDEN,
   };
+}
+
+/** Name to show for a player. Live mode never uses real_name (or anything
+ * derived from it, like a Slack handle): only the in-game name. */
+export function liveName(
+  live: boolean,
+  user: { display_name?: string | null } | null | undefined,
+  realName: string | null | undefined,
+): string {
+  if (!live) return realName ?? "";
+  return user?.display_name || "Player";
 }

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requirePagePerm } from "@/lib/guard";
+import { getLiveMode } from "@/lib/liveModeServer";
+import { LiveBlocked } from "@/app/_components/LiveBlocked";
 import { getPlayerBySlackId, playerLabel, searchPlayerHandles } from "@/lib/db";
 import { getSlackUserProfile } from "@/lib/slack";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -27,6 +29,7 @@ export default async function SlackLookupPage({
   searchParams: Promise<{ q?: string; name?: string }>;
 }) {
   const access = await requirePagePerm(["lookup"]);
+  if (await getLiveMode()) return <LiveBlocked what="Slack lookup" />;
   const { q, name } = await searchParams;
   const query = q?.trim() ?? "";
   const nameQuery = name?.trim() ?? "";

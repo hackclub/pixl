@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/guard";
+import { getLiveMode } from "@/lib/liveModeServer";
+import { LiveBlocked } from "@/app/_components/LiveBlocked";
 import {
   listFulfillerIds,
   fulfillerStatsBySlackId,
@@ -97,6 +99,7 @@ export default async function FulfillerPage({
 }) {
   const access = await requireAdmin();
   if (!access.isSuper) redirect("/");
+  if (await getLiveMode()) return <LiveBlocked what="Fulfillers" />;
   const { id } = await params;
   const slackId = decodeURIComponent(id);
 

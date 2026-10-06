@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { requirePagePerm } from "@/lib/guard";
+import { getLiveMode } from "@/lib/liveModeServer";
+import { liveName } from "@/lib/liveMode";
 import { listViolations } from "@/lib/db";
 import { slackHandles } from "@/lib/slack";
 import { BanForm, WarnForm } from "@/app/_components/Moderate";
@@ -24,6 +26,7 @@ export default async function ViolationsPage({
   searchParams: Promise<{ kind?: string; q?: string; page?: string }>;
 }) {
   await requirePagePerm(["warn", "ban"]);
+  const live = await getLiveMode();
   const { kind, q, page } = await searchParams;
   const all = await listViolations(500);
 
@@ -37,7 +40,7 @@ export default async function ViolationsPage({
   if (query)
     rows = rows.filter(
       (v) =>
-        (v.users?.real_name || v.users?.display_name || "").toLowerCase().includes(query) ||
+        liveName(live, v.users, v.users?.real_name || v.users?.display_name || "").toLowerCase().includes(query) ||
         (v.content ?? "").toLowerCase().includes(query),
     );
 
@@ -106,8 +109,8 @@ export default async function ViolationsPage({
           <div className="p-6 text-muted-foreground text-sm text-center">No violations match.</div>
         )}
         {slice.map((v) => {
-          const name = v.users?.real_name || v.users?.display_name || v.user_id;
-          const handle = (v.users?.slack_id && handles.get(v.users.slack_id)) ?? null;
+          const name = liveName(live, v.users, v.users?.real_name || v.users?.display_name || v.user_id);
+          const handle = live ? null : ((v.users?.slack_id && handles.get(v.users.slack_id)) ?? null);
           const initials =
             (name || "?")
               .split(/\s+/)

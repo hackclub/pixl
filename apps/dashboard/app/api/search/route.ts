@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getAccess, canView } from "@/lib/guard";
 import { globalSearch } from "@/lib/db";
 import { slackHandles } from "@/lib/slack";
+import { getLiveMode } from "@/lib/liveModeServer";
+import { liveName } from "@/lib/liveMode";
 
 export const dynamic = "force-dynamic";
 
@@ -20,12 +22,13 @@ export async function GET(req: Request) {
     projects: canProjects,
   });
 
+  const live = await getLiveMode();
   const handles = await slackHandles(players.map((p) => p.slack_id));
 
   return NextResponse.json({
     players: players.map((p) => ({
       id: p.id,
-      label: p.real_name || (p.slack_id && handles.get(p.slack_id)) || p.slack_id || p.display_name,
+      label: liveName(live, p, p.real_name || (p.slack_id && handles.get(p.slack_id)) || p.slack_id || p.display_name),
       sub: p.display_name,
     })),
     projects: projects.map((p) => ({

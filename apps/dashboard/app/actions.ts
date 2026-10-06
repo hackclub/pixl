@@ -101,6 +101,7 @@ import {
   type AdminAccess,
   type Permission,
   type ReviewQueueScope,
+  getAccess,
 } from "@/lib/guard";
 import { GUIDELINES_VERSION } from "@/lib/guidelines";
 import { applyBlackoutDecision } from "@/lib/operationsReview";
@@ -2816,15 +2817,15 @@ export async function holdReview(formData: FormData): Promise<void> {
   revalidatePath("/review");
 }
 
-// Per-reviewer "live mode" (see lib/liveMode.ts): hides builder identity on
-// the review pages so a review can be screen-shared. A cookie, not a DB flag,
-// so it only ever affects the reviewer who flipped it.
+// Global "live mode" (see lib/liveMode.ts): hides players' real identities
+// across the whole dashboard so it can be screen-shared. A cookie, not a DB flag,
+// so it only ever affects the person who flipped it.
 export async function setLiveMode(formData: FormData): Promise<void> {
-  await requirePerm("review");
+  if (!(await getAccess())) throw new Error("Not signed in");
   const on = formData.get("on") === "1";
   const jar = await cookies();
   jar.set(LIVE_MODE_COOKIE, on ? "1" : "0", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 12 });
-  revalidatePath("/review", "layout");
+  revalidatePath("/", "layout");
 }
 
 // Extracts the Slack id from an actorName()-formatted string ("Name (SlackID)"),

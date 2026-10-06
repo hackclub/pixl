@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePerm, isReportViewer } from "@/lib/guard";
+import { getLiveMode } from "@/lib/liveModeServer";
 import { banIsActive, getPlayer, listReportsAgainst } from "@/lib/db";
 import { slackHandle } from "@/lib/slack";
 import {
@@ -65,6 +66,7 @@ export default async function PlayerPage({
   params: Promise<{ id: string }>;
 }) {
   const access = await requirePagePerm(["warn", "ban"]);
+  const live = await getLiveMode();
   const can = (p: string) => access.isSuper || access.perms.has(p);
   const { id } = await params;
   const data = await getPlayer(id);
@@ -84,7 +86,7 @@ export default async function PlayerPage({
         .reduce((s, p) => s + (Number(p.approved_hours) || 0), 0) * 10,
     ) / 10;
   const initials =
-    (user.real_name || user.display_name || "?")
+    (live ? user.display_name || "?" : user.real_name || user.display_name || "?")
       .split(/\s+/)
       .map((w) => w[0])
       .slice(0, 2)
@@ -104,9 +106,9 @@ export default async function PlayerPage({
         <div className="min-w-0">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-semibold text-foreground tracking-tight break-words">
-              {user.real_name || user.display_name}
+              {live ? user.display_name : user.real_name || user.display_name}
             </h1>
-            {user.real_name && user.display_name && user.real_name !== user.display_name && (
+            {!live && user.real_name && user.display_name && user.real_name !== user.display_name && (
               <span className="text-sm text-muted-foreground">
                 in-game: {user.display_name}
               </span>
@@ -150,7 +152,7 @@ export default async function PlayerPage({
         )}
       </div>
 
-      {access.isSuper && (
+      {access.isSuper && !live && (
         <Card className="p-5 mb-8 gap-0">
           <div className="text-base font-semibold mb-3">Player info</div>
           <EditInfoForm

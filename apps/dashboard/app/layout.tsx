@@ -6,6 +6,9 @@ import { getAccess, canView, isReportViewer, isHelper, isFulfiller } from "@/lib
 import { countPendingReviews, countOpenReports, countPendingOrders } from "@/lib/db";
 import { ticketStats } from "@/lib/tickets";
 import { Shell } from "@/app/_components/Shell";
+import { LiveModeProvider } from "@/app/_components/LiveMode";
+import { LiveModeToggle } from "@/app/_components/LiveModeToggle";
+import { getLiveMode } from "@/lib/liveModeServer";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 
@@ -55,6 +58,7 @@ export default async function RootLayout({
   const reportViewer = await isReportViewer();
   const helper = await isHelper();
   const fulfiller = await isFulfiller();
+  const live = await getLiveMode();
   const nav = access
     ? {
         overview: access.isSuper,
@@ -69,7 +73,7 @@ export default async function RootLayout({
         notify: access.isSuper || access.perms.has("notify"),
         admins: access.isSuper,
         reviewers: access.isSuper,
-        slackLookup: canView(access, ["lookup"]),
+        slackLookup: !live && canView(access, ["lookup"]),
         referrals: canView(access, ["referrals"]),
         online: canView(access, ["warn", "ban"]),
         shop: canView(access, ["shop"]),
@@ -80,7 +84,7 @@ export default async function RootLayout({
         goals: canView(access, ["goals"]),
         news: canView(access, ["news"]),
         showNTell: canView(access, ["show_n_tell"]),
-        fulfillment: fulfiller,
+        fulfillment: !live && fulfiller,
         forms: canView(access, ["forms"]),
         // Spans every permission boundary at once (bans next to review verdicts
         // next to permission grants), so it is owner-only - matching the gate
@@ -165,6 +169,7 @@ export default async function RootLayout({
           // >
           //   {children}
           // </Shell>
+          <LiveModeProvider live={live}>
           <SidebarProvider defaultOpen={sidebarOpen}>
             <Shell
               session={{ name: session.name, slackId: session.slackId }}
@@ -176,12 +181,14 @@ export default async function RootLayout({
             />
 
             <main className="flex-1 min-w-0 overflow-x-clip flex flex-col gap-4">
-              <div className="bg-command-background/40 backdrop-blur-xl backdrop-saturate-150 shadow-2xl shadow-black/30 w-full h-10 fixed z-100 p-2">
+              <div className="bg-command-background/40 backdrop-blur-xl backdrop-saturate-150 shadow-2xl shadow-black/30 w-full h-10 fixed z-100 p-2 flex items-center justify-between">
                 <SidebarTrigger />
+                <div className="pr-14"><LiveModeToggle live={live} /></div>
               </div>
               <div className="px-10 pt-10">{children}</div>
             </main>
           </SidebarProvider>
+          </LiveModeProvider>
         ) : (
           children
         )}
