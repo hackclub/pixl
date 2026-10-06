@@ -2514,16 +2514,23 @@
         const entries = data.entries || [];
         const [label, cls] = statusInfo(p);
 
-        // Creation, submission, then whatever verdicts have landed since.
-        // Reviewer identity and notes stay internal; only the verdict and its
-        // timestamp are public.
-        const timeline = [{ label: "Started", time: p.created_at, tone: "" }];
-        if (p.shipped_at) timeline.push({ label: "Shipped for review", time: p.shipped_at, tone: "teal" });
-        for (const r of data.reviews || []) {
-          if (r.verdict === "approved") timeline.push({ label: "Approved", time: r.created_at, tone: "green" });
-          else if (r.verdict === "needs_changes") timeline.push({ label: "Changes requested", time: r.created_at, tone: "red" });
-        }
-        timeline.sort((a, b) => new Date(a.time) - new Date(b.time));
+        // Creation, submission, then whatever final verdicts have landed
+        // since, with the reviewer's note and credited hours, in the same
+        // event shape the owner's own timeline uses so tlRow renders both.
+        // Reviewer identity and intermediate verdicts stay internal (the
+        // server only sends approved/needs_changes).
+        const timeline = [{ kind: "created", at: p.created_at }];
+        if (p.shipped_at) timeline.push({ kind: "shipped", at: p.shipped_at });
+        for (const r of data.reviews || [])
+          timeline.push({
+            kind: "review",
+            at: r.created_at,
+            verdict: r.verdict,
+            note: r.note || "",
+            claimedHours: r.claimed_hours,
+            approvedHours: r.approved_hours,
+          });
+        timeline.sort((a, b) => new Date(a.at) - new Date(b.at));
 
         view.innerHTML = `
     ${Pixl.hasToken ? `<a class="btn dark back-btn" href="/projects/">← ALL PROJECTS</a>` : ""}
@@ -2532,6 +2539,8 @@
         ${Pixl.esc(p.name)}
         <span class="chip ${cls}">${label}</span>
         ${p.hackatime_seconds ? `<span class="chip teal">${Pixl.hours(p.hackatime_seconds)} TRACKED</span>` : ""}
+        ${p.approved_hours != null ? `<span class="chip teal">${Number(p.approved_hours)}h APPROVED</span>` : ""}
+        ${p.pixels_earned ? `<span class="chip gold">+${Math.round(p.pixels_earned)} PX EARNED</span>` : ""}
         ${p.level ? `<span class="chip">${Pixl.esc(LEVELS[(p.level || 1) - 1][0])}</span>` : ""}
         ${p.is_peak ? `<span class="chip gold" title="Nominated as a standout project by a reviewer">★ BEACON</span>` : ""}
         <button class="btn ghost" style="margin-left:auto" data-copy="${Number(p.id)}">COPY LINK</button>
@@ -2553,8 +2562,7 @@
       </div>
 
       <div class="section-h">TIMELINE</div>
-      <div class="timeline panel">${timeline.map((t) => `
-        <div class="tl-item"><span class="tl-dot ${t.tone}"></span><span class="tl-label">${Pixl.esc(t.label)}</span><span class="tl-time">${Pixl.timeAgo(t.time)}</span></div>`).join("")}</div>
+      <div class="tl-list">${timeline.map(tlRow).join("")}</div>
 
       <div class="section-h">JOURNAL · ${entries.length} ENTR${entries.length === 1 ? "Y" : "IES"}</div>
       ${entries.length === 0
@@ -2562,6 +2570,7 @@
         : `<div class="journal">${entries.map((e) => `
             <div class="journal-entry panel">
               <div class="jmeta"><span>${Pixl.timeAgo(e.created_at)}</span>${e.hours ? `<span class="teal">${Number(e.hours).toFixed(1)}h logged</span>` : ""}</div>
+              ${e.title ? `<div class="jtitle" style="font-weight:700;margin-bottom:4px">${Pixl.esc(e.title)}</div>` : ""}
               <div class="jbody md">${Pixl.markdown(e.content)}</div>
             </div>`).join("")}</div>`}
     </div>

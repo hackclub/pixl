@@ -476,7 +476,7 @@ router.get("/api/explore/projects/:id", async (req, res) => {
     .maybeSingle();
   if (error || !project) return res.status(404).json({ ok: false });
 
-  const [owner, entries, ups, reviews] = await Promise.all([
+  const [owner, entries, ups, reviews, payout, earnedTxs] = await Promise.all([
     supabase
       .from("users")
       .select("id, display_name, avatar_url")
@@ -485,30 +485,57 @@ router.get("/api/explore/projects/:id", async (req, res) => {
     // #safe-fields-only
     supabase
       .from("project_journals")
-      .select("id, content, hours, created_at, edited_at")
+      .select("id, title, content, hours, created_at, edited_at")
       .eq("project_id", id)
       .order("created_at", { ascending: false }),
     supabase
       .from("project_upvotes")
       .select("voter_id")
       .eq("project_id", id),
-    // Only verdict + created_at go public here , the reviewer identity and
-    // review/audit notes stay internal to the dashboard.
+    // Final player-facing verdicts only, with the same note and hours the
+    // owner sees on their own timeline. The reviewer identity and every
+    // intermediate verdict (first-pass proposals, ban proposals, fraud
+    // review) stay internal to the dashboard.
     supabase
       .from("review_audits")
-      .select("verdict, created_at")
+      .select("verdict, note, claimed_hours, approved_hours, created_at")
       .eq("project_id", id)
       .in("verdict", ["approved", "needs_changes"])
       .order("created_at", { ascending: true }),
+    supabase
+      .from("projects")
+      .select("approved_hours")
+      .eq("id", id)
+      .maybeSingle(),
+    // Same sum the owner's own project list shows as "PX EARNED".
+    supabase
+      .from("pixel_transactions")
+      .select("amount")
+      .eq("project_id", id)
+      .in("reason", ["project_approved", "review_reverted"]),
   ]);
 
   const upvoters = ups.data ?? [];
+  // Credited hours are only real once the project is approved (see
+  // toPlayerProject in projects.ts), so a stale value from an earlier review
+  // cycle never shows, and a needs_changes verdict's hours stay hidden too.
+  const approved = project.status === "approved";
   res.json({
     ok: true,
-    project,
+    project: {
+      ...project,
+      approved_hours: approved ? (payout.data?.approved_hours ?? null) : null,
+      pixels_earned: (earnedTxs.data ?? []).reduce((s, t) => s + Number(t.amount), 0),
+    },
     owner: owner.data ?? null,
     entries: entries.data ?? [],
-    reviews: reviews.data ?? [],
+    reviews: (reviews.data ?? []).map((r) => ({
+      verdict: r.verdict,
+      created_at: r.created_at,
+      note: r.note ?? "",
+      claimed_hours: r.claimed_hours ?? null,
+      approved_hours: r.verdict === "approved" ? (r.approved_hours ?? null) : null,
+    })),
     upvotes: upvoters.length,
     has_upvoted: !!session && upvoters.some((u) => u.voter_id === session.userId),
   });
