@@ -8,6 +8,7 @@ import { ticketStats } from "@/lib/tickets";
 import { Shell } from "@/app/_components/Shell";
 import { LiveModeProvider } from "@/app/_components/LiveMode";
 import { LiveModeToggle } from "@/app/_components/LiveModeToggle";
+import { FontSizeSwitcher } from "@/app/_components/FontSizeSwitcher";
 import { getLiveMode } from "@/lib/liveModeServer";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
@@ -124,12 +125,8 @@ export default async function RootLayout({
     }
   } catch(e) {}
   var scales = [1, 1.15, 1.3];
-  var labels = ["A", "A+", "A++"];
   function applyFont(i) {
     html.style.setProperty("--font-scale", scales[i]);
-    document.querySelectorAll("[data-font-cycle]").forEach(function(b) {
-      b.textContent = labels[i];
-    });
   }
   var fi = 0;
   try {
@@ -146,13 +143,6 @@ export default async function RootLayout({
         b.textContent = dark ? "☀" : "☾";
       });
       try { localStorage.setItem("theme", dark ? "dark" : "light"); } catch(e) {}
-      return;
-    }
-    var fontBtn = e.target.closest("[data-font-cycle]");
-    if (fontBtn) {
-      fi = (fi + 1) % scales.length;
-      applyFont(fi);
-      try { localStorage.setItem("fontStep", String(fi)); } catch(e) {}
     }
   });
 })();
@@ -187,6 +177,7 @@ export default async function RootLayout({
               </div>
               <div className="px-10 pt-10">{children}</div>
             </main>
+            <FontSizeSwitcher />
           </SidebarProvider>
           </LiveModeProvider>
         ) : (
