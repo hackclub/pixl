@@ -6,7 +6,7 @@
   "menu": {
     "playTheGame": "गेम खेलो!",
     "language": "भाषा",
-    "textSize": "टेक्स्ट का आकार",
+    "font": "फ़ॉन्ट",
     "openDocs": "डॉक्स खोलो"
   },
   "easterEgg": {

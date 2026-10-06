@@ -179,6 +179,40 @@ html {
   font-size: calc(15px * var(--font-scale, 1));
 }
 
+/* Phantom Sans (Hack Club's typeface, same files css.hackclub.com/fonts.css
+   serves). Only downloaded once the FontSwitcher toggle turns it on. */
+@font-face {
+  font-family: "Phantom Sans";
+  src: url("https://assets.hackclub.com/fonts/Phantom_Sans_0.7/Regular.woff2") format("woff2"),
+    url("https://assets.hackclub.com/fonts/Phantom_Sans_0.7/Regular.woff") format("woff");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Phantom Sans";
+  src: url("https://assets.hackclub.com/fonts/Phantom_Sans_0.7/Italic.woff2") format("woff2"),
+    url("https://assets.hackclub.com/fonts/Phantom_Sans_0.7/Italic.woff") format("woff");
+  font-weight: normal;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Phantom Sans";
+  src: url("https://assets.hackclub.com/fonts/Phantom_Sans_0.7/Bold.woff2") format("woff2"),
+    url("https://assets.hackclub.com/fonts/Phantom_Sans_0.7/Bold.woff") format("woff");
+  font-weight: bold;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* The toggle swaps every element's font, overriding per-component font
+   classes, but leaves code blocks monospace. */
+html[data-font="phantom"] body,
+html[data-font="phantom"] body *:not(code, pre, kbd, samp, code *, pre *) {
+  font-family: "Phantom Sans", system-ui, sans-serif !important;
+}
+
 body {
   background: var(--bg);
   color: var(--text);
