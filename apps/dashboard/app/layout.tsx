@@ -171,14 +171,14 @@ export default async function RootLayout({
             />
 
             <main className="flex-1 min-w-0 overflow-x-clip flex flex-col gap-4">
-              <div className="bg-command-background/40 backdrop-blur-xl backdrop-saturate-150 shadow-2xl shadow-black/30 w-full h-10 fixed z-100 p-2 flex items-center justify-between">
+              <div className="bg-command-background/40 backdrop-blur-xl backdrop-saturate-150 shadow-2xl shadow-black/30 w-full h-10 sticky top-0 z-100 p-2 flex items-center justify-between">
                 <SidebarTrigger />
-                <div className="pr-14 flex items-center gap-2">
+                <div className="flex items-center gap-2">
                   <FontSizeSwitcher />
                   <LiveModeToggle live={live} />
                 </div>
               </div>
-              <div className="px-10 pt-10">{children}</div>
+              <div className="px-10">{children}</div>
             </main>
           </SidebarProvider>
           </LiveModeProvider>
