@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 
-// Text-size cycler pinned to the bottom-right corner on every page. The
+// Text-size cycler, rendered in the fixed top bar (app/layout.tsx) next to
+// the live mode toggle so it's pinned on every page. The
 // saved step is applied before paint by the inline script in app/layout.tsx
 // (so there's no flash of the wrong size); this only syncs its label to it
 // and handles the clicks. globals.css scales the root font-size by
@@ -35,7 +36,7 @@ export function FontSizeSwitcher() {
       onClick={cycle}
       title="Text size"
       aria-label={`Text size: ${LABELS[step]}`}
-      className="fixed bottom-4 right-4 z-100 grid place-items-center h-9 min-w-9 px-2 rounded-lg border border-border bg-card text-sm font-semibold text-muted-foreground shadow-lg hover:text-foreground hover:bg-accent"
+      className="grid place-items-center h-8 min-w-8 px-2 rounded-md border border-border bg-secondary text-xs font-semibold text-secondary-foreground hover:bg-accent"
     >
       {LABELS[step]}
     </button>
