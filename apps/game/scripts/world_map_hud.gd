@@ -20,6 +20,7 @@ const REGION_POINTS := {
 		"The Hub": Vector2(-164, -322),
 		"Dustline": Vector2(-950, 627),
 		"Pixlcraft": Vector2(408, 696),
+		"Factory Island": Vector2(-1030, -198),
 	},
 	"village": {
 		"The Hub": Vector2(-136, -104),
@@ -32,6 +33,7 @@ const ROUTES := [
 	["The Hub", "Dustline"],
 	["The Hub", "Pixlcraft"],
 	["Pixlcraft", "Dustline"],
+	["The Hub", "Factory Island"],
 ]
 
 # Interiors (house/shop) are rooms inside the overworld and have no bake of
