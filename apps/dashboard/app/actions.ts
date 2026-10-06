@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { LIVE_MODE_COOKIE } from "@/lib/liveMode";
-import { unshipResetFields } from "@/lib/unship";
+import { unshipResetFields, UNSHIPPABLE_STATUSES } from "@/lib/unship";
 import {
   config,
   levelForRe,
@@ -2041,14 +2041,14 @@ export async function unshipProject(formData: FormData): Promise<void> {
     .eq("id", projectId)
     .single();
   if (!current) return;
-  if (current.status !== "second_review")
-    redirect(`${back}?error=${encodeURIComponent("This project isn't awaiting a final pass.")}`);
+  if (!(UNSHIPPABLE_STATUSES as readonly string[]).includes(current.status as string))
+    redirect(`${back}?error=${encodeURIComponent("This project isn't in second pass or fraud review.")}`);
 
   const { data: project, error } = await db
     .from("projects")
     .update(unshipResetFields())
     .eq("id", projectId)
-    .eq("status", "second_review")
+    .in("status", [...UNSHIPPABLE_STATUSES])
     .select("id, name, user_id")
     .single();
   if (error || !project) {

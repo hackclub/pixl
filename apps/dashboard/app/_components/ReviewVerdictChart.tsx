@@ -13,6 +13,10 @@ export interface VerdictWindow {
   key: string;
   label: string;
   counts: VerdictCounts;
+  /** Distinct reviewers who submitted a review in this window. */
+  reviewers: number;
+  /** Who they are and how many reviews each submitted, most active first. */
+  reviewerList: { name: string; reviews: number }[];
 }
 
 // Fixed hue per category (never cycled), reused across every time window so a
@@ -54,6 +58,38 @@ export function ReviewVerdictChart({ windows }: { windows: VerdictWindow[] }) {
               </div>
             ) : (
               <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-6 rounded-md bg-muted/50 px-4 py-3">
+                  <div>
+                    <div className="text-2xl font-semibold tabular-nums" title="Distinct reviewers who submitted a review in this window">
+                      {w.reviewers}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      reviewer{w.reviewers === 1 ? "" : "s"} reviewed
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-semibold tabular-nums">{total}</div>
+                    <div className="text-xs text-muted-foreground">review{total === 1 ? "" : "s"}</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-semibold tabular-nums" title="Reviews divided by reviewers">
+                      {(total / Math.max(1, w.reviewers)).toFixed(1)}
+                    </div>
+                    <div className="text-xs text-muted-foreground">per reviewer</div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {w.reviewerList.map((r) => (
+                    <span
+                      key={r.name}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-sm"
+                      title={`${r.name}: ${r.reviews} review${r.reviews === 1 ? "" : "s"}`}
+                    >
+                      <span className="font-medium">{r.name}</span>
+                      <span className="tabular-nums text-muted-foreground">{r.reviews}</span>
+                    </span>
+                  ))}
+                </div>
                 {BUCKETS.map((b) => {
                   const count = w.counts[b.key];
                   const pct = Math.round((count / max) * 100);
@@ -79,7 +115,8 @@ export function ReviewVerdictChart({ windows }: { windows: VerdictWindow[] }) {
                   );
                 })}
                 <div className="pt-1 text-xs text-muted-foreground">
-                  {total} review{total === 1 ? "" : "s"} in this window
+                  {total} review{total === 1 ? "" : "s"} by {w.reviewers} reviewer
+                  {w.reviewers === 1 ? "" : "s"} in this window
                 </div>
               </div>
             )}

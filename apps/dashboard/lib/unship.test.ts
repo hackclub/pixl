@@ -1,5 +1,18 @@
 import { describe, expect, test } from "bun:test";
-import { unshipResetFields } from "./unship";
+import { unshipResetFields, UNSHIPPABLE_STATUSES, unshipWarning } from "./unship";
+
+describe("unshippable statuses", () => {
+  test("second pass and fraud review, nothing else", () => {
+    expect([...UNSHIPPABLE_STATUSES].sort()).toEqual(["fraud_review", "second_review"]);
+  });
+
+  test("each stage gets its own warning, other statuses get none", () => {
+    expect(unshipWarning("fraud_review")).toContain("fraud review");
+    expect(unshipWarning("second_review")).toContain("final pass");
+    expect(unshipWarning("shipped")).toBeNull();
+    expect(unshipWarning("approved")).toBeNull();
+  });
+});
 
 describe("unshipResetFields", () => {
   const f = unshipResetFields() as Record<string, unknown>;
