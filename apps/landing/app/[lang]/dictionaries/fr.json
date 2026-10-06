@@ -6,6 +6,7 @@
   "menu": {
     "playTheGame": "Joue au jeu !",
     "language": "Langue",
+    "textSize": "Taille du texte",
     "openDocs": "docs"
   },
   "easterEgg": {
