@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requirePagePerm, canView } from "@/lib/guard";
-import { getProject, listCollaboratorsForProject, listProjectNotes } from "@/lib/db";
+import { db, getProject, listCollaboratorsForProject, listProjectNotes } from "@/lib/db";
+import { FRAUD_SCORE_THRESHOLD } from "@/lib/robertOutcome";
 import { fetchCommits } from "@/lib/commits";
 import {
   reReviewProject,
@@ -38,6 +39,60 @@ import { Textarea } from "@/components/ui/textarea";
 
 export const dynamic = "force-dynamic";
 
+interface ReviewAuditRow {
+  id: number;
+  reviewer: string;
+  verdict: string;
+  note: string | null;
+  audit_note: string | null;
+  claimed_hours: number | null;
+  approved_hours: number | null;
+  total_seconds: number | null;
+  created_at: string;
+}
+
+const AUDIT_VERDICT_LABEL: Record<string, string> = {
+  first_pass_approved: "first pass approved",
+  first_pass_banned: "first pass proposed ban",
+  approved: "approved",
+  needs_changes: "changes requested",
+  banned: "banned",
+  sent_to_first_pass: "sent to first pass",
+  reverted: "reverted",
+};
+
+function auditVerdictVariant(v: string): "success" | "secondary" | "destructive" | "info" {
+  if (v === "approved") return "success";
+  if (v === "first_pass_approved") return "secondary";
+  if (v === "sent_to_first_pass" || v === "reverted") return "info";
+  return "destructive";
+}
+
+// Notes saved from some forms carry a literal backslash-r (a pasted CRLF that
+// was escaped), which would show up as noise in the text.
+function cleanNote(s: string | null): string {
+  return (s ?? "").replace(/\\r\\n|\\r|\\n/g, "\n").replace(/\r/g, "").trim();
+}
+
+// The internal audit note is "SECTION HEADER:\ntext" blocks; bold the headers
+// (TECHNICAL FEATURES, DEFLATION REASON, NOTES, ...) and keep the text as-is.
+function AuditNoteText({ text }: { text: string }) {
+  const lines = cleanNote(text).split("\n");
+  return (
+    <div className="text-sm text-foreground/80 break-words whitespace-pre-wrap">
+      {lines.map((line, i) =>
+        /^[A-Z][A-Z ]+:$/.test(line.trim()) ? (
+          <div key={i} className="mt-2 first:mt-0 text-xs font-semibold tracking-wide text-muted-foreground">
+            {line.trim()}
+          </div>
+        ) : (
+          <div key={i}>{line || " "}</div>
+        ),
+      )}
+    </div>
+  );
+}
+
 export default async function ProjectPage({
   params,
   searchParams,
@@ -54,6 +109,18 @@ export default async function ProjectPage({
   if (!data) notFound();
   const { project, journals, verdicts } = data;
   const notes = await listProjectNotes(projectId);
+  // Reviewers' internal justifications and Robert's fraud review are staff
+  // context, same audience as the review page, so they need review access.
+  const canSeeReviews = canView(access, ["review"]);
+  const audits: ReviewAuditRow[] = canSeeReviews
+    ? (((
+        await db
+          .from("review_audits")
+          .select("id, reviewer, verdict, note, audit_note, claimed_hours, approved_hours, total_seconds, created_at")
+          .eq("project_id", projectId)
+          .order("created_at", { ascending: false })
+      ).data ?? []) as ReviewAuditRow[])
+    : [];
   // The Trial this project was shipped for, if the player flagged one at ship
   // time (joined in getProject). null = they built their own idea.
   const trial = (
@@ -687,6 +754,108 @@ export default async function ProjectPage({
       </Card>
 
       <ProjectNotes projectId={project.id} notes={notes} className="mb-8" />
+
+      {canSeeReviews && (project.robert_project_id || project.robert_trust_score != null) && (
+        <>
+          <h2 className="text-lg font-semibold text-foreground tracking-tight mb-3">
+            Robert fraud review
+          </h2>
+          <Card className="p-5 gap-3 mb-8">
+            {project.robert_trust_score != null ? (
+              <>
+                <div className="flex flex-wrap items-center gap-3">
+                  <Badge
+                    variant={project.robert_trust_score <= FRAUD_SCORE_THRESHOLD ? "destructive" : "secondary"}
+                  >
+                    {project.robert_trust_score}/10
+                  </Badge>
+                  {project.robert_trust_score <= FRAUD_SCORE_THRESHOLD && (
+                    <span className="text-sm text-rose-600 dark:text-rose-400">Robert&apos;s &quot;Fraud&quot; range</span>
+                  )}
+                  {project.robert_state && (
+                    <span className="text-xs text-muted-foreground">Robert state: {project.robert_state}</span>
+                  )}
+                  {project.robert_reviewed_at && (
+                    <span className="text-xs text-muted-foreground">
+                      reviewed {new Date(project.robert_reviewed_at).toLocaleString()}
+                    </span>
+                  )}
+                </div>
+                <div className="text-sm whitespace-pre-wrap break-words text-foreground/80">
+                  {project.robert_note || "No note given."}
+                </div>
+                {project.robert_outcome && (
+                  <div className="text-xs text-muted-foreground">
+                    Pixl&apos;s final verdict was sent back to Robert: {project.robert_outcome}
+                    {project.robert_outcome_at ? ` (${new Date(project.robert_outcome_at).toLocaleString()})` : ""}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-sm text-muted-foreground">
+                {project.robert_submitted_at
+                  ? `Submitted to Robert ${new Date(project.robert_submitted_at).toLocaleString()}, no review yet.`
+                  : "Not submitted to Robert yet."}
+                {project.robert_error && (
+                  <span className="mt-1 block text-rose-600 dark:text-rose-400">
+                    Last submission failed: {project.robert_error}
+                  </span>
+                )}
+              </div>
+            )}
+          </Card>
+        </>
+      )}
+
+      {canSeeReviews && (
+        <>
+          <h2 className="text-lg font-semibold text-foreground tracking-tight mb-3">
+            Review justifications
+          </h2>
+          <Card className="divide-y divide-border py-0 mb-8">
+            {audits.length === 0 && (
+              <div className="p-5 text-muted-foreground text-sm">No review justifications recorded yet.</div>
+            )}
+            {audits.map((a) => (
+              <div key={a.id} className="p-4 flex flex-col gap-2">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                  <Badge variant={auditVerdictVariant(a.verdict)} className="shrink-0">
+                    {AUDIT_VERDICT_LABEL[a.verdict] ?? a.verdict.replace(/_/g, " ")}
+                  </Badge>
+                  <span className="font-bold">{a.reviewer}</span>
+                  {a.claimed_hours != null && (
+                    <span className="text-xs text-muted-foreground">
+                      {a.claimed_hours}h claimed
+                      {a.approved_hours != null && a.approved_hours !== a.claimed_hours
+                        ? ` → ${a.approved_hours}h credited`
+                        : a.approved_hours != null
+                          ? ", credited in full"
+                          : ""}
+                    </span>
+                  )}
+                  {a.total_seconds != null && a.total_seconds > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      {Math.floor(a.total_seconds / 60)}m {a.total_seconds % 60}s on the review
+                    </span>
+                  )}
+                  <span className="text-xs text-muted-foreground ml-auto">
+                    {new Date(a.created_at).toLocaleString()}
+                  </span>
+                </div>
+                {a.audit_note && cleanNote(a.audit_note) && <AuditNoteText text={a.audit_note} />}
+                {a.note && cleanNote(a.note) && (
+                  <div className="text-sm border-l-2 border-border pl-3 text-foreground/70 whitespace-pre-wrap break-words">
+                    <span className="block text-xs font-semibold tracking-wide text-muted-foreground">
+                      NOTE TO PLAYER
+                    </span>
+                    {cleanNote(a.note)}
+                  </div>
+                )}
+              </div>
+            ))}
+          </Card>
+        </>
+      )}
 
       <h2 className="text-lg font-semibold text-foreground tracking-tight mb-3">
         Review history
