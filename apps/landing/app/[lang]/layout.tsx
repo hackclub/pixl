@@ -69,16 +69,16 @@ export default async function RootLayout({
     <html
       lang={locale}
       className={`${poppins.variable} ${geistMono.variable} antialiased`}
-      // The inline script below sets --font-scale on <html> before React
-      // hydrates, so the style attribute legitimately differs from the server's.
+      // The inline script below sets data-font on <html> before React
+      // hydrates, so its attributes legitimately differ from the server's.
       suppressHydrationWarning
     >
       <head>
-        {/* Applies the saved text size (FontSizeSwitcher) before first paint,
-            so a scaled-up page never flashes at the default size. */}
+        {/* Applies the saved Phantom Sans choice (FontSwitcher) before first
+            paint, so the page never flashes in the other font. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var s=parseInt(localStorage.getItem("fontStep")||"0",10);var f=[1,1.15,1.3][s];if(f)document.documentElement.style.setProperty("--font-scale",String(f))}catch(e){}`,
+            __html: `try{if(localStorage.getItem("font")==="phantom")document.documentElement.dataset.font="phantom"}catch(e){}`,
           }}
         />
       </head>
