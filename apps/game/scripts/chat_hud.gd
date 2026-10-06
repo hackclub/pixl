@@ -1,7 +1,7 @@
 extends CanvasLayer
 
 const GAMEPLAY_SCENES := ["village", "open_world", "house_interior", "shop_interior"]
-const MAX_LINES := 14
+const MAX_LINES := 120
 const LINE_TTL := 11.0
 const FADE_TIME := 0.6
 const WRAP_WIDTH := 620.0
@@ -12,6 +12,7 @@ const COLOR_DIM := Color(0.788235, 0.694118, 0.54902)
 const COLOR_ACCENT := Color(1, 0.819608, 0.4)
 const COLOR_DM := Color(0.85, 0.72, 1)
 
+@onready var _scroll: ScrollContainer = %Scroll
 @onready var _lines_box: VBoxContainer = %Lines
 @onready var _hint: Label = %Hint
 @onready var _input: LineEdit = %Input
@@ -108,8 +109,8 @@ func _ready() -> void:
 	_input.add_theme_stylebox_override("focus", input_bg)
 	_input.offset_right = 636.0
 	_input.add_theme_font_size_override("font_size", 20)
-	_lines_box.offset_right = 636.0
 	_lines_box.add_theme_constant_override("separation", 3)
+	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
 
 	_line_style = StyleBoxFlat.new()
 	_line_style.bg_color = Color(0, 0, 0, 0.6)
@@ -186,6 +187,10 @@ func _open_input() -> void:
 	_input.clear()
 	_input.visible = true
 	_input.grab_focus()
+	# Open chat is a scrollable history; closed it's just floating lines.
+	_scroll.mouse_filter = Control.MOUSE_FILTER_STOP
+	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	_scroll_to_bottom()
 	for line in _lines:
 		if line["tween"] != null:
 			line["tween"].kill()
@@ -202,6 +207,9 @@ func _close_input() -> void:
 	_input.visible = false
 	_input.release_focus()
 	_hint.visible = true
+	_scroll.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_SHOW_NEVER
+	_scroll_to_bottom()
 	var now := Time.get_ticks_msec() / 1000.0
 	for line in _lines:
 		line["fading"] = false
@@ -331,7 +339,14 @@ func _on_dm(from_name: String, to_name: String, text: String, outgoing: bool) ->
 	var prefix := "to %s" % to_name if outgoing else "from %s" % from_name
 	_add_line("[lb]%s[rb] %s" % [_bb_escape(prefix), _sanitize_bb(_censor(text))], COLOR_DM, outgoing)
 
+func _scroll_to_bottom() -> void:
+	await get_tree().process_frame
+	_scroll.scroll_vertical = int(_scroll.get_v_scroll_bar().max_value)
+
 func _add_line(display: String, color: Color, own: bool) -> void:
+	# Don't yank the view down if someone is reading older messages.
+	var bar := _scroll.get_v_scroll_bar()
+	var was_at_bottom := bar.value >= bar.max_value - bar.page - 4.0
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", _line_style)
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -384,6 +399,9 @@ func _add_line(display: String, color: Color, own: bool) -> void:
 		if old["tween"] != null:
 			old["tween"].kill()
 		old["panel"].queue_free()
+
+	if was_at_bottom or own:
+		_scroll_to_bottom()
 
 	if not own and not _input.has_focus():
 		_unread += 1

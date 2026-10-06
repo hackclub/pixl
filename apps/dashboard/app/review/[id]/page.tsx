@@ -51,6 +51,7 @@ import { LevelBadge, TypeBadge, ShipBadges, StatusBadge, BeaconBadge, FundingBad
 import { slackHandle } from "@/lib/slack";
 import { getLiveMode } from "@/lib/liveModeServer";
 import { liveAlias, redactBuilderDetails } from "@/lib/liveMode";
+import { unshipWarning } from "@/lib/unship";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -170,6 +171,10 @@ export default async function ReviewDetail({
     ((p.status === "shipped" && !isOwn) ||
       (isProposedBan && canSecondPass) ||
       (spotCheckStage && access.isSuper));
+  // Reviewer-side unship (see unshipProject): available to final reviewers at
+  // second pass or fraud review regardless of who could submit a verdict, and
+  // never on your own project or while a hold is set.
+  const unshipNote = canSecondPass && !isOwn && !isHeld ? unshipWarning(p.status) : null;
   const shippedAt = (p as { shipped_at?: string | null }).shipped_at ?? null;
 
   // Everything below only depends on `p` (already resolved above), not on
@@ -1295,45 +1300,6 @@ export default async function ReviewDetail({
                     </details>
                     )}
 
-                    {isFinalStage && canSecondPass && (
-                    <details className="rounded-xl bg-card ring-1 ring-amber-300 dark:ring-amber-500/30 p-4 text-card-foreground">
-                      <summary className="flex items-center gap-2 cursor-pointer text-sm font-semibold text-amber-700 dark:text-amber-400 select-none list-none">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-600" />
-                        Unship to draft
-                      </summary>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Takes this out of the queue and hands it back to the owner as an editable draft.
-                        They fix it and reship, and it starts review from scratch: the first-pass verdict
-                        (including a ban proposal), notes and second-pass checklist are all cleared. The
-                        owner and any collaborators are notified with your reason.
-                      </p>
-                      <form action={unshipProject} className="mt-3 flex flex-col gap-2">
-                        <input type="hidden" name="projectId" value={p.id} />
-                        <Textarea
-                          name="reason"
-                          required
-                          rows={2}
-                          placeholder="Why unship this (shown to the owner)…"
-                          className="text-sm resize-y"
-                        />
-                        <Label className="flex items-start gap-2 text-sm py-0.5 font-normal">
-                          <Checkbox name="voidPayout" value="1" className="mt-0.5" />
-                          <span>
-                            This was the first-pass reviewer&apos;s mistake , void their pending payout
-                            instead of paying it in full
-                          </span>
-                        </Label>
-                        <PendingButton
-                          className="bg-amber-700 text-white border-transparent hover:bg-amber-800"
-                          pendingText="Unshipping…"
-                          confirm="Unship this project back to a draft? The owner is notified and it leaves the queue."
-                        >
-                          Unship to draft
-                        </PendingButton>
-                      </form>
-                    </details>
-                    )}
-
                     {canModerate && (
                     <details className="rounded-xl bg-card ring-1 ring-rose-300 dark:ring-rose-500/30 p-4 text-card-foreground">
                       <summary className="flex items-center gap-2 cursor-pointer text-sm font-semibold text-rose-700 dark:text-rose-400 select-none list-none">
@@ -1405,6 +1371,50 @@ export default async function ReviewDetail({
                 )}
               </TabsContent>
             </Tabs>
+
+            {unshipNote && (
+              <details className="rounded-xl bg-card ring-1 ring-amber-300 dark:ring-amber-500/30 p-4 text-card-foreground">
+                <summary className="flex items-center gap-2 cursor-pointer text-sm font-semibold text-amber-700 dark:text-amber-400 select-none list-none">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-600" />
+                  Unship to draft
+                </summary>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Takes this out of the queue and hands it back to the owner as an editable draft. They
+                  fix it and reship, and review starts from scratch: the first-pass verdict (including a
+                  ban proposal), notes and second-pass checklist are all cleared. The owner and any
+                  collaborators are notified with your reason.
+                </p>
+                <Alert className="mt-3 border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10">
+                  <AlertDescription className="text-xs font-medium text-amber-800 dark:text-amber-300">
+                    {unshipNote}
+                  </AlertDescription>
+                </Alert>
+                <form action={unshipProject} className="mt-3 flex flex-col gap-2">
+                  <input type="hidden" name="projectId" value={p.id} />
+                  <Textarea
+                    name="reason"
+                    required
+                    rows={2}
+                    placeholder="Why unship this (shown to the owner)…"
+                    className="text-sm resize-y"
+                  />
+                  <Label className="flex items-start gap-2 text-sm py-0.5 font-normal">
+                    <Checkbox name="voidPayout" value="1" className="mt-0.5" />
+                    <span>
+                      This was the first-pass reviewer&apos;s mistake , void their pending payout instead
+                      of paying it in full
+                    </span>
+                  </Label>
+                  <PendingButton
+                    className="bg-amber-700 text-white border-transparent hover:bg-amber-800"
+                    pendingText="Unshipping…"
+                    confirm={`${unshipNote}\n\nUnship this project back to a draft? The owner is notified and it leaves the queue.`}
+                  >
+                    Unship to draft
+                  </PendingButton>
+                </form>
+              </details>
+            )}
           </div>
         </aside>
       </div>

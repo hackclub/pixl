@@ -115,6 +115,7 @@ d("operations (real Postgres)", () => {
     await sql.unsafe(loadSql("testdb/base-schema.sql"));
     await sql.unsafe(loadSql("../../drizzle/0183_operations.sql"));
     await sql.unsafe(loadSql("../../drizzle/0184_blackout_window_fix.sql"));
+    await sql.unsafe(loadSql("../../drizzle/0210_blackout_withdraw_needs_changes.sql"));
   });
 
   afterAll(async () => {
@@ -957,16 +958,43 @@ describe("operations HTTP routes (real router, real Postgres)", () => {
     expect(Object.keys(mine.entries[0]).sort()).toEqual(["firstShipAt", "graceDeadline", "joinedAt", "label", "projectId"]);
   });
 
-  test("withdraw works only before the first Blackout ship", async () => {
+  test("withdraw works before the first Blackout ship and during a fix window, never mid-review", async () => {
     const { uid, pid } = await newProject();
     await post(`/api/operations/${SLUG}/entries`, token(uid), { projectId: pid });
     const del = (p: number) => fetch(`${base}/api/operations/${SLUG}/entries/${p}?token=${token(uid)}`, { method: "DELETE" });
+    const count = async () => (await db2`select count(*)::int as n from operation_entries where project_id = ${pid}`)[0].n;
     expect((await del(pid)).status).toBe(200);
-    expect((await db2`select count(*)::int as n from operation_entries where project_id = ${pid}`)[0].n).toBe(0);
+    expect(await count()).toBe(0);
     await post(`/api/operations/${SLUG}/entries`, token(uid), { projectId: pid });
     await db2`update projects set status = 'shipped' where id = ${pid}`;
     await db2`select operation_record_ship(${pid}, ${uid})`;
     expect((await del(pid)).status).toBe(400);
+
+    await db2`update projects set status = 'needs_changes' where id = ${pid}`;
+    await db2`select operation_request_changes(${pid})`;
+    const nonOwner = await newProject();
+    const delAs = (u: string) => fetch(`${base}/api/operations/${SLUG}/entries/${pid}?token=${token(u)}`, { method: "DELETE" });
+    expect((await delAs(nonOwner.uid)).status).toBe(400);
+    expect((await del(pid)).status).toBe(200);
+    expect(await count()).toBe(0);
+    const [audit] = await db2`select actor, detail from operation_audit
+      where action = 'entry_withdrawn' and (detail->>'project_id')::bigint = ${pid}`;
+    expect(audit.actor).toBe(uid);
+  });
+
+  test("withdraw refuses a fix-window entry with a settled contributor", async () => {
+    const { uid, pid } = await newProject();
+    await post(`/api/operations/${SLUG}/entries`, token(uid), { projectId: pid });
+    await db2`update projects set status = 'shipped' where id = ${pid}`;
+    await db2`select operation_record_ship(${pid}, ${uid})`;
+    await db2`update projects set status = 'needs_changes' where id = ${pid}`;
+    await db2`select operation_request_changes(${pid})`;
+    const [{ id: entryId }] = await db2`select id from operation_entries where project_id = ${pid}`;
+    await db2`insert into operation_entry_contributors (entry_id, user_id, role, settled_at)
+      values (${entryId}, ${uid}, 'owner', now())
+      on conflict (entry_id, user_id) do update set settled_at = now()`;
+    const r = await fetch(`${base}/api/operations/${SLUG}/entries/${pid}?token=${token(uid)}`, { method: "DELETE" });
+    expect(r.status).toBe(400);
   });
 });
 });

@@ -4,6 +4,18 @@
 // reachable by a final reviewer at second_review, so it has to wipe every
 // review field - a stale first_pass_verdict (say, a ban proposal) surviving a
 // reship is exactly the bug that restriction exists to prevent.
+export const UNSHIPPABLE_STATUSES = ["second_review", "fraud_review"] as const;
+
+// The warning a reviewer sees before unshipping from each stage. Both stages
+// are past a first-pass verdict, so both discard it.
+export function unshipWarning(status: string): string | null {
+  if (status === "fraud_review")
+    return "This is in fraud review. Unshipping discards the first-pass approval and the fraud review in progress; a reship starts review over from the beginning.";
+  if (status === "second_review")
+    return "This is awaiting its final pass. Unshipping discards the first-pass verdict (including a ban proposal) and any second-pass checklist progress.";
+  return null;
+}
+
 export function unshipResetFields() {
   return {
     status: "draft",
