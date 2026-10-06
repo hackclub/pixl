@@ -29,6 +29,8 @@ body {
 
 html {
   scroll-behavior: smooth;
+  /* Text size switcher (FontSizeSwitcher): scales every rem-based size. */
+  font-size: calc(100% * var(--font-scale, 1));
 }
 
 @keyframes scroll-ltr {

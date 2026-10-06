@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { hasLocale } from "./dictionaries";
 import { Menu } from "../_components/Menu";
 import { LanguageSwitcher } from "../_components/LanguageSwitcher";
+import { FontSizeSwitcher } from "../_components/FontSizeSwitcher";
 import { Hero } from "../_components/Hero";
 import { WTFISTHIS } from "../_components/Description";
 import { Story } from "../_components/Story";
@@ -20,6 +21,7 @@ export default async function Home({ params }: PageProps<"/[lang]">) {
     <div className="bg-[#F5EED2] min-h-screen text-black font-pixel overflow-x-clip">
       <Menu />
       <LanguageSwitcher />
+      <FontSizeSwitcher />
       <Hero />
       <WTFISTHIS />
       <Story />
