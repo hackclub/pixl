@@ -2022,16 +2022,18 @@
           <option value="">None - my own idea</option>
           ${(() => {
             const linkedId = p.sidequest_id != null ? Number(p.sidequest_id) : null;
-            const accepted = allTrials.filter((t) => t.unlocked && !t.completed);
-            const locked = allTrials.filter((t) => !t.unlocked);
+            const isLinked = (t) => linkedId != null && Number(t.id) === linkedId;
+            // A Trial that's been shipped and approved is completed, so it
+            // fails the "unlocked && !completed" test and isn't "locked"
+            // either - it would land in no group and the <select> would fall
+            // back to "None" (and the next save would unlink it). The linked
+            // Trial always stays listed, even once completed.
+            const accepted = allTrials.filter((t) => isLinked(t) || (t.unlocked && !t.completed));
+            const locked = allTrials.filter((t) => !t.unlocked && !isLinked(t));
             let html = "";
-            // The linked Trial can be completed (or otherwise missing from
-            // allTrials) by the time this form re-renders , without its own
-            // option here the <select> silently falls back to "None" and the
-            // next save wipes sidequest_id, unlinking a Trial nothing actually
-            // changed about. Keep it selectable/selected regardless.
-            const linkedInList = linkedId != null && allTrials.some((t) => Number(t.id) === linkedId);
-            if (linkedId != null && !linkedInList)
+            // The linked Trial can also be missing from allTrials entirely
+            // (inactive/removed); give it its own option so it stays selected.
+            if (linkedId != null && !allTrials.some(isLinked))
               html += `<option value="${linkedId}" selected>${Pixl.esc(p.sidequest_name || "Linked Trial")}</option>`;
             if (accepted.length)
               html += `<optgroup label="Accepted - ready to build">${accepted
@@ -4223,7 +4225,7 @@
         not_accepting_entries: "Operation Blackout isn't taking entries right now.",
         project_in_review: "Unship it first, a project that is already in review can't be entered.",
         project_banned: "This project can't be entered.",
-        cannot_withdraw: "It already shipped for Blackout, that can't be undone.",
+        cannot_withdraw: "It's already being reviewed for Blackout, you can only opt out before shipping or while changes are requested.",
         project_not_found: "Only the project's owner can enter it.",
       };
 
@@ -4253,10 +4255,10 @@
         if (!e && !(accepting && canEnter)) return "";
         if (e) {
           const c = BLACKOUT_CHIPS[e.label];
-          // Once shipped, first_qualified_ship_at locks in what's already
-          // being tracked - operation_withdraw refuses it server-side, so
-          // there is no opt-out affordance past that point either.
-          const canTakeBack = e.label === "entered" && !e.firstShipAt;
+          // operation_withdraw only allows this before the first ship or
+          // during a fix window (needs_changes) - never while a review is
+          // pending or after a decision, so the button follows the same rule.
+          const canTakeBack = (e.label === "entered" && !e.firstShipAt) || e.label === "needs_changes";
           const until = e.graceDeadline
             ? ` Fix window closes ${new Date(e.graceDeadline).toLocaleString()} (your local time).`
             : "";
@@ -4270,7 +4272,7 @@
         return `<div class="bo-panel" id="bo-panel">
           <div class="bo-head"><strong>Operation Blackout</strong></div>
           <label class="check-row"><input type="checkbox" id="bo-check"> Enter this project into Operation Blackout</label>
-          <div class="bo-text">Only work you do after entering${ends ? ", and before Blackout ends (" + ends + ", your local time)" : ""}, is eligible. You can still ship and get reviewed anytime, even after Blackout ends. Entering doesn't guarantee approval, a reviewer decides. It can't be undone once you ship.</div>
+          <div class="bo-text">Only work you do after entering${ends ? ", and before Blackout ends (" + ends + ", your local time)" : ""}, is eligible. You can still ship and get reviewed anytime, even after Blackout ends. Entering doesn't guarantee approval, a reviewer decides. Once you ship you can only opt out if changes are requested.</div>
         </div>`;
       }
 
@@ -4306,16 +4308,15 @@
           });
         }
 
-        // Already entered, not yet shipped: an explicit opt-out button
-        // (with a confirm dialog) rather than a silent checkbox uncheck -
-        // this is the only point at which withdrawing is possible at all,
-        // see canTakeBack above.
+        // Already entered, not yet shipped (or sent back for changes): an
+        // explicit opt-out button (with a confirm dialog) rather than a
+        // silent checkbox uncheck - see canTakeBack above for when it shows.
         const optOutBtn = $("bo-optout");
         if (optOutBtn) {
           optOutBtn.addEventListener("click", async () => {
             const ok = await Pixl.confirm({
               title: "Opt out of Operation Blackout?",
-              body: "You can rejoin later, as long as you haven't shipped yet and Blackout is still open. Once you ship, this can't be undone either way.",
+              body: "You can rejoin while Blackout is still open, but only work you do after rejoining will count. Your normal review and payout are unaffected.",
               confirmText: "Opt out",
             });
             if (!ok) return;
