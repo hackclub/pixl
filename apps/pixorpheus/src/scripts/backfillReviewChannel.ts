@@ -16,7 +16,7 @@ const client: PixlBackfillClient = {
 // Everyone who has ever sent a project to review (owners) or had one approved
 // (owners and accepted collaborators).
 async function reviewedPlayerSlackIds(): Promise<(string | null)[]> {
-  const rows = await sql<{ slack_id: string | null }[]>`
+  const rows = await sql.unsafe<{ slack_id: string | null }[]>(`
     select distinct u.slack_id
     from users u
     where u.id in (
@@ -27,7 +27,7 @@ async function reviewedPlayerSlackIds(): Promise<(string | null)[]> {
       join projects p on p.id = c.project_id
       where c.status = 'accepted' and p.status = 'approved'
     )
-  `;
+  `);
   return rows.map((row) => row.slack_id);
 }
 
