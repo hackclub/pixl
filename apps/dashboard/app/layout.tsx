@@ -8,7 +8,6 @@ import { ticketStats } from "@/lib/tickets";
 import { Shell } from "@/app/_components/Shell";
 import { LiveModeProvider } from "@/app/_components/LiveMode";
 import { LiveModeToggle } from "@/app/_components/LiveModeToggle";
-import { FontSwitcher } from "@/app/_components/FontSwitcher";
 import { getLiveMode } from "@/lib/liveModeServer";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
@@ -124,11 +123,6 @@ export default async function RootLayout({
       html.classList.add("dark");
     }
   } catch(e) {}
-  // Phantom Sans toggle (FontSwitcher): applied before paint so the page
-  // never flashes in the other font.
-  try {
-    if (localStorage.getItem("font") === "phantom") html.dataset.font = "phantom";
-  } catch(e) {}
   document.addEventListener("click", function(e) {
     var themeBtn = e.target.closest("[data-theme-toggle]");
     if (themeBtn) {
@@ -168,10 +162,7 @@ export default async function RootLayout({
             <main className="flex-1 min-w-0 overflow-x-clip flex flex-col gap-4">
               <div className="bg-command-background/40 backdrop-blur-xl backdrop-saturate-150 shadow-2xl shadow-black/30 w-full h-10 sticky top-0 z-100 p-2 flex items-center justify-between">
                 <SidebarTrigger />
-                <div className="flex items-center gap-2">
-                  <FontSwitcher />
-                  <LiveModeToggle live={live} />
-                </div>
+                <LiveModeToggle live={live} />
               </div>
               <div className="px-10">{children}</div>
             </main>

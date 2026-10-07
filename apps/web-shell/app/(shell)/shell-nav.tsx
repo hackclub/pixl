@@ -37,6 +37,10 @@ export function ShellNav({
   const [sheetOpen, setSheetOpen] = useState(false);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const [theme, setThemeState] = useState("light");
+  // Phantom Sans toggle. app/layout.tsx's head script applies the saved
+  // choice (pixl_font, shared with apps/game/web and the landing page) as
+  // <html data-font="phantom"> before paint; this just mirrors it.
+  const [phantom, setPhantomState] = useState(false);
 
   useEffect(() => {
     try {
@@ -49,6 +53,23 @@ export function ShellNav({
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    setPhantomState(document.documentElement.dataset.font === "phantom");
+  }, []);
+
+  function togglePhantom() {
+    const next = !phantom;
+    setPhantomState(next);
+    if (next) document.documentElement.dataset.font = "phantom";
+    else delete document.documentElement.dataset.font;
+    try {
+      if (next) localStorage.setItem("pixl_font", "phantom");
+      else localStorage.removeItem("pixl_font");
+    } catch {
+      // best-effort persistence only
+    }
+  }
 
   useEffect(() => {
     if (!sheetOpen) return;
@@ -166,6 +187,16 @@ export function ShellNav({
           </span>
           <span className="px">{pixels.toLocaleString()}</span>
         </div>
+        <button
+          className="rail-btn font-toggle"
+          type="button"
+          title="Switch to Phantom Sans"
+          aria-label="Phantom Sans font"
+          aria-pressed={phantom}
+          onClick={togglePhantom}
+        >
+          Aa
+        </button>
         <div className="theme-picker">
           <button
             className="theme-toggle"
