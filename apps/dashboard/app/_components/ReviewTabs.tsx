@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { useLiveMode } from "@/app/_components/LiveMode";
 
 export function ReviewTabs({
   isSuper,
@@ -23,6 +24,7 @@ export function ReviewTabs({
   proposedBanCount?: number;
 }) {
   const pathname = usePathname();
+  const live = useLiveMode();
   const tabs: { href: string; label: string; count?: number; extra?: string }[] = [
     { href: "/review", label: "Needs review", count: pending },
     { href: "/review/reviewed", label: "Reviewed" },
@@ -63,7 +65,9 @@ export function ReviewTabs({
     // project, only dismisses itself once spot-checked.
     tabs.push({ href: "/review/spot-check", label: "Spot check", count: spotCheckCount });
     tabs.push({ href: "/review/log", label: "Reviewer log" });
-    tabs.push({ href: "/review/audit", label: "Audit notes" });
+    // Internal reviewer notes - the tab disappears while live (the page
+    // itself also refuses to render).
+    if (!live) tabs.push({ href: "/review/audit", label: "Audit notes" });
   }
   // The gate that forces a first-time read-through (or a "Skip for now")
   // only fires once per guidelines version, so this is the way back in for

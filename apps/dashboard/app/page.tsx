@@ -41,20 +41,24 @@ export default async function Overview({
   // Reviewers / sub-admins don't get the owner Overview; their home is their own
   // reviewer stats. Only owners (isSuper) see the full dashboard overview.
   if (!access.isSuper && access.perms.has("review")) redirect("/review/stats");
-  const showModeration = canView(access, ["warn", "ban"]);
+  // Live mode hides everything internal from a screen share: moderation
+  // (violations, bans) and the pixel economy, including their entries in the
+  // activity feed below.
+  const showModeration = canView(access, ["warn", "ban"]) && !live;
+  const showPixels = access.isSuper && !live;
   const { range } = await searchParams;
   const days = RANGES.includes(Number(range)) ? Number(range) : 30;
   const [stats, growth, pixelFlow, recent, feed] = await Promise.all([
     getStats(),
     getGrowthSeries(days),
-    access.isSuper ? getPixelFlowSeries(days) : Promise.resolve([]),
+    showPixels ? getPixelFlowSeries(days) : Promise.resolve([]),
     showModeration ? listViolations(8) : Promise.resolve([]),
     listActivityFeed({
       mod: showModeration,
       review: canView(access, ["review"]),
       team: access.isSuper,
-      pixels: access.isSuper,
-      payouts: access.isSuper,
+      pixels: showPixels,
+      payouts: showPixels,
       limit: 8,
     }),
   ]);
@@ -194,7 +198,7 @@ export default async function Overview({
               />
             </Card>
           )}
-          {access.isSuper && (
+          {showPixels && (
             <Card className="p-5 lg:col-span-2">
               <PixelFlowChart points={pixelFlow} />
             </Card>
