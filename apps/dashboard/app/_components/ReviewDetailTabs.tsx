@@ -12,6 +12,7 @@ import { setJournalHours } from "@/app/actions";
 import { PendingButton } from "@/app/_components/PendingButton";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { useLiveMode } from "@/app/_components/LiveMode";
 import { parseAuditNote, type AuditHeader } from "@/lib/auditNote";
 import { isSafeUrl } from "@/lib/safeUrl";
 import { Card } from "@/components/ui/card";
@@ -167,6 +168,9 @@ export function ReviewDetailTabs({
   repoUrl: string | null;
   projectKind: string;
 }) {
+  // Live mode keeps each past review's verdict and hours but drops its
+  // internal audit-note sections (technical features, deflation reason, ...).
+  const live = useLiveMode();
   const [tab, setTab] = useState<
     "commits" | "journals" | "reviews" | "ysws" | "hackatime" | "fraud"
   >("commits");
@@ -447,7 +451,7 @@ export function ReviewDetailTabs({
                 label: v.verdict.replaceAll("_", " "),
                 variant: "secondary" as const,
               };
-              const sections = v.audit_note ? parseAuditNote(v.audit_note) : null;
+              const sections = v.audit_note && !live ? parseAuditNote(v.audit_note) : null;
               const sectionKeys = sections
                 ? (Object.keys(SECTION_LABEL) as AuditHeader[]).filter((h) => sections[h]?.trim())
                 : [];

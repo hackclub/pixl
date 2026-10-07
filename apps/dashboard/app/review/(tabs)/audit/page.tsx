@@ -2,6 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requirePagePerm, requireGuidelinesAck } from "@/lib/guard";
 import { listReviewAudits } from "@/lib/db";
+import { getLiveMode } from "@/lib/liveModeServer";
+import { LiveBlocked } from "@/app/_components/LiveBlocked";
 import { parseAuditNote, type AuditHeader } from "@/lib/auditNote";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -35,6 +37,8 @@ export default async function AuditNotesPage() {
   const access = await requirePagePerm(["review"]);
   await requireGuidelinesAck(access);
   if (!access.isSuper) redirect("/review");
+  if (await getLiveMode())
+    return <LiveBlocked what="Audit notes" reason="These are internal reviewer notes" />;
   const audits = await listReviewAudits(200);
   const withNotes = audits.filter((a) => a.audit_note && a.audit_note.trim() !== "");
 
