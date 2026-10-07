@@ -35,7 +35,22 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${poppins.variable} ${pixelifySans.variable} ${jetbrainsMono.variable}`}>
+    <html
+      lang="en"
+      className={`${poppins.variable} ${pixelifySans.variable} ${jetbrainsMono.variable}`}
+      // The head script sets data-font before React hydrates.
+      suppressHydrationWarning
+    >
+      <head>
+        {/* Applies the saved Phantom Sans choice (pixl_font, the "Aa" rail
+            button) before first paint, so the page never flashes in the
+            other font. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{if(localStorage.getItem("pixl_font")==="phantom")document.documentElement.dataset.font="phantom"}catch(e){}`,
+          }}
+        />
+      </head>
       <body>{children}</body>
     </html>
   );

@@ -78,7 +78,7 @@ export default async function RootLayout({
             paint, so the page never flashes in the other font. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{if(localStorage.getItem("font")==="phantom")document.documentElement.dataset.font="phantom"}catch(e){}`,
+            __html: `try{if(localStorage.getItem("pixl_font")==="phantom")document.documentElement.dataset.font="phantom"}catch(e){}`,
           }}
         />
       </head>

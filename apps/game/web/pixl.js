@@ -127,6 +127,27 @@ const Pixl = (() => {
     document.documentElement.dataset.theme = "light";
   }
 
+  // Phantom Sans toggle (the "Aa" rail button), applied this early for the
+  // same no-flash reason as the theme. pixl_font is shared with the landing
+  // page and the React web shell, which all live on this origin.
+  try {
+    if (localStorage.getItem("pixl_font") === "phantom") document.documentElement.dataset.font = "phantom";
+  } catch {}
+
+  function isPhantom() {
+    return document.documentElement.dataset.font === "phantom";
+  }
+
+  function setPhantom(on) {
+    if (on) document.documentElement.dataset.font = "phantom";
+    else delete document.documentElement.dataset.font;
+    try {
+      if (on) localStorage.setItem("pixl_font", "phantom");
+      else localStorage.removeItem("pixl_font");
+    } catch {}
+    document.querySelectorAll(".font-toggle").forEach((b) => b.setAttribute("aria-pressed", String(on)));
+  }
+
   // Swatch preview colors for the picker menu — CSS custom properties only
   // expose the *active* theme's values, so the other themes' panel/gold need
   // their own small copy here just to draw the dots. Keep in sync with
@@ -548,6 +569,7 @@ const Pixl = (() => {
         <button class="theme-toggle" id="pixl-theme-btn" type="button" title="Change theme" aria-expanded="false"></button>
         <div class="theme-menu" id="pixl-theme-menu" hidden></div>
       </div>`;
+    const fontBtn = `<button class="rail-btn font-toggle" id="pixl-font-btn" type="button" title="Switch to Phantom Sans" aria-label="Phantom Sans font" aria-pressed="${isPhantom()}">Aa</button>`;
     const rail = token
       ? `<div class="rest-chip" id="pixl-rest" title="Core Integrity: total Restoration Energy earned by the whole community" hidden>
             <span class="slot">${RE_ICON}</span>
@@ -564,8 +586,9 @@ const Pixl = (() => {
             <span class="px">-</span>
           </div>
           <button class="rail-btn" id="pixl-help-btn" type="button" title="New here? Replay the tour" aria-label="Replay the tour">${HELP_ICON}</button>
+          ${fontBtn}
           ${themeBtn}`
-      : `<a class="btn" href="${loginUrl()}">LOG IN</a><a class="btn ghost" href="${GAME}">PLAY THE GAME</a>${themeBtn}`;
+      : `<a class="btn" href="${loginUrl()}">LOG IN</a><a class="btn ghost" href="${GAME}">PLAY THE GAME</a>${fontBtn}${themeBtn}`;
     const foot = token
       ? `<a class="btn dark back-to-game" href="${GAME}"><span class="arrow">◄</span> BACK TO GAME</a>`
       : `<a class="btn" href="${loginUrl()}">LOG IN</a>`;
@@ -579,6 +602,8 @@ const Pixl = (() => {
       <div class="toprail">${rail}</div>`);
     const help = document.getElementById("pixl-help-btn");
     if (help) help.onclick = () => runTour();
+    const fontToggle = document.getElementById("pixl-font-btn");
+    if (fontToggle) fontToggle.onclick = () => setPhantom(!isPhantom());
     const more = document.getElementById("pixl-more");
     const sheetEl = document.getElementById("pixl-sheet");
     if (more && sheetEl) {

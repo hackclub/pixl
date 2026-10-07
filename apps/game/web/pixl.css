@@ -591,3 +591,32 @@ audio{display:none}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
 }
+
+/* ── Phantom Sans toggle ──
+   Hack Club's typeface (the same files css.hackclub.com/fonts.css serves),
+   switched on by the "Aa" rail button and stored as pixl_font, shared with the
+   landing page and the React web shell since they're all on one origin.
+   The font files only download once the toggle is on. Code stays monospace. */
+@font-face{
+  font-family:"Phantom Sans";
+  src:url("https://assets.hackclub.com/fonts/Phantom_Sans_0.7/Regular.woff2") format("woff2"),
+    url("https://assets.hackclub.com/fonts/Phantom_Sans_0.7/Regular.woff") format("woff");
+  font-weight:normal;font-style:normal;font-display:swap;
+}
+@font-face{
+  font-family:"Phantom Sans";
+  src:url("https://assets.hackclub.com/fonts/Phantom_Sans_0.7/Italic.woff2") format("woff2"),
+    url("https://assets.hackclub.com/fonts/Phantom_Sans_0.7/Italic.woff") format("woff");
+  font-weight:normal;font-style:italic;font-display:swap;
+}
+@font-face{
+  font-family:"Phantom Sans";
+  src:url("https://assets.hackclub.com/fonts/Phantom_Sans_0.7/Bold.woff2") format("woff2"),
+    url("https://assets.hackclub.com/fonts/Phantom_Sans_0.7/Bold.woff") format("woff");
+  font-weight:bold;font-style:normal;font-display:swap;
+}
+html[data-font="phantom"] body,
+html[data-font="phantom"] body *:not(code,pre,kbd,samp,code *,pre *){
+  font-family:"Phantom Sans",system-ui,sans-serif !important;
+}
+.rail-btn[aria-pressed="true"]{background:var(--ink);color:var(--panel)}

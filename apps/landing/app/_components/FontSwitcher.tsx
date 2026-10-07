@@ -5,7 +5,8 @@ import { useLocale } from "./LocaleProvider";
 
 // Toggles the whole page between its normal fonts and Phantom Sans, Hack
 // Club's typeface. Pinned to the bottom-right corner as the mirror of the
-// LanguageSwitcher on the left. The choice is stored in localStorage and
+// LanguageSwitcher on the left. The choice is stored in localStorage (as
+// pixl_font, shared with the player web pages on this same origin) and
 // applied as <html data-font="phantom"> by the inline script in
 // app/[lang]/layout.tsx before first paint; globals.css does the font swap.
 const listeners = new Set<() => void>();
@@ -30,8 +31,8 @@ export function FontSwitcher() {
     if (next) document.documentElement.dataset.font = "phantom";
     else delete document.documentElement.dataset.font;
     try {
-      if (next) localStorage.setItem("font", "phantom");
-      else localStorage.removeItem("font");
+      if (next) localStorage.setItem("pixl_font", "phantom");
+      else localStorage.removeItem("pixl_font");
     } catch {}
     listeners.forEach((l) => l());
   }
