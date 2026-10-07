@@ -630,6 +630,22 @@ function ownedByViewer(p: ShippedProject, viewer?: string): boolean {
 // (never auto-advance someone onto a project they can't action). The queue
 // page passes includeClaimed so it can show them with a "being reviewed" tag
 // instead - see annotateClaims.
+// When the player first sent the project in. shipped_at restarts on every
+// re-ship, so the total time in the queue (what the review table shows as
+// "waited") comes from first_shipped_at, falling back to shipped_at for older
+// rows that never had it set.
+function firstShipTime(p: { first_shipped_at?: string | null; shipped_at?: string | null }): number {
+  const iso = p.first_shipped_at ?? p.shipped_at;
+  return iso ? new Date(iso).getTime() : 0;
+}
+
+// Longest total wait first. Array.sort is stable, so ties keep the database order.
+function oldestWaitFirst<T extends { first_shipped_at?: string | null; shipped_at?: string | null }>(
+  rows: T[],
+): T[] {
+  return [...rows].sort((a, b) => firstShipTime(a) - firstShipTime(b));
+}
+
 export async function listShippedProjects(
   viewer?: string,
   kind?: "software" | "hardware",
@@ -654,7 +670,13 @@ export async function listShippedProjects(
     console.error("listShippedProjects", error.message);
     return [];
   }
-  const rows = (data ?? []) as ShippedProject[];
+  // Reverted projects stay at the front (oldest revert first); everything else
+  // goes by total time waiting, longest first.
+  const all = (data ?? []) as (ShippedProject & { reverted_at?: string | null })[];
+  const rows: ShippedProject[] = [
+    ...all.filter((p) => p.reverted_at),
+    ...oldestWaitFirst(all.filter((p) => !p.reverted_at)),
+  ];
   const visible = opts?.includeClaimed
     ? annotateClaims(rows, viewer)
     : rows.filter((p) => !claimedByOther(p, viewer));
@@ -697,9 +719,9 @@ export async function claimReview(
 // (when a first reviewer happened to get to it). A project that sat a long
 // time waiting for its first pass has already made its player wait; a quick
 // first pass on a project shipped more recently shouldn't cut in front of
-// it just because the first-pass verdict landed sooner. shipped_at is set
-// once at the initial ship and never touched again (see the ship route),
-// so it tracks total time waiting across both passes.
+// it just because the first-pass verdict landed sooner. The order is the
+// total time waiting (first_shipped_at, see oldestWaitFirst), the same value
+// the review table shows as "waited" - shipped_at restarts on every re-ship.
 export async function listSecondReviewProjects(
   viewer?: string,
   kind?: "software" | "hardware",
@@ -724,7 +746,7 @@ export async function listSecondReviewProjects(
     console.error("listSecondReviewProjects", error.message);
     return [];
   }
-  const rows = (data ?? []) as ShippedProject[];
+  const rows = oldestWaitFirst((data ?? []) as ShippedProject[]);
   const visible = opts?.includeClaimed
     ? annotateClaims(rows, viewer)
     : rows.filter((p) => !claimedByOther(p, viewer));
@@ -779,19 +801,18 @@ export async function nextReviewId(opts: {
   // Advance to the project right after the one just closed, not the head of
   // the queue - otherwise a reviewer on #14 gets bounced back to #1. The
   // closed project has already left the queue, so locate its slot by the same
-  // sort key the lists use (reverted_at first, then shipped_at).
+  // sort key the lists use (reverted_at first, then total wait).
   const { data: closed } = await db
     .from("projects")
-    .select("shipped_at, reverted_at")
+    .select("shipped_at, first_shipped_at, reverted_at")
     .eq("id", excludeId)
     .maybeSingle();
-  const sortKey = (p: { shipped_at?: string | null; reverted_at?: string | null }): [number, number] =>
-    p.reverted_at
-      ? [0, new Date(p.reverted_at).getTime()]
-      : [1, p.shipped_at ? new Date(p.shipped_at).getTime() : 0];
+  type SortRow = { shipped_at?: string | null; first_shipped_at?: string | null; reverted_at?: string | null };
+  const sortKey = (p: SortRow): [number, number] =>
+    p.reverted_at ? [0, new Date(p.reverted_at).getTime()] : [1, firstShipTime(p)];
   const pickAfter = (list: ShippedProject[]): ShippedProject | undefined => {
     if (!closed) return list[0];
-    const [cg, ct] = sortKey(closed as { shipped_at?: string | null; reverted_at?: string | null });
+    const [cg, ct] = sortKey(closed as SortRow);
     const after = list.find((p) => {
       const [g, t] = sortKey(p);
       return g > cg || (g === cg && t > ct);
@@ -998,13 +1019,13 @@ export async function listSpotCheckProjects(
     .is("rejected_at", null)
     .is("banned_at", null);
   if (kind) q = q.eq("kind", kind);
-  // shipped_at, not first_pass_at - see listSecondReviewProjects above.
+  // Sorted by total wait (first_shipped_at) in JS below, not first_pass_at.
   const { data, error } = await q.order("shipped_at", { ascending: true }).limit(500);
   if (error) {
     console.error("listSpotCheckProjects", error.message);
     return [];
   }
-  const rows = (data ?? []) as ShippedProject[];
+  const rows = oldestWaitFirst((data ?? []) as ShippedProject[]);
   const visible = opts?.includeClaimed
     ? annotateClaims(rows, viewer)
     : rows.filter((p) => !claimedByOther(p, viewer));
@@ -1045,13 +1066,13 @@ export async function listProposedBanProjects(kind?: "software" | "hardware"): P
     .is("rejected_at", null)
     .is("banned_at", null);
   if (kind) q = q.eq("kind", kind);
-  // shipped_at, not first_pass_at - see listSecondReviewProjects above.
+  // Sorted by total wait (first_shipped_at) in JS below, not first_pass_at.
   const { data, error } = await q.order("shipped_at", { ascending: true }).limit(500);
   if (error) {
     console.error("listProposedBanProjects", error.message);
     return [];
   }
-  return hydrateHours((data ?? []) as ShippedProject[]);
+  return hydrateHours(oldestWaitFirst((data ?? []) as ShippedProject[]));
 }
 
 export async function countProposedBanProjects(): Promise<number> {
