@@ -46,9 +46,12 @@ function displayName(label: string): string {
 
 // `audits` is expected newest first (as the stats page queries it), so the
 // first label seen for a Slack id is that reviewer's most recent name.
+// `nameFor` turns the full "Name (SlackID)" label into what's shown (the
+// stats page passes live mode's reviewerName so others can be hidden).
 export function summarizeWindow(
   audits: AuditLike[],
   since: number | null,
+  nameFor: (label: string) => string = displayName,
 ): { counts: VerdictCounts; reviewers: number; reviewerList: ReviewerCount[] } {
   const counts = emptyCounts();
   const byReviewer = new Map<string, ReviewerCount>();
@@ -60,7 +63,7 @@ export function summarizeWindow(
     const key = slackIdFromLabel(a.reviewer) ?? a.reviewer;
     const entry = byReviewer.get(key);
     if (entry) entry.reviews++;
-    else byReviewer.set(key, { name: displayName(a.reviewer), reviews: 1 });
+    else byReviewer.set(key, { name: nameFor(a.reviewer), reviews: 1 });
   }
   const reviewerList = [...byReviewer.values()].sort(
     (a, b) => b.reviews - a.reviews || a.name.localeCompare(b.name),

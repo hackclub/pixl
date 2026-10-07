@@ -119,3 +119,14 @@ describe("summarizeWindow", () => {
     expect(s.reviewerList).toEqual([{ name: "Ada", reviews: 2 }]);
   });
 });
+
+describe("summarizeWindow nameFor", () => {
+  test("names each reviewer with the given function, from their full label", () => {
+    const s = summarizeWindow(
+      [row("Ada (U1)", "approved", d("2026-10-04T12:00:00Z")), row("Me (U9)", "approved", d("2026-10-04T12:00:00Z"))],
+      null,
+      (label) => (label.endsWith("(U9)") ? "Me" : "Reviewer"),
+    );
+    expect(s.reviewerList.map((r) => r.name).sort()).toEqual(["Me", "Reviewer"]);
+  });
+});

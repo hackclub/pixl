@@ -12,7 +12,7 @@ import { setJournalHours } from "@/app/actions";
 import { PendingButton } from "@/app/_components/PendingButton";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { useLiveMode } from "@/app/_components/LiveMode";
+import { useLiveMode, useReviewerName } from "@/app/_components/LiveMode";
 import { parseAuditNote, type AuditHeader } from "@/lib/auditNote";
 import { isSafeUrl } from "@/lib/safeUrl";
 import { Card } from "@/components/ui/card";
@@ -171,6 +171,7 @@ export function ReviewDetailTabs({
   // Live mode keeps each past review's verdict and hours but drops its
   // internal audit-note sections (technical features, deflation reason, ...).
   const live = useLiveMode();
+  const reviewerName = useReviewerName();
   const [tab, setTab] = useState<
     "commits" | "journals" | "reviews" | "ysws" | "hackatime" | "fraud"
   >("commits");
@@ -462,7 +463,7 @@ export function ReviewDetailTabs({
                     <Badge variant={meta.variant}>{meta.label}</Badge>
                     <div className="flex-1 min-w-48">
                       <span className="font-medium">
-                        {v.reviewer.replace(/\s*\([^)]*\)\s*$/, "")}
+                        {reviewerName(v.reviewer)}
                       </span>
                       {v.approved_hours !== null && v.approved_hours !== v.claimed_hours ? (
                         <span className="text-foreground/70">

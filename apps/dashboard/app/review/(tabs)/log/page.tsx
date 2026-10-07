@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requirePagePerm, requireGuidelinesAck } from "@/lib/guard";
+import { getHideReviewers } from "@/lib/liveModeServer";
+import { reviewerName } from "@/lib/liveMode";
 import { listReviewAudits } from "@/lib/db";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -32,6 +34,7 @@ const VERDICT_BADGE: Record<string, { label: string; variant: "success" | "info"
 export default async function ReviewLogPage() {
   const access = await requirePagePerm(["review"]);
   await requireGuidelinesAck(access);
+  const hideReviewers = await getHideReviewers();
   if (!access.isSuper) redirect("/review");
   const log = await listReviewAudits();
 
@@ -54,7 +57,7 @@ export default async function ReviewLogPage() {
               {badge.label}
             </Badge>
             <div className="flex-1 min-w-48">
-              <span className="font-bold">{r.reviewer}</span>
+              <span className="font-bold">{reviewerName(r.reviewer, access.session.slackId, hideReviewers)}</span>
               {" → "}
               <Link href={`/players/${r.user_id}`} className="font-bold hover:text-brand">
                 {r.player_name}

@@ -8,7 +8,7 @@ import { ticketStats } from "@/lib/tickets";
 import { Shell } from "@/app/_components/Shell";
 import { LiveModeProvider } from "@/app/_components/LiveMode";
 import { LiveModeToggle } from "@/app/_components/LiveModeToggle";
-import { getLiveMode } from "@/lib/liveModeServer";
+import { getLiveMode, getHideReviewers } from "@/lib/liveModeServer";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 
@@ -59,6 +59,7 @@ export default async function RootLayout({
   const helper = await isHelper();
   const fulfiller = await isFulfiller();
   const live = await getLiveMode();
+  const hideReviewers = await getHideReviewers();
   const nav = access
     ? {
         overview: access.isSuper,
@@ -148,7 +149,7 @@ export default async function RootLayout({
           // >
           //   {children}
           // </Shell>
-          <LiveModeProvider live={live}>
+          <LiveModeProvider live={live} hideReviewers={hideReviewers} viewer={session?.slackId ?? ""}>
           <SidebarProvider defaultOpen={sidebarOpen}>
             <Shell
               session={{ name: session.name, slackId: session.slackId }}

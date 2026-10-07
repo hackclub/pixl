@@ -7,6 +7,8 @@ import {
   countProposedBanProjects,
 } from "@/lib/db";
 import { ReviewTabs } from "@/app/_components/ReviewTabs";
+import { ShowReviewerNames } from "@/app/_components/ShowReviewerNames";
+import { getLiveMode, getHideReviewers } from "@/lib/liveModeServer";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +35,7 @@ export default async function ReviewLayout({
     access.isSuper ? countSpotCheckProjects() : Promise.resolve(undefined),
     access.isSuper ? countProposedBanProjects() : Promise.resolve(undefined),
   ]);
+  const [live, hideReviewers] = await Promise.all([getLiveMode(), getHideReviewers()]);
   return (
     <>
       <ReviewTabs
@@ -44,6 +47,13 @@ export default async function ReviewLayout({
         spotCheckCount={spotCheckCount}
         proposedBanCount={proposedBanCount}
       />
+      {/* While live, other reviewers' names are hidden on every review tab;
+          this reveals (or re-hides) them. */}
+      {live && (
+        <div className="flex justify-end mb-4">
+          <ShowReviewerNames hidden={hideReviewers} />
+        </div>
+      )}
       {children}
     </>
   );

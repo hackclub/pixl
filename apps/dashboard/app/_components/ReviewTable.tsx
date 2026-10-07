@@ -6,7 +6,7 @@ import type { ShippedProject } from "@/lib/db";
 import { LevelBadge, StatusBadge, FundingBadge } from "@/app/_components/ProjectBadges";
 import { Badge } from "@/components/ui/badge";
 import { BlackoutBadge } from "@/app/_components/BlackoutBadge";
-import { useLiveMode } from "@/app/_components/LiveMode";
+import { useLiveMode, useReviewerName } from "@/app/_components/LiveMode";
 import { Card } from "@/components/ui/card";
 import {
   Table,
@@ -65,6 +65,11 @@ export function ReviewTable({
   const blackoutSet = new Set(blackoutIds);
   const router = useRouter();
   const live = useLiveMode();
+  const reviewerName = useReviewerName();
+  // claimedBy is a bare Slack id: while live (names not revealed) anyone but
+  // the viewer is just "A reviewer"; otherwise their Slack handle.
+  const claimer = (id: string) =>
+    reviewerName(id) === "Reviewer" ? "A reviewer" : (handles.get(id) ?? "someone");
   if (rows.length === 0) {
     return (
       <Card className="p-10 text-center text-muted-foreground">{emptyLabel}</Card>
@@ -204,9 +209,9 @@ export function ReviewTable({
                       <Badge
                         variant="secondary"
                         className="text-[0.65rem] uppercase tracking-wide"
-                        title={`${handles.get(p.claimedBy) ?? p.claimedBy} opened this for review in the last 30 minutes. You can still open it, but you won't be able to grade it while their claim is live.`}
+                        title={`${claimer(p.claimedBy)} opened this for review in the last 30 minutes. You can still open it, but you won't be able to grade it while their claim is live.`}
                       >
-                        {handles.get(p.claimedBy) ?? "someone"} is reviewing
+                        {claimer(p.claimedBy)} is reviewing
                       </Badge>
                     )}
                   </div>
@@ -214,7 +219,7 @@ export function ReviewTable({
 
                 {showFirstPass && (
                   <TableCell className="py-3.5 text-sm text-foreground/80 truncate max-w-[180px]">
-                    {p.first_pass_by ? p.first_pass_by.replace(/\s*\([^)]*\)\s*$/, "") : "—"}
+                    {reviewerName(p.first_pass_by, "—")}
                   </TableCell>
                 )}
 
