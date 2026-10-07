@@ -54,7 +54,8 @@ export default async function PlayersPage({
   const cur = Math.min(Math.max(parseInt(page ?? "1", 10) || 1, 1), pages);
   const start = (cur - 1) * PER;
   const players = all.slice(start, start + PER);
-  const handles = await slackHandles(players.map((p) => p.slack_id));
+  // Live mode never shows real names or Slack identities, so skip the lookup.
+  const handles = live ? new Map<string, string>() : await slackHandles(players.map((p) => p.slack_id));
   const qp = (n: number) =>
     `/players?page=${n}${q ? `&q=${encodeURIComponent(q)}` : ""}`;
 
@@ -183,9 +184,11 @@ export default async function PlayersPage({
                     <Link href={`/players/${p.id}`} className="font-bold hover:text-brand">
                       {liveName(live, p, p.real_name || (p.slack_id && handles.get(p.slack_id)) || p.display_name || "Unknown")}
                     </Link>
-                    <div className="text-xs text-muted-foreground">
-                      {p.slack_id ?? "no slack id"} · {p.oauth_provider}
-                    </div>
+                    {!live && (
+                      <div className="text-xs text-muted-foreground">
+                        {p.slack_id ?? "no slack id"} · {p.oauth_provider}
+                      </div>
+                    )}
                   </TableCell>
                   <TableCell className="p-3">{p.projectCount}</TableCell>
                   <TableCell className={`p-3 ${p.violationCount > 0 ? "text-tang font-bold" : ""}`}>

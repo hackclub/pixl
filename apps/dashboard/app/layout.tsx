@@ -65,16 +65,16 @@ export default async function RootLayout({
         players: canView(access, ["warn", "ban"]),
         projects: canView(access, ["review", "warn", "ban"]),
         review: canView(access, ["review"]),
-        pixels: canView(access, ["pixels"]),
-        moderation: canView(access, ["warn", "ban"]),
+        pixels: !live && canView(access, ["pixels"]),
+        moderation: !live && canView(access, ["warn", "ban"]),
         ideas: canView(access, ["ideas"]),
-        reports: reportViewer,
+        reports: !live && reportViewer,
         tickets: helper,
         notify: access.isSuper || access.perms.has("notify"),
         admins: access.isSuper,
         reviewers: access.isSuper,
         slackLookup: !live && canView(access, ["lookup"]),
-        referrals: canView(access, ["referrals"]),
+        referrals: !live && canView(access, ["referrals"]),
         online: canView(access, ["warn", "ban"]),
         shop: canView(access, ["shop"]),
         events: canView(access, ["events"]),
@@ -96,7 +96,7 @@ export default async function RootLayout({
     nav?.review && access
       ? await countPendingReviews({ viewer: access.session.slackId })
       : 0;
-  const reportCount = reportViewer ? await countOpenReports() : 0;
+  const reportCount = nav?.reports ? await countOpenReports() : 0;
   const ticketCount = helper ? (await ticketStats()).open : 0;
   const orderCount = nav?.fulfillment ? await countPendingOrders() : 0;
   return (

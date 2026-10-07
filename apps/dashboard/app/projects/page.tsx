@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { requirePagePerm, canView } from "@/lib/guard";
 import { getLiveMode } from "@/lib/liveModeServer";
-import { liveName } from "@/lib/liveMode";
 import { listProjects, collaboratorsByProject } from "@/lib/db";
 import { StatusBadge, BeaconBadge } from "@/app/_components/ProjectBadges";
 import { Badge } from "@/components/ui/badge";
@@ -36,7 +35,11 @@ export default async function ProjectsPage({
     archived,
     includeArchived: !archived && isAdmin,
   });
-  const handles = await slackHandles(projects.map((p) => p.users?.slack_id));
+  // Live mode shows no player names at all here (not even in-game ones) and
+  // no Hackatime projects, so the Slack handle lookup is skipped too.
+  const handles = live
+    ? new Map<string, string>()
+    : await slackHandles(projects.map((p) => p.users?.slack_id));
   const collaborators = await collaboratorsByProject(projects.map((p) => p.id));
 
   return (
@@ -76,7 +79,7 @@ export default async function ProjectsPage({
               <TableHead className="p-3">Status</TableHead>
               <TableHead className="p-3">Owner</TableHead>
               <TableHead className="p-3">Links</TableHead>
-              <TableHead className="p-3">Hackatime</TableHead>
+              {!live && <TableHead className="p-3">Hackatime</TableHead>}
               <TableHead className="p-3">Created</TableHead>
             </TableRow>
           </TableHeader>
@@ -104,17 +107,15 @@ export default async function ProjectsPage({
                 <TableCell className="p-3">
                   {p.users ? (
                     <Link href={`/players/${p.user_id}`} className="font-bold hover:text-brand">
-                      {liveName(
-                        live,
-                        p.users,
-                        p.users.real_name ||
+                      {live
+                        ? "Builder"
+                        : p.users.real_name ||
                           (p.users.slack_id && handles.get(p.users.slack_id)) ||
                           p.users.display_name ||
-                          p.users.slack_id,
-                      )}
+                          p.users.slack_id}
                     </Link>
                   ) : (
-                    <span className="text-muted-foreground">{p.user_id}</span>
+                    <span className="text-muted-foreground">{live ? "Builder" : p.user_id}</span>
                   )}
                   {(collaborators.get(p.id)?.length ?? 0) > 0 && (
                     <div className="text-xs text-muted-foreground">
@@ -148,9 +149,11 @@ export default async function ProjectsPage({
                     {!p.repo_url && !p.demo_url && <span className="text-muted-foreground">-</span>}
                   </div>
                 </TableCell>
-                <TableCell className="p-3 text-foreground/70">
-                  {p.hackatime_projects?.length ? p.hackatime_projects.join(", ") : "-"}
-                </TableCell>
+                {!live && (
+                  <TableCell className="p-3 text-foreground/70">
+                    {p.hackatime_projects?.length ? p.hackatime_projects.join(", ") : "-"}
+                  </TableCell>
+                )}
                 <TableCell className="p-3 text-muted-foreground">
                   {new Date(p.created_at).toLocaleDateString()}
                 </TableCell>
@@ -158,7 +161,7 @@ export default async function ProjectsPage({
             ))}
             {projects.length === 0 && (
               <TableRow className="hover:bg-transparent">
-                <TableCell className="p-5 text-muted-foreground" colSpan={6}>
+                <TableCell className="p-5 text-muted-foreground" colSpan={live ? 5 : 6}>
                   No projects found.
                 </TableCell>
               </TableRow>

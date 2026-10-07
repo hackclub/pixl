@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireReportViewer, getAccess, canView, isModerator } from "@/lib/guard";
+import { getLiveMode } from "@/lib/liveModeServer";
+import { LiveBlocked } from "@/app/_components/LiveBlocked";
 import { getReport, listChatFor, reportCounts } from "@/lib/db";
 import { resolveReport } from "@/app/actions";
 import { slackHandle } from "@/lib/slack";
@@ -25,6 +27,7 @@ export default async function ReportDetailPage({
   params: Promise<{ id: string }>;
 }) {
   await requireReportViewer();
+  if (await getLiveMode()) return <LiveBlocked what="Reports" />;
   const { id } = await params;
   const report = await getReport(Number(id));
   if (!report) notFound();

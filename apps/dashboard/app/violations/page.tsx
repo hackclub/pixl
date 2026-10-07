@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requirePagePerm } from "@/lib/guard";
 import { getLiveMode } from "@/lib/liveModeServer";
+import { LiveBlocked } from "@/app/_components/LiveBlocked";
 import { liveName } from "@/lib/liveMode";
 import { listViolations } from "@/lib/db";
 import { slackHandles } from "@/lib/slack";
@@ -27,6 +28,7 @@ export default async function ViolationsPage({
 }) {
   await requirePagePerm(["warn", "ban"]);
   const live = await getLiveMode();
+  if (live) return <LiveBlocked what="Violations" reason="This page is internal moderation data" />;
   const { kind, q, page } = await searchParams;
   const all = await listViolations(500);
 

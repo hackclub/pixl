@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import { requirePagePerm } from "@/lib/guard";
+import { getLiveMode } from "@/lib/liveModeServer";
+import { LiveBlocked } from "@/app/_components/LiveBlocked";
 import {
   listReferrals,
   referrerLeaderboard,
@@ -34,6 +36,7 @@ function fmtDate(iso: string | null): string {
 
 export default async function ReferralsPage() {
   const access = await requirePagePerm(["referrals"]);
+  if (await getLiveMode()) return <LiveBlocked what="Referrals" />;
 
   const referrals = await listReferrals();
   const leaderboard = await referrerLeaderboard(referrals);
