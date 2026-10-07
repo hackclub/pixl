@@ -21,7 +21,7 @@ test("first pass and final approval use their own wording", () => {
   expect(buildReviewMessage({ ...base, kind: "first_pass" })).toContain("pending for a second review");
   const final = buildReviewMessage({ ...base, kind: "final", pixels: 120, playerSlackIds: ["U0AAAAAAAA", "U0CCCCCCCC"] });
   expect(final).toContain("Hi <@U0AAAAAAAA>, <@U0CCCCCCCC>!");
-  expect(final).toContain("120 pixels were granted");
+  expect(final).toContain("*120 pixels* were granted");
   expect(final).toContain("This approval was made by <@U0BBBBBBBB>");
 });
 

@@ -74,7 +74,7 @@ export function buildReviewMessage(input: ReviewMessageInput): string {
   const pixels = input.pixels ?? 0;
   const granted =
     pixels > 0
-      ? `${pixels} pixels were granted to your account, you can now go take a look at the shop or keep building projects!`
+      ? `*${pixels} pixels* were granted to your account, you can now go take a look at the shop or keep building projects!`
       : "No new pixels this time since this project already earned its pixels, but you can keep building projects!";
   return (
     `${hello} The Pixl fraud squad and the Pixl mayor were amazed by your project ${project} and decided to approve it fully and pushed it to the core! ${granted}` +

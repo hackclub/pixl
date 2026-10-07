@@ -1,5 +1,5 @@
 import { app } from "../slack/app.js";
-import { SILENCED_CHANNELS, TRAINING_CHANNEL } from "../constants.js";
+import { PIXL_REVIEW_CHANNEL, SILENCED_CHANNELS, TRAINING_CHANNEL } from "../constants.js";
 import { checkAiRateLimit, AI_RATE_LIMIT_MESSAGE } from "../ai/rateLimit.js";
 import { config, hasLaunched, launchDateLabel } from "../config.generated.js";
 import { botIdentity } from "../slack/identity.js";
@@ -95,6 +95,14 @@ app.message(async ({ message, client }) => {
     lowerText.includes(" pix ") ||
     lowerText.startsWith("pix ") ||
     (botIdentity.userId && text.includes(`<@${botIdentity.userId}>`));
+  // The review channel is for humans discussing verdicts in the threads Pixo
+  // posts, so Pixo stays out of it unless it is explicitly @mentioned (a bare
+  // "pixo" in prose, a Pixl question or a bot-started thread don't count).
+  if (
+    m.channel === PIXL_REVIEW_CHANNEL &&
+    !(botIdentity.userId && text.includes(`<@${botIdentity.userId}>`))
+  )
+    return;
   const isPixlQuestion =
     !m.thread_ts &&
     /\b(what'?s|what is|c'est quoi|explain|tell me about|keskon|kézako)\b.{0,40}\bpixl\b|\bpixl\b.{0,40}\b(what|c'est quoi|explain)\b/i.test(
