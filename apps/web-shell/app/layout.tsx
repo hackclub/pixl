@@ -42,7 +42,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       suppressHydrationWarning
     >
       <head>
-        {/* Applies the saved Phantom Sans choice (pixl_font, the "Aa" rail
+        {/* Applies the saved Phantom Sans choice (pixl_font, the "Phantom Sans" rail
             button) before first paint, so the page never flashes in the
             other font. */}
         <script

@@ -195,7 +195,7 @@ export function ShellNav({
           aria-pressed={phantom}
           onClick={togglePhantom}
         >
-          Aa
+          PHANTOM SANS
         </button>
         <div className="theme-picker">
           <button
