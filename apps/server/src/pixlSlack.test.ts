@@ -43,3 +43,19 @@ test("reports an unavailable Pixorpheus service without throwing", async () => {
 
   expect(result).toEqual({ kind: "failed" });
 });
+
+test("can target the review channel join endpoint", async () => {
+  const urls: string[] = [];
+  const result = await requestPixlChannelEnrollment(
+    "U0123456789",
+    { apiKey: "shared-secret", url: "https://pixo.example.com" },
+    async (url) => {
+      urls.push(url);
+      return new Response(null, { status: 200 });
+    },
+    "/api/external/review-channel/join",
+  );
+
+  expect(result).toEqual({ kind: "enrolled" });
+  expect(urls).toEqual(["https://pixo.example.com/api/external/review-channel/join"]);
+});

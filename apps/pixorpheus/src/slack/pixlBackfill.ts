@@ -24,6 +24,7 @@ export interface PixlBackfillClient {
 
 export interface PixlBackfillOptions {
   readonly apply: boolean;
+  readonly channel?: string;
   readonly delay?: (milliseconds: number) => Promise<void>;
 }
 
@@ -46,12 +47,12 @@ function uniqueSlackUserIds(candidateIds: readonly (string | null)[]): string[] 
   ];
 }
 
-async function existingPixlMemberIds(client: PixlBackfillClient): Promise<Set<string>> {
+async function existingPixlMemberIds(client: PixlBackfillClient, channel: string): Promise<Set<string>> {
   const members = new Set<string>();
   let cursor: string | undefined;
   do {
     const page = await client.conversations.members({
-      channel: PIXL_MAIN_CHANNEL,
+      channel,
       cursor,
       limit: 200,
     });
@@ -80,7 +81,8 @@ export async function backfillPixlChannelMembers(
   options: PixlBackfillOptions,
 ): Promise<PixlBackfillSummary> {
   const eligibleIds = uniqueSlackUserIds(candidateIds);
-  const existingIds = await existingPixlMemberIds(client);
+  const channel = options.channel ?? PIXL_MAIN_CHANNEL;
+  const existingIds = await existingPixlMemberIds(client, channel);
   const missingIds = eligibleIds.filter((slackId) => !existingIds.has(slackId));
   const summary = {
     alreadyMember: eligibleIds.length - missingIds.length,
@@ -97,7 +99,7 @@ export async function backfillPixlChannelMembers(
   for (const [index, batch] of invitationBatches.entries()) {
     try {
       const response = await client.conversations.invite({
-        channel: PIXL_MAIN_CHANNEL,
+        channel,
         force: true,
         users: batch.join(","),
       });

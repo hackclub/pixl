@@ -28,6 +28,7 @@ import "./github/webhook.js";
 import "./shop/webhook.js";
 import "./external/ticketApi.js";
 import "./external/dmApi.js";
+import "./external/reviewPostApi.js";
 
 (async () => {
   await app.start(process.env.PORT || 3000);

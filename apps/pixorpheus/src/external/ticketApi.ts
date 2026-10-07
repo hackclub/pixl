@@ -7,6 +7,7 @@ import {
   isSlackUserId,
   type SlackConversationClient,
 } from "../slack/pixlMembership.js";
+import { PIXL_REVIEW_CHANNEL } from "../constants.js";
 import { resolveTicket } from "../tickets/service.js";
 
 // Lets the Pixl HQ dashboard (apps/dashboard) resolve a ticket through this bot
@@ -52,6 +53,20 @@ receiver.app.post("/api/external/pixl-channel/join", express.json(), requireExte
       console.error("[pixl-membership] invite failed", result.errorCode ?? "unknown_error");
       return res.status(502).json({ error: "Slack invite failed" });
   }
+});
+
+// Same as /pixl-channel/join but for the public review channel, called when a
+// player ships their first project.
+receiver.app.post("/api/external/review-channel/join", express.json(), requireExternalApiKey, async (req, res) => {
+  const slackId = slackUserIdFromBody(req.body);
+  if (!slackId) return res.status(400).json({ error: "Invalid Slack user ID" });
+
+  const result = await ensurePixlChannelMembership(slackId, pixlMembershipClient, PIXL_REVIEW_CHANNEL);
+  if (result.kind === "failed") {
+    console.error("[pixl-membership] review channel invite failed", result.errorCode ?? "unknown_error");
+    return res.status(502).json({ error: "Slack invite failed" });
+  }
+  return res.json({ ok: true, membership: result.kind });
 });
 
 receiver.app.post("/api/external/tickets/:ts/resolve", express.json(), requireExternalApiKey, async (req, res) => {

@@ -9,6 +9,7 @@
     "start": "bun run src/index.ts",
     "dev": "bun --watch run src/index.ts",
     "backfill:pixl-channel": "bun run src/scripts/backfillPixlChannel.ts",
+    "backfill:review-channel": "bun run src/scripts/backfillReviewChannel.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },

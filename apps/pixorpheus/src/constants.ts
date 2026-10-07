@@ -5,6 +5,9 @@ export const RICKY_ID = "U0A1VPETCR3";
 /** #pixl - the main public channel, the one every "come join us" link points at. */
 export const PIXL_MAIN_CHANNEL = "C0B5P4N0WHH";
 
+/** Public review verdicts (approved / changes requested) are posted here. */
+export const PIXL_REVIEW_CHANNEL = "C0C78RZMX1T";
+
 /** Channels Pixo is allowed to be chatty in. */
 export const PIXL_CHANNELS = [PIXL_MAIN_CHANNEL, "C0B5UEMF4RW"];
 

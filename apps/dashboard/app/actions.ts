@@ -79,6 +79,7 @@ import { SHOP_REGIONS, type ShopRegion } from "@/lib/shopRegions";
 import { SHOP_CATEGORIES, type ShopCategory } from "@/lib/shopCategories";
 import { kickOnlinePlayer, uploadSubmissionImage } from "@/lib/gameServer";
 import { dmOrEmail } from "@/lib/notify";
+import { announceReview } from "@/lib/reviewChannel";
 import { assertSafeExternalUrl } from "@/lib/urlSafety";
 import { safeRedirectPath, isSafeUrl } from "@/lib/safeUrl";
 import {
@@ -509,6 +510,13 @@ async function notifyOwner(
   const { error } = await db.from("notifications").insert({ user_id: userId, title, body });
   if (error) console.error("review notification failed", error.message);
   await dmOrEmail(userId, title, body);
+}
+
+// In-app notification only. Review verdicts are announced in the public review
+// channel (announceReview) instead of by DM; the DM is only the fallback.
+async function notifyInApp(userId: string, title: string, body: string): Promise<void> {
+  const { error } = await db.from("notifications").insert({ user_id: userId, title, body });
+  if (error) console.error("review notification failed", error.message);
 }
 
 // Same "hackatime if tracked, else journal" source as claimedHoursFor(), but
@@ -1133,18 +1141,26 @@ export async function reviewProject(formData: FormData): Promise<void> {
     if (!own && proposedKey === "approved")
       await recordSettledPayout(projectId, access, "first_pass_approved", project.name);
     if (proposedKey === "approved") {
-      await notifyOwner(
-        project.user_id,
-        "First pass complete!",
-        `"${project.name}" passed first-pass review by ${playerFacingReviewer}. It still needs a second reviewer to confirm before your pixels are credited , hang tight!`,
-      );
-      for (const collaboratorId of await acceptedCollaboratorUserIds(projectId)) {
-        await notifyOwner(
-          collaboratorId,
-          "First pass complete!",
-          `A project you collaborate on, "${project.name}", passed first-pass review by ${playerFacingReviewer}. It still needs a second reviewer to confirm before pixels are credited.`,
-        );
-      }
+      const ownerBody = `"${project.name}" passed first-pass review by ${playerFacingReviewer}. It still needs a second reviewer to confirm before your pixels are credited , hang tight!`;
+      const collabBody = `A project you collaborate on, "${project.name}", passed first-pass review by ${playerFacingReviewer}. It still needs a second reviewer to confirm before pixels are credited.`;
+      const collaboratorIds = await acceptedCollaboratorUserIds(projectId);
+      await notifyInApp(project.user_id, "First pass complete!", ownerBody);
+      for (const collaboratorId of collaboratorIds)
+        await notifyInApp(collaboratorId, "First pass complete!", collabBody);
+      await announceReview({
+        kind: "first_pass",
+        projectId,
+        projectName: project.name,
+        ownerId: project.user_id,
+        collaboratorIds,
+        note,
+        reviewerSlackId: access.session.slackId,
+        revealName,
+        fallback: [
+          { userId: project.user_id, title: "First pass complete!", body: ownerBody },
+          ...collaboratorIds.map((userId) => ({ userId, title: "First pass complete!", body: collabBody })),
+        ],
+      });
     }
     await logModAction(project.user_id, "project_first_pass", `${project.name}: proposed ${proposedKey.replace("_", " ")} , ${note}`, by);
     if (proposedKey === "approved") await submitToRobert(projectId);
@@ -1211,18 +1227,26 @@ export async function reviewProject(formData: FormData): Promise<void> {
     // updateReviewPayoutSettings) - 0 keeps the historical "only approvals
     // pay" behavior with no special-casing here.
     if (!own) await recordSettledPayout(projectId, access, "needs_changes", project.name);
-    await notifyOwner(
-      project.user_id,
-      "Changes requested",
-      `"${project.name}" needs changes before it can be approved , ${playerFacingReviewer}:\n\n${note}\n\nUpdate your project and ship it again.`,
-    );
-    for (const collaboratorId of await acceptedCollaboratorUserIds(projectId)) {
-      await notifyOwner(
-        collaboratorId,
-        "Changes requested",
-        `"${project.name}" needs changes before it can be approved , ${playerFacingReviewer}:\n\n${note}`,
-      );
-    }
+    const changesOwnerBody = `"${project.name}" needs changes before it can be approved , ${playerFacingReviewer}:\n\n${note}\n\nUpdate your project and ship it again.`;
+    const changesCollabBody = `"${project.name}" needs changes before it can be approved , ${playerFacingReviewer}:\n\n${note}`;
+    const changesCollaboratorIds = await acceptedCollaboratorUserIds(projectId);
+    await notifyInApp(project.user_id, "Changes requested", changesOwnerBody);
+    for (const collaboratorId of changesCollaboratorIds)
+      await notifyInApp(collaboratorId, "Changes requested", changesCollabBody);
+    await announceReview({
+      kind: "changes",
+      projectId,
+      projectName: project.name,
+      ownerId: project.user_id,
+      collaboratorIds: changesCollaboratorIds,
+      note,
+      reviewerSlackId: access.session.slackId,
+      revealName,
+      fallback: [
+        { userId: project.user_id, title: "Changes requested", body: changesOwnerBody },
+        ...changesCollaboratorIds.map((userId) => ({ userId, title: "Changes requested", body: changesCollabBody })),
+      ],
+    });
     await logModAction(project.user_id, "project_needs_changes", `${project.name}: ${note}`, by);
     const nextPath = await nextReviewPath(access, by, stage, projectId);
     revalidatePath("/review");
@@ -1330,6 +1354,8 @@ export async function reviewProject(formData: FormData): Promise<void> {
     .eq("project_id", projectId)
     .eq("status", "accepted");
   const collaborators = (collabRows ?? []) as { id: number; user_id: string; hackatime_seconds: number | null }[];
+  // What each player would get by DM if the public approval post fails.
+  const finalFallback: { userId: string; title: string; body: string }[] = [];
   const allBeneficiaryIds = [project.user_id, ...collaborators.map((c) => c.user_id)];
 
   // One tier per project, applied to everyone credited on it. Re-read rather
@@ -1482,11 +1508,9 @@ export async function reviewProject(formData: FormData): Promise<void> {
     }
     if (cPayout.goalNote && cPayout.deltaPx > 0) cCredited += cPayout.goalNote;
     if (cPayout.referralNote && cPayout.deltaPx > 0) cCredited += cPayout.referralNote;
-    await notifyOwner(
-      c.user_id,
-      "Project approved!",
-      `"${project.name}" passed review , approved by ${approvalReviewer}. Congrats on shipping!${cCredited}`,
-    );
+    const collabApprovedBody = `"${project.name}" passed review , approved by ${approvalReviewer}. Congrats on shipping!${cCredited}`;
+    await notifyInApp(c.user_id, "Project approved!", collabApprovedBody);
+    finalFallback.push({ userId: c.user_id, title: "Project approved!", body: collabApprovedBody });
   }
 
   const blackout = await operationRpc.settle({
@@ -1574,11 +1598,27 @@ export async function reviewProject(formData: FormData): Promise<void> {
       );
   }
 
-  await notifyOwner(
-    project.user_id,
-    "Project approved!",
-    `"${project.name}" passed review , approved by ${approvalPlayerFacingReviewer}. Congrats on shipping!\n\nReviewer note: ${note}${credited}`,
-  );
+  const ownerApprovedBody = `"${project.name}" passed review , approved by ${approvalPlayerFacingReviewer}. Congrats on shipping!\n\nReviewer note: ${note}${credited}`;
+  await notifyInApp(project.user_id, "Project approved!", ownerApprovedBody);
+  finalFallback.unshift({ userId: project.user_id, title: "Project approved!", body: ownerApprovedBody });
+  // A Trial ship holds its pixels until the maker picks, so the post says that
+  // instead of claiming pixels were granted.
+  const trialHeld = holdForTrial && trialChoice !== "item";
+  await announceReview({
+    kind: "final",
+    projectId,
+    projectName: project.name,
+    ownerId: project.user_id,
+    collaboratorIds: collaborators.map((c) => c.user_id),
+    note,
+    reviewerSlackId: access.session.slackId,
+    revealName,
+    pixels: trialHeld ? trialBeyondPx : Math.max(deltaPx, 0),
+    creditNote: trialHeld
+      ? `Your Trial prize is waiting, head to the project page to claim it (or take the pixels instead).`
+      : undefined,
+    fallback: finalFallback,
+  });
   await logModAction(
     project.user_id,
     "project_approved",

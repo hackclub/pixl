@@ -34,10 +34,11 @@ function resultForError(errorCode: string | null): PixlMembershipResult {
 export async function ensurePixlChannelMembership(
   slackUserId: string,
   client: SlackConversationClient,
+  channel: string = PIXL_MAIN_CHANNEL,
 ): Promise<PixlMembershipResult> {
   try {
     const result = await client.conversations.invite({
-      channel: PIXL_MAIN_CHANNEL,
+      channel,
       users: slackUserId,
     });
     if (result.ok === true) return { kind: "joined" };

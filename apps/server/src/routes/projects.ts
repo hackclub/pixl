@@ -6,6 +6,7 @@ import { findAllInYswsArchive } from "../ysws/archive.js";
 import { buildDoubleDip, type TeamMember } from "../ysws/doubleDip.js";
 import { fetchHackatimeStats, fetchTrackedSecondsBetween, fetchTrackedSecondsSince, HACKATIME_CUTOFF } from "../hackatime/api.js";
 import { dmReviewerOfResubmit, postShipToSlack } from "../shipNotify.js";
+import { enrollSlackPlayerInReviewChannel } from "../pixlSlack.js";
 import {
   shipEligibilityBlock,
   MANUAL_ELIGIBILITY_OVERRIDE_USER_IDS,
@@ -908,6 +909,9 @@ router.post("/api/projects/:id/ship", async (req, res) => {
     `"${project.name}" is in the review queue. You'll hear back here once it's reviewed.`,
   );
   void postShipToSlack(data, ownerSlackId, trackedSeconds, isUpdate);
+  // First-ever ship: add them to the public review channel. Idempotent on the
+  // bot side (already_in_channel is fine), so a retry after a failure is safe.
+  if (!project.first_shipped_at && ownerSlackId) void enrollSlackPlayerInReviewChannel(ownerSlackId);
   if (project.status === "needs_changes" && project.notify_reviewer_slack_id)
     void dmReviewerOfResubmit(project.notify_reviewer_slack_id as string, data);
   res.json({ ok: true, project: toPlayerProject(data) });
