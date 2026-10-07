@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { requireReportViewer, getAccess } from "@/lib/guard";
+import { getLiveMode } from "@/lib/liveModeServer";
+import { LiveBlocked } from "@/app/_components/LiveBlocked";
 import { listReports, listReportViewers, listModerators } from "@/lib/db";
 import {
   addReportViewerAction,
@@ -36,6 +38,7 @@ export default async function ReportsPage({
   searchParams: Promise<{ status?: string; verror?: string }>;
 }) {
   const session = await requireReportViewer();
+  if (await getLiveMode()) return <LiveBlocked what="Reports" />;
   const { status, verror } = await searchParams;
   const [all, viewers, moderators, access] = await Promise.all([
     listReports(500),

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requirePagePerm, canView } from "@/lib/guard";
 import { getLiveMode } from "@/lib/liveModeServer";
+import { LiveBlocked } from "@/app/_components/LiveBlocked";
 import { liveName } from "@/lib/liveMode";
 import { listBans, listBanLog, listBanProposals, banIsActive } from "@/lib/db";
 import { LiftBanForm } from "@/app/_components/Moderate";
@@ -26,6 +27,7 @@ export default async function BansPage({
 }) {
   const access = await requirePagePerm(["warn", "ban"]);
   const live = await getLiveMode();
+  if (live) return <LiveBlocked what="Bans" reason="This page is internal moderation data" />;
   const canConfirm = canView(access, ["ban"]);
   const { tab } = await searchParams;
   const active = tab === "logs" ? "logs" : tab === "proposed" ? "proposed" : "bans";
