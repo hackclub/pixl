@@ -9,7 +9,8 @@ import {
 import { slackHandles } from "@/lib/slack";
 import { hackatimeUserIdsFor } from "@/lib/hackatime";
 import { listBlackoutQueueProjectIds } from "@/lib/operations";
-import { getLiveMode } from "@/lib/liveModeServer";
+import { getLiveMode, getHideReviewers } from "@/lib/liveModeServer";
+import { reviewerName } from "@/lib/liveMode";
 import { ReviewTable } from "@/app/_components/ReviewTable";
 import { LiveReview } from "@/app/_components/LiveReview";
 import { Badge } from "@/components/ui/badge";
@@ -84,17 +85,30 @@ export default async function ReviewListPage({
   const cur = Math.min(Math.max(parseInt(page ?? "1", 10) || 1, 1), pages);
   const start = (cur - 1) * PER;
   const slice = rows.slice(start, start + PER);
+  // While live (names not revealed), other reviewers' names never leave the
+  // server: their claim isn't resolved to a Slack handle and first_pass_by is
+  // masked before the rows reach ReviewTable's client props.
+  const hideReviewers = await getHideReviewers();
+  const claimId = (id: string | null | undefined) => (hideReviewers && id !== viewer ? null : id);
+  const masked = <T extends { first_pass_by?: string | null }>(list: T[]): T[] =>
+    hideReviewers
+      ? list.map((p) =>
+          p.first_pass_by && reviewerName(p.first_pass_by, viewer, true) === "Reviewer"
+            ? { ...p, first_pass_by: "Reviewer" }
+            : p,
+        )
+      : list;
   // claimedBy is another reviewer's slack id, resolved through the same map
   // the maker column uses so the "being reviewed" tag can name them.
   const [finalHandles, spotCheckHandles, handles, finalHackatimeUserIds, spotCheckHackatimeUserIds] =
     await Promise.all([
       finalRows.length
-        ? slackHandles(finalRows.flatMap((p) => [p.users?.slack_id, p.claimedBy]))
+        ? slackHandles(finalRows.flatMap((p) => [p.users?.slack_id, claimId(p.claimedBy)]))
         : Promise.resolve(new Map<string, string>()),
       spotCheckRows.length
-        ? slackHandles(spotCheckRows.flatMap((p) => [p.users?.slack_id, p.claimedBy]))
+        ? slackHandles(spotCheckRows.flatMap((p) => [p.users?.slack_id, claimId(p.claimedBy)]))
         : Promise.resolve(new Map<string, string>()),
-      slackHandles(slice.flatMap((p) => [p.users?.slack_id, p.claimedBy])),
+      slackHandles(slice.flatMap((p) => [p.users?.slack_id, claimId(p.claimedBy)])),
       hackatimeUserIdsFor(finalRows),
       hackatimeUserIdsFor(spotCheckRows),
     ]);
@@ -146,7 +160,7 @@ export default async function ReviewListPage({
               Show {finalRows.length} project{finalRows.length === 1 ? "" : "s"} awaiting Robert
             </summary>
             <ReviewTable
-              rows={finalRows}
+              rows={masked(finalRows)}
               handles={finalHandles}
               hackatimeUserIds={finalHackatimeUserIds}
               blackoutIds={blackoutIds}
@@ -175,7 +189,7 @@ export default async function ReviewListPage({
               Show {spotCheckRows.length} project{spotCheckRows.length === 1 ? "" : "s"} awaiting spot check
             </summary>
             <ReviewTable
-              rows={spotCheckRows}
+              rows={masked(spotCheckRows)}
               handles={spotCheckHandles}
               hackatimeUserIds={spotCheckHackatimeUserIds}
               blackoutIds={blackoutIds}
@@ -225,7 +239,7 @@ export default async function ReviewListPage({
       </div>
 
       <ReviewTable
-        rows={slice}
+        rows={masked(slice)}
         handles={handles}
         blackoutIds={blackoutIds}
         emptyLabel="Queue's clear. Nothing waiting for review."

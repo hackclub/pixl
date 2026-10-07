@@ -79,9 +79,9 @@ export function ReviewVerdictChart({ windows }: { windows: VerdictWindow[] }) {
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {w.reviewerList.map((r) => (
+                  {w.reviewerList.map((r, i) => (
                     <span
-                      key={r.name}
+                      key={`${r.name}-${i}`}
                       className="inline-flex items-center gap-1.5 rounded-full bg-muted px-3 py-1 text-sm"
                       title={`${r.name}: ${r.reviews} review${r.reviews === 1 ? "" : "s"}`}
                     >

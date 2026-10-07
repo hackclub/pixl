@@ -49,8 +49,9 @@ import { ReviewHeartbeat } from "@/app/_components/ReviewHeartbeat";
 import { ProjectNotes } from "@/app/_components/ProjectNotes";
 import { LevelBadge, TypeBadge, ShipBadges, StatusBadge, BeaconBadge, FundingBadge } from "@/app/_components/ProjectBadges";
 import { slackHandle } from "@/lib/slack";
-import { getLiveMode } from "@/lib/liveModeServer";
-import { liveAlias, redactBuilderDetails } from "@/lib/liveMode";
+import { getLiveMode, getHideReviewers } from "@/lib/liveModeServer";
+import { ShowReviewerNames } from "@/app/_components/ShowReviewerNames";
+import { liveAlias, redactBuilderDetails, reviewerName } from "@/lib/liveMode";
 import { unshipWarning } from "@/lib/unship";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -126,6 +127,11 @@ export default async function ReviewDetail({
   // Live mode (screen-share safe): builder identity is swapped out here on the
   // server, so none of it reaches the browser. See lib/liveMode.ts.
   const live = await getLiveMode();
+  // While live, other reviewers' names are "Reviewer" unless revealed with
+  // the Show reviewer names button (the viewer's own name always shows).
+  const hideReviewers = await getHideReviewers();
+  const rn = (label: string | null | undefined, fallback?: string) =>
+    reviewerName(label, viewer, hideReviewers, fallback);
 
   // getProject and listCollaboratorsForProject don't depend on each other
   // (the latter only needs projectId), so they run together instead of one
@@ -201,7 +207,8 @@ export default async function ReviewDetail({
           .gt("ends_at", shippedAt)
       : Promise.resolve({ data: [] as { id: number; name: string; config: Record<string, unknown> }[] }),
   ]);
-  const claimHandle = !claim.ok && claim.by ? await slackHandle(claim.by) : null;
+  const claimHandle =
+    !claim.ok && claim.by && rn(claim.by) !== "Reviewer" ? await slackHandle(claim.by) : null;
 
   const hackatimeProjects = p.hackatime_projects ?? [];
   // approved_hours is a reviewer's per-entry deflation set from the Journals
@@ -436,6 +443,7 @@ export default async function ReviewDetail({
         <Link href="/review" className="text-sm text-brand font-medium hover:underline">
           ← Needs review
         </Link>
+        {live && <ShowReviewerNames hidden={hideReviewers} />}
       </div>
 
       {error && (
@@ -446,7 +454,7 @@ export default async function ReviewDetail({
       {!claim.ok && (
         <Alert className="mt-4 border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10">
           <AlertDescription className="text-amber-800 dark:text-amber-300">
-            Heads up , {claimHandle ?? claim.by ?? "another reviewer"} is already reviewing this
+            Heads up , {claimHandle ?? (claim.by && rn(claim.by) !== "Reviewer" ? claim.by : "another reviewer")} is already reviewing this
             submission. Avoid double-grading it.
           </AlertDescription>
         </Alert>
@@ -877,7 +885,13 @@ export default async function ReviewDetail({
             commits={commits}
             journals={journals}
             contributorNames={contributorNames}
-            reviewAudits={reviewAudits}
+            reviewAudits={
+              // Masked on the server so hidden reviewers' names never reach
+              // the client props (see hideReviewers above).
+              hideReviewers
+                ? reviewAudits.map((a) => (rn(a.reviewer) === "Reviewer" ? { ...a, reviewer: "Reviewer" } : a))
+                : reviewAudits
+            }
             yswsShips={yswsShips}
             yswsImport={
               p.imported_from_ysws
@@ -910,7 +924,7 @@ export default async function ReviewDetail({
                   {p.hold_reason || "No reason given."}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Held by {p.hold_by || "a super admin"}
+                  Held by {rn(p.hold_by, "a super admin")}
                   {p.hold_at ? ` on ${new Date(p.hold_at).toLocaleString()}` : ""}.
                 </p>
                 {(access.isSuper || heldByMe) && (
@@ -933,7 +947,7 @@ export default async function ReviewDetail({
             {spotCheckStage && p.second_pass_note && (
               <Card className="p-4 text-sm gap-1">
                 <div className="font-semibold text-foreground">
-                  Fraud triage note ({p.second_pass_by || "a reviewer"})
+                  Fraud triage note ({rn(p.second_pass_by, "a reviewer")})
                 </div>
                 <p className="text-xs text-muted-foreground whitespace-pre-wrap">{p.second_pass_note}</p>
               </Card>
@@ -1071,7 +1085,7 @@ export default async function ReviewDetail({
                         : p.first_pass_verdict === "needs_changes"
                           ? "Changes proposed by "
                           : "Passed by "}
-                      <span className="font-medium text-foreground">{p.first_pass_by || "a reviewer"}</span>
+                      <span className="font-medium text-foreground">{rn(p.first_pass_by, "a reviewer")}</span>
                       {p.first_pass_hours != null && (
                         <>
                           {" "}

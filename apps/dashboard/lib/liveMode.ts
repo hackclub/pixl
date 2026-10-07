@@ -51,3 +51,26 @@ export function liveName(
   if (!live) return realName ?? "";
   return user?.display_name || "Player";
 }
+
+// Session cookie behind the "Show reviewer names" button: while live, other
+// reviewers' names are hidden unless this is "1". setLiveMode clears it, so
+// every new live session starts hidden again.
+export const LIVE_SHOW_REVIEWERS_COOKIE = "pixl_live_show_reviewers";
+
+/** Display name for a reviewer label, either an actorName()-style
+ * "Name (SlackID)" or a bare Slack id. When `hide` is on (live mode, names
+ * not revealed) anyone but the viewer becomes "Reviewer"; a label with no
+ * Slack id can't be proven to be the viewer, so it's hidden too. */
+export function reviewerName(
+  label: string | null | undefined,
+  viewerSlackId: string,
+  hide: boolean,
+  fallback = "Reviewer",
+): string {
+  if (!label) return fallback;
+  const suffix = label.match(/\(([^)]+)\)\s*$/);
+  const name = label.replace(/\s*\([^)]*\)\s*$/, "");
+  if (!hide) return name || fallback;
+  const id = suffix ? suffix[1] : /^U[A-Z0-9_]+$/.test(label) ? label : "";
+  return id && id === viewerSlackId ? name : "Reviewer";
+}

@@ -60,6 +60,8 @@ export default async function Overview({
       pixels: showPixels,
       payouts: showPixels,
       limit: 8,
+      // Live mode: no staff or player names in the feed (yours still shows).
+      maskNames: live ? { viewer: access.session.slackId } : undefined,
     }),
   ]);
 

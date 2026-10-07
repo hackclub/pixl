@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { LIVE_MODE_COOKIE } from "@/lib/liveMode";
+import { LIVE_MODE_COOKIE, LIVE_SHOW_REVIEWERS_COOKIE } from "@/lib/liveMode";
 import { unshipResetFields, UNSHIPPABLE_STATUSES } from "@/lib/unship";
 import {
   config,
@@ -2865,6 +2865,19 @@ export async function setLiveMode(formData: FormData): Promise<void> {
   const on = formData.get("on") === "1";
   const jar = await cookies();
   jar.set(LIVE_MODE_COOKIE, on ? "1" : "0", { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 12 });
+  // Every new live session starts with other reviewers' names hidden again.
+  jar.delete(LIVE_SHOW_REVIEWERS_COOKIE);
+  revalidatePath("/", "layout");
+}
+
+// The "Show reviewer names" button: while live, reveals (or re-hides) other
+// reviewers' names. A session cookie, cleared again by setLiveMode.
+export async function setShowReviewerNames(formData: FormData): Promise<void> {
+  if (!(await getAccess())) throw new Error("Not signed in");
+  const show = formData.get("show") === "1";
+  const jar = await cookies();
+  if (show) jar.set(LIVE_SHOW_REVIEWERS_COOKIE, "1", { httpOnly: true, sameSite: "lax", path: "/" });
+  else jar.delete(LIVE_SHOW_REVIEWERS_COOKIE);
   revalidatePath("/", "layout");
 }
 

@@ -1,4 +1,6 @@
 import { requirePagePerm, requireGuidelinesAck } from "@/lib/guard";
+import { getHideReviewers } from "@/lib/liveModeServer";
+import { reviewerName } from "@/lib/liveMode";
 import { db, payoutTotalsBySlackId, type ReviewAuditRow } from "@/lib/db";
 import { Card } from "@/components/ui/card";
 import {
@@ -37,6 +39,11 @@ function fmtDur(secs: number): string {
 export default async function ReviewStatsPage() {
   const access = await requirePagePerm(["review"]);
   await requireGuidelinesAck(access);
+  // While live, other reviewers show as "Reviewer" (Show reviewer names
+  // button in the tab bar reveals them); masked here on the server so the
+  // real names never reach the chart's client props.
+  const hideReviewers = await getHideReviewers();
+  const rn = (label: string) => reviewerName(label, access.session.slackId, hideReviewers);
   const [{ data, error }, payoutTotals] = await Promise.all([
     db.from("review_audits").select("*").order("created_at", { ascending: false }).limit(2000),
     payoutTotalsBySlackId(),
@@ -68,7 +75,7 @@ export default async function ReviewStatsPage() {
   const verdictWindows: VerdictWindow[] = windowDefs.map((w) => ({
     key: w.key,
     label: w.label,
-    ...summarizeWindow(audits, w.since),
+    ...summarizeWindow(audits, w.since, rn),
   }));
 
   const byReviewer = new Map<string, ReviewAuditRow[]>();
@@ -146,9 +153,9 @@ export default async function ReviewStatsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {stats.map((s) => (
-                <TableRow key={s.reviewer} className="hover:bg-transparent">
-                  <TableCell className="p-3 font-medium break-words">{s.reviewer}</TableCell>
+              {stats.map((s, i) => (
+                <TableRow key={hideReviewers ? i : s.reviewer} className="hover:bg-transparent">
+                  <TableCell className="p-3 font-medium break-words">{rn(s.reviewer)}</TableCell>
                   <TableCell className="p-3 tabular-nums">{s.total}</TableCell>
                   <TableCell className="p-3 tabular-nums text-hc-green font-medium">{s.approved}</TableCell>
                   <TableCell className="p-3 tabular-nums">{s.firstPass}</TableCell>
