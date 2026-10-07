@@ -127,7 +127,7 @@ const Pixl = (() => {
     document.documentElement.dataset.theme = "light";
   }
 
-  // Phantom Sans toggle (the "Aa" rail button), applied this early for the
+  // Phantom Sans toggle (the "Phantom Sans" rail button), applied this early for the
   // same no-flash reason as the theme. pixl_font is shared with the landing
   // page and the React web shell, which all live on this origin.
   try {
@@ -569,7 +569,7 @@ const Pixl = (() => {
         <button class="theme-toggle" id="pixl-theme-btn" type="button" title="Change theme" aria-expanded="false"></button>
         <div class="theme-menu" id="pixl-theme-menu" hidden></div>
       </div>`;
-    const fontBtn = `<button class="rail-btn font-toggle" id="pixl-font-btn" type="button" title="Switch to Phantom Sans" aria-label="Phantom Sans font" aria-pressed="${isPhantom()}">Aa</button>`;
+    const fontBtn = `<button class="rail-btn font-toggle" id="pixl-font-btn" type="button" title="Switch to Phantom Sans" aria-label="Phantom Sans font" aria-pressed="${isPhantom()}">PHANTOM SANS</button>`;
     const rail = token
       ? `<div class="rest-chip" id="pixl-rest" title="Core Integrity: total Restoration Energy earned by the whole community" hidden>
             <span class="slot">${RE_ICON}</span>

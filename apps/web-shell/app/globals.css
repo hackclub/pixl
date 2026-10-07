@@ -395,7 +395,7 @@ audio { display: none; }
 
 /* ── Phantom Sans toggle ──
    Hack Club's typeface (the same files css.hackclub.com/fonts.css serves),
-   switched on by the "Aa" rail button and stored as pixl_font, shared with the
+   switched on by the "Phantom Sans" rail button and stored as pixl_font, shared with the
    landing page and the React web shell since they're all on one origin.
    The font files only download once the toggle is on. Code stays monospace. */
 @font-face{
@@ -421,3 +421,5 @@ html[data-font="phantom"] body *:not(code,pre,kbd,samp,code *,pre *){
   font-family:"Phantom Sans",system-ui,sans-serif !important;
 }
 .rail-btn[aria-pressed="true"]{background:var(--ink);color:var(--panel)}
+/* Rail buttons are 32px icon squares; this one carries a text label. */
+.rail-btn.font-toggle{width:auto;padding:0 10px;font-size:12px;letter-spacing:.5px;white-space:nowrap}
