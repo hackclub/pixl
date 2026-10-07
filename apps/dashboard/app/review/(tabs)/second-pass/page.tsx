@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { requirePagePerm, requireGuidelinesAck } from "@/lib/guard";
 import { listSecondReviewProjects } from "@/lib/db";
 import { slackHandles } from "@/lib/slack";
+import { getHideReviewers } from "@/lib/liveModeServer";
 import { hackatimeUserIdsFor } from "@/lib/hackatime";
 import { listBlackoutQueueProjectIds } from "@/lib/operations";
 import { ReviewTable } from "@/app/_components/ReviewTable";
@@ -21,11 +22,17 @@ export default async function SecondPassPage() {
   if (!access.canSecondPass) redirect("/review");
 
   const [rows, blackoutIds] = await Promise.all([
-    listSecondReviewProjects(access.session.slackId),
+    // includeClaimed: a project another reviewer has open stays listed (tagged), like /review.
+    listSecondReviewProjects(access.session.slackId, undefined, { includeClaimed: true }),
     listBlackoutQueueProjectIds(),
   ]);
+  // While live (names not revealed), another reviewer's claim isn't resolved to a handle.
+  const hideReviewers = await getHideReviewers();
   const [handles, hackatimeUserIds] = await Promise.all([
-    slackHandles(rows.map((p) => p.users?.slack_id)),
+    slackHandles(rows.flatMap((p) => [
+        p.users?.slack_id,
+        hideReviewers && p.claimedBy !== access.session.slackId ? null : p.claimedBy,
+      ])),
     hackatimeUserIdsFor(rows),
   ]);
 
