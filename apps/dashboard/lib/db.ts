@@ -1438,6 +1438,31 @@ export async function creditReviewerPixels(
   return "credited";
 }
 
+// Takes back a reviewer payout that was already credited (the counterpart of
+// creditReviewerPixels), leaving the reversal in the pixel ledger. Returns false
+// when there's no linked account or the debit failed.
+export async function debitReviewerPixels(slackId: string, amount: number): Promise<boolean> {
+  if (!slackId || amount <= 0) return false;
+  const { data: user } = await db
+    .from("users")
+    .select("id")
+    .eq("slack_id", slackId)
+    .limit(1)
+    .maybeSingle();
+  if (!user?.id) return false;
+  const { error } = await db.rpc("adjust_user_pixels", {
+    p_user_id: user.id,
+    p_amount: -amount,
+    p_reason: "review_payout_voided",
+    p_created_by: "payout system",
+  });
+  if (error) {
+    console.error("debitReviewerPixels", error.message);
+    return false;
+  }
+  return true;
+}
+
 // Same shape as creditReviewerPixels above, for the flat fulfillment payout
 // (see shipOrder in app/actions.ts) - a separate function (not a shared one
 // with a reason param) matches how creditProjectPixels/creditReviewerPixels

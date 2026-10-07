@@ -1299,8 +1299,8 @@ export default async function ReviewDetail({
                         <Label className="flex items-start gap-2 text-sm py-0.5 font-normal">
                           <Checkbox name="voidPayout" value="1" className="mt-0.5" />
                           <span>
-                            This was the first-pass reviewer&apos;s mistake , void their pending payout
-                            instead of paying it in full
+                            This was the first-pass reviewer&apos;s mistake , void their payout and take
+                            the pixels back instead of keeping it
                           </span>
                         </Label>
                         <PendingButton
@@ -1415,8 +1415,8 @@ export default async function ReviewDetail({
                   <Label className="flex items-start gap-2 text-sm py-0.5 font-normal">
                     <Checkbox name="voidPayout" value="1" className="mt-0.5" />
                     <span>
-                      This was the first-pass reviewer&apos;s mistake , void their pending payout instead
-                      of paying it in full
+                      This was the first-pass reviewer&apos;s mistake , void their payout and take the
+                      pixels back instead of keeping it
                     </span>
                   </Label>
                   <PendingButton

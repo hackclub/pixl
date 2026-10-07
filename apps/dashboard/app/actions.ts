@@ -33,6 +33,7 @@ import {
   projectPixelTotal,
   lifetimeRe,
   creditReviewerPixels,
+  debitReviewerPixels,
   creditFulfillerPixels,
   type CreditReviewerResult,
   activeDashEvents,
@@ -437,13 +438,43 @@ async function settleFirstPassPayouts(projectId: number, projectName: string): P
 }
 
 // A first-pass approval pays immediately now (see reviewProject), so a later
-// needs_changes/ban verdict never claws it back - this only ever finds a row
-// to void for a legacy pending payout from before that change, or one
-// sendBackToFirstPass explicitly left pending. No-op otherwise.
+// needs_changes/ban verdict never claws it back and those callers only void
+// legacy pending rows. The send-back / unship "this was the first-pass
+// reviewer's mistake" box passes clawBackPaid, which also voids the already
+// paid first-pass approval and takes the credited pixels back.
 async function voidFirstPassPayouts(
   projectId: number,
   reason = "sent back for a redo before a final verdict",
+  opts: { clawBackPaid?: boolean } = {},
 ): Promise<void> {
+  if (opts.clawBackPaid) {
+    const { data: paid } = await db
+      .from("review_payouts")
+      .select("id, reviewer_slack_id, paid_pixels, credited")
+      .eq("project_id", projectId)
+      .eq("verdict", "first_pass_approved")
+      .eq("status", "paid");
+    for (const row of paid ?? []) {
+      // Guarded on still being paid so a double submit can't debit twice.
+      const { data: claimed } = await db
+        .from("review_payouts")
+        .update({
+          status: "voided",
+          paid_pixels: 0,
+          cut_pct: 100,
+          cut_reason: reason,
+          settled_at: new Date().toISOString(),
+        })
+        .eq("id", row.id)
+        .eq("status", "paid")
+        .select("id");
+      if (!claimed || claimed.length === 0) continue;
+      const amount = Number(row.paid_pixels) || 0;
+      if (!row.credited || amount <= 0) continue;
+      if (!(await debitReviewerPixels(row.reviewer_slack_id, amount)))
+        console.error("voidFirstPassPayouts: could not claw back", row.id, row.reviewer_slack_id, amount);
+    }
+  }
   const { error } = await db
     .from("review_payouts")
     .update({
@@ -2067,7 +2098,8 @@ export async function sendBackToFirstPass(formData: FormData): Promise<void> {
     return;
   }
 
-  if (voidPayout) await voidFirstPassPayouts(projectId);
+  if (voidPayout)
+    await voidFirstPassPayouts(projectId, "first-pass reviewer's mistake", { clawBackPaid: true });
   else await settleFirstPassPayouts(projectId, project.name);
 
   const claimedHours = await claimedHoursFor(projectId);
@@ -2133,7 +2165,8 @@ export async function unshipProject(formData: FormData): Promise<void> {
     return;
   }
 
-  if (voidPayout) await voidFirstPassPayouts(projectId);
+  if (voidPayout)
+    await voidFirstPassPayouts(projectId, "first-pass reviewer's mistake", { clawBackPaid: true });
   else await settleFirstPassPayouts(projectId, project.name);
 
   const claimedHours = await claimedHoursFor(projectId);
