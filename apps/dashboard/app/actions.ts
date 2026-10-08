@@ -1635,7 +1635,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
   // A Trial ship holds its pixels until the maker picks, so the post says that
   // instead of claiming pixels were granted.
   const trialHeld = holdForTrial && trialChoice !== "item";
-  await announceReview({
+  const approvalPosted = await announceReview({
     kind: "final",
     projectId,
     projectName: project.name,
@@ -1650,6 +1650,11 @@ export async function reviewProject(formData: FormData): Promise<void> {
       : undefined,
     fallback: finalFallback,
   });
+  // The public post is the announcement; the detailed breakdown (hours
+  // approved, pixels, rate, RE) still goes to each player by DM. When the post
+  // failed, announceReview already sent these same DMs as its fallback.
+  if (approvalPosted)
+    for (const f of finalFallback) await dmOrEmail(f.userId, f.title, f.body);
   await logModAction(
     project.user_id,
     "project_approved",
