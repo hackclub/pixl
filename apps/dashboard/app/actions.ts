@@ -5106,11 +5106,14 @@ export async function shipOrder(formData: FormData): Promise<void> {
     .eq("status", "credited");
   if (error) throw new Error(error.message);
 
+  // Slack renders <#ID> as a channel link in the DM, but the in-app
+  // notification is plain text, so it names the channel instead.
   const showOffLine = "Show it off in <#C07UMRYJ1LH> when it arrives, we'd love to see it! 🎉";
+  const showOffLineInApp = "Show it off in #treasure-cove when it arrives, we'd love to see it! 🎉";
   await db.from("notifications").insert({
     user_id: order.user_id,
     title: "Order shipped! 📦",
-    body: `Your "${order.item_name}" order shipped. Tracking: ${tracking}\n\n${showOffLine}`,
+    body: `Your "${order.item_name}" order shipped. Tracking: ${tracking}\n\n${showOffLineInApp}`,
   });
   // DM the tracking number to the buyer through Pixo. Best-effort , a missing
   // Slack link shouldn't block shipping, and the in-game notification still lands.
