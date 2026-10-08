@@ -68,7 +68,10 @@ router.get("/api/sidequests", async (req, res) => {
       const g = giverBySq.get(q.id as number);
       return {
         ...q,
-        unlocked: unlockMap.has(q.id as number),
+        // A completed Trial is always unlocked, even with no sidequest_unlocks
+        // row - a project can be linked to a Trial from the project form
+        // without ever accepting it from the NPC.
+        unlocked: unlockMap.has(q.id as number) || completed.has(q.id as number),
         unlocked_at: unlockMap.get(q.id as number) || null,
         completed: completed.has(q.id as number),
         // Giver look + reminder for the village check-in copy (falls back to the
