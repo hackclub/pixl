@@ -4917,13 +4917,13 @@ export async function claimOrder(formData: FormData): Promise<void> {
     .eq("id", id)
     .eq("status", "pending");
   if (error) throw new Error(error.message);
+  // In-app only: the player is DMed once, when the order ships (shipOrder).
   const placedBody = `Your "${order.item_name}" order has been placed and is being fulfilled. We'll let you know when it ships.`;
   await db.from("notifications").insert({
     user_id: order.user_id,
     title: "Order placed! 📦",
     body: placedBody,
   });
-  await dmOrEmail(order.user_id, "Order placed! 📦", placedBody);
   await logOrderAction(id, "order_claimed", "claimed and placed", actorName(access), order);
   revalidatePath("/fulfillment");
 }
