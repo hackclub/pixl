@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { buildReviewMessage, escapeMrkdwn, reviewerToTag, slackLinkUrl } from "./reviewChannel";
+import { buildReviewMessage, escapeMrkdwn, reviewerToTag } from "./reviewChannel";
 
 const base = {
   playerSlackIds: ["U0AAAAAAAA"],
@@ -37,6 +37,4 @@ test("opting out of being named tags Gabin instead", () => {
 
 test("escaping helpers", () => {
   expect(escapeMrkdwn("a & <b>")).toBe("a &amp; &lt;b&gt;");
-  expect(slackLinkUrl("javascript:alert(1)")).toBeNull();
-  expect(slackLinkUrl("https://a.com/?x=1&y=<2>|3")).toBe("https://a.com/?x=1&amp;y=%3C2%3E%7C3");
 });

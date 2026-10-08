@@ -9,6 +9,8 @@ import { dmUser } from "@/lib/slack";
 
 const GABIN_SLACK_ID = "U0A2SJ7B739";
 const PIXORPHEUS_URL = (process.env.PIXORPHEUS_URL ?? "https://pixo.pixl.rsvp").replace(/\/+$/, "");
+// The player-facing project page on the game site (served by apps/game).
+const PROJECT_PAGE_URL = "https://play.pixl.hackclub.com/project";
 const SLACK_ID_RE = /^[UW][A-Z0-9]{5,20}$/;
 
 export type ReviewAnnouncementKind = "changes" | "first_pass" | "final";
@@ -18,7 +20,7 @@ export interface ReviewMessageInput {
   /** Slack ids to greet: the owner first, then any accepted collaborators. */
   playerSlackIds: string[];
   projectName: string;
-  /** Already a safe http(s) url for Slack, or null for a plain name. */
+  /** Link for the project name, or null for a plain bold name. */
   projectUrl: string | null;
   note: string;
   reviewerSlackId: string;
@@ -30,17 +32,6 @@ export interface ReviewMessageInput {
 
 export function escapeMrkdwn(text: string): string {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-export function slackLinkUrl(raw: string | null | undefined): string | null {
-  if (!raw) return null;
-  try {
-    const u = new URL(raw);
-    if (u.protocol !== "https:" && u.protocol !== "http:") return null;
-    return u.href.replace(/&/g, "&amp;").replace(/</g, "%3C").replace(/>/g, "%3E").replace(/\|/g, "%7C");
-  } catch {
-    return null;
-  }
 }
 
 function quote(note: string): string {
@@ -144,16 +135,11 @@ export async function announceReview(a: ReviewAnnouncement): Promise<boolean> {
       const collabSlackIds = a.collaboratorIds
         .map((id) => slackById.get(id) ?? "")
         .filter((id) => SLACK_ID_RE.test(id));
-      const { data: project } = await db
-        .from("projects")
-        .select("demo_url, repo_url")
-        .eq("id", a.projectId)
-        .maybeSingle();
       const message = buildReviewMessage({
         kind: a.kind,
         playerSlackIds: [ownerSlackId, ...collabSlackIds],
         projectName: a.projectName,
-        projectUrl: slackLinkUrl(project?.demo_url) ?? slackLinkUrl(project?.repo_url),
+        projectUrl: `${PROJECT_PAGE_URL}/${a.projectId}`,
         note: a.note,
         reviewerSlackId: reviewerToTag(a.reviewerSlackId, a.revealName),
         pixels: a.pixels,
