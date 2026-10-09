@@ -4260,6 +4260,7 @@ export async function addShopItem(formData: FormData): Promise<void> {
       .from("shop_items")
       .select("id")
       .eq("name", name)
+      .is("reserved_user_id", null)
       .eq("region", region)
       .gte("created_at", cutoff)
       .limit(1);
@@ -4374,6 +4375,7 @@ export async function updateShopItem(formData: FormData): Promise<void> {
       .from("shop_items")
       .select("id")
       .eq("name", gateName)
+      .is("reserved_user_id", null)
       .eq("unlock_xp", 0)
       .neq("id", id);
     for (const s of siblings ?? []) affectedIds.push(s.id as number);
@@ -4424,6 +4426,7 @@ export async function updateShopItem(formData: FormData): Promise<void> {
     .from("shop_items")
     .update({ unlock_trial_ids: unlockTrials })
     .eq("name", gateName)
+    .is("reserved_user_id", null)
     .eq("unlock_xp", 0);
   if (gateErr) console.error("updateShopItem (trial gate)", gateErr.message);
 
@@ -4432,6 +4435,7 @@ export async function updateShopItem(formData: FormData): Promise<void> {
     .from("shop_items")
     .update({ manual_locked: manualLocked, lock_note: lockNote })
     .eq("name", gateName)
+    .is("reserved_user_id", null)
     .eq("unlock_xp", 0);
   if (lockErr) console.error("updateShopItem (manual lock)", lockErr.message);
 
@@ -4440,6 +4444,7 @@ export async function updateShopItem(formData: FormData): Promise<void> {
     .from("shop_items")
     .update({ beacon_locked: beaconLocked })
     .eq("name", gateName)
+    .is("reserved_user_id", null)
     .eq("unlock_xp", 0);
   if (beaconErr) console.error("updateShopItem (beacon lock)", beaconErr.message);
 
@@ -4449,6 +4454,7 @@ export async function updateShopItem(formData: FormData): Promise<void> {
     .from("shop_items")
     .update({ discount_percent: discountPercent })
     .eq("name", gateName)
+    .is("reserved_user_id", null)
     .eq("unlock_xp", 0);
   if (discountErr) console.error("updateShopItem (discount)", discountErr.message);
 
@@ -4457,6 +4463,7 @@ export async function updateShopItem(formData: FormData): Promise<void> {
       .from("shop_items")
       .update({ name, description, category })
       .eq("name", originalName)
+      .is("reserved_user_id", null)
       .eq("unlock_xp", 0)
       .neq("id", id);
     if (propErr) throw new Error(propErr.message);
@@ -4480,6 +4487,7 @@ export async function updateShopItem(formData: FormData): Promise<void> {
         .from("shop_items")
         .select("id, price, config_options")
         .eq("name", originalName)
+        .is("reserved_user_id", null)
         .eq("unlock_xp", 0)
         .neq("id", id);
       if (siblingsErr) {
@@ -4546,6 +4554,7 @@ export async function updateShopItemPrices(formData: FormData): Promise<void> {
     .from("shop_items")
     .select("*")
     .eq("name", name)
+    .is("reserved_user_id", null)
     .eq("unlock_xp", 0);
 
   for (const r of SHOP_REGIONS) {
@@ -4564,6 +4573,7 @@ export async function updateShopItemPrices(formData: FormData): Promise<void> {
       .from("shop_items")
       .update(patch)
       .eq("name", name)
+      .is("reserved_user_id", null)
       .eq("region", r)
       .eq("unlock_xp", 0);
     if (error) console.error("updateShopItemPrices", r, error.message);
@@ -4573,6 +4583,7 @@ export async function updateShopItemPrices(formData: FormData): Promise<void> {
     .from("shop_items")
     .select("*")
     .eq("name", name)
+    .is("reserved_user_id", null)
     .eq("unlock_xp", 0);
   await notifyShopUpdates(
     (before ?? []) as ShopRowSnapshot[],
@@ -4673,6 +4684,7 @@ export async function updateShopItemRegionDetails(formData: FormData): Promise<v
     .from("shop_items")
     .select("*")
     .eq("name", name)
+    .is("reserved_user_id", null)
     .eq("unlock_xp", 0);
 
   for (const r of SHOP_REGIONS) {
@@ -4722,6 +4734,7 @@ export async function updateShopItemRegionDetails(formData: FormData): Promise<v
       .from("shop_items")
       .update(patch)
       .eq("name", name)
+      .is("reserved_user_id", null)
       .eq("region", r)
       .eq("unlock_xp", 0);
     if (error) console.error("updateShopItemRegionDetails", r, error.message);
@@ -4732,6 +4745,7 @@ export async function updateShopItemRegionDetails(formData: FormData): Promise<v
       .from("shop_items")
       .select("*")
       .eq("name", name)
+      .is("reserved_user_id", null)
       .eq("unlock_xp", 0);
     await notifyShopUpdates(
       (before ?? []) as ShopRowSnapshot[],
@@ -4793,6 +4807,161 @@ export async function deleteShopItem(formData: FormData): Promise<void> {
   revalidatePath("/shop");
 }
 
+// ---- Personal shop items -------------------------------------------------
+// An item made for ONE player (reserved_user_id, see drizzle/0212): it only
+// ever shows up in that player's shop, in whatever region they are in, and
+// can be bought once. It is created hidden; "Activate" is what puts it in
+// their shop. It goes through the normal order/fulfillment pipeline, and it
+// is deliberately never announced in Slack (no notifyShopInsert).
+
+function personalItemError(message: string): never {
+  redirect(`/shop?personalError=${encodeURIComponent(message)}`);
+}
+
+// A player picked by Slack id (U...), or by their exact in-game name when
+// that name is unique.
+async function findPlayerForPersonalItem(
+  raw: string,
+): Promise<{ id: string; display_name: string | null; region: string | null } | null> {
+  const query = raw.trim().replace(/^@/, "");
+  if (!query) return null;
+  const cols = "id, display_name, region";
+  if (/^[UW][A-Z0-9]{5,20}$/.test(query)) {
+    const { data } = await db.from("users").select(cols).eq("slack_id", query).limit(2);
+    return data && data.length === 1 ? data[0] : null;
+  }
+  const { data } = await db.from("users").select(cols).ilike("display_name", query).limit(2);
+  return data && data.length === 1 ? data[0] : null;
+}
+
+export async function createPersonalShopItem(formData: FormData): Promise<void> {
+  const access = await requirePerm("shop");
+  const name = String(formData.get("name") ?? "").trim().slice(0, 60);
+  const description = String(formData.get("description") ?? "").trim().slice(0, 300);
+  const price = Math.round(Number(formData.get("price") ?? 0));
+  const options = readOptions(String(formData.get("options") ?? ""));
+  const playerRaw = String(formData.get("player") ?? "");
+  if (!name) personalItemError("Give the item a name.");
+  if (!Number.isFinite(price) || price <= 0) personalItemError("Price must be a number of pixels above 0.");
+
+  const player = await findPlayerForPersonalItem(playerRaw);
+  if (!player)
+    personalItemError(
+      "Couldn't find exactly one player for that. Use their Slack ID (U...) or their exact in-game name.",
+    );
+
+  let imageUrl = "";
+  const image = formData.get("image");
+  if (image instanceof File && image.size > 0) {
+    if (image.size > 4 * 1024 * 1024) personalItemError("Image too big (max 4 MB).");
+    imageUrl = await uploadShopImage(image);
+  }
+
+  // Double-submit guard: same player + name in the last minute is one click
+  // arriving twice, not a second item.
+  const { data: recent } = await db
+    .from("shop_items")
+    .select("id")
+    .eq("reserved_user_id", player!.id)
+    .eq("name", name)
+    .gte("created_at", new Date(Date.now() - 60_000).toISOString())
+    .limit(1);
+  if (recent && recent.length > 0) {
+    revalidatePath("/shop");
+    return;
+  }
+
+  // The row needs a region (NOT NULL); it only labels the item here, the
+  // server ignores it for personal items so the player sees it wherever they are.
+  const region = readRegion(String(player!.region ?? "US"));
+  const { data: inserted, error } = await db
+    .from("shop_items")
+    .insert({
+      name,
+      description,
+      price,
+      image_url: imageUrl,
+      options,
+      region,
+      category: "other",
+      reserved_user_id: player!.id,
+      active: formData.get("activate") === "1",
+      created_by: actorName(access),
+    })
+    .select("id")
+    .single();
+  if (error || !inserted) personalItemError(error?.message ?? "Couldn't create the item.");
+
+  await logModAction(
+    player!.id,
+    "personal_item_created",
+    `${name}: ${price} px, ${formData.get("activate") === "1" ? "active" : "hidden"}`,
+    actorName(access),
+  );
+  revalidatePath("/shop");
+}
+
+export async function setPersonalShopItemActive(formData: FormData): Promise<void> {
+  const access = await requirePerm("shop");
+  const id = Number(formData.get("id") ?? 0);
+  const active = formData.get("active") === "1";
+  if (!id) return;
+  const { data: item } = await db
+    .from("shop_items")
+    .select("name, reserved_user_id")
+    .eq("id", id)
+    .not("reserved_user_id", "is", null)
+    .maybeSingle();
+  if (!item) return;
+  if (active) {
+    // Bought once already: buy_shop_item would refuse it, so don't put it back
+    // in the player's shop looking buyable.
+    const { data: live } = await db
+      .from("shop_orders")
+      .select("id")
+      .eq("item_id", id)
+      .neq("status", "cancelled")
+      .limit(1);
+    if (live && live.length > 0)
+      personalItemError(`"${item.name}" was already bought, cancel that order first to make it buyable again.`);
+  }
+  const { error } = await db
+    .from("shop_items")
+    .update({ active })
+    .eq("id", id)
+    .not("reserved_user_id", "is", null);
+  if (error) throw new Error(error.message);
+  await logModAction(
+    item.reserved_user_id as string,
+    active ? "personal_item_activated" : "personal_item_hidden",
+    String(item.name),
+    actorName(access),
+  );
+  revalidatePath("/shop");
+}
+
+export async function deletePersonalShopItem(formData: FormData): Promise<void> {
+  const access = await requirePerm("shop");
+  const id = Number(formData.get("id") ?? 0);
+  if (!id) return;
+  const { data: item } = await db
+    .from("shop_items")
+    .select("name, reserved_user_id")
+    .eq("id", id)
+    .not("reserved_user_id", "is", null)
+    .maybeSingle();
+  if (!item) return;
+  // Orders keep pointing at the item for fulfillment history, so one that was
+  // ever ordered is hidden instead of deleted.
+  const { data: orders } = await db.from("shop_orders").select("id").eq("item_id", id).limit(1);
+  if (orders && orders.length > 0)
+    personalItemError(`"${item.name}" has orders on it, hide it instead of deleting it.`);
+  const { error } = await db.from("shop_items").delete().eq("id", id).not("reserved_user_id", "is", null);
+  if (error) throw new Error(error.message);
+  await logModAction(item.reserved_user_id as string, "personal_item_deleted", String(item.name), actorName(access));
+  revalidatePath("/shop");
+}
+
 export interface ShopCsvRow {
   key: string; // stable per-row id assigned client-side, echoed back so results line up
   name: string;
@@ -4816,7 +4985,8 @@ export async function checkShopItemsConflicts(
   const { data, error } = await db
     .from("shop_items")
     .select("id, name, region, price, description")
-    .in("name", names);
+    .in("name", names)
+    .is("reserved_user_id", null);
   if (error) throw new Error(error.message);
   const byKey: Record<string, { id: number; price: number; description: string }> = {};
   for (const row of data ?? []) {

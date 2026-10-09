@@ -2470,6 +2470,10 @@ export interface ShopItemRow {
   // which applies the exact same rounding so the displayed and charged price
   // always match.
   discount_percent: number;
+  // Set on a personal item (created for one specific player, see
+  // createPersonalShopItem in app/actions.ts and drizzle/0212). Those are kept
+  // out of every normal catalog listing and managed from their own section.
+  reserved_user_id?: string | null;
   // Where this row's price was sourced from (a retailer product page, a
   // regional storefront, ...) - see updateShopItemRegionDetails in
   // app/actions.ts and the /shop-detail page. Empty string = not set.
@@ -2511,7 +2515,9 @@ export async function listShopOptionStock(itemIds: number[]): Promise<Map<number
 // Omit `region` to get every item across all regions (used by the events
 // merchant picker, which isn't region-scoped).
 export async function listShopItems(region?: ShopRegion): Promise<ShopItemRow[]> {
-  let query = db.from("shop_items").select("*");
+  // Personal items belong to one player and have their own section, they must
+  // not show up as (or be edited like) a catalog item in any region.
+  let query = db.from("shop_items").select("*").is("reserved_user_id", null);
   if (region) query = query.eq("region", region);
   const { data, error } = await query
     .order("position", { ascending: true })
@@ -2521,6 +2527,54 @@ export async function listShopItems(region?: ShopRegion): Promise<ShopItemRow[]>
     return [];
   }
   return (data ?? []) as ShopItemRow[];
+}
+
+export interface PersonalShopItem extends ShopItemRow {
+  owner: { id: string; display_name: string | null; slack_id: string | null } | null;
+  // The live (non-cancelled) order for this item, if the player already bought
+  // it. A personal item can only be bought once.
+  purchase: { order_id: number; status: string; created_at: string } | null;
+}
+
+// Items created for one specific player (reserved_user_id), newest first, with
+// who they are for and whether the player has already bought them.
+export async function listPersonalShopItems(): Promise<PersonalShopItem[]> {
+  const { data, error } = await db
+    .from("shop_items")
+    .select("*")
+    .not("reserved_user_id", "is", null)
+    .order("id", { ascending: false });
+  if (error) {
+    console.error("listPersonalShopItems", error.message);
+    return [];
+  }
+  const items = (data ?? []) as ShopItemRow[];
+  if (items.length === 0) return [];
+
+  const userIds = [...new Set(items.map((i) => String(i.reserved_user_id)))];
+  const itemIds = items.map((i) => i.id);
+  const [{ data: users }, { data: orders }] = await Promise.all([
+    db.from("users").select("id, display_name, slack_id").in("id", userIds),
+    db
+      .from("shop_orders")
+      .select("id, item_id, status, created_at")
+      .in("item_id", itemIds)
+      .neq("status", "cancelled")
+      .order("id", { ascending: false }),
+  ]);
+  const ownerById = new Map(
+    ((users ?? []) as { id: string; display_name: string | null; slack_id: string | null }[]).map((u) => [u.id, u]),
+  );
+  const purchaseByItem = new Map<number, PersonalShopItem["purchase"]>();
+  for (const o of (orders ?? []) as { id: number; item_id: number; status: string; created_at: string }[]) {
+    if (!purchaseByItem.has(o.item_id))
+      purchaseByItem.set(o.item_id, { order_id: o.id, status: o.status, created_at: o.created_at });
+  }
+  return items.map((i) => ({
+    ...i,
+    owner: ownerById.get(String(i.reserved_user_id)) ?? null,
+    purchase: purchaseByItem.get(i.id) ?? null,
+  }));
 }
 
 export type OrderStatus =

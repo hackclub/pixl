@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requirePagePerm } from "@/lib/guard";
-import { listShopItems, listShopOptionStock, listSidequests, SHOP_REGIONS, SHOP_REGION_LABELS, SHOP_CATEGORIES, SHOP_CATEGORY_LABELS, type ShopRegion } from "@/lib/db";
+import { listShopItems, listPersonalShopItems, listShopOptionStock, listSidequests, SHOP_REGIONS, SHOP_REGION_LABELS, SHOP_CATEGORIES, SHOP_CATEGORY_LABELS, type ShopRegion } from "@/lib/db";
 import { addShopItem, toggleShopItem, deleteShopItem, updateShopItem, updateShopItemPrices } from "@/app/actions";
 import { PendingButton } from "@/app/_components/PendingButton";
 import { Disclosure } from "@/app/_components/Disclosure";
 import { OptionsEditor } from "@/app/_components/OptionsEditor";
 import { AddShopItemForm } from "@/app/_components/AddShopItemForm";
+import { PersonalShopItems } from "@/app/_components/PersonalShopItems";
 import { ShopItemEditConfigurator } from "@/app/_components/ShopItemEditConfigurator";
 import { BulkUploadShopItemsForm } from "@/app/_components/BulkUploadShopItemsForm";
 import { parseOptionGroups } from "@/lib/shopOptions";
@@ -32,10 +33,10 @@ const FILE_INPUT =
 export default async function ShopPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; region?: string; q?: string }>;
+  searchParams: Promise<{ page?: string; region?: string; q?: string; personalError?: string }>;
 }) {
   const access = await requirePagePerm(["shop"]);
-  const { page, region: rawRegion, q } = await searchParams;
+  const { page, region: rawRegion, q, personalError } = await searchParams;
   const region: ShopRegion = (SHOP_REGIONS as readonly string[]).includes(rawRegion ?? "")
     ? (rawRegion as ShopRegion)
     : "US";
@@ -43,10 +44,11 @@ export default async function ShopPage({
   // Trophies (unlock_xp > 0, e.g. the 3D Printed Blahaj) are earned by
   // leveling up, not bought with pixels or tied to a region, pull them out
   // into their own section regardless of which region tab is selected.
-  const [regionItems, everyItem, allSidequests] = await Promise.all([
+  const [regionItems, everyItem, allSidequests, personalItems] = await Promise.all([
     listShopItems(region),
     listShopItems(),
     listSidequests(),
+    listPersonalShopItems(),
   ]);
   // Active Trials the admin can gate a shop item behind (unlock via completion).
   const gateTrials = allSidequests.filter((q) => q.active);
@@ -134,6 +136,8 @@ export default async function ShopPage({
           </div>
         </div>
       )}
+
+      <PersonalShopItems items={personalItems} error={personalError} />
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-1.5 flex-wrap">

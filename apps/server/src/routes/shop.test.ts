@@ -6,6 +6,7 @@ const {
   regionMismatch,
   isNewItem,
   shouldShowBuyerCount,
+  scopePersonalItems,
   NEW_ITEM_DAYS,
   BUYERS_VISIBLE_MIN,
 } = await import("./shop.js");
@@ -103,5 +104,30 @@ describe("shouldShowBuyerCount", () => {
   test("a missing count is not shown", () => {
     expect(shouldShowBuyerCount(undefined)).toBe(false);
     expect(shouldShowBuyerCount(null)).toBe(false);
+  });
+});
+
+describe("scopePersonalItems", () => {
+  const catalog = { id: 1, name: "Keyboard", reserved_user_id: null };
+  const mine = { id: 2, name: "Custom tablet", reserved_user_id: "user-a" };
+  const theirs = { id: 3, name: "Other custom", reserved_user_id: "user-b" };
+
+  test("the owner sees their personal item, flagged and without the owner id", () => {
+    const out = scopePersonalItems([catalog, mine, theirs], "user-a");
+    expect(out.map((i) => i.id)).toEqual([1, 2]);
+    expect(out[1]).toMatchObject({ id: 2, personal: true });
+    expect("reserved_user_id" in out[1]).toBe(false);
+  });
+
+  test("another player never sees it", () => {
+    expect(scopePersonalItems([catalog, mine], "user-c").map((i) => i.id)).toEqual([1]);
+  });
+
+  test("a signed-out visitor never sees it", () => {
+    expect(scopePersonalItems([catalog, mine], null).map((i) => i.id)).toEqual([1]);
+  });
+
+  test("items from before the column existed (no key) stay in the catalog", () => {
+    expect(scopePersonalItems([{ id: 9, name: "Old" }], null)).toHaveLength(1);
   });
 });

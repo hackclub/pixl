@@ -77,7 +77,7 @@ async function regionFor(userId: string): Promise<string> {
 // with 0106 , fall back gracefully before each is applied so the catalog
 // keeps loading.
 const ITEM_COLUMNS =
-  "id, name, description, price, image_url, options, unlock_xp, config_options, region, category, unlock_trial_ids, manual_locked, lock_note, beacon_locked, discount_percent, created_at";
+  "id, name, description, price, image_url, options, unlock_xp, config_options, region, category, unlock_trial_ids, manual_locked, lock_note, beacon_locked, discount_percent, created_at, reserved_user_id";
 const ITEM_COLUMNS_FALLBACK = "id, name, description, price, image_url, options";
 
 // How recently an item has to have been added to still be worth flagging as
@@ -118,6 +118,30 @@ export function shouldShowBuyerCount(buyers: unknown): boolean {
   return Number(buyers) >= BUYERS_VISIBLE_MIN;
 }
 
+// Personal items (created by an admin for one specific player, see
+// drizzle/0212) are only ever shown to that player, in whatever region they
+// are in. Everyone else, including signed-out visitors, never sees them. The
+// owner's id is replaced by a plain `personal` flag so it doesn't go out in
+// the response.
+export function scopePersonalItems<T extends Record<string, unknown>>(
+  items: T[],
+  viewerId: string | null,
+): T[] {
+  const out: T[] = [];
+  for (const item of items) {
+    const owner = item.reserved_user_id;
+    if (owner == null) {
+      out.push(item);
+      continue;
+    }
+    if (viewerId && owner === viewerId) {
+      const { reserved_user_id: _owner, ...rest } = item;
+      out.push({ ...rest, personal: true } as unknown as T);
+    }
+  }
+  return out;
+}
+
 // Items are scoped to the player's own region (fulfillment/shipping differ a
 // lot by where they live) , pass `region` to filter, or omit it to get every
 // region (not currently used, but keeps this function generally useful).
@@ -129,7 +153,10 @@ async function fetchItems(filterIds?: number[], region?: string) {
     let q = supabase.from("shop_items").select(cols);
     if (filterIds) q = q.in("id", filterIds);
     else q = q.eq("active", true);
-    if (withRegion && region) q = q.or(`region.eq.${orValue(region)},unlock_xp.gt.0`);
+    // A personal item (reserved_user_id) is not tied to a region, it is
+    // scoped to its player by scopePersonalItems below instead.
+    if (withRegion && region)
+      q = q.or(`region.eq.${orValue(region)},unlock_xp.gt.0,reserved_user_id.is.not.null`);
     return q.order("position", { ascending: true }).order("id", { ascending: true });
   };
   const first = await build(ITEM_COLUMNS, true);
@@ -285,7 +312,10 @@ router.get("/api/shop/items", async (req, res) => {
     console.error("[shop] items failed", error);
     return res.status(500).json({ ok: false });
   }
-  const items: Record<string, unknown>[] = data.map((i) => ({ ...i, limited: false }));
+  const items: Record<string, unknown>[] = scopePersonalItems(
+    data.map((i) => ({ ...i, limited: false })),
+    session?.userId ?? null,
+  );
 
   const merchants = await activeEvents(["mystery_merchant"]);
   const limitedIds = [
@@ -298,7 +328,8 @@ router.get("/api/shop/items", async (req, res) => {
   if (limitedIds.length > 0) {
     const { data: limited } = await fetchItems(limitedIds, region);
     const endsAt = merchants.map((m) => m.ends_at).sort()[0];
-    for (const i of limited ?? []) items.unshift({ ...i, limited: true, limited_until: endsAt });
+    for (const i of scopePersonalItems(limited ?? [], session?.userId ?? null))
+      items.unshift({ ...i, limited: true, limited_until: endsAt });
   }
 
   await attachStock(items);
@@ -452,6 +483,7 @@ router.get("/api/shop/item/:id/public", async (req, res) => {
     .select("id, name, description, price, image_url")
     .eq("id", id)
     .eq("active", true)
+    .is("reserved_user_id", null)
     .maybeSingle();
   if (error) {
     console.error("[shop] public item lookup failed", error.message);
@@ -736,7 +768,7 @@ router.post("/api/shop/buy/:id", async (req, res) => {
   // outright, independent of any Trial.
   const { data: gateRow } = await supabase
     .from("shop_items")
-    .select("unlock_trial_ids, manual_locked, region, unlock_xp, beacon_locked")
+    .select("unlock_trial_ids, manual_locked, region, unlock_xp, beacon_locked, reserved_user_id")
     .eq("id", id)
     .maybeSingle();
   if ((gateRow as { manual_locked?: boolean } | null)?.manual_locked)
@@ -745,7 +777,11 @@ router.post("/api/shop/buy/:id", async (req, res) => {
     const available = await availableBeaconUnlocks(session.userId);
     if (available < 1) return res.status(403).json({ ok: false, error: "locked" });
   }
-  const itemRegion = (gateRow as { region?: string } | null)?.region;
+  // Personal item: only its player can buy it, from any region.
+  const reservedFor = (gateRow as { reserved_user_id?: string | null } | null)?.reserved_user_id ?? null;
+  if (reservedFor && reservedFor !== session.userId)
+    return res.status(404).json({ ok: false, error: "unavailable" });
+  const itemRegion = reservedFor ? undefined : (gateRow as { region?: string } | null)?.region;
   const itemUnlockXp = Number((gateRow as { unlock_xp?: number } | null)?.unlock_xp ?? 0);
   if (itemRegion && itemUnlockXp <= 0 && regionMismatch(itemRegion, buyerRegion))
     return res.status(403).json({ ok: false, error: "wrong_region", region: buyerRegion });
