@@ -72,8 +72,12 @@ func _network_scene_name() -> String:
 # Worlds must `await` this in _ready() before anything that walks their NPC
 # children (village.gd's _spawn_npcs/_reveal_trial_npcs, open_world.gd's
 # _sync_trial_givers), otherwise those run against an empty tree.
-func spawn_world_npcs() -> void:
-	var world := _network_scene_name()
+#
+# A sub-world embedded in this scene (Factory Island inside open_world) passes
+# its own world name and node, so its rows land in that node's local space.
+func spawn_world_npcs(world: String = "", parent: Node = null) -> void:
+	if world == "":
+		world = _network_scene_name()
 	var rows := await _fetch_npcs(world)
 	if rows.is_empty():
 		# Signed out, offline, or the server errored. The committed bake keeps a
@@ -81,7 +85,7 @@ func spawn_world_npcs() -> void:
 		rows = _load_npc_fallback(world)
 	for row in rows:
 		if typeof(row) == TYPE_DICTIONARY:
-			_add_npc(row)
+			_add_npc(row, parent if parent else self)
 
 func _fetch_npcs(world: String) -> Array:
 	if NetworkManager.session_token == "":
@@ -117,7 +121,7 @@ func _load_npc_fallback(world: String) -> Array:
 
 # Exports are set before add_child so npc.gd's _ready() (which reads position for
 # its wander home, and skin for its spriteframes) sees the authored values.
-func _add_npc(row: Dictionary) -> void:
+func _add_npc(row: Dictionary, parent: Node) -> void:
 	var inst = NPC_SCENE.instantiate()
 	inst.npc_name = String(row.get("npc_name", "Villager"))
 	inst.name = inst.npc_name
@@ -145,7 +149,7 @@ func _add_npc(row: Dictionary) -> void:
 	# npc.gd's _ready() also de-monitors its InteractArea when it starts hidden.
 	if inst.trial_checkin:
 		inst.visible = false
-	add_child(inst)
+	parent.add_child(inst)
 
 func setup_multiplayer() -> void:
 	if not NetworkManager.is_connected_to_server():

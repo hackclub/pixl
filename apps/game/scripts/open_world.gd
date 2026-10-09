@@ -6,6 +6,12 @@ var _dialogue_was_open: bool = false
 func _ready() -> void:
 	super._ready()
 	await spawn_world_npcs()
+	# Factory Island is part of this scene, not a world of its own: its NPCs
+	# are authored in its local coordinates (world "factory_island"), so they
+	# go under its node.
+	var factory_island := get_node_or_null("FactoryIsland")
+	if factory_island:
+		await spawn_world_npcs("factory_island", factory_island)
 	_sync_trial_givers()
 	await get_tree().create_timer(0.3).timeout
 	can_transition = true
