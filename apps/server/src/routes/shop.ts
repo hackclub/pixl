@@ -263,13 +263,14 @@ function applyDiscount(items: Record<string, unknown>[]): void {
   }
 }
 
-// How many Beacon-locked items this player can still buy: one unlock per
+// How many Beacon-locked items this player can still unlock: one unlock per
 // Beacon project they have (projects.is_peak, live/not banned/rejected/
-// archived), minus however many they've already spent on a non-cancelled
-// order for a beacon_locked item. Shared pool across every beacon_locked
-// item, not one-per-item - see toggleProjectPeak in
-// apps/dashboard/app/actions.ts for how a project becomes a Beacon.
-async function availableBeaconUnlocks(userId: string): Promise<number> {
+// archived), minus however many distinct beacon_locked items they already
+// own (a non-cancelled order). Shared pool across every beacon_locked item,
+// not one-per-item - see toggleProjectPeak in apps/dashboard/app/actions.ts
+// for how a project becomes a Beacon. An owned item stays unlocked for good:
+// buying it again never spends another unlock.
+async function beaconUnlocks(userId: string): Promise<{ available: number; owned: Set<number> }> {
   const [{ count: beaconCount }, { data: beaconItemIds }] = await Promise.all([
     supabase
       .from("projects")
@@ -282,14 +283,15 @@ async function availableBeaconUnlocks(userId: string): Promise<number> {
     supabase.from("shop_items").select("id").eq("beacon_locked", true),
   ]);
   const ids = ((beaconItemIds ?? []) as { id: number }[]).map((i) => i.id);
-  if (ids.length === 0) return beaconCount ?? 0;
-  const { count: spent } = await supabase
+  if (ids.length === 0) return { available: beaconCount ?? 0, owned: new Set() };
+  const { data: orders } = await supabase
     .from("shop_orders")
-    .select("id", { count: "exact", head: true })
+    .select("item_id")
     .eq("user_id", userId)
     .neq("status", "cancelled")
     .in("item_id", ids);
-  return Math.max((beaconCount ?? 0) - (spent ?? 0), 0);
+  const owned = new Set(((orders ?? []) as { item_id: number }[]).map((o) => Number(o.item_id)));
+  return { available: Math.max((beaconCount ?? 0) - owned.size, 0), owned };
 }
 
 // Active catalog, plus mystery-merchant items while their event runs , those
@@ -433,11 +435,19 @@ router.get("/api/shop/items", async (req, res) => {
 
   // Beacon-locked items: locked unless this player still has an unspent
   // Beacon-project unlock. A manual lock above still wins if both are set.
+  // One they already own is permanently unlocked, so for this player it's
+  // sent back as an ordinary item (beacon_locked cleared) - no lock, and no
+  // "uses a Beacon unlock" note on rebuy.
   let beaconAvailable = 0;
+  let beaconOwned = new Set<number>();
   if (session && items.some((i) => i.beacon_locked)) {
-    beaconAvailable = await availableBeaconUnlocks(session.userId);
+    ({ available: beaconAvailable, owned: beaconOwned } = await beaconUnlocks(session.userId));
   }
   for (const i of items) {
+    if (i.beacon_locked && beaconOwned.has(Number(i.id))) {
+      i.beacon_locked = false;
+      continue;
+    }
     if (i.beacon_locked && !i.manual_locked) {
       i.locked = beaconAvailable < 1;
       i.unlockPending = false;
@@ -774,8 +784,8 @@ router.post("/api/shop/buy/:id", async (req, res) => {
   if ((gateRow as { manual_locked?: boolean } | null)?.manual_locked)
     return res.status(403).json({ ok: false, error: "locked" });
   if ((gateRow as { beacon_locked?: boolean } | null)?.beacon_locked) {
-    const available = await availableBeaconUnlocks(session.userId);
-    if (available < 1) return res.status(403).json({ ok: false, error: "locked" });
+    const { available, owned } = await beaconUnlocks(session.userId);
+    if (!owned.has(id) && available < 1) return res.status(403).json({ ok: false, error: "locked" });
   }
   // Personal item: only its player can buy it, from any region.
   const reservedFor = (gateRow as { reserved_user_id?: string | null } | null)?.reserved_user_id ?? null;
