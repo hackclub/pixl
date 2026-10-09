@@ -1,8 +1,6 @@
 import { requirePagePerm } from "@/lib/guard";
 import {
   countPendingReviews,
-  countSecondPassReviews,
-  sumSecondPassHours,
   countSpotCheckProjects,
   countProposedBanProjects,
 } from "@/lib/db";
@@ -25,13 +23,9 @@ export default async function ReviewLayout({
 }) {
   const access = await requirePagePerm(["review"]);
   // "Needs review" is first-pass ("shipped") work only, for every viewer
-  // regardless of role - second-pass work has its own "Second pass"
-  // tab/badge below, so folding it in here just made this badge show a
-  // combined total that didn't match either queue.
-  const [pending, secondPassCount, secondPassHours, spotCheckCount, proposedBanCount] = await Promise.all([
+  // regardless of role.
+  const [pending, spotCheckCount, proposedBanCount] = await Promise.all([
     countPendingReviews({ viewer: access.session.slackId }),
-    access.canSecondPass ? countSecondPassReviews() : Promise.resolve(undefined),
-    access.canSecondPass ? sumSecondPassHours() : Promise.resolve(undefined),
     access.isSuper ? countSpotCheckProjects() : Promise.resolve(undefined),
     access.isSuper ? countProposedBanProjects() : Promise.resolve(undefined),
   ]);
@@ -42,8 +36,6 @@ export default async function ReviewLayout({
         isSuper={access.isSuper}
         canSecondPass={access.canSecondPass}
         pending={pending}
-        secondPassCount={secondPassCount}
-        secondPassHours={secondPassHours}
         spotCheckCount={spotCheckCount}
         proposedBanCount={proposedBanCount}
       />

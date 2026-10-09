@@ -10,16 +10,12 @@ export function ReviewTabs({
   isSuper,
   canSecondPass,
   pending,
-  secondPassCount,
-  secondPassHours,
   spotCheckCount,
   proposedBanCount,
 }: {
   isSuper: boolean;
   canSecondPass: boolean;
   pending?: number;
-  secondPassCount?: number;
-  secondPassHours?: number;
   spotCheckCount?: number;
   proposedBanCount?: number;
 }) {
@@ -32,22 +28,7 @@ export function ReviewTabs({
   ];
   if (canSecondPass) {
     // Anyone who can do the final pass - supers, and anyone else granted the
-    // SECOND_PASS marker (e.g. a Sponsor, see addSponsor in app/actions.ts,
-    // which promises "review access, including the final pass"). This used to
-    // be nested under the isSuper block below, which silently hid the tab
-    // from non-super second-pass reviewers even though they could already
-    // work the same queue via /review's "Awaiting your final pass" section ,
-    // that's easy to miss buried in the main queue, this is a dedicated view
-    // of just that stage.
-    tabs.push({
-      href: "/review/second-pass",
-      label: "Second pass",
-      count: secondPassCount,
-      // Total hours sitting in the queue, not just how many projects - a
-      // project count alone doesn't say whether the queue is five quick
-      // ships or five 40-hour builds.
-      extra: secondPassHours ? `${secondPassHours}h` : undefined,
-    });
+    // SECOND_PASS marker (e.g. a Sponsor, see addSponsor in app/actions.ts).
     // Every score Robert's fraud reviewer has given, newest first, including
     // projects that already left Spot check.
     tabs.push({ href: "/review/fraud-reviews", label: "Fraud reviews" });
@@ -61,8 +42,8 @@ export function ReviewTabs({
     tabs.push({ href: "/review/proposed-bans", label: "Proposed bans", count: proposedBanCount });
     // An optional QA pass over the same second_review stage - not an action
     // queue, just "has a super glanced at how this was first-pass reviewed".
-    // Separate from Second pass above since it never blocks or resolves a
-    // project, only dismisses itself once spot-checked.
+    // It never blocks or resolves a project, only dismisses itself once
+    // spot-checked.
     tabs.push({ href: "/review/spot-check", label: "Spot check", count: spotCheckCount });
     tabs.push({ href: "/review/log", label: "Reviewer log" });
     // Internal reviewer notes - the tab disappears while live (the page
