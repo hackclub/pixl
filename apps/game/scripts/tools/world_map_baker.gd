@@ -18,6 +18,7 @@ extends RefCounted
 const SCENES := {
 	"open_world": "res://scenes/open_world.tscn",
 	"village": "res://scenes/village.tscn",
+	"factory_island": "res://scenes/factory_island.tscn",
 }
 
 const OUT_DIR := "res://assets/map"

@@ -5586,7 +5586,7 @@ export async function deleteSidequest(formData: FormData): Promise<void> {
 // so adding one meant opening the Godot editor and shipping a build. These write
 // the `npcs` table the client reads at world load instead.
 
-const NPC_WORLDS = new Set(["village", "open_world"]);
+const NPC_WORLDS = new Set(["village", "open_world", "factory_island"]);
 
 // Mirrors what the game can resolve for an NPC: a cvc: preset, a cv1: composite,
 // or an npc:<name> NPC-only sheet (SkinUtil.NPC_SHEETS - pixo, cheetah). The

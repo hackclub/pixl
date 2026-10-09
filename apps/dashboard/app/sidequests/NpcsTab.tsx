@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 const WORLD_LABEL: Record<string, string> = {
   village: "The Hub village",
   open_world: "Open world (Dustline)",
+  factory_island: "Factory Island",
 };
 
 // npc.gd resolves its modes as an if/elif chain, in this order. Reading a row

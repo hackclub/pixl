@@ -2,12 +2,20 @@
   "_note": "GENERATED from apps/game/assets/map/bounds.json by `bun run map:sync` - do not edit",
   "downscale": 1,
   "worlds": {
+    "factory_island": {
+      "h": 432,
+      "ih": 432,
+      "iw": 672,
+      "w": 672,
+      "x": -64,
+      "y": -16
+    },
     "open_world": {
       "h": 1449,
       "ih": 1449,
-      "iw": 2248,
-      "w": 2248,
-      "x": -1374,
+      "iw": 2264,
+      "w": 2264,
+      "x": -1390,
       "y": -518
     },
     "village": {

@@ -14,6 +14,7 @@ const selectCls =
 const WORLDS = [
   { id: "village", label: "The Hub village" },
   { id: "open_world", label: "Open world (Dustline)" },
+  { id: "factory_island", label: "Factory Island" },
 ];
 
 // npc.gd resolves its modes as an if/elif chain, so exactly one applies.

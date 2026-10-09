@@ -1,6 +1,14 @@
 {
 	"downscale": 1,
 	"worlds": {
+		"factory_island": {
+			"h": 432.0,
+			"ih": 432,
+			"iw": 672,
+			"w": 672.0,
+			"x": -64.0,
+			"y": -16.0
+		},
 		"open_world": {
 			"h": 1449.0,
 			"ih": 1449,
