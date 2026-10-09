@@ -3,7 +3,7 @@ import { escapeMrkdwn } from "./slackEscape.js";
 
 const MODEL = "google/gemini-2.5-flash-lite";
 const LOOKBACK_HOURS = 10;
-export const DASH_URL = "https://dash.pixl.rsvp";
+export const DASH_URL = "https://dash.pixl.hackclub.com";
 
 export interface ReportAiResult {
   score: number;

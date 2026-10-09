@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { postShipToSlack } from "./shipNotify.js";
+import { postShipToSlack, resubmitMessage } from "./shipNotify.js";
 
 // F-7: project.name/description are typed by the shipping player, not
 // staff, and land in the ship-alerts staff channel's mrkdwn blocks. Before
@@ -189,5 +189,19 @@ describe("postShipToSlack description truncation", () => {
   test("a description that escapes to exactly the limit is kept whole", async () => {
     expect(await sentDescription("&".repeat(500))).toBe("&amp;".repeat(500));
     expect(await sentDescription("&".repeat(501))).toBe("&amp;".repeat(500));
+  });
+});
+
+describe("resubmitMessage (DM to the reviewer who asked for changes)", () => {
+  test("links to the live dashboard review page", () => {
+    const msg = resubmitMessage({ id: 238, name: "MySpace OS" });
+    expect(msg).toContain("https://dash.pixl.hackclub.com/review/238");
+    expect(msg).not.toContain("pixl.rsvp");
+  });
+
+  test("the project name is escaped so it can't ping or forge a link", () => {
+    const msg = resubmitMessage({ id: 1, name: "<!channel> <https://evil.example|click>" });
+    expect(msg).toContain("&lt;!channel&gt;");
+    expect(msg).not.toContain("<!channel>");
   });
 });
