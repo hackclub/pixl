@@ -172,12 +172,14 @@ func _reveal_choices(options: PackedStringArray) -> void:
 		b.text = String(options[i])
 		b.add_theme_font_size_override("font_size", 20)
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		# Never focusable: a focused Button fires on ui_accept (Enter/Space),
+		# and the GUI sees that before chat_hud's _unhandled_input does, so
+		# pressing Enter to chat silently picked the first option (e.g.
+		# "Accept this Trial"). Choices are click-only, same as [E] below.
+		b.focus_mode = Control.FOCUS_NONE
 		b.pressed.connect(_on_choice.bind(i))
 		_choices.add_child(b)
 	_choices.visible = true
-	await get_tree().process_frame
-	if _choices.get_child_count() > 0:
-		(_choices.get_child(0) as Button).grab_focus()
 
 func _on_choice(index: int) -> void:
 	if not _choosing:
