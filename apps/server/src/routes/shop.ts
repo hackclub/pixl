@@ -677,7 +677,7 @@ router.get("/api/shop/orders", async (req, res) => {
 });
 
 // Let a player cancel their own order and get their pixels back, as long as
-// fulfillment hasn't shipped it yet. Same cancel_shop_order RPC the dashboard's
+// it's still pending (no fulfiller has ordered the real item yet). Same cancel_shop_order RPC the dashboard's
 // admin cancel button uses (refund + status flip happen together in there, and
 // it's idempotent), just reached from the player's own Orders tab instead of
 // /fulfillment - p_by is tagged "(self-cancel)" so the fulfillment log can
@@ -697,7 +697,7 @@ router.post("/api/shop/orders/:id/cancel", async (req, res) => {
     .maybeSingle();
   if (!order || order.user_id !== session.userId)
     return res.status(404).json({ ok: false });
-  if (["shipped", "done", "cancelled"].includes(order.status as string))
+  if (order.status !== "pending")
     return res.status(400).json({ ok: false, error: "not_cancellable" });
 
   const { data: refunded, error } = await supabase.rpc("cancel_shop_order", {

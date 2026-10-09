@@ -203,10 +203,10 @@
             ? `<div class="order-meta">Tracking <span class="order-track">${Pixl.esc(o.tracking)}</span><span class="muted">· DM'd to you</span></div>`
             : "";
 
-        // Cancellable up until it ships - once fulfillment marks it shipped
-        // (or it's already done/cancelled) there's nothing left to refund.
-        const cancellable = !["shipped", "done", "cancelled"].includes(o.status);
-        const cancelBtn = cancellable
+        // Cancellable only while nobody's claimed it yet - once a fulfiller
+        // has ordered/paid for the real item it's already on its way, same
+        // rule as the dashboard's own cancel button.
+        const cancelBtn = o.status === "pending"
           ? `<button class="btn ghost" data-cancel="${o.id}" style="margin-left:auto">CANCEL &amp; REFUND</button>`
           : "";
 
