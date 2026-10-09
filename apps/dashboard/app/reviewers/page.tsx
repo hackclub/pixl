@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import {
   requireAdmin,
   isSecondPassReviewer,
+  EDIT_SUBMISSION,
   ownerSlackIds,
   secondPassSlackIds,
   NO_REVIEW,
@@ -242,6 +243,11 @@ export default async function ReviewersPage({
                         {isSecondPassReviewer(r.slack_id, r.permissions, owners.has(r.slack_id)) && (
                           <Badge variant="success" className="text-[0.65rem] uppercase tracking-wide">
                             second pass
+                          </Badge>
+                        )}
+                        {r.permissions.includes(EDIT_SUBMISSION) && (
+                          <Badge variant="info" className="text-[0.65rem] uppercase tracking-wide">
+                            edits submissions
                           </Badge>
                         )}
                       </span>

@@ -96,6 +96,7 @@ import {
   SUBADMIN_PERMISSIONS,
   NO_REVIEW,
   SECOND_PASS,
+  EDIT_SUBMISSION,
   SPONSOR,
   SPONSOR_BASE_PERMS,
   REVIEW_HARDWARE_ONLY,
@@ -1987,8 +1988,8 @@ export async function applySubmissionEdits(formData: FormData): Promise<void> {
   const projectId = Number(formData.get("projectId") ?? 0);
   const back = `/review/${projectId}`;
   if (!projectId) return;
-  if (!access.canSecondPass && !access.isSuper)
-    redirect(`${back}?error=${encodeURIComponent("Only a final reviewer or a super admin can edit the submission.")}`);
+  if (!access.canEditSubmission)
+    redirect(`${back}?error=${encodeURIComponent("You don't have permission to edit the submission.")}`);
 
   const { data: current } = await db
     .from("projects")
@@ -3882,6 +3883,39 @@ export async function setSecondPass(formData: FormData): Promise<void> {
       slackId,
       "Your final-reviewer role on Pixl has been removed , you can still review first passes as usual. Contact the team if you think this is a mistake.",
     );
+}
+
+// Let a reviewer edit submission details (title, image, repo/demo links,
+// description) without making them a final reviewer: just an EDIT_SUBMISSION
+// marker in their admins row. They have to be on the team already.
+export async function setEditSubmission(formData: FormData): Promise<void> {
+  const access = await requireSuper();
+  const slackId = String(formData.get("slackId") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+  const enable = formData.get("enable") === "1";
+  if (!slackId) return;
+  const existing = await getAdmin(slackId);
+  if (!existing) return;
+  const already = existing.permissions.includes(EDIT_SUBMISSION);
+  if (enable === already) return;
+  const kept = existing.permissions.filter((p) => p !== EDIT_SUBMISSION);
+  await setTeamPerms(
+    slackId,
+    name,
+    enable ? [...kept, EDIT_SUBMISSION] : kept,
+    enable ? "edit submission access granted" : "edit submission access removed",
+    actorName(access),
+    actorName(access),
+  );
+  await dmTeam(
+    slackId,
+    enable
+      ? [
+          "You can now edit submission details on the Pixl review dashboard 🎉",
+          "On a project's review page, open the \"Edit submission\" section to fix the title, image, repo/demo links and description. It applies right away, everywhere the project shows up, and it's separate from your verdict. Nothing else about your reviewer access changes.",
+        ].join("\n\n")
+      : "Your access to edit submission details on the Pixl review dashboard has been removed. You can still review as usual. Contact the team if you think this is a mistake.",
+  );
 }
 
 // Restrict a reviewer to one queue (software/hardware), or clear the

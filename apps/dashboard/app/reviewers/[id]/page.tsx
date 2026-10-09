@@ -8,6 +8,7 @@ import {
   reviewQueueScopeFor,
   NO_REVIEW,
   SECOND_PASS,
+  EDIT_SUBMISSION,
 } from "@/lib/guard";
 import {
   getAdmin,
@@ -17,7 +18,7 @@ import {
   auditFlags,
   type ReviewerStats,
 } from "@/lib/db";
-import { removeReviewer, setSecondPass, setReviewQueueAccess } from "@/app/actions";
+import { removeReviewer, setSecondPass, setEditSubmission, setReviewQueueAccess } from "@/app/actions";
 import { PendingButton } from "@/app/_components/PendingButton";
 import { slackHandle } from "@/lib/slack";
 import { Badge } from "@/components/ui/badge";
@@ -215,6 +216,34 @@ export default async function ReviewerPage({
                   className="bg-mint text-ink border-transparent hover:bg-mint/90"
                 >
                   Make final reviewer
+                </PendingButton>
+              )}
+            </form>
+          )}
+          {/* Narrow grant: editing submission details only, no final-reviewer
+              tools. Final reviewers and supers can already edit, so it is only
+              offered to everyone else. */}
+          {!envGrantsSecondPass && !admin?.permissions.includes(SECOND_PASS) && admin && (
+            <form action={setEditSubmission}>
+              <input type="hidden" name="slackId" value={slackId} />
+              <input type="hidden" name="name" value={display} />
+              <input
+                type="hidden"
+                name="enable"
+                value={admin.permissions.includes(EDIT_SUBMISSION) ? "0" : "1"}
+              />
+              {admin.permissions.includes(EDIT_SUBMISSION) ? (
+                <PendingButton
+                  variant="ghost"
+                  size="sm"
+                  pendingText="Removing…"
+                  className="text-foreground/70"
+                >
+                  Remove submission editing
+                </PendingButton>
+              ) : (
+                <PendingButton variant="outline" size="sm" pendingText="Saving…">
+                  Allow editing submission details
                 </PendingButton>
               )}
             </form>

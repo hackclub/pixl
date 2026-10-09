@@ -390,6 +390,7 @@ export function ReviewForm({
   currentDescription,
   currentImageUrl,
   isSuper = false,
+  canEditSubmission = false,
   serverDraft,
 }: {
   projectId: number;
@@ -431,6 +432,9 @@ export function ReviewForm({
   /** Whether the viewing reviewer is a super admin - gates the "Generate AI
    * draft" button below (visible to every reviewer, only clickable for admins). */
   isSuper?: boolean;
+  /** Whether the viewer may edit the submission's details (title, image, links,
+   * description) - shows the "Edit submission" panel at any review stage. */
+  canEditSubmission?: boolean;
   /** The shared, server-side draft saved by saveReviewDraft (see review_draft
    * on ProjectRow) - whoever last typed into this form, on any device, not
    * just this browser's own localStorage copy. Used only when this browser
@@ -801,7 +805,7 @@ export function ReviewForm({
 
   return (
     <>
-      {(secondPass || isSuper) && (
+      {(secondPass || isSuper || canEditSubmission) && (
         <details className="rounded-lg border p-4 mt-4">
           <summary className="cursor-pointer text-xs font-bold uppercase tracking-wide text-muted-foreground select-none">
             Edit submission , title, image, repo/demo links, description
