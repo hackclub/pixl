@@ -4329,6 +4329,12 @@ export async function addShopItem(formData: FormData): Promise<void> {
   revalidatePath("/shop");
 }
 
+// Shown as a banner on /shop instead of letting the action throw, which in
+// production only surfaces as an opaque "Minified React error #441".
+function shopItemError(region: string, message: string): never {
+  redirect(`/shop?region=${encodeURIComponent(region)}&shopError=${encodeURIComponent(message)}`);
+}
+
 export async function updateShopItem(formData: FormData): Promise<void> {
   await requirePerm("shop");
   const id = Number(formData.get("id") ?? 0);
@@ -4450,7 +4456,15 @@ export async function updateShopItem(formData: FormData): Promise<void> {
   }
 
   const { error } = await db.from("shop_items").update(patch).eq("id", id);
-  if (error) throw new Error(error.message);
+  if (error) {
+    // shop_items_name_region_unique_idx: one catalog row per (name, region).
+    if ((error as { code?: string }).code === "23505")
+      shopItemError(
+        region,
+        `Couldn't save: there's already a ${region} item called "${name}". Rename this one or pick a different region.`,
+      );
+    throw new Error(error.message);
+  }
 
   // A Trial gate is item-wide, so mirror it onto every region row of this item
   // (matched by its name before any rename, gateName above), never locked in
@@ -4500,7 +4514,14 @@ export async function updateShopItem(formData: FormData): Promise<void> {
       .is("reserved_user_id", null)
       .eq("unlock_xp", 0)
       .neq("id", id);
-    if (propErr) throw new Error(propErr.message);
+    if (propErr) {
+      if ((propErr as { code?: string }).code === "23505")
+        shopItemError(
+          region,
+          `Saved this region, but couldn't rename it in every region: another region already has an item called "${name}".`,
+        );
+      throw new Error(propErr.message);
+    }
   }
 
   // "Apply to all regions" per price-changing-options group (see

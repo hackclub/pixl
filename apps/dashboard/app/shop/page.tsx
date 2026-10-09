@@ -33,10 +33,10 @@ const FILE_INPUT =
 export default async function ShopPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; region?: string; q?: string; personalError?: string }>;
+  searchParams: Promise<{ page?: string; region?: string; q?: string; personalError?: string; shopError?: string }>;
 }) {
   const access = await requirePagePerm(["shop"]);
-  const { page, region: rawRegion, q, personalError } = await searchParams;
+  const { page, region: rawRegion, q, personalError, shopError } = await searchParams;
   const region: ShopRegion = (SHOP_REGIONS as readonly string[]).includes(rawRegion ?? "")
     ? (rawRegion as ShopRegion)
     : "US";
@@ -138,6 +138,12 @@ export default async function ShopPage({
       )}
 
       <PersonalShopItems items={personalItems} error={personalError} />
+
+      {shopError && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {shopError}
+        </div>
+      )}
 
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-1.5 flex-wrap">
