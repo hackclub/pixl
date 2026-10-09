@@ -661,23 +661,16 @@ export async function listShippedProjects(
     .is("banned_at", null);
   if (kind) q = q.eq("kind", kind);
   const { data, error } = await q
-    // Reverted (reReviewProject, app/actions.ts) jumps the queue instead of
-    // sorting by its original shipped_at like everything else - oldest
-    // revert first, then every non-reverted project in normal ship order.
-    .order("reverted_at", { ascending: true, nullsFirst: false })
     .order("shipped_at", { ascending: true })
     .limit(500);
   if (error) {
     console.error("listShippedProjects", error.message);
     return [];
   }
-  // Reverted projects stay at the front (oldest revert first); everything else
-  // goes by total time waiting, longest first.
-  const all = (data ?? []) as (ShippedProject & { reverted_at?: string | null })[];
-  const rows: ShippedProject[] = [
-    ...all.filter((p) => p.reverted_at),
-    ...oldestWaitFirst(all.filter((p) => !p.reverted_at)),
-  ];
+  // Strictly longest total wait first. Projects that were re-shipped after
+  // changes (reverted_at is set on their reship) used to jump to the front
+  // ahead of everything, which buried much older first-time ships behind them.
+  const rows = oldestWaitFirst((data ?? []) as ShippedProject[]);
   const visible = opts?.includeClaimed
     ? annotateClaims(rows, viewer)
     : rows.filter((p) => !claimedByOther(p, viewer));
@@ -802,15 +795,14 @@ export async function nextReviewId(opts: {
   // Advance to the project right after the one just closed, not the head of
   // the queue - otherwise a reviewer on #14 gets bounced back to #1. The
   // closed project has already left the queue, so locate its slot by the same
-  // sort key the lists use (reverted_at first, then total wait).
+  // sort key the lists use (total wait, oldest first).
   const { data: closed } = await db
     .from("projects")
-    .select("shipped_at, first_shipped_at, reverted_at")
+    .select("shipped_at, first_shipped_at")
     .eq("id", excludeId)
     .maybeSingle();
-  type SortRow = { shipped_at?: string | null; first_shipped_at?: string | null; reverted_at?: string | null };
-  const sortKey = (p: SortRow): [number, number] =>
-    p.reverted_at ? [0, new Date(p.reverted_at).getTime()] : [1, firstShipTime(p)];
+  type SortRow = { shipped_at?: string | null; first_shipped_at?: string | null };
+  const sortKey = (p: SortRow): [number, number] => [0, firstShipTime(p)];
   const pickAfter = (list: ShippedProject[]): ShippedProject | undefined => {
     if (!closed) return list[0];
     const [cg, ct] = sortKey(closed as SortRow);
