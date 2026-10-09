@@ -112,17 +112,20 @@
         you get paid , based on that project's hours, whichever ship it happens to be:
       </div>
       <div class="tiers">
-        <div class="tier"><div class="hrs">2H SHIPPED BY THEM</div><div class="amt">+10px</div><div class="usd">~$0.70</div></div>
-        <div class="tier"><div class="hrs">5H SHIPPED BY THEM</div><div class="amt">+19px</div><div class="usd">~$1.33</div></div>
-        <div class="tier"><div class="hrs">10H SHIPPED BY THEM</div><div class="amt">+33px</div><div class="usd">~$2.31</div></div>
+        <div class="tier"><div class="hrs">2H SHIPPED BY THEM</div><div class="amt">+6px</div><div class="usd">~$0.60</div></div>
+        <div class="tier"><div class="hrs">5H SHIPPED BY THEM</div><div class="amt">+13px</div><div class="usd">~$1.30</div></div>
+        <div class="tier"><div class="hrs">10H SHIPPED BY THEM</div><div class="amt">+23px</div><div class="usd">~$2.30</div></div>
+        <div class="tier"><div class="hrs">25H SHIPPED BY THEM</div><div class="amt">+50px</div><div class="usd">~$5.00</div></div>
+        <div class="tier"><div class="hrs">50H SHIPPED BY THEM</div><div class="amt">+74px</div><div class="usd">~$7.40</div></div>
+        <div class="tier"><div class="hrs">100H SHIPPED BY THEM</div><div class="amt">+133px</div><div class="usd">~$13.30</div></div>
       </div>
       <div class="card-note">
         This pays out once per referral. Refer 10 people who all ship and you get a
-        <b>+119px</b> (~$8.33) milestone bonus, again every 10 after that.
+        <b>+83px</b> (~$8.30) milestone bonus, again every 10 after that.
       </div>
       <div class="card-note">
         Worth mentioning when you share your code: the person you refer gets something too ,
-        <b>+5px/hr</b> (~$0.35/hr) extra on their own first shipped project.
+        <b>+4px/hr</b> (~$0.40/hr) extra on their own first shipped project.
       </div>
     </div>
 
@@ -134,7 +137,7 @@
     <div class="card" id="apply-card" hidden>
       <div class="card-h">GOT A CODE?</div>
       <div class="card-note" style="margin-top:0">
-        Enter the code whoever referred you shared. You'll get +5px/hr on your first shipped
+        Enter the code whoever referred you shared. You'll get +4px/hr on your first shipped
         project.
       </div>
       <div class="row apply-row">
@@ -209,7 +212,7 @@
       $("boost-card").hidden = false;
       const remaining = data.boost.shipsRemaining;
       $("boost-body").innerHTML = remaining > 0
-        ? `<div class="used-note"><span class="chip">+5px/hr ACTIVE</span> applies to your next shipped project</div>
+        ? `<div class="used-note"><span class="chip">+4px/hr ACTIVE</span> applies to your next shipped project</div>
            <div class="boost-bar"><div class="boost-fill" style="width:0%"></div></div>`
         : `<div class="used-note">You've used your referral boost , back to your normal rate now.</div>
            <div class="boost-bar"><div class="boost-fill" style="width:100%"></div></div>`;

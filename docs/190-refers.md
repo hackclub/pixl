@@ -18,21 +18,21 @@ A referral code has to be applied within the referred player's first 2 days on P
 
 ## What the new builder gets
 
-An extra 5 px/hr on top of their normal rate for their first approved project, to get their balance moving.
+An extra 4 px/hr on top of their normal rate for their first approved project, to get their balance moving.
 
 ## What you get
 
 A one-off bounty when your referral lands their first approved ship, sized by how big their project was:
 
-- **2h+** → 10 px
-- **5h+** → 19 px
-- **10h+** → 33 px
-- **25h+** → 71 px
-- **50h+** → 105 px
-- **100h+** → 190 px
+- **2h+** → 6 px
+- **5h+** → 13 px
+- **10h+** → 23 px
+- **25h+** → 50 px
+- **50h+** → 74 px
+- **100h+** → 133 px
 
 It pays on shipped builds, not on signups.
 
 ## Milestone bonuses
 
-Every 10 referrals who complete a ship adds another 119 px on top.
+Every 10 referrals who complete a ship adds another 83 px on top.
