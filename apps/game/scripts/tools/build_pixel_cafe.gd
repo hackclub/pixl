@@ -21,11 +21,12 @@ const TILE := 16
 const WIN_MIN := Vector2i(-6, -6)
 const WIN_MAX := Vector2i(48, 32) # exclusive
 const WALKABLE := ["Ground", "Path", "Docks"]
+const BLOCKING := ["Fences"]
 
 # Footprint (width, height) in island pixels, centred on the sprite's base, by
 # texture file name. Missing entries get no collision (pots, mailbox, decor).
 const FOOTPRINTS := {
-	"cottage.png": Vector2(96, 28),
+	"Houses.png": Vector2(80, 24),
 	"tavern.png": Vector2(104, 28),
 	"large_market_canopy.png": Vector2(104, 18),
 	"market_display.png": Vector2(30, 10),
@@ -36,6 +37,8 @@ const FOOTPRINTS := {
 	"cafe_table.png": Vector2(28, 12),
 	"fire_pit.png": Vector2(24, 8),
 	"lamp_post.png": Vector2(6, 6),
+	"Trees_cherryblossom.png": Vector2(8, 6),
+	"Trees_oak_young.png": Vector2(6, 5),
 }
 
 
@@ -96,6 +99,11 @@ func _walkable_cells(root: Node) -> Dictionary:
 		var layer: TileMapLayer = root.get_node(layer_name)
 		for c in layer.get_used_cells():
 			cells[c] = true
+	for layer_name in BLOCKING:
+		var layer := root.get_node_or_null(layer_name) as TileMapLayer
+		if layer:
+			for c in layer.get_used_cells():
+				cells.erase(c)
 	return cells
 
 
