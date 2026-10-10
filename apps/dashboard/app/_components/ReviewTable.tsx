@@ -1,5 +1,6 @@
 "use client";
 
+import { queueWaitSince } from "@/lib/queueWait";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { ShippedProject } from "@/lib/db";
@@ -242,7 +243,7 @@ export function ReviewTable({
                 )}
 
                 <TableCell className="px-5 py-3.5 text-right">
-                  <div className="text-foreground/70">{waited(p.first_shipped_at ?? p.shipped_at)}</div>
+                  <div className="text-foreground/70">{waited(queueWaitSince(p))}</div>
                   <div className="text-xs text-muted-foreground">
                     {fmtHM(p.hours)} logged
                   </div>

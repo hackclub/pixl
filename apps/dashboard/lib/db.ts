@@ -1,3 +1,4 @@
+import { queueWaitStartMs, type QueueWaitInput } from "./queueWait";
 import { randomBytes } from "node:crypto";
 import { decryptPII } from "./crypto";
 import { reForProject } from "@/app/_generated/config";
@@ -631,20 +632,12 @@ function ownedByViewer(p: ShippedProject, viewer?: string): boolean {
 // (never auto-advance someone onto a project they can't action). The queue
 // page passes includeClaimed so it can show them with a "being reviewed" tag
 // instead - see annotateClaims.
-// When the player first sent the project in. shipped_at restarts on every
-// re-ship, so the total time in the queue (what the review table shows as
-// "waited") comes from first_shipped_at, falling back to shipped_at for older
-// rows that never had it set.
-function firstShipTime(p: { first_shipped_at?: string | null; shipped_at?: string | null }): number {
-  const iso = p.first_shipped_at ?? p.shipped_at;
-  return iso ? new Date(iso).getTime() : 0;
-}
-
-// Longest total wait first. Array.sort is stable, so ties keep the database order.
-function oldestWaitFirst<T extends { first_shipped_at?: string | null; shipped_at?: string | null }>(
-  rows: T[],
-): T[] {
-  return [...rows].sort((a, b) => firstShipTime(a) - firstShipTime(b));
+// Longest wait first, where the wait starts at queueWaitSince (lib/queueWait.ts):
+// the very first ship for a first ship or a fix-and-reship, but the update ship
+// itself for an update of an already approved project. Array.sort is stable,
+// so ties keep the database order.
+function oldestWaitFirst<T extends QueueWaitInput>(rows: T[]): T[] {
+  return [...rows].sort((a, b) => queueWaitStartMs(a) - queueWaitStartMs(b));
 }
 
 export async function listShippedProjects(
@@ -798,11 +791,11 @@ export async function nextReviewId(opts: {
   // sort key the lists use (total wait, oldest first).
   const { data: closed } = await db
     .from("projects")
-    .select("shipped_at, first_shipped_at")
+    .select("shipped_at, first_shipped_at, is_update")
     .eq("id", excludeId)
     .maybeSingle();
-  type SortRow = { shipped_at?: string | null; first_shipped_at?: string | null };
-  const sortKey = (p: SortRow): [number, number] => [0, firstShipTime(p)];
+  type SortRow = QueueWaitInput;
+  const sortKey = (p: SortRow): [number, number] => [0, queueWaitStartMs(p)];
   const pickAfter = (list: ShippedProject[]): ShippedProject | undefined => {
     if (!closed) return list[0];
     const [cg, ct] = sortKey(closed as SortRow);
