@@ -1,12 +1,21 @@
 extends CanvasLayer
 
+const MAP_FRAME := preload("res://assets/ui/map_frame.png")
+const MAP_FRAME_TOP := preload("res://assets/ui/map_frame_top.png")
+const FRAME_SIZE := Vector2(1392, 816)
+const BEZEL_RECT := Rect2(80, 164, 1228, 560)
+const BEZEL_STEP := 4.0
+const COLOR_BEZEL_OUTLINE := Color(0.141176, 0.101961, 0.090196)
+const COLOR_BEZEL_RIM := Color(0.85098, 0.72549, 0.580392)
+const COLOR_BEZEL_SHADOW := Color(0.141176, 0.101961, 0.090196)
+const MAP_RECT := Rect2(BEZEL_RECT.position + Vector2(8, 8), BEZEL_RECT.size - Vector2(16, 16))
 const MONOCRAFT := preload("res://assets/fonts/Monocraft.ttf")
 
 const GAMEPLAY_SCENES := ["village", "open_world", "house_interior", "shop_interior"]
 const COLOR_ACCENT := Color(1, 0.819608, 0.4)
 const COLOR_DIM := Color(0.788235, 0.694118, 0.54902)
 const COLOR_MARKER := Color(1, 0.85, 0.1)
-const COLOR_SEA := Color(0.098039, 0.219608, 0.32549)
+const COLOR_SEA := Color(0.309804, 0.643137, 0.721569)
 const COLOR_INK := Color(0.121569, 0.098039, 0.070588)
 const COLOR_ROUTE := Color(1, 0.85, 0.55, 0.4)
 
@@ -126,33 +135,25 @@ func _build_ui() -> void:
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_root.add_child(center)
 
-	var wrap := VBoxContainer.new()
-	wrap.add_theme_constant_override("separation", 10)
-	center.add_child(wrap)
+	var frame := TextureRect.new()
+	frame.texture = MAP_FRAME
+	frame.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	frame.custom_minimum_size = FRAME_SIZE
+	center.add_child(frame)
 
-	var title := Label.new()
-	title.text = "MAP"
-	title.add_theme_color_override("font_color", COLOR_ACCENT)
-	title.add_theme_font_size_override("font_size", 22)
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	wrap.add_child(title)
-
-	var map_frame := PanelContainer.new()
-	map_frame.custom_minimum_size = Vector2(720, 480)
-	# The bake is wider than the panel, so it letterboxes. Sea-coloured bars and a
-	# chunky ink border make that read as the edge of a chart instead of a gap.
-	var frame_style := StyleBoxFlat.new()
-	frame_style.bg_color = COLOR_SEA
-	frame_style.border_color = COLOR_INK
-	frame_style.set_border_width_all(4)
-	frame_style.set_content_margin_all(4)
-	map_frame.add_theme_stylebox_override("panel", frame_style)
-	wrap.add_child(map_frame)
+	var bezel := Control.new()
+	bezel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bezel.draw.connect(func():
+		bezel.draw_rect(BEZEL_RECT, COLOR_BEZEL_OUTLINE)
+		bezel.draw_rect(BEZEL_RECT.grow(-BEZEL_STEP), COLOR_BEZEL_RIM)
+	)
+	frame.add_child(bezel)
 
 	_map_panel = Control.new()
-	_map_panel.custom_minimum_size = Vector2(720, 480)
+	_map_panel.position = MAP_RECT.position
+	_map_panel.size = MAP_RECT.size
 	_map_panel.clip_contents = true
-	map_frame.add_child(_map_panel)
+	frame.add_child(_map_panel)
 
 	var bg := ColorRect.new()
 	bg.color = COLOR_SEA
@@ -171,11 +172,26 @@ func _build_ui() -> void:
 	# the layout pass needs the art node to already exist.
 	_map_panel.resized.connect(_layout_hotspots)
 
-	var hint := Label.new()
-	hint.text = "Press M to close"
-	hint.theme_type_variation = &"InfoText"
-	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	wrap.add_child(hint)
+	var shadow := Control.new()
+	shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shadow.draw.connect(_draw_inset_shadow.bind(shadow))
+	frame.add_child(shadow)
+
+	var overlay := TextureRect.new()
+	overlay.texture = MAP_FRAME_TOP
+	overlay.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.size = FRAME_SIZE
+	frame.add_child(overlay)
+
+	var close_btn := Button.new()
+	close_btn.flat = true
+	close_btn.position = Vector2(1316, 96)
+	close_btn.size = Vector2(40, 40)
+	close_btn.focus_mode = Control.FOCUS_NONE
+	close_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	close_btn.pressed.connect(close)
+	frame.add_child(close_btn)
 
 	var names := {}
 	for key in REGION_POINTS:
@@ -221,6 +237,15 @@ func _draw_art() -> void:
 		MONOCRAFT, at + Vector2(-20, -12), "YOU", HORIZONTAL_ALIGNMENT_CENTER, 40, 13,
 		COLOR_SELF
 	)
+
+func _draw_inset_shadow(canvas: Control) -> void:
+	var r := MAP_RECT
+	for i in 2:
+		var edge := COLOR_BEZEL_SHADOW
+		edge.a = 0.32 - 0.16 * i
+		var o := BEZEL_STEP * i
+		canvas.draw_rect(Rect2(r.position + Vector2(o, o), Vector2(r.size.x - o, BEZEL_STEP)), edge)
+		canvas.draw_rect(Rect2(r.position + Vector2(o, o + BEZEL_STEP), Vector2(BEZEL_STEP, r.size.y - o - BEZEL_STEP)), edge)
 
 # Dashed line between two islands: the boats make these trips, so the map says so.
 func _draw_route(from: Vector2, to: Vector2) -> void:
@@ -303,7 +328,7 @@ func _add_hotspot(region_name: String) -> void:
 	hotspot.add_theme_color_override("font_outline_color", COLOR_INK)
 	hotspot.add_theme_constant_override("outline_size", 6)
 	hotspot.visible = false
-	hotspot.pressed.connect(_show_detail.bind(region_name))
+	hotspot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_map_panel.add_child(hotspot)
 	_hotspots[region_name] = hotspot
 
