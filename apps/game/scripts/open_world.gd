@@ -12,6 +12,9 @@ func _ready() -> void:
 	var factory_island := get_node_or_null("FactoryIsland")
 	if factory_island:
 		await spawn_world_npcs("factory_island", factory_island)
+	var pixel_cafe := get_node_or_null("PixelCafe")
+	if pixel_cafe:
+		await spawn_world_npcs("pixel_cafe", pixel_cafe)
 	_sync_trial_givers()
 	await get_tree().create_timer(0.3).timeout
 	can_transition = true

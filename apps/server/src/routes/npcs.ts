@@ -6,7 +6,7 @@ const router = Router();
 
 // Worlds the client can ask for. Anything else is a typo or a probe, reject it
 // rather than running a query that can only return nothing.
-const WORLDS = new Set(["village", "open_world", "factory_island"]);
+const WORLDS = new Set(["village", "open_world", "factory_island", "pixel_cafe"]);
 
 // Every NPC the client should spawn in a world. Replaces the hand-placed nodes
 // that used to live in village.tscn / open_world.tscn, so an NPC can be authored

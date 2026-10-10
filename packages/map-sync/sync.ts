@@ -20,7 +20,7 @@ const ROOT = new URL("../../", import.meta.url).pathname;
 const SRC = `${ROOT}apps/game/assets/map/`;
 const DEST = `${ROOT}apps/dashboard/public/map/`;
 
-const MAPS = ["open_world.png", "village.png", "factory_island.png"];
+const MAPS = ["open_world.png", "village.png", "factory_island.png", "pixel_cafe.png"];
 
 await mkdir(DEST, { recursive: true });
 
