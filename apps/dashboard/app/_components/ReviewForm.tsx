@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { REVIEW_MACROS, expandMacro } from "@/lib/reviewMacros";
 import { useFormStatus } from "react-dom";
 import {
   reviewProject,
@@ -1216,13 +1217,29 @@ export function ReviewForm({
         name="note"
         required
         ref={noteRef}
-        onChange={() => saveDraft()}
+        onChange={(e) => {
+          // Macros (lib/reviewMacros.ts): typing /ai swaps in the canned text.
+          // Only after something was typed or pasted, so deleting back down to
+          // "/ai" never expands it.
+          const input = e.currentTarget;
+          if ((e.nativeEvent as InputEvent).inputType?.startsWith("insert")) {
+            const expanded = expandMacro(input.value, input.selectionStart ?? input.value.length);
+            if (expanded) {
+              input.value = expanded.value;
+              input.setSelectionRange(expanded.caret, expanded.caret);
+            }
+          }
+          saveDraft();
+        }}
         placeholder={
           "Note to the player (required). Be nice and personal, show their work is good. If the site was a restaurant menu, play along and talk like you are ordering before telling them it is a great project. Finish with a short motivation like \"Keep it up!\"."
         }
         className="w-full text-sm"
         rows={3}
       />
+      <p className="text-xs text-muted-foreground -mt-1">
+        Macros: {REVIEW_MACROS.map((m) => `${m.trigger} = ${m.label}`).join(", ")}
+      </p>
       <label className="flex items-start gap-2 text-sm cursor-pointer">
         <input
           type="checkbox"
