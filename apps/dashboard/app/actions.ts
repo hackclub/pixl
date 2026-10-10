@@ -81,6 +81,7 @@ import { SHOP_CATEGORIES, type ShopCategory } from "@/lib/shopCategories";
 import { kickOnlinePlayer, uploadSubmissionImage } from "@/lib/gameServer";
 import { dmOrEmail } from "@/lib/notify";
 import { announceReview } from "@/lib/reviewChannel";
+import { REVIEW_REWARD_COOKIE, REVIEW_REWARD_MAX_AGE } from "@/lib/reviewReward";
 import { assertSafeExternalUrl } from "@/lib/urlSafety";
 import { safeRedirectPath, isSafeUrl } from "@/lib/safeUrl";
 import {
@@ -376,13 +377,13 @@ async function recordSettledPayout(
   access: AdminAccess,
   verdict: string,
   projectName: string,
-): Promise<void> {
+): Promise<number> {
   // Excluded reviewer (see DM_EXCLUDED_SLACK_IDS in lib/slack.ts) - reviews
   // without being paid or DMed for it. No payout row at all, same as the
   // "skip entirely" convention below for a verdict whose rate is 0.
-  if (DM_EXCLUDED_SLACK_IDS.has(access.session.slackId)) return;
+  if (DM_EXCLUDED_SLACK_IDS.has(access.session.slackId)) return 0;
   const { full, blitzApplied } = await payoutBasePixels(verdict);
-  if (full <= 0) return;
+  if (full <= 0) return 0;
   const credited = await creditReviewerPixels(access.session.slackId, full);
   const { error } = await db.from("review_payouts").insert({
     project_id: projectId,
@@ -397,9 +398,25 @@ async function recordSettledPayout(
   });
   if (error) {
     console.error("review payout insert failed", error.message);
-    return;
+    return credited === "credited" ? full : 0;
   }
   await dmPayout(access.session.slackId, projectName, full, full, credited, blitzApplied);
+  // What the reviewer actually got, for the "+6 pixels" celebration.
+  return credited === "credited" ? full : 0;
+}
+
+// Hands the pixels this verdict paid to the page the reviewer lands on next
+// (ReviewCelebration reads and clears it): a short-lived, JS-readable cookie.
+// Set even when the verdict paid nothing, the celebration then just says the
+// review was submitted.
+async function flagReviewReward(px: number): Promise<void> {
+  const jar = await cookies();
+  jar.set(REVIEW_REWARD_COOKIE, String(Math.max(0, Math.round(px))), {
+    httpOnly: false,
+    sameSite: "lax",
+    path: "/",
+    maxAge: REVIEW_REWARD_MAX_AGE,
+  });
 }
 
 // A first-pass approval now pays immediately (see reviewProject's first-pass
@@ -934,6 +951,8 @@ export async function generateAiReviewDraftAction(
 export async function reviewProject(formData: FormData): Promise<void> {
   const access = await requirePerm("review");
   const by = actorName(access);
+  // Pixels this verdict pays the reviewer, shown as "+N pixels" on their next page.
+  let rewardPx = 0;
   const projectId = Number(formData.get("projectId") ?? 0);
   const verdict = String(formData.get("verdict") ?? "");
   const note = String(formData.get("note") ?? "").trim().slice(0, 1000);
@@ -1171,7 +1190,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
     // second reviewer's confirmation. A proposed ban never pays , the
     // eventual ban confirmation is what settles a real payout, if any.
     if (!own && proposedKey === "approved")
-      await recordSettledPayout(projectId, access, "first_pass_approved", project.name);
+      rewardPx = await recordSettledPayout(projectId, access, "first_pass_approved", project.name);
     if (proposedKey === "approved") {
       const ownerBody = `"${project.name}" passed first-pass review by ${playerFacingReviewer}. It still needs a second reviewer to confirm before your pixels are credited , hang tight!`;
       const collabBody = `A project you collaborate on, "${project.name}", passed first-pass review by ${playerFacingReviewer}. It still needs a second reviewer to confirm before pixels are credited.`;
@@ -1196,6 +1215,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
     }
     await logModAction(project.user_id, "project_first_pass", `${project.name}: proposed ${proposedKey.replace("_", " ")} , ${note}`, by);
     if (proposedKey === "approved") await submitToRobert(projectId);
+    await flagReviewReward(rewardPx);
     const nextPath = await nextReviewPath(access, by, stage, projectId);
     revalidatePath("/review");
     redirect(nextPath);
@@ -1258,7 +1278,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
     // Pays out only when an admin has set needs_changes_pixels above 0 (see
     // updateReviewPayoutSettings) - 0 keeps the historical "only approvals
     // pay" behavior with no special-casing here.
-    if (!own) await recordSettledPayout(projectId, access, "needs_changes", project.name);
+    if (!own) rewardPx = await recordSettledPayout(projectId, access, "needs_changes", project.name);
     const changesOwnerBody = `"${project.name}" needs changes before it can be approved , ${playerFacingReviewer}:\n\n${note}\n\nUpdate your project and ship it again.`;
     const changesCollabBody = `"${project.name}" needs changes before it can be approved , ${playerFacingReviewer}:\n\n${note}`;
     const changesCollaboratorIds = await acceptedCollaboratorUserIds(projectId);
@@ -1280,6 +1300,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
       ],
     });
     await logModAction(project.user_id, "project_needs_changes", `${project.name}: ${note}`, by);
+    await flagReviewReward(rewardPx);
     const nextPath = await nextReviewPath(access, by, stage, projectId);
     revalidatePath("/review");
     redirect(nextPath);
@@ -1311,7 +1332,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
     }
     await insertReviewAudit(formData, projectId, project.user_id, by, "banned", note, claimedHours, approvedHours);
     await operationRpc.onBan(projectId);
-    if (!own) await recordSettledPayout(projectId, access, "banned", project.name);
+    if (!own) rewardPx = await recordSettledPayout(projectId, access, "banned", project.name);
     if (stage === "second_review") {
       await voidFirstPassPayouts(projectId, "final verdict was a ban, not an approval");
       await recordRobertOutcome(current.robert_project_id, current.robert_state, "rejected", note);
@@ -1325,6 +1346,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
       await dmOrEmail(collaboratorId, "Project banned", collabBanBody);
     }
     await logModAction(project.user_id, "project_banned", `${project.name}: ${note}`, by);
+    await flagReviewReward(rewardPx);
     const nextPath = await nextReviewPath(access, by, stage, projectId);
     revalidatePath("/review");
     revalidatePath("/", "layout");
@@ -1375,7 +1397,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
     await settleFirstPassPayouts(projectId, project.name);
     await recordRobertOutcome(current.robert_project_id, current.robert_state, "approved");
   }
-  if (!own) await recordSettledPayout(projectId, access, "approved", project.name);
+  if (!own) rewardPx = await recordSettledPayout(projectId, access, "approved", project.name);
 
   // Collected up front so each beneficiary's referral check can see who else
   // is being credited on this same project , see the referrerRidingAlong
@@ -1696,6 +1718,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
   } catch (err) {
     console.error(`reviewProject: Airtable push threw for project ${projectId}`, (err as Error).message);
   }
+  await flagReviewReward(rewardPx);
   const nextPath = await nextReviewPath(access, by, stage, projectId);
   revalidatePath("/review");
   redirect(nextPath);
