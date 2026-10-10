@@ -2299,14 +2299,30 @@ export async function archiveProject(formData: FormData): Promise<void> {
   revalidatePath("/", "layout");
 }
 
+// One person on the project: the owner, or an accepted collaborator. Each one
+// gets their own Airtable row (their own name/address/birthday, their own
+// Hackatime and their own approved hours), so a team project isn't reported
+// as if the owner did all of it.
+interface AirtablePerson {
+  label: string;
+  userId: string;
+  hours: number | null;
+  hackatimeProjects: string[];
+  recordId: string | null;
+  /** Saves the Airtable row id, on the project (owner) or the collaborator row. */
+  saveRecordId: (recordId: string) => Promise<string | null>;
+}
+
 // Manual, one-project-at-a-time push into the intermediate YSWS Airtable
-// base. Never flips that base's own "Automation - Submit to Unified"
-// checkbox - a teammate does that by hand after reviewing what lands here.
-// Re-running this (e.g. the "Re-send to Airtable" button) updates the same
-// row via the stored airtable_record_id instead of creating a duplicate -
-// but an update ship clears that id at ship time (see the ship handler in
-// apps/server/src/routes/projects.ts), so its eventual approval pushes a
-// genuinely NEW row instead of overwriting the original ship's row.
+// base, one row per person (the owner plus every accepted collaborator). Never
+// flips that base's own "Automation - Submit to Unified" checkbox - a
+// teammate does that by hand after reviewing what lands here.
+// Re-running this (e.g. the "Re-send to Airtable" button) updates each
+// person's row via its stored airtable_record_id instead of creating a
+// duplicate, and adds a row for anyone who doesn't have one yet. An update
+// ship clears those ids at ship time (see the ship handler in
+// apps/server/src/routes/projects.ts), so its eventual approval pushes
+// genuinely NEW rows instead of overwriting the original ship's.
 // Shared by the automatic push on final approval (see reviewProject) and the
 // manual "Send to Airtable" / "Re-send to Airtable" button on the project
 // page - one place owns the field-building/push logic so the two callers
@@ -2323,19 +2339,6 @@ async function pushProjectToAirtable(projectId: number): Promise<{ ok: boolean; 
   if (project.status !== "approved" || project.banned_at || project.rejected_at)
     return { ok: false, error: "Only approved projects can be sent to Airtable." };
 
-  const { data: user, error: userError } = await db
-    .from("users")
-    .select(
-      "first_name, last_name, real_name, email, birthday, address_line1, address_line2, address_city, address_state, address_country, address_postal, slack_id, hackatime_token",
-    )
-    .eq("id", project.user_id)
-    .maybeSingle();
-  if (userError) return { ok: false, error: "Could not look up this project's owner - try again." };
-
-  const [fallbackFirst, ...fallbackRest] = (user?.real_name ?? "").split(" ");
-  const firstName = user?.first_name || fallbackFirst || "";
-  const lastName = user?.last_name || fallbackRest.join(" ") || "";
-
   const { data: audit, error: auditError } = await db
     .from("review_audits")
     .select("audit_note")
@@ -2347,10 +2350,99 @@ async function pushProjectToAirtable(projectId: number): Promise<{ ok: boolean; 
   if (auditError) return { ok: false, error: "Could not look up the approval note - try again." };
   const auditSections = parseAuditNote(audit?.audit_note ?? "");
 
+  // Only worth a link (and a token) when there's actually something to show -
+  // most projects use Hackatime, not journals, for their hours evidence.
+  const { count: journalCount } = await db
+    .from("project_journals")
+    .select("id", { count: "exact", head: true })
+    .eq("project_id", projectId);
+  let journalShareUrl = "";
+  if ((journalCount ?? 0) > 0) {
+    const token = await ensureJournalShareToken(projectId);
+    if (token) journalShareUrl = `${config.urls.play}/journals/${projectId}/${token}`;
+  }
+
+  const { data: collabRows, error: collabError } = await db
+    .from("project_collaborators")
+    .select("id, user_id, approved_hours, hackatime_projects, airtable_record_id")
+    .eq("project_id", projectId)
+    .eq("status", "accepted")
+    .order("id", { ascending: true });
+  if (collabError) return { ok: false, error: "Could not look up this project's collaborators - try again." };
+
+  const people: AirtablePerson[] = [
+    {
+      label: "the owner",
+      userId: project.user_id,
+      hours: project.approved_hours,
+      hackatimeProjects: project.hackatime_projects ?? [],
+      recordId: project.airtable_record_id ?? null,
+      saveRecordId: async (recordId) => {
+        const { error } = await db.from("projects").update({ airtable_record_id: recordId }).eq("id", projectId);
+        return error?.message ?? null;
+      },
+    },
+    ...(collabRows ?? []).map(
+      (c: {
+        id: number;
+        user_id: string;
+        approved_hours: number | string | null;
+        hackatime_projects: string[] | null;
+        airtable_record_id: string | null;
+      }): AirtablePerson => ({
+        label: "a collaborator",
+        userId: c.user_id,
+        hours: c.approved_hours == null ? null : Number(c.approved_hours),
+        hackatimeProjects: c.hackatime_projects ?? [],
+        recordId: c.airtable_record_id ?? null,
+        saveRecordId: async (recordId) => {
+          const { error } = await db
+            .from("project_collaborators")
+            .update({ airtable_record_id: recordId })
+            .eq("id", c.id);
+          return error?.message ?? null;
+        },
+      }),
+    ),
+  ];
+
+  const errors: string[] = [];
+  for (const person of people) {
+    const error = await pushPersonToAirtable(project, person, auditSections, journalShareUrl);
+    if (error) errors.push(error);
+  }
+  return errors.length === 0 ? { ok: true } : { ok: false, error: errors.join(" ") };
+}
+
+async function pushPersonToAirtable(
+  project: {
+    repo_url: string | null;
+    demo_url: string | null;
+    description: string | null;
+    image_url: string | null;
+    system_note: string | null;
+  },
+  person: AirtablePerson,
+  auditSections: ReturnType<typeof parseAuditNote>,
+  journalShareUrl: string,
+): Promise<string | null> {
+  const { data: user, error: userError } = await db
+    .from("users")
+    .select(
+      "first_name, last_name, real_name, email, birthday, address_line1, address_line2, address_city, address_state, address_country, address_postal, slack_id, hackatime_token",
+    )
+    .eq("id", person.userId)
+    .maybeSingle();
+  if (userError) return `Could not look up ${person.label} - try again.`;
+
+  const [fallbackFirst, ...fallbackRest] = (user?.real_name ?? "").split(" ");
+  const firstName = user?.first_name || fallbackFirst || "";
+  const lastName = user?.last_name || fallbackRest.join(" ") || "";
+
   const hackatimeReport = await fetchHackatimeReport(
     user?.slack_id,
     user?.hackatime_token ?? null,
-    project.hackatime_projects ?? [],
+    person.hackatimeProjects,
   );
   // "hackatime-project 7/20/2026-7/22/2026, hackatime-project-2 7/21/2026-7/23/2026" -
   // Airtable's own format for this field (see its field description), not the
@@ -2369,18 +2461,6 @@ async function pushProjectToAirtable(projectId: number): Promise<{ ok: boolean; 
     .filter((url): url is string => !!url)
     .join(", ");
 
-  // Only worth a link (and a token) when there's actually something to show -
-  // most projects use Hackatime, not journals, for their hours evidence.
-  const { count: journalCount } = await db
-    .from("project_journals")
-    .select("id", { count: "exact", head: true })
-    .eq("project_id", projectId);
-  let journalShareUrl = "";
-  if ((journalCount ?? 0) > 0) {
-    const token = await ensureJournalShareToken(projectId);
-    if (token) journalShareUrl = `${config.urls.play}/journals/${projectId}/${token}`;
-  }
-
   const fields = buildAirtableFields({
     repoUrl: project.repo_url ?? "",
     demoUrl: project.demo_url ?? "",
@@ -2389,7 +2469,7 @@ async function pushProjectToAirtable(projectId: number): Promise<{ ok: boolean; 
     email: user?.email ?? "",
     imageUrl: project.image_url ?? "",
     description: project.description ?? "",
-    approvedHours: project.approved_hours,
+    approvedHours: person.hours,
     systemNote: project.system_note ?? "",
     birthday: decryptPII(user?.birthday),
     addressLine1: decryptPII(user?.address_line1),
@@ -2405,24 +2485,17 @@ async function pushProjectToAirtable(projectId: number): Promise<{ ok: boolean; 
     journalShareUrl,
   });
 
-  const result = await pushProjectRecord(fields, project.airtable_record_id ?? null);
+  const result = await pushProjectRecord(fields, person.recordId);
   // result.error comes from Airtable's own API error message or a network
   // failure reason - never from decrypted PII, so it's safe to show/log.
-  if (!result.ok) return { ok: false, error: `Airtable push failed: ${result.error}` };
+  if (!result.ok) return `Airtable push failed for ${person.label}: ${result.error}`;
 
-  const { error: updateError } = await db
-    .from("projects")
-    .update({ airtable_record_id: result.recordId })
-    .eq("id", projectId);
-  if (updateError) {
-    console.error("pushProjectToAirtable: airtable_record_id save failed", updateError.message);
-    return {
-      ok: false,
-      error:
-        "Pushed to Airtable, but failed to save the record link - check Airtable for a duplicate before pushing again.",
-    };
+  const saveError = await person.saveRecordId(result.recordId);
+  if (saveError) {
+    console.error("pushProjectToAirtable: airtable_record_id save failed", saveError);
+    return `Pushed ${person.label} to Airtable, but failed to save the record link - check Airtable for a duplicate before pushing again.`;
   }
-  return { ok: true };
+  return null;
 }
 
 export async function sendProjectToAirtable(formData: FormData): Promise<void> {

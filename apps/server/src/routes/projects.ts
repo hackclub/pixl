@@ -898,6 +898,16 @@ router.post("/api/projects/:id/ship", async (req, res) => {
     console.error("[projects] ship failed", updateError);
     return res.status(500).json({ ok: false });
   }
+  // Collaborators get their own Airtable row per approval, same rule as the
+  // owner's airtable_record_id above: an update ship starts fresh rows.
+  if (isUpdate) {
+    const { error: collabResetError } = await supabase
+      .from("project_collaborators")
+      .update({ airtable_record_id: null })
+      .eq("project_id", id);
+    if (collabResetError)
+      console.error("[projects] collaborator airtable reset failed", collabResetError.message);
+  }
   try {
     await recordShipForOperations(id, session.userId);
   } catch (e) {
