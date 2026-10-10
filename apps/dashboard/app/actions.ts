@@ -240,7 +240,12 @@ function readSeconds(value: FormDataEntryValue | null): number {
   return Math.min(Math.round(n), 86400);
 }
 
-async function claimedHoursFor(projectId: number): Promise<number> {
+// `raw` returns what the player actually logged, ignoring any per-journal
+// deflation a reviewer applied from the Journals tab. Without it (the default)
+// the total is the post-deflation figure, which is the cap on what a verdict can
+// credit. Audit rows and the "approved of N logged" text use the raw one, so a
+// project shipped at 16.7h and trimmed to 10h reads "10h approved of 16.7h".
+async function claimedHoursFor(projectId: number, opts: { raw?: boolean } = {}): Promise<number> {
   const [{ data: journals }, { data: proj }] = await Promise.all([
     db.from("project_journals").select("hours, approved_hours, user_id").eq("project_id", projectId),
     db.from("projects").select("hackatime_seconds, kind, user_id").eq("id", projectId).single(),
@@ -251,7 +256,7 @@ async function claimedHoursFor(projectId: number): Promise<number> {
   const journalHours =
     Math.round(
       (journals ?? []).reduce(
-        (s, j) => s + (Number(j.approved_hours ?? j.hours) || 0),
+        (s, j) => s + (Number((opts.raw ? j.hours : (j.approved_hours ?? j.hours))) || 0),
         0,
       ) * 10,
     ) / 10;
@@ -290,6 +295,7 @@ async function insertReviewAudit(
   reviewer: string,
   verdict: string,
   note: string,
+  loggedHours: number,
   claimedHours: number,
   approvedHours: number | null,
 ): Promise<void> {
@@ -300,8 +306,12 @@ async function insertReviewAudit(
     verdict,
     note,
     audit_note: String(formData.get("auditNote") ?? "").trim().slice(0, 5000),
-    claimed_hours: claimedHours,
-    approved_hours: approvedHours,
+    // What the player logged, so "10h approved from 16.7h" reads true. When
+    // journal deflation already trimmed it and the reviewer left the credited
+    // hours blank, the credit is the post-deflation total, recorded explicitly
+    // so a blank override isn't read back as "credited as logged".
+    claimed_hours: loggedHours,
+    approved_hours: approvedHours ?? (loggedHours !== claimedHours ? claimedHours : null),
     repo_opened: formData.get("repoOpened") === "1",
     demo_opened: formData.get("demoOpened") === "1",
     repo_seconds: readSeconds(formData.get("repoSeconds")),
@@ -1022,6 +1032,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
     redirect(`${back}?error=${encodeURIComponent("Feedback is required for every verdict.")}`);
 
   const claimedHours = await claimedHoursFor(projectId);
+  const loggedHours = await claimedHoursFor(projectId, { raw: true });
   const hoursRaw = String(formData.get("approvedHours") ?? "").trim();
   let approvedHours: number | null = null;
   if (hoursRaw !== "") {
@@ -1183,7 +1194,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
       console.error("reviewProject (first pass) failed", error?.message);
       return;
     }
-    await insertReviewAudit(formData, projectId, project.user_id, by, `first_pass_${proposedKey}`, note, claimedHours, approvedHours);
+    await insertReviewAudit(formData, projectId, project.user_id, by, `first_pass_${proposedKey}`, note, loggedHours, claimedHours, approvedHours);
     // A first-pass approval pays and DMs the reviewer immediately, same as a
     // final approval does - reviewing is the work being paid for, not the
     // eventual outcome, so this doesn't wait on (or get clawed back by) a
@@ -1261,7 +1272,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
       console.error("reviewProject (changes) failed", error?.message);
       return;
     }
-    await insertReviewAudit(formData, projectId, project.user_id, by, "needs_changes", note, claimedHours, approvedHours);
+    await insertReviewAudit(formData, projectId, project.user_id, by, "needs_changes", note, loggedHours, claimedHours, approvedHours);
     await operationRpc.requestChanges(projectId);
     const changesEntry = await getBlackoutEntry(projectId);
     if (changesEntry?.graceDeadline && changesEntry.status === "needs_changes") {
@@ -1330,7 +1341,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
       console.error("reviewProject (ban) failed", error?.message);
       return;
     }
-    await insertReviewAudit(formData, projectId, project.user_id, by, "banned", note, claimedHours, approvedHours);
+    await insertReviewAudit(formData, projectId, project.user_id, by, "banned", note, loggedHours, claimedHours, approvedHours);
     await operationRpc.onBan(projectId);
     if (!own) rewardPx = await recordSettledPayout(projectId, access, "banned", project.name);
     if (stage === "second_review") {
@@ -1391,7 +1402,7 @@ export async function reviewProject(formData: FormData): Promise<void> {
     console.error("reviewProject (approve) failed", error?.message);
     return;
   }
-  await insertReviewAudit(formData, projectId, project.user_id, by, "approved", note, claimedHours, approvedHours);
+  await insertReviewAudit(formData, projectId, project.user_id, by, "approved", note, loggedHours, claimedHours, approvedHours);
 
   if (stage === "second_review") {
     await settleFirstPassPayouts(projectId, project.name);
@@ -1481,8 +1492,8 @@ export async function reviewProject(formData: FormData): Promise<void> {
     credited = `\n\nNo new pixels this time , this project already earned ${alreadyPx} pixels.`;
   } else {
     credited =
-      approvedHours !== null && approvedHours !== claimedHours
-        ? `\n\n${totalPx} pixels credited (${approvedHours}h approved of ${claimedHours}h logged).`
+      creditHours !== loggedHours
+        ? `\n\n${totalPx} pixels credited (${creditHours}h approved of ${loggedHours}h logged).`
         : `\n\n${totalPx} pixels credited for ${creditHours}h approved.`;
   }
   // The flat Trial bonus counts toward level and the community vault, but
