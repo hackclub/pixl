@@ -5728,7 +5728,7 @@ position = Vector2(162, -222)
 collision_mask = 2
 script = ExtResource("46_boat1")
 target_marker = NodePath("../PixelCafeSpawn")
-destination_label = "Go to Pixel Cafe"
+destination_label = "Go to Pixl Cafe"
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Pixel Cafe Boat Trigger" unique_id=2147000012]
 shape = SubResource("RectangleShape2D_boat1")

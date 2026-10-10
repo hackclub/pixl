@@ -15,7 +15,7 @@ const WORLDS = [
   { id: "village", label: "The Hub village" },
   { id: "open_world", label: "Open world (Dustline)" },
   { id: "factory_island", label: "Factory Island" },
-  { id: "pixel_cafe", label: "Pixel Cafe" },
+  { id: "pixel_cafe", label: "Pixl Cafe" },
 ];
 
 // npc.gd resolves its modes as an if/elif chain, so exactly one applies.
