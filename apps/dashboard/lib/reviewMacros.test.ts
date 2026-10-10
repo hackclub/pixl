@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { REVIEW_MACROS, expandMacro } from "./reviewMacros";
 
 const AI = REVIEW_MACROS.find((m) => m.trigger === "/ai")!;
+const FRAUD = REVIEW_MACROS.find((m) => m.trigger === "/fraud")!;
 
 describe("expandMacro", () => {
   test("/ai on its own becomes the excessive-AI message", () => {
@@ -33,6 +34,20 @@ describe("expandMacro", () => {
 
   test("only looks at the text before the caret", () => {
     expect(expandMacro("hello /ai", 5)).toBeNull();
+  });
+});
+
+describe("/fraud", () => {
+  test("becomes the fraud squad ban message and puts the caret after it", () => {
+    const out = expandMacro("/fraud", 6);
+    expect(out?.value).toBe("This project was banned by the fraud squad. Please check fraud.hackclub.com ");
+    expect(out?.caret).toBe(out!.value.length);
+  });
+
+  test("expands mid-note and is not mistaken for /ai", () => {
+    const out = expandMacro("Sorry. /fraud", 13);
+    expect(out?.value).toBe(`Sorry. ${FRAUD.text}`);
+    expect(expandMacro("/fra", 4)).toBeNull();
   });
 });
 

@@ -22,6 +22,11 @@ export const REVIEW_MACROS: readonly ReviewMacro[] = [
       "whether you could make your project again, but without AI. The answer should always be yes.\n\n" +
       "Feel free to resubmit another project to Pixl!",
   },
+  {
+    trigger: "/fraud",
+    label: "Banned by the fraud squad",
+    text: "This project was banned by the fraud squad. Please check fraud.hackclub.com ",
+  },
 ];
 
 /**
