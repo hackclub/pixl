@@ -4,7 +4,7 @@
 // this repo has no @vercel/node dependency for the newer one, and apps/game's
 // serve.ts adapts it for the container deploy.
 import { renderProjectCard } from "./_lib/projectCard.ts";
-import { safeFetch } from "./_lib/safeFetch.ts";
+import { fetchCardImage } from "./_lib/cardImage.ts";
 
 import pixl from "../../pixl.json" with { type: "json" };
 
@@ -69,17 +69,9 @@ export default async function handler(req: MinimalReq, res: MinimalRes): Promise
     if (!body.ok || !body.project) return fallback(60);
     const { project } = body;
 
-    let imageBytes: Uint8Array | null = null;
-    if (project.image_url) {
-      try {
-        // image_url is DB-sourced, not a literal in this repo, so it goes
-        // through the SSRF guard before we fetch it - see _lib/safeFetch.ts.
-        const imgRes = await safeFetch(project.image_url);
-        if (imgRes.ok) imageBytes = new Uint8Array(await imgRes.arrayBuffer());
-      } catch (err) {
-        console.error("[project-og] image fetch failed", err);
-      }
-    }
+    // image_url is player-set, so it goes through the SSRF guard, size caps
+    // and fetch budget in _lib/cardImage.ts.
+    const image = await fetchCardImage(project.image_url, "project-og");
 
     send(
       renderProjectCard({
@@ -89,9 +81,9 @@ export default async function handler(req: MinimalReq, res: MinimalRes): Promise
         status: project.status,
         isPeak: !!project.is_peak,
         siteHost: SITE_HOST,
-        imageBytes,
+        imageBytes: image.bytes,
       }),
-      3600,
+      image.throttled ? 60 : 3600,
     );
   } catch (err) {
     console.error("[project-og] failed", err);

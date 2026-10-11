@@ -5,7 +5,7 @@
 // dependency to pull in the types for either - this form has worked
 // unchanged since Vercel's very first Node runtime.
 import { renderItemCard } from "./_lib/shopCard.ts";
-import { safeFetch } from "./_lib/safeFetch.ts";
+import { fetchCardImage } from "./_lib/cardImage.ts";
 
 import pixl from "../../pixl.json" with { type: "json" };
 
@@ -52,20 +52,15 @@ export default async function handler(req: MinimalReq, res: MinimalRes): Promise
       return send(renderItemCard({ name: "Pixl Shop", price: 0, imageBytes: null, siteHost: SITE_HOST }), 60);
     }
 
-    let imageBytes: Uint8Array | null = null;
-    if (body.item.image_url) {
-      try {
-        // image_url comes from the DB record, not a literal in this repo, so
-        // it's validated against SSRF (private/loopback targets) before we
-        // ever fetch it - see _lib/safeFetch.ts.
-        const imgRes = await safeFetch(body.item.image_url);
-        if (imgRes.ok) imageBytes = new Uint8Array(await imgRes.arrayBuffer());
-      } catch (err) {
-        console.error("[shop-og] image fetch failed", err);
-      }
-    }
+    // image_url comes from the DB record, not a literal in this repo, so it
+    // goes through the SSRF guard, size caps and fetch budget in
+    // _lib/cardImage.ts.
+    const image = await fetchCardImage(body.item.image_url, "shop-og");
 
-    send(renderItemCard({ name: body.item.name, price: body.item.price, imageBytes, siteHost: SITE_HOST }), 3600);
+    send(
+      renderItemCard({ name: body.item.name, price: body.item.price, imageBytes: image.bytes, siteHost: SITE_HOST }),
+      image.throttled ? 60 : 3600,
+    );
   } catch (err) {
     console.error("[shop-og] failed", err);
     send(renderItemCard({ name: "Pixl Shop", price: 0, imageBytes: null, siteHost: SITE_HOST }), 60);

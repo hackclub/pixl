@@ -3,7 +3,7 @@
 // ./project-og.ts and ./shop-og.ts: classic Vercel Node.js (req, res) function
 // signature, adapted by apps/game's serve.ts for the container deploy.
 import { renderPlayerCard } from "./_lib/playerCard.ts";
-import { safeFetch } from "./_lib/safeFetch.ts";
+import { fetchCardImage } from "./_lib/cardImage.ts";
 
 import pixl from "../../pixl.json" with { type: "json" };
 
@@ -71,17 +71,9 @@ export default async function handler(req: MinimalReq, res: MinimalRes): Promise
     if (!body.ok || !body.player) return fallback(60);
     const { player } = body;
 
-    let avatarBytes: Uint8Array | null = null;
-    if (player.avatar_url) {
-      try {
-        // avatar_url is DB-sourced (Slack/gravatar), not a literal in this
-        // repo, so it goes through the SSRF guard first - see _lib/safeFetch.ts.
-        const imgRes = await safeFetch(player.avatar_url);
-        if (imgRes.ok) avatarBytes = new Uint8Array(await imgRes.arrayBuffer());
-      } catch (err) {
-        console.error("[player-og] avatar fetch failed", err);
-      }
-    }
+    // avatar_url is DB-sourced (Slack/gravatar, or player-set), so it goes
+    // through the SSRF guard, size caps and fetch budget in _lib/cardImage.ts.
+    const avatar = await fetchCardImage(player.avatar_url, "player-og");
 
     send(
       renderPlayerCard({
@@ -91,9 +83,9 @@ export default async function handler(req: MinimalReq, res: MinimalRes): Promise
         projects: (body.projects ?? []).length,
         joined: player.created_at ?? null,
         siteHost: SITE_HOST,
-        avatarBytes,
+        avatarBytes: avatar.bytes,
       }),
-      3600,
+      avatar.throttled ? 60 : 3600,
     );
   } catch (err) {
     console.error("[player-og] failed", err);

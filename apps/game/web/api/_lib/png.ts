@@ -170,11 +170,19 @@ function paeth(a: number, b: number, c: number): number {
   return c;
 }
 
+// Largest image decodePNG will allocate for. Decoding holds the inflated
+// scanlines, the unfiltered pixels and the RGBA output at once (~12 bytes a
+// pixel), and the bytes come from player-set URLs, so a header claiming a huge
+// canvas is refused before anything is allocated. 3840x2160 still fits a 4K
+// screenshot, and every card only draws a thumbnail anyway.
+export const MAX_DECODE_PIXELS = 3840 * 2160;
+
 // Decodes an 8-bit, non-interlaced PNG (grayscale, RGB, palette, or their
 // +alpha variants) into flat RGBA. Item photos are ordinary exported PNGs,
 // so that covers everything that actually shows up in practice - anything
-// else (16-bit, interlaced, sub-byte depths) throws, and callers fall back
-// to a text-only card rather than fail the whole preview.
+// else (16-bit, interlaced, sub-byte depths, larger than MAX_DECODE_PIXELS)
+// throws, and callers fall back to a text-only card rather than fail the
+// whole preview.
 export function decodePNG(bytes: Uint8Array): DecodedImage {
   for (let i = 0; i < SIGNATURE.length; i++) {
     if (bytes[i] !== SIGNATURE[i]) throw new Error("not a PNG");
@@ -189,13 +197,14 @@ export function decodePNG(bytes: Uint8Array): DecodedImage {
   const idatParts: Uint8Array[] = [];
 
   let pos = 8;
-  while (pos < bytes.length) {
+  while (pos + 8 <= bytes.length) {
     const view = new DataView(bytes.buffer, bytes.byteOffset + pos, 8);
     const len = view.getUint32(0);
     const type = String.fromCharCode(bytes[pos + 4]!, bytes[pos + 5]!, bytes[pos + 6]!, bytes[pos + 7]!);
     const data = bytes.subarray(pos + 8, pos + 8 + len);
 
     if (type === "IHDR") {
+      if (data.length < 13) throw new Error("truncated PNG header");
       const dv = new DataView(data.buffer, data.byteOffset, data.byteLength);
       width = dv.getUint32(0);
       height = dv.getUint32(4);
@@ -220,6 +229,8 @@ export function decodePNG(bytes: Uint8Array): DecodedImage {
   const channels = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 }[colorType];
   if (!channels) throw new Error(`unsupported PNG color type ${colorType}`);
   if (colorType === 3 && !palette) throw new Error("palette PNG missing PLTE");
+  if (width === 0 || height === 0) throw new Error("PNG missing IHDR");
+  if (width * height > MAX_DECODE_PIXELS) throw new Error(`PNG too large (${width}x${height})`);
 
   const total = idatParts.reduce((n, p) => n + p.length, 0);
   const idat = new Uint8Array(total);
@@ -228,10 +239,14 @@ export function decodePNG(bytes: Uint8Array): DecodedImage {
     idat.set(p, at);
     at += p.length;
   }
-  const raw = inflateSync(idat);
 
   const bpp = channels;
   const stride = width * channels;
+  // One filter byte plus `stride` bytes per row. Capping the inflate there
+  // stops a tiny zlib bomb from expanding past what the header declared.
+  const expected = (stride + 1) * height;
+  const raw = inflateSync(idat, { maxOutputLength: expected });
+  if (raw.length < expected) throw new Error("truncated PNG data");
   const recon = new Uint8Array(stride * height);
 
   for (let y = 0; y < height; y++) {
