@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { requirePage, requireGuidelinesAck } from "@/lib/guard";
 import { canSeeBuilderPII } from "@/lib/reviewAccess";
 import { listShippedProjects, listReviewAudits } from "@/lib/db";
@@ -8,6 +9,7 @@ import { getHideReviewers } from "@/lib/liveModeServer";
 import { reviewerName } from "@/lib/liveMode";
 import { ReviewTable } from "@/app/_components/ReviewTable";
 import { LiveReview } from "@/app/_components/LiveReview";
+import { REVIEW_SORTS, REVIEW_SORT_COOKIE } from "@/lib/reviewSort";
 import {
   Badge,
   ButtonLink,
@@ -23,11 +25,7 @@ import {
 export const dynamic = "force-dynamic";
 
 const PER = 15;
-const SORTS = [
-  { key: "oldest", label: "Oldest" },
-  { key: "hours", label: "Hours" },
-  { key: "status", label: "Status" },
-];
+const SORTS = REVIEW_SORTS;
 
 export default async function ReviewListPage({
   searchParams,
@@ -37,7 +35,9 @@ export default async function ReviewListPage({
   const access = await requirePage("reviewer");
   await requireGuidelinesAck(access);
   const viewer = access.session.slackId;
-  const { page, sort, kind: rawKind, blackout } = await searchParams;
+  const { page, sort: sortParam, kind: rawKind, blackout } = await searchParams;
+  // No ?sort= in the URL: use the reviewer's last pick (set by proxy.ts).
+  const sort = sortParam ?? (await cookies()).get(REVIEW_SORT_COOKIE)?.value;
   const onlyBlackout = blackout === "1";
   // Hardware and software have separate review queues. A reviewer restricted
   // to one queue (access.reviewQueues) can't view or query the other, so clamp

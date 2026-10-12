@@ -47,6 +47,7 @@ import { SecondPassChecklist } from "@/app/_components/SecondPassChecklist";
 import { hackatimeCutoffUnix, hackatimeCutoffLabel } from "@/app/_generated/config";
 import { ReviewDetailTabs } from "@/app/_components/ReviewDetailTabs";
 import { ReviewSplit } from "./ReviewSplit";
+import { ReviewShortcuts } from "./ReviewShortcuts";
 import { getStaffSettings } from "@/lib/db";
 import { ReviewHeartbeat } from "@/app/_components/ReviewHeartbeat";
 import { ProjectNotes } from "@/app/_components/ProjectNotes";
@@ -480,6 +481,70 @@ export default async function ReviewDetail({
     </Callout>
   );
 
+  // Repo, README, demo (and Telescreen on the final pass) sit in the owner
+  // card, next to who built it, instead of a separate row further down.
+  const projectLinks = (
+    <div className="flex flex-wrap gap-2">
+      {repoUrl ? (
+        <>
+          {/* data-review-link lets ReviewForm record that the repo/demo was
+              opened (repo_opened/demo_opened on the review audit). */}
+          <span data-review-link="repo" className="contents">
+            <ButtonLink href={repoUrl} external variant="outline" icon="github">
+              Repo
+            </ButtonLink>
+            <ButtonLink href={`${repoUrl.replace(/\/$/, "")}#readme`} external variant="outline" icon="docs">
+              README
+            </ButtonLink>
+          </span>
+        </>
+      ) : (
+        <Badge tone="danger">No repo</Badge>
+      )}
+      {demoUrl ? (
+        <span data-review-link="demo" className="contents">
+          <ButtonLink href={demoUrl} external variant="outline" icon="link">
+            Live demo
+          </ButtonLink>
+        </span>
+      ) : (
+        <Badge tone="danger">No demo</Badge>
+      )}
+      {/* Final pass only: the Telescreen workbench is what a final
+          reviewer cross-checks heartbeats against. One button per
+          linked Hackatime project so &p= opens that project's
+          heartbeats, or a single unscoped link when none is linked. */}
+      {!live && isFinalStage && (
+        <Suspense fallback={null}>
+          <Await promise={hackatimeReportPromise}>
+            {(report) => {
+              if (!report?.hackatimeUserId) return null;
+              const telescreenUrl = (projectName?: string) => {
+                const url = new URL("https://telescreen.hackclub.com/workbench/hackatime/overview");
+                url.searchParams.set("u", report.hackatimeUserId);
+                if (projectName) url.searchParams.set("p", projectName);
+                return url.toString();
+              };
+              const linked = report.projects.filter((hp) => hp.linked);
+              if (linked.length === 0) {
+                return (
+                  <ButtonLink href={telescreenUrl()} external icon="view">
+                    Telescreen
+                  </ButtonLink>
+                );
+              }
+              return linked.map((hp) => (
+                <ButtonLink key={hp.name} href={telescreenUrl(hp.name)} external icon="view">
+                  Telescreen: {hp.name}
+                </ButtonLink>
+              ));
+            }}
+          </Await>
+        </Suspense>
+      )}
+    </div>
+  );
+
   const ownerCard = (ownerName: string) => {
     const contributors = contributorsFor(ownerName);
     return (
@@ -492,7 +557,12 @@ export default async function ReviewDetail({
             </TextLink>
             <div className="text-sm">
               {!live && p.users?.slack_id && (
-                <TextLink href={`https://hackclub.slack.com/team/${p.users.slack_id}`} external>
+                <TextLink
+                  href={`https://hackclub.slack.com/team/${p.users.slack_id}`}
+                  external
+                  className="inline-flex items-center gap-1"
+                >
+                  <Icon glyph="slack" size={16} />
                   <Mono>{p.users.slack_id}</Mono>
                 </TextLink>
               )}
@@ -502,18 +572,19 @@ export default async function ReviewDetail({
                 </Muted>
               )}
             </div>
+            <p className="hc-caption mt-1 text-sm">
+              Submitted {ago(p.shipped_at)} · {fmtHM(hours)} logged
+              {hackatimeProjects.length > 0 && (
+                <>
+                  {" · "}
+                  <a href="#hackatime" className="hc-link">
+                    Hackatime: {hackatimeProjects.join(", ")}
+                  </a>
+                </>
+              )}
+            </p>
           </div>
-          {!live && p.users?.slack_id && (
-            <ButtonLink
-              href={`https://hackclub.slack.com/team/${p.users.slack_id}`}
-              external
-              variant="outline"
-              size="sm"
-              icon="slack"
-            >
-              Open in Slack
-            </ButtonLink>
-          )}
+          {projectLinks}
         </div>
         {acceptedCollaborators.length > 0 && (
           <div className="mt-4 border-t border-[var(--border)] pt-4">
@@ -531,6 +602,33 @@ export default async function ReviewDetail({
             </p>
           </div>
         )}
+        <details className="mt-3 border-t border-[var(--border)] pt-3">
+          <summary className="hc-caption inline-flex cursor-pointer items-center gap-1 text-sm">
+            <Icon glyph="checkmark" size={16} />
+            Eligibility check and builder details
+          </summary>
+          <ul className="hc-caption mt-2 flex list-disc flex-col gap-1 pl-5 text-sm">
+            <li>
+              <strong>Not</strong> a school assignment, and <strong>not</strong> built as paid Hack Club work. Both are
+              ineligible for the unified database.
+            </li>
+            <li>Repo has a usable README and the live demo actually works.</li>
+          </ul>
+          <p className="hc-eyebrow mb-2 mt-4">
+            {builderView.privileged ? "Builder details (name, email, age, shipping)" : "Builder details (age, fields on file)"}
+          </p>
+          <DescriptionList
+            items={[
+              ["Name", builderDetails.fullName],
+              ["Email", builderDetails.email],
+              ["Age", builderDetails.ageLabel],
+              ["Country", builderDetails.country],
+              ...(builderView.address !== null
+                ? ([["Address", builderDetails.address]] as [ReactNode, ReactNode][])
+                : []),
+            ]}
+          />
+        </details>
       </Card>
     );
   };
@@ -989,6 +1087,12 @@ export default async function ReviewDetail({
             <h1 className="hc-title mt-2 break-words">{p.name}</h1>
           </div>
 
+          {/* Who built it, when, how long, and the links: first thing a
+              reviewer needs, so it sits right under the title. */}
+          <Suspense fallback={ownerCard(ownerNameFor(null))}>
+            <Await promise={ownerHandlePromise}>{(handle) => ownerCard(ownerNameFor(handle))}</Await>
+          </Suspense>
+
           {p.image_url && (
             <img
               src={p.image_url}
@@ -1154,123 +1258,6 @@ export default async function ReviewDetail({
             </Card>
           )}
 
-          <Suspense fallback={ownerCard(ownerNameFor(null))}>
-            <Await promise={ownerHandlePromise}>{(handle) => ownerCard(ownerNameFor(handle))}</Await>
-          </Suspense>
-
-          <Details
-            summary={
-              <>
-                <Icon glyph="checkmark" size={18} className="hc-muted" />
-                Eligibility check
-              </>
-            }
-          >
-            <ul className="hc-caption flex list-disc flex-col gap-1 pl-5 text-sm">
-              <li>
-                <strong>Not</strong> a school assignment, and <strong>not</strong> built as paid Hack Club work. Both
-                are ineligible for the unified database.
-              </li>
-              <li>Repo has a usable README and the live demo actually works.</li>
-            </ul>
-            <div className="mt-4">
-              <Details
-                summary={
-                  builderView.privileged
-                    ? "Builder details (name, email, age, shipping)"
-                    : "Builder details (age, fields on file)"
-                }
-              >
-                <DescriptionList
-                  items={[
-                    ["Name", builderDetails.fullName],
-                    ["Email", builderDetails.email],
-                    ["Age", builderDetails.ageLabel],
-                    ["Country", builderDetails.country],
-                    ...(builderView.address !== null
-                      ? ([["Address", builderDetails.address]] as [ReactNode, ReactNode][])
-                      : []),
-                  ]}
-                />
-              </Details>
-            </div>
-          </Details>
-
-          {/* Right above the tabs they go with: the repo, README and demo are
-              what a reviewer opens next to the commits and journals. */}
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
-            <p className="hc-caption text-sm">
-              Submitted {ago(p.shipped_at)} · {fmtHM(hours)} logged
-              {hackatimeProjects.length > 0 && (
-                <>
-                  {" · "}
-                  <a href="#hackatime" className="hc-link">
-                    Hackatime: {hackatimeProjects.join(", ")}
-                  </a>
-                </>
-              )}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {repoUrl ? (
-                <>
-                  <ButtonLink href={repoUrl} external variant="outline" size="sm" icon="github">
-                    Repo
-                  </ButtonLink>
-                  <ButtonLink
-                    href={`${repoUrl.replace(/\/$/, "")}#readme`}
-                    external
-                    variant="outline"
-                    size="sm"
-                    icon="docs"
-                  >
-                    README
-                  </ButtonLink>
-                </>
-              ) : (
-                <Badge tone="danger">No repo</Badge>
-              )}
-              {demoUrl ? (
-                <ButtonLink href={demoUrl} external variant="outline" size="sm" icon="link">
-                  Live demo
-                </ButtonLink>
-              ) : (
-                <Badge tone="danger">No demo</Badge>
-              )}
-              {/* Final pass only: the Telescreen workbench is what a final
-                  reviewer cross-checks heartbeats against. One button per
-                  linked Hackatime project so &p= opens that project's
-                  heartbeats, or a single unscoped link when none is linked. */}
-              {!live && isFinalStage && (
-                <Suspense fallback={null}>
-                  <Await promise={hackatimeReportPromise}>
-                    {(report) => {
-                      if (!report?.hackatimeUserId) return null;
-                      const telescreenUrl = (projectName?: string) => {
-                        const url = new URL("https://telescreen.hackclub.com/workbench/hackatime/overview");
-                        url.searchParams.set("u", report.hackatimeUserId);
-                        if (projectName) url.searchParams.set("p", projectName);
-                        return url.toString();
-                      };
-                      const linked = report.projects.filter((hp) => hp.linked);
-                      if (linked.length === 0) {
-                        return (
-                          <ButtonLink href={telescreenUrl()} external size="sm" icon="view">
-                            Telescreen
-                          </ButtonLink>
-                        );
-                      }
-                      return linked.map((hp) => (
-                        <ButtonLink key={hp.name} href={telescreenUrl(hp.name)} external size="sm" icon="view">
-                          Telescreen: {hp.name}
-                        </ButtonLink>
-                      ));
-                    }}
-                  </Await>
-                </Suspense>
-              )}
-            </div>
-          </div>
-
           <Suspense fallback={<CardSkeleton lines={6} />}>
             <Await
               promise={Promise.all([commitsPromise, yswsPromise, hackatimeReportPromise, ownerHandlePromise])}
@@ -1377,7 +1364,8 @@ export default async function ReviewDetail({
       </ReviewSplit>
 
       <nav className="sticky bottom-0 z-10 -mx-6 flex items-center gap-4 border-t border-[var(--border)] bg-[var(--background)] px-6 py-3">
-        <Suspense fallback={<QueueNav prevId={null} nextId={null} label="Loading queue..." />}>
+        <ReviewShortcuts />
+        <Suspense fallback={<QueueNav prevId={null} nextId={null} index={-1} total={0} />}>
           <Await promise={queuePromise}>
             {(queue) => {
               // projects.id is a Postgres bigint; compare numerically so a
@@ -1387,7 +1375,8 @@ export default async function ReviewDetail({
                 <QueueNav
                   prevId={idx > 0 ? queue[idx - 1].id : null}
                   nextId={idx >= 0 && idx < queue.length - 1 ? queue[idx + 1].id : null}
-                  label={idx >= 0 ? `Submission ${idx + 1} of ${queue.length}` : "Not in queue"}
+                  index={idx}
+                  total={queue.length}
                 />
               );
             }}
@@ -1401,28 +1390,39 @@ export default async function ReviewDetail({
 function QueueNav({
   prevId,
   nextId,
-  label,
+  index,
+  total,
 }: {
   prevId: number | string | null;
   nextId: number | string | null;
-  label: string;
+  /** This submission's position in the queue, -1 when it isn't in it. */
+  index: number;
+  total: number;
 }) {
+  // The position goes on the buttons ("Next · 4/21") so it's readable at a
+  // glance; the middle of the bar lists the keyboard shortcuts instead.
+  const position = (i: number) => (index >= 0 ? ` · ${i + 1}/${total}` : "");
   const step = (id: number | string | null, prev: boolean) => {
     const body = prev ? (
       <>
-        <Icon glyph="view-back" size={18} /> Prev
+        <Icon glyph="view-back" size={18} /> Prev{id != null && position(index - 1)}
       </>
     ) : (
       <>
-        Next <Icon glyph="view-forward" size={18} />
+        Next{id != null && position(index + 1)} <Icon glyph="view-forward" size={18} />
       </>
     );
     return id != null ? (
-      <Link href={`/review/${id}`} prefetch={false} className={buttonClass("outline", "sm")}>
+      <Link
+        href={`/review/${id}`}
+        prefetch={false}
+        data-shortcut={prev ? "prev" : "next"}
+        className={buttonClass("outline", "md")}
+      >
         {body}
       </Link>
     ) : (
-      <span className={`${buttonClass("outline", "sm")} pointer-events-none opacity-40`} aria-disabled>
+      <span className={`${buttonClass("outline", "md")} pointer-events-none opacity-40`} aria-disabled>
         {body}
       </span>
     );
@@ -1430,7 +1430,11 @@ function QueueNav({
   return (
     <>
       {step(prevId, true)}
-      <span className="hc-caption hc-mono flex-1 text-center text-sm">{label}</span>
+      <span className="hc-caption flex-1 text-center text-xs">
+        {index < 0 && total > 0 ? "Not in queue · " : ""}
+        <kbd className="hc-mono">←</kbd> <kbd className="hc-mono">→</kbd> move · <kbd className="hc-mono">R</kbd> repo ·{" "}
+        <kbd className="hc-mono">D</kbd> demo
+      </span>
       {step(nextId, false)}
     </>
   );

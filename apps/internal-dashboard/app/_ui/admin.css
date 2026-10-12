@@ -502,10 +502,19 @@ html[data-theme="light"] .admin-shell {
   border: 1px solid var(--border);
   padding: 0 10px;
   height: 34px;
-  width: 100%;
   -webkit-appearance: none;
   appearance: none;
   transition: border-color 0.1s ease;
+}
+
+/* Full width by default, but in Tailwind's components layer so a width
+   utility on the element (w-24, w-auto, sm:w-28) still wins. Unlayered, this
+   beat every utility and stretched inline inputs across the whole row. */
+@layer components {
+  .hc-input,
+  .hc-textarea {
+    width: 100%;
+  }
 }
 
 .hc-input-search {
@@ -1105,30 +1114,34 @@ html[data-theme="light"] .admin-shell {
   font-weight: 400;
 }
 
+/* Review page type: Phantom Sans for headings, labels, steps and section
+   headers so it scans like a document; JetBrains Mono stays on buttons and on
+   data (IDs, numbers, code via .hc-mono/.hc-code). Phantom Sans ships only
+   400 and 700. */
 .hc-review .hc-title {
-  font-family: var(--font-monospace);
-  font-size: 24px;
+  font-family: var(--font-body);
+  font-size: 26px;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
 }
 
 .hc-review .hc-heading {
-  font-family: var(--font-monospace);
-  font-size: 14px;
-  font-weight: 600;
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 700;
   letter-spacing: 0;
 }
 
 .hc-review .hc-eyebrow {
-  font-family: var(--font-monospace);
-  font-weight: 600;
+  font-family: var(--font-body);
+  font-weight: 700;
   letter-spacing: 0.04em;
 }
 
 .hc-review .hc-label {
-  font-family: var(--font-monospace);
-  font-size: 12.5px;
-  font-weight: 600;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .hc-review .hc-label-hint {
@@ -1148,39 +1161,39 @@ html[data-theme="light"] .admin-shell {
 }
 
 .hc-review .hc-step {
-  font-family: var(--font-monospace);
-  font-size: 12px;
-  font-weight: 600;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .hc-review .hc-details > summary {
-  font-family: var(--font-monospace);
-  font-size: 12.5px;
-  font-weight: 600;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .hc-review .hc-table th,
 .hc-review .hc-dl dt {
-  font-family: var(--font-monospace);
-  font-weight: 600;
+  font-family: var(--font-body);
+  font-weight: 700;
 }
 
 .hc-review .hc-dl dt {
-  font-size: 12.5px;
+  font-size: 13.5px;
 }
 
 .hc-review .hc-empty-title {
-  font-family: var(--font-monospace);
-  font-size: 15px;
-  font-weight: 600;
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .hc-review .hc-markdown h1,
 .hc-review .hc-markdown h2,
 .hc-review .hc-markdown h3,
 .hc-review .hc-markdown h4 {
-  font-family: var(--font-monospace);
-  font-weight: 600;
+  font-family: var(--font-body);
+  font-weight: 700;
 }
 
 .hc-review .hc-markdown h1 { font-size: 19px; }

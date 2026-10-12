@@ -28,7 +28,6 @@ import {
   rePerHour,
 } from "@/app/_generated/config";
 import { TECHNICAL_FEATURES_MIN } from "@/lib/auditNote";
-import { isSafeUrl } from "@/lib/safeUrl";
 import { BlackoutReviewSection, type BlackoutReviewData } from "@/app/_components/BlackoutReviewSection";
 import { Badge, Button, Callout, Checkbox, Details, Field, formatDateTime, Input, NativeSelect, Textarea } from "@/app/_ui/ui";
 import { actionErrorMessage, isStaleDeployError } from "@/app/_ui/actionError";
@@ -213,76 +212,87 @@ function TierAndPayout({
       <p className="hc-caption text-xs">{TIERS[Math.min(Math.max(tier, 1), 4) - 1].blurb}</p>
       {regradeError && <Callout tone="danger" icon="important">{regradeError}</Callout>}
 
-      <div className="flex flex-col gap-1 border-t border-[var(--border)] pt-2 text-sm tabular-nums">
-        <PayoutRow
-          label={`This project · ${hours}h × ${perHour} RE/h`}
-          value={`${round1(hoursRe).toLocaleString()} RE`}
-        />
-        {trialBonusRe > 0 && (
-          <PayoutRow label="Trial bonus (flat, every Trial)" value={`+${trialBonusRe.toLocaleString()} RE`} />
-        )}
-        <PayoutRow
-          label="Their RE before → after"
-          value={`${round1(playerReBefore).toLocaleString()} → ${round1(reAfter).toLocaleString()}`}
-        />
-        <PayoutRow
-          label="Their level before → after"
-          value={
+      {/* The breakdown is collapsed by default; the summary keeps the number
+          that matters (what the player actually gets) visible. */}
+      <Details
+        summary={
+          <span className="tabular-nums">
+            Payout: {netPx.toLocaleString()} px · ${netUsd.toFixed(2)}
+            {forTrial && " (held for Trial)"}
+          </span>
+        }
+      >
+        <div className="flex flex-col gap-1 text-sm tabular-nums">
+          <PayoutRow
+            label={`This project · ${hours}h × ${perHour} RE/h`}
+            value={`${round1(hoursRe).toLocaleString()} RE`}
+          />
+          {trialBonusRe > 0 && (
+            <PayoutRow label="Trial bonus (flat, every Trial)" value={`+${trialBonusRe.toLocaleString()} RE`} />
+          )}
+          <PayoutRow
+            label="Their RE before → after"
+            value={`${round1(playerReBefore).toLocaleString()} → ${round1(reAfter).toLocaleString()}`}
+          />
+          <PayoutRow
+            label="Their level before → after"
+            value={
+              <>
+                {levelBefore} → {levelAfter}
+                {levelAfter > levelBefore && <span className="text-[var(--hc-green)]"> ▲</span>}
+              </>
+            }
+          />
+          <PayoutRow
+            label="Rate (averaged over this ship)"
+            value={`${Math.round(rate)} px/h · $${usdRate.toFixed(2)}/h`}
+          />
+          <div className="border-t border-[var(--border)] pt-1">
+            <PayoutRow strong label="Payout" value={`${px.toLocaleString()} px · $${usd.toFixed(2)}`} />
+          </div>
+          {forTrial && trialPrizePx > 0 && (
             <>
-              {levelBefore} → {levelAfter}
-              {levelAfter > levelBefore && <span className="text-[var(--hc-green)]"> ▲</span>}
-            </>
-          }
-        />
-        <PayoutRow
-          label="Rate (averaged over this ship)"
-          value={`${Math.round(rate)} px/h · $${usdRate.toFixed(2)}/h`}
-        />
-        <div className="border-t border-[var(--border)] pt-1">
-          <PayoutRow strong label="Payout" value={`${px.toLocaleString()} px · $${usd.toFixed(2)}`} />
-        </div>
-        {forTrial && trialPrizePx > 0 && (
-          <>
-            <PayoutRow
-              label={`"${trialName}" prize · first ${trialMinHours}h`}
-              value={`≈${trialPrizePx.toLocaleString()} px`}
-            />
-            <PayoutRow label="+ pixels for hours beyond that" value={`${trialBeyondPx.toLocaleString()} px`} />
-          </>
-        )}
-        {forTrial && (
-          <p className="hc-caption pt-1 text-xs">
-            Trial ship: this payout is held, not credited.{" "}
-            {trialPrizePx > 0
-              ? `Once you approve it, the maker keeps the prize (worth ≈${trialPrizePx.toLocaleString()} px) plus the ${trialBeyondPx.toLocaleString()} px for hours beyond the minimum by default, or can skip the prize for all ${px.toLocaleString()} px instead.`
-              : "The maker picks the Trial reward or these pixels once you approve it, and only gets the one they pick."}
-          </p>
-        )}
-        {fundingPx > 0 && (
-          <>
-            <PayoutRow
-              label={`Hardware funding grant ($${fundingUsd.toFixed(2)})`}
-              value={`-${fundingPx.toLocaleString()} px`}
-            />
-            <div className="border-t border-[var(--border)] pt-1">
               <PayoutRow
-                strong
-                label="They actually get"
-                value={`${netPx.toLocaleString()} px · $${netUsd.toFixed(2)}`}
+                label={`"${trialName}" prize · first ${trialMinHours}h`}
+                value={`≈${trialPrizePx.toLocaleString()} px`}
               />
-            </div>
+              <PayoutRow label="+ pixels for hours beyond that" value={`${trialBeyondPx.toLocaleString()} px`} />
+            </>
+          )}
+          {forTrial && (
             <p className="hc-caption pt-1 text-xs">
-              The ${fundingUsd.toFixed(2)} funding grant comes out of this payout instead of their wallet, so
-              approving credits {netPx.toLocaleString()} px, not {px.toLocaleString()}.
+              Trial ship: this payout is held, not credited.{" "}
+              {trialPrizePx > 0
+                ? `Once you approve it, the maker keeps the prize (worth ≈${trialPrizePx.toLocaleString()} px) plus the ${trialBeyondPx.toLocaleString()} px for hours beyond the minimum by default, or can skip the prize for all ${px.toLocaleString()} px instead.`
+                : "The maker picks the Trial reward or these pixels once you approve it, and only gets the one they pick."}
             </p>
-          </>
-        )}
-      </div>
-      <p className="hc-caption text-xs">
-        Changing the tier here re-grades it as soon as you click Set, same as the Re-grade tier control above. It
-        doesn&apos;t wait for your verdict. Community-goal bonuses and any referral boost apply on top and aren&apos;t
-        shown.
-      </p>
+          )}
+          {fundingPx > 0 && (
+            <>
+              <PayoutRow
+                label={`Hardware funding grant ($${fundingUsd.toFixed(2)})`}
+                value={`-${fundingPx.toLocaleString()} px`}
+              />
+              <div className="border-t border-[var(--border)] pt-1">
+                <PayoutRow
+                  strong
+                  label="They actually get"
+                  value={`${netPx.toLocaleString()} px · $${netUsd.toFixed(2)}`}
+                />
+              </div>
+              <p className="hc-caption pt-1 text-xs">
+                The ${fundingUsd.toFixed(2)} funding grant comes out of this payout instead of their wallet, so
+                approving credits {netPx.toLocaleString()} px, not {px.toLocaleString()}.
+              </p>
+            </>
+          )}
+        </div>
+        <p className="hc-caption text-xs">
+          Changing the tier here re-grades it as soon as you click Set, same as the Re-grade tier control above. It
+          doesn&apos;t wait for your verdict. Community-goal bonuses and any referral boost apply on top and aren&apos;t
+          shown.
+        </p>
+      </Details>
     </div>
   );
 }
@@ -777,6 +787,25 @@ export function ReviewForm({
     away.current = { kind, at: Date.now() };
   };
 
+  // The repo/demo links live in the owner card on the review page (outside
+  // this form), tagged with data-review-link, so listen for their clicks here
+  // to keep recording whether and how long the reviewer opened them. auxclick
+  // catches middle-click, which opens a new tab without firing click.
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (e.type === "auxclick" && e.button !== 1) return;
+      const kind = (e.target as Element | null)?.closest("[data-review-link]")?.getAttribute("data-review-link");
+      if (kind === "repo" || kind === "demo") markOpen(kind);
+    };
+    document.addEventListener("click", onClick);
+    document.addEventListener("auxclick", onClick);
+    return () => {
+      document.removeEventListener("click", onClick);
+      document.removeEventListener("auxclick", onClick);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Technical features / additional notes are only required for approve and
   // ban (reviewProject relaxes them for needs_changes too). Those fields live
   // in Step 2, hidden by the time the verdict buttons are clicked, and the
@@ -962,20 +991,6 @@ export function ReviewForm({
         {stepError && <Callout tone="danger" icon="important">{stepError}</Callout>}
 
         <div data-step="1" hidden={step !== 1} className="flex flex-col gap-4">
-          {((repoUrl && isSafeUrl(repoUrl)) || (demoUrl && isSafeUrl(demoUrl))) && (
-            <div className="flex flex-wrap items-center gap-2">
-              {repoUrl && isSafeUrl(repoUrl) && (
-                <a href={repoUrl} target="_blank" rel="noreferrer" onClick={() => markOpen("repo")} className="hc-btn hc-btn-outline">
-                  Repo
-                </a>
-              )}
-              {demoUrl && isSafeUrl(demoUrl) && (
-                <a href={demoUrl} target="_blank" rel="noreferrer" onClick={() => markOpen("demo")} className="hc-btn hc-btn-outline">
-                  Demo
-                </a>
-              )}
-            </div>
-          )}
           <InlineNumber
             label="Hours to credit"
             hint={
