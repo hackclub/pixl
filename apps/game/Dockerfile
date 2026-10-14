@@ -58,7 +58,7 @@ RUN set -eux; \
     sed -i "s|</title>|</title>${META}|" /out/index.html; \
     grep -q 'og:title' /out/index.html
 
-FROM oven/bun:1.3.13 AS runtime
+FROM oven/bun:1.4.2 AS runtime
 WORKDIR /srv/app
 ENV NODE_ENV=production
 ENV PORT=3000
