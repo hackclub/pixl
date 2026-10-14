@@ -141,7 +141,7 @@ export default async function DashboardPage() {
         )}
         href={step.href}
       >
-        <span className="min-w-[240px] flex-1">
+        <span className="flex min-w-[240px] flex-1 flex-col">
           <span className="mb-[5px] font-pixel text-xs uppercase tracking-[1px] text-gold">Next up</span>
           <span className="font-pixel text-[19px] tracking-[.3px] text-ink">{step.h}</span>
           <span className="mt-1.5 text-sm leading-[1.55] text-dim">{step.s}</span>
