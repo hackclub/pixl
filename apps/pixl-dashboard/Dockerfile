@@ -4,7 +4,7 @@
 # both need to be inside the build context.
 #
 #   docker build -f apps/pixl-dashboard/Dockerfile .
-FROM oven/bun:1.3.13 AS build
+FROM oven/bun:1.4.2 AS build
 WORKDIR /repo
 ENV NEXT_TELEMETRY_DISABLED=1
 
