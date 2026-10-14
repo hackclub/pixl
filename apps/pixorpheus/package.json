@@ -22,7 +22,7 @@
     "postgres": "^3.4.9"
   },
   "devDependencies": {
-    "@slack/types": "^2.22.0",
+    "@slack/types": "^3.2.0",
     "@slack/web-api": "^7.16.0",
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.2",
