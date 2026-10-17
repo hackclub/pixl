@@ -2609,6 +2609,7 @@ export interface ShopOrderRow {
   // known-working link instead of hunting for one. Only populated by
   // listShopOrders (the fulfillment page's query); null elsewhere.
   item_source_url: string | null;
+  item_alt_source_url?: string | null;
   item_image_url?: string | null;
   item_category?: ShopCategory | null;
 }
@@ -2636,13 +2637,14 @@ export async function listShopOrders(status?: string, limit = 500): Promise<Shop
   );
   const itemIds = [...new Set(rows.map((r) => r.item_id).filter((id): id is number => id != null))];
   const items = itemIds.length
-    ? await db.from("shop_items").select("id, price_source_url, image_url, category").in("id", itemIds)
+    ? await db.from("shop_items").select("id, price_source_url, alt_source_url, image_url, category").in("id", itemIds)
     : { data: [] };
   const itemInfo = new Map(
     (items.data ?? []).map((i) => [
       i.id as number,
       {
         source: (i.price_source_url as string | null) ?? null,
+        altSource: (i.alt_source_url as string | null) || null,
         image: (i.image_url as string | null) || null,
         category: (i.category as ShopCategory | null) ?? null,
       },
@@ -2654,6 +2656,7 @@ export async function listShopOrders(status?: string, limit = 500): Promise<Shop
     r.player_slack = names.get(r.user_id)?.slack_id ?? null;
     const info = r.item_id != null ? itemInfo.get(r.item_id) : undefined;
     r.item_source_url = info?.source ?? null;
+    r.item_alt_source_url = info?.altSource ?? null;
     r.item_image_url = info?.image ?? null;
     r.item_category = info?.category ?? null;
   }

@@ -246,6 +246,14 @@ export function OrderDetail({
             ) : (
               <Muted>No previous source on file for this item.</Muted>
             )}
+            {o.item_alt_source_url && (
+              <>
+                <p className="hc-caption mt-3 text-xs">Alternate link</p>
+                <p className="mt-1 text-sm">
+                  <SafeLink url={o.item_alt_source_url} />
+                </p>
+              </>
+            )}
           </Panel>
           {facts.length > 0 && (
             <Panel title="Fulfillment" icon="bolt">
