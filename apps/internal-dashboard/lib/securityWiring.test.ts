@@ -99,7 +99,7 @@ describe("M1/M2 reviewer actions", () => {
     expect(review).toContain('stage === "second_review" && own');
     expect(review).not.toMatch(/stage === "shipped" &&\s*!access\.isOwner/);
     const page = src("app/review/[id]/page.tsx");
-    expect(page).toContain("spotCheckStage && access.isOwner && !isOwn");
+    expect(page).toContain("spotCheckStage && (access.isOwner || canSecondPass) && !isOwn");
     expect(page).not.toMatch(/const isOwn =\s*!access\.isOwner/);
   });
 });
