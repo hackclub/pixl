@@ -2443,6 +2443,8 @@ export interface ShopItemRow {
   // regional storefront, ...) - see updateShopItemRegionDetails in
   // app/actions.ts and the /shop-detail page. Empty string = not set.
   price_source_url: string;
+  // Fulfiller-facing second place to buy from (dashboard only). Null = none.
+  alt_source_url?: string | null;
   // Present only for configurator-style items (Framework laptops, Huawei
   // tablets, ...) built via a one-off migration - see 0058_shop_item_configurator.sql.
   config_options: {

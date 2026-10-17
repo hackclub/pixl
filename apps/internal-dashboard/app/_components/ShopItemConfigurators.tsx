@@ -5,6 +5,7 @@ import { PriceUsdInput } from "@/app/_components/PriceUsdInput";
 import { ShopConfiguratorPanel } from "@/app/_components/ShopConfiguratorPanel";
 import type { EditableGroup } from "@/app/_components/ShopConfigEditor";
 import { Input, Muted, TextLink } from "@/app/_ui/ui";
+import { isSafeUrl } from "@/lib/safeUrl";
 
 export interface ShopDetailRegionData {
   region: string;
@@ -12,6 +13,7 @@ export interface ShopDetailRegionData {
   hasRow: boolean;
   price: number;
   priceSourceUrl: string;
+  altSourceUrl: string;
   hasConfig: boolean;
   basePrice: number;
   referenceUrl: string;
@@ -77,6 +79,18 @@ export function ShopItemConfigurators({
                 </TextLink>
               )}
             </div>
+            {r.altSourceUrl && (
+              <div className="mt-1 flex items-center gap-2 text-sm">
+                <span className="hc-muted shrink-0">Alternate link</span>
+                {isSafeUrl(r.altSourceUrl) ? (
+                  <TextLink href={r.altSourceUrl} external className="min-w-0 truncate">
+                    {r.altSourceUrl}
+                  </TextLink>
+                ) : (
+                  <span className="min-w-0 truncate">{r.altSourceUrl}</span>
+                )}
+              </div>
+            )}
             {r.hasRow && (
               <ShopConfiguratorPanel
                 region={r.region}
