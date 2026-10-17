@@ -4821,13 +4821,19 @@ export const updateShopItemRegionDetails = guardedAction("updateShopItemRegionDe
   for (const r of SHOP_REGIONS) {
     const priceRaw = formData.get(`price_${r}`);
     const sourceRaw = formData.get(`source_${r}`);
-    if (priceRaw === null && sourceRaw === null) continue;
+    const altRaw = formData.get(`alt_source_${r}`);
+    if (priceRaw === null && sourceRaw === null && altRaw === null) continue;
     const row = (before ?? []).find((b) => (b as { region: string }).region === r) as
       | { config_options: unknown; price: number }
       | undefined;
     const patch: Record<string, unknown> = {};
     if (priceRaw !== null) patch.price = Math.max(0, Math.round(Number(priceRaw) || 0));
     if (sourceRaw !== null) patch.price_source_url = String(sourceRaw).trim().slice(0, 500);
+    if (altRaw !== null) {
+      const alt = String(altRaw).trim().slice(0, 500);
+      if (!alt) patch.alt_source_url = null;
+      else if (isSafeUrl(alt)) patch.alt_source_url = alt;
+    }
 
     const disableRaw = formData.get(`config_disable_${r}`);
     const enableRaw = formData.get(`config_enable_${r}`);

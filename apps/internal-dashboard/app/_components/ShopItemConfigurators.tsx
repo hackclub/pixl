@@ -79,18 +79,20 @@ export function ShopItemConfigurators({
                 </TextLink>
               )}
             </div>
-            {r.altSourceUrl && (
-              <div className="mt-1 flex items-center gap-2 text-sm">
-                <span className="hc-muted shrink-0">Alternate link</span>
-                {isSafeUrl(r.altSourceUrl) ? (
-                  <TextLink href={r.altSourceUrl} external className="min-w-0 truncate">
-                    {r.altSourceUrl}
-                  </TextLink>
-                ) : (
-                  <span className="min-w-0 truncate">{r.altSourceUrl}</span>
-                )}
-              </div>
-            )}
+            <div className="mt-1 flex items-center gap-2">
+              <Input
+                name={`alt_source_${r.region}`}
+                type="url"
+                disabled={!r.hasRow}
+                placeholder="Alternate link https://..."
+                defaultValue={r.altSourceUrl}
+              />
+              {r.altSourceUrl && isSafeUrl(r.altSourceUrl) && (
+                <TextLink href={r.altSourceUrl} external className="shrink-0 text-sm">
+                  Open
+                </TextLink>
+              )}
+            </div>
             {r.hasRow && (
               <ShopConfiguratorPanel
                 region={r.region}

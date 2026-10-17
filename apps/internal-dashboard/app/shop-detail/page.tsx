@@ -119,7 +119,7 @@ export default async function ShopDetailPage({
                       <th>Region</th>
                       <th>Price</th>
                       <th>USD</th>
-                      <th>Price source link</th>
+                      <th>Price source link / alternate</th>
                     </tr>
                   </thead>
                   <tbody>
