@@ -3,6 +3,7 @@ import { REVIEW_MACROS, expandMacro } from "./reviewMacros";
 
 const AI = REVIEW_MACROS.find((m) => m.trigger === "/ai")!;
 const FRAUD = REVIEW_MACROS.find((m) => m.trigger === "/fraud")!;
+const README_AI = REVIEW_MACROS.find((m) => m.trigger === "/readmeai")!;
 
 describe("expandMacro", () => {
   test("/ai on its own becomes the excessive-AI message", () => {
@@ -48,6 +49,30 @@ describe("/fraud", () => {
     const out = expandMacro("Sorry. /fraud", 13);
     expect(out?.value).toBe(`Sorry. ${FRAUD.text}`);
     expect(expandMacro("/fra", 4)).toBeNull();
+  });
+});
+
+describe("/readmeai", () => {
+  test("becomes the AI-generated README message and puts the caret after it", () => {
+    const out = expandMacro("/readmeai", 9);
+    expect(out?.value).toBe(README_AI.text);
+    expect(out?.caret).toBe(README_AI.text.length);
+  });
+
+  test("expands mid-note and is case-insensitive", () => {
+    const out = expandMacro("Hey! /READMEAI", 14);
+    expect(out?.value).toBe(`Hey! ${README_AI.text}`);
+    expect(expandMacro("/readme", 7)).toBeNull();
+  });
+});
+
+describe("the /readmeai message", () => {
+  test("fits the 1000 character player note limit with room to spare", () => {
+    expect(README_AI.text.length).toBeLessThan(700);
+  });
+
+  test("has no em dashes", () => {
+    expect(README_AI.text).not.toContain("—");
   });
 });
 

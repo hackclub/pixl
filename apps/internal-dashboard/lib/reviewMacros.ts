@@ -27,6 +27,13 @@ export const REVIEW_MACROS: readonly ReviewMacro[] = [
     label: "Banned by the fraud squad",
     text: "This project was banned by the fraud squad. Please check fraud.hackclub.com ",
   },
+  {
+    trigger: "/readmeai",
+    label: "AI-generated README",
+    text:
+      "heyy :hii:, i like your project, very tuff!! however your readme looks ai generated right now :(Could you please make one yourself from scratch?? thanks!! here's a handy template you can use for reference: https://gist.github.com/FaizeenHoque/0709576cc598721df07fb62d2430e6fe\n" +
+      "good luck! :yay2:",
+  },
 ];
 
 /**
