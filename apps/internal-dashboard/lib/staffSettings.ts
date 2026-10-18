@@ -70,6 +70,10 @@ export interface StaffSettings {
   sound: boolean;
   /** Width in px of the review page's right column (see ReviewSplit). */
   reviewPanelWidth: number;
+  /** Show reviewer's name in verdict notifications by default. On unless turned off. */
+  reviewRevealName: boolean;
+  /** Request a DM on Slack by default when requesting changes. Off unless turned on. */
+  reviewNotifyOnResubmit: boolean;
 }
 
 // What the settings page shows for each theme. The colours themselves live in
@@ -110,6 +114,8 @@ export const DEFAULT_STAFF_SETTINGS: StaffSettings = {
   confetti: false,
   sound: true,
   reviewPanelWidth: 460,
+  reviewRevealName: true,
+  reviewNotifyOnResubmit: false,
 };
 
 export const REVIEW_PANEL_MIN = 360;
@@ -133,5 +139,7 @@ export function parseStaffSettings(raw: unknown): StaffSettings {
     confetti: r.confetti === true,
     sound: r.sound !== false,
     reviewPanelWidth: clampReviewPanelWidth(r.reviewPanelWidth),
+    reviewRevealName: r.reviewRevealName !== false,
+    reviewNotifyOnResubmit: r.reviewNotifyOnResubmit === true,
   };
 }

@@ -494,6 +494,8 @@ export function ReviewForm({
   isSuper = false,
   canAiDraft = false,
   canEditSubmission = false,
+  defaultRevealName = true,
+  defaultNotifyOnResubmit = false,
   serverDraft,
 }: {
   projectId: number;
@@ -535,6 +537,10 @@ export function ReviewForm({
   canAiDraft?: boolean;
   /** Whether the viewer may edit the submission's details at any review stage. */
   canEditSubmission?: boolean;
+  /** Default for the "Show my name to the player" checkbox. */
+  defaultRevealName?: boolean;
+  /** Default for the "Notify on resubmit" checkbox. */
+  defaultNotifyOnResubmit?: boolean;
   /** The shared server-side draft (saveReviewDraft). Used only when this
    * browser has no local draft of its own to restore. */
   serverDraft?: {
@@ -1317,12 +1323,13 @@ export function ReviewForm({
           <Checkbox
             name="revealName"
             value="1"
-            defaultChecked
+            defaultChecked={defaultRevealName}
             label={'Show my name to the player in this verdict\'s notification (approved / needs changes). Untick to send it as "the review team" instead.'}
           />
           <Checkbox
             name="notifyOnResubmit"
             value="1"
+            defaultChecked={defaultNotifyOnResubmit}
             label="If you request changes: DM me on Slack when the player ships this project again, so I can re-review it while I still remember it."
           />
           {submitError && <Callout tone="danger" icon="important">{submitError}</Callout>}

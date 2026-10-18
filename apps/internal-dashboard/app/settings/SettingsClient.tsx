@@ -276,23 +276,46 @@ export default function SettingsClient({
         )}
 
         {section === "review" && (
-          <Card>
-            <h2 className="hc-heading text-base">After a review</h2>
-            <div className="mt-2 flex flex-col">
-              <Toggle
-                label="Review sound"
-                hint="A short sound after you submit a review."
-                checked={settings.sound}
-                onChange={(sound) => update({ sound })}
-              />
-              <Toggle
-                label="Confetti"
-                hint="Confetti after you submit a review."
-                checked={settings.confetti}
-                onChange={(confetti) => update({ confetti })}
-              />
-            </div>
-          </Card>
+          <>
+            <Card>
+              <h2 className="hc-heading text-base">Review defaults</h2>
+              <p className="hc-caption mt-1 mb-4 text-sm">
+                Default checkboxes on the verdict form when you review a project.
+              </p>
+              <div className="flex flex-col">
+                <Toggle
+                  label="Show name to player"
+                  hint="Include your name in verdict notifications by default instead of sending as &quot;the review team&quot;."
+                  checked={settings.reviewRevealName}
+                  onChange={(reviewRevealName) => update({ reviewRevealName })}
+                />
+                <Toggle
+                  label="Notify on resubmit"
+                  hint="Default to requesting a Slack DM when a project you requested changes on is resubmitted."
+                  checked={settings.reviewNotifyOnResubmit}
+                  onChange={(reviewNotifyOnResubmit) => update({ reviewNotifyOnResubmit })}
+                />
+              </div>
+            </Card>
+
+            <Card>
+              <h2 className="hc-heading text-base">After a review</h2>
+              <div className="mt-2 flex flex-col">
+                <Toggle
+                  label="Review sound"
+                  hint="A short sound after you submit a review."
+                  checked={settings.sound}
+                  onChange={(sound) => update({ sound })}
+                />
+                <Toggle
+                  label="Confetti"
+                  hint="Confetti after you submit a review."
+                  checked={settings.confetti}
+                  onChange={(confetti) => update({ confetti })}
+                />
+              </div>
+            </Card>
+          </>
         )}
 
         {section === "account" && (

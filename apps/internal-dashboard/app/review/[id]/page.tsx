@@ -764,6 +764,8 @@ export default async function ReviewDetail({
               currentName={p.name}
               currentDescription={p.description}
               currentImageUrl={p.image_url}
+              defaultRevealName={staffSettings.reviewRevealName}
+              defaultNotifyOnResubmit={staffSettings.reviewNotifyOnResubmit}
               firstPass={
                 firstPassAudit
                   ? {

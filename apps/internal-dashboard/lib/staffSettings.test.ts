@@ -34,6 +34,8 @@ describe("parseStaffSettings", () => {
       confetti: true,
       sound: true,
       reviewPanelWidth: 620,
+      reviewRevealName: true,
+      reviewNotifyOnResubmit: false,
     });
     expect(parseStaffSettings({ theme: "neon", accent: "javascript:alert(1)", extra: 1 })).toEqual(
       DEFAULT_STAFF_SETTINGS,
@@ -75,5 +77,19 @@ describe("parseStaffSettings", () => {
     expect(parseStaffSettings({ reviewPanelWidth: 5 }).reviewPanelWidth).toBe(360);
     expect(parseStaffSettings({ reviewPanelWidth: 99999 }).reviewPanelWidth).toBe(1000);
     expect(parseStaffSettings({ reviewPanelWidth: "wide" }).reviewPanelWidth).toBe(460);
+  });
+
+  test("show reviewer name is on unless explicitly false", () => {
+    expect(parseStaffSettings({}).reviewRevealName).toBe(true);
+    expect(parseStaffSettings({ reviewRevealName: "false" }).reviewRevealName).toBe(true);
+    expect(parseStaffSettings({ reviewRevealName: false }).reviewRevealName).toBe(false);
+    expect(parseStaffSettings({ reviewRevealName: true }).reviewRevealName).toBe(true);
+  });
+
+  test("notify on resubmit is off unless explicitly true", () => {
+    expect(parseStaffSettings({}).reviewNotifyOnResubmit).toBe(false);
+    expect(parseStaffSettings({ reviewNotifyOnResubmit: "true" }).reviewNotifyOnResubmit).toBe(false);
+    expect(parseStaffSettings({ reviewNotifyOnResubmit: true }).reviewNotifyOnResubmit).toBe(true);
+    expect(parseStaffSettings({ reviewNotifyOnResubmit: false }).reviewNotifyOnResubmit).toBe(false);
   });
 });
