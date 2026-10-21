@@ -90,12 +90,10 @@ if (slacks.length > 0) {
       }
       const projects = await tx`select id, name, status, approved_hours, prior_approved_hours, airtable_record_id, funding_usd, needs_funding, funding_deducted_px from projects where user_id = ${u.id}`;
       const orders = await tx`select id, item_name, quantity, price, status, actual_cost_usd from shop_orders where user_id = ${u.id} order by id`;
-      let ledger: unknown = [];
-      try {
-        ledger = await tx`select order_id, amount_cents, basis, verdict from fulfillment_commitments where user_id = ${u.id}`;
-      } catch {
-        ledger = [];
-      }
+      const [reg] = await tx`select to_regclass('public.fulfillment_commitments') as t`;
+      const ledger = reg?.t
+        ? await tx`select order_id, amount_cents, basis, verdict from fulfillment_commitments where user_id = ${u.id}`
+        : [];
       res.push({ slack, projects, orders, ledger });
     }
     return res;
