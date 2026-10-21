@@ -23,7 +23,7 @@ export const POLICIES: Record<string, EligibilityPolicy> = {
     shipsMaxAgeMs: 30 * 60 * 1000,
     overBudgetToleranceUsd: 0.01,
     enforceOnClaim: false,
-    allowUnledgeredClaim: true,
+    allowUnledgeredClaim: false,
     itemValueRules: [{ match: /^hardware grant$/i, basis: "face", faceValueUsd: 10 }],
   },
   "2026-10-22.2": {
@@ -33,7 +33,7 @@ export const POLICIES: Record<string, EligibilityPolicy> = {
     shipsMaxAgeMs: 30 * 60 * 1000,
     overBudgetToleranceUsd: 0.01,
     enforceOnClaim: false,
-    allowUnledgeredClaim: true,
+    allowUnledgeredClaim: false,
     itemValueRules: [{ match: /^hardware grant$/i, basis: "face", faceValueUsd: 10 }],
   },
 };

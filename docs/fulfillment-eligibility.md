@@ -96,7 +96,7 @@ Enforcement is off (`enforceOnClaim: false`). In that mode the claim always proc
 No claim is accounted silently:
 
 - Evidence cannot be loaded (advisory mode): the claim is still written to the ledger, as `unverified`, at the order's own amount, with evidence `{degraded: evidence_unavailable}`; the audit log says so. With enforcement on it is refused.
-- Migration not applied (`42883` / `42P01`): allowed only while `allowUnledgeredClaim` is true in the policy. The order is claimed with the old direct update, a server error is logged, and the order audit log records "claimed and placed WITHOUT a funding ledger entry". Set the flag to false (new policy version) once the migration is applied and the claim is refused instead. Commitments are still derived from order status, so later evaluations count that order.
+- Migration not applied (`42883` / `42P01`): the claim is refused with a "migration 0228" error because `allowUnledgeredClaim` is false in every shipped policy. Apply 0228 before claims are used. Setting the flag to true in a new policy version restores the old direct update, which is audit-logged as claimed WITHOUT a funding ledger entry.
 - Anything else (permissions, runtime errors, a failed order lookup): the action throws and nothing is claimed.
 - A failed ledger amount refresh after `markOrderCredited` or `updateOrderFulfillmentInfo` is written to the order audit log (`ledger_refresh_failed`).
 

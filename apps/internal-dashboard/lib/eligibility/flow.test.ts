@@ -364,20 +364,24 @@ describe("claim flow", () => {
     });
   });
 
-  test("an undeployed ledger is reported as unledgered, never as a recorded claim", async () => {
+  test("an undeployed ledger is reported as unledgered when the policy allows it", async () => {
+    const policy = { ...POLICIES["2026-10-22.2"]!, allowUnledgeredClaim: true };
     const { db } = fakeDb(orderRow(), () => ({ data: null, error: { code: "42883", message: "function does not exist" } }));
-    expect(await claimOrderWithFunding(base, { db, sql: fakeSql(tables) })).toEqual({ kind: "unledgered", reason: "ledger_not_installed" });
+    expect(await claimOrderWithFunding(base, { db, sql: fakeSql(tables), policy })).toEqual({ kind: "unledgered", reason: "ledger_not_installed" });
   });
 
-  test("an undeployed ledger is a hard error when the policy forbids unledgered claims", async () => {
-    const policy = { ...POLICIES["2026-10-22.1"]!, allowUnledgeredClaim: false };
-    const { db } = fakeDb(orderRow(), () => ({ data: null, error: { code: "42883", message: "function does not exist" } }));
-    await expect(claimOrderWithFunding(base, { db, sql: fakeSql(tables), policy })).rejects.toThrow("migration 0228");
+  test("an undeployed ledger is a hard error under every shipped policy", async () => {
+    for (const policy of Object.values(POLICIES)) {
+      expect(policy.allowUnledgeredClaim).toBe(false);
+      const { db } = fakeDb(orderRow(), () => ({ data: null, error: { code: "42883", message: "function does not exist" } }));
+      await expect(claimOrderWithFunding(base, { db, sql: fakeSql(tables), policy })).rejects.toThrow("migration 0228");
+    }
   });
 
   test("permission errors are thrown even when unledgered claims are allowed", async () => {
+    const policy = { ...POLICIES["2026-10-22.2"]!, allowUnledgeredClaim: true };
     const { db } = fakeDb(orderRow(), () => ({ data: null, error: { code: "42501", message: "permission denied for function" } }));
-    await expect(claimOrderWithFunding(base, { db, sql: fakeSql(tables) })).rejects.toThrow("permission denied");
+    await expect(claimOrderWithFunding(base, { db, sql: fakeSql(tables), policy })).rejects.toThrow("permission denied");
   });
 
   test("a failed order lookup is an error, not a missing order", async () => {
