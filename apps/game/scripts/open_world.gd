@@ -46,26 +46,23 @@ func _sync_trial_givers() -> void:
 		var quests = json.get("quests", [])
 		if typeof(quests) != TYPE_ARRAY:
 			return
-		var state_by_name := {}
-		for q in quests:
-			if typeof(q) != TYPE_DICTIONARY:
-				continue
-			var qname := String(q.get("name", ""))
-			if qname == "":
-				continue
-			var unlocked := bool(q.get("unlocked", false))
-			var completed := bool(q.get("completed", false))
-			state_by_name[qname] = "completed" if completed else ("active" if unlocked else "none")
 		for child in get_children():
 			if not (child.has_method("npc_id") and child.get("quest_trial") == true):
 				continue
-			var tn := String(child.get("trial_name"))
-			if tn == "" or not state_by_name.has(tn):
-				continue
-			var state: String = state_by_name[tn]
-			if state == "none":
+			# Ask the NPC which Trial it is on right now: the authored one until
+			# it's done, then its next active follow-up assigned to the same
+			# giver. A giver stays hidden while any of those is accepted, not
+			# just the one originally linked in the dashboard.
+			var trial: Dictionary = child.pick_trial(quests)
+			if trial.is_empty():
 				child.set_present(true)
 				continue
+			var tn := String(trial.get("name", ""))
+			var state := "none"
+			if bool(trial.get("completed", false)):
+				state = "completed"
+			elif bool(trial.get("unlocked", false)):
+				state = "active"
 			var changed := TrialFx.has_changed(tn, state)
 			child.set_present(state != "active")
 			if state == "completed" and changed:

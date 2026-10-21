@@ -285,7 +285,7 @@ func _start_trial_quest() -> void:
 	_quest_pending = false
 	if not _in_range:
 		return
-	var trial := _find_trial(quests)
+	var trial := pick_trial(quests)
 	if trial.is_empty():
 		# Trial row missing (e.g. migration not run), fall back to flavor text so
 		# the NPC never feels broken.
@@ -296,18 +296,20 @@ func _start_trial_quest() -> void:
 	var completed := bool(trial.get("completed", false))
 	var unlocked := bool(trial.get("unlocked", false))
 	var tid := int(trial.get("id", 0))
+	var authored := _is_authored_trial(trial)
 	# Pages open without a query string, so the Terminal no longer gets the
 	# Trial id; the projects page shows the player's Trials itself.
 	var proj_path := "projects"
 
 	if completed:
-		Dialogue.open(npc_name, quest_done.split("\n"))
+		var done := quest_done if authored and quest_done != "" else "Good job, builder. That Trial's done."
+		Dialogue.open(npc_name, done.split("\n"))
 		_update_prompt()
 		return
 
 	# Check-in copy (Hub Ridit): no accept prompt, just a nudge toward the Terminal.
 	if trial_checkin:
-		var lines := (trial_reminder if trial_reminder != "" else quest_offer).split("\n")
+		var lines := _trial_lines(trial, authored, trial_reminder if trial_reminder != "" else quest_offer)
 		Dialogue.open(npc_name, lines)
 		Dialogue.closed.connect(func(): WebPages.open(proj_path), CONNECT_ONE_SHOT)
 		_update_prompt()
@@ -315,14 +317,18 @@ func _start_trial_quest() -> void:
 
 	# Already accepted, not yet done, remind and open the Terminal.
 	if unlocked:
-		var lines := (trial_reminder if trial_reminder != "" else quest_offer).split("\n")
+		var lines := _trial_lines(trial, authored, trial_reminder if trial_reminder != "" else quest_offer)
 		Dialogue.open(npc_name, lines)
 		Dialogue.closed.connect(func(): WebPages.open(proj_path), CONNECT_ONE_SHOT)
 		_update_prompt()
 		return
 
 	# Fresh offer: description + reward, then Accept / build your own / not now.
-	var offer := quest_offer.split("\n") if quest_offer != "" else PackedStringArray([String(trial.get("description", ""))])
+	# A follow-up Trial uses its own description, not this NPC's authored pitch
+	# for whatever Trial used to be linked here.
+	var offer := _trial_lines(trial, authored, quest_offer)
+	if offer.is_empty():
+		offer = PackedStringArray([String(trial.get("description", ""))])
 	var reward := String(trial.get("reward", ""))
 	if reward != "":
 		offer.append("Reward on completion: %s, plus pixels for any hours beyond the minimum." % reward)
@@ -333,7 +339,7 @@ func _start_trial_quest() -> void:
 	var choice := String(picked[1]) if picked.size() > 1 else "no"
 	if choice == "accept":
 		await _accept_trial(tid)
-		TrialFx.mark(trial_name, "active")
+		TrialFx.mark(String(trial.get("name", trial_name)), "active")
 		play_teleport_fx()
 		await get_tree().create_timer(0.35).timeout
 		set_present(false)
@@ -344,17 +350,51 @@ func _start_trial_quest() -> void:
 		Dialogue.closed.connect(func(): WebPages.open("projects"), CONNECT_ONE_SHOT)
 	_update_prompt()
 
-func _find_trial(quests: Array) -> Dictionary:
-	# Match this NPC's assigned Trial by exact name. No fallback to "some other
-	# starter Trial" here on purpose, that used to silently swap in an unrelated
-	# quest whenever a Trial got renamed *or deleted* in the dashboard, which made
-	# a deletion invisible instead of surfacing it. A genuine rename should update
-	# this NPC's trial_name in the same change; a real deletion should fall through
-	# to the caller's empty-trial flavor-text branch, not hand out a random quest.
+# The Trial this NPC should talk about right now. The authored link wins while
+# that Trial is still open; once it's completed (or the link is stale/inactive)
+# fall through to the next active Trial assigned to this giver by name, so a
+# giver can hand out follow-ups like Ridit's "Claim Your Stake" instead of
+# dead-ending on their first completion line. Check-in copies always stay on
+# their own authored Trial.
+static func pick_trial_for(quests: Array, authored_name: String, giver: String, checkin: bool) -> Dictionary:
+	var authored := {}
 	for q in quests:
-		if typeof(q) == TYPE_DICTIONARY and String(q.get("name", "")) == trial_name:
+		if typeof(q) == TYPE_DICTIONARY and String(q.get("name", "")) == authored_name:
+			authored = q
+			break
+	if checkin:
+		return authored
+	if not authored.is_empty() and not bool(authored.get("completed", false)):
+		return authored
+	for q in quests:
+		if typeof(q) != TYPE_DICTIONARY:
+			continue
+		if String(q.get("name", "")) == authored_name:
+			continue
+		if bool(q.get("completed", false)):
+			continue
+		# `npc_name` is whichever NPC row is linked to the Trial, while `npc` is
+		# the giver authored on the Trial itself. Match either, so a stale or
+		# re-pointed NPC link can't hide a follow-up from its real giver.
+		if String(q.get("npc_name", "")) == giver or String(q.get("npc", "")) == giver:
 			return q
-	return {}
+	# Nothing else open: return the authored Trial so the caller can still show
+	# its completion line (or {} when the authored Trial is gone entirely).
+	return authored
+
+func pick_trial(quests: Array) -> Dictionary:
+	return pick_trial_for(quests, trial_name, npc_name, trial_checkin)
+
+func _is_authored_trial(trial: Dictionary) -> bool:
+	return trial_name != "" and String(trial.get("name", "")) == trial_name
+
+func _trial_lines(trial: Dictionary, authored: bool, authored_text: String) -> PackedStringArray:
+	if authored and authored_text != "":
+		return authored_text.split("\n")
+	var description := String(trial.get("description", ""))
+	if description != "":
+		return description.split("\n")
+	return authored_text.split("\n") if authored_text != "" else PackedStringArray()
 
 func _fetch_sidequests() -> Array:
 	if NetworkManager.session_token == "":
