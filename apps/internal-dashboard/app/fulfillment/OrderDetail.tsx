@@ -14,7 +14,9 @@ import {
   formatDate,
   formatDateTime,
 } from "@/app/_ui/ui";
+import type { EligibilityResult } from "@/lib/eligibility/engine";
 import { SlackHandle } from "./SlackHandle";
+import { FundingBreakdown } from "./Funding";
 import { EditFulfillmentInfo, FlagControls, OrderActions } from "./OrderActions";
 import { ItemThumb, TypeBadge } from "./OrderList";
 import { STAGE_HINT, STAGE_LABEL, STAGE_TONE, SafeLink, slackLink, usdBudget } from "./shared";
@@ -120,6 +122,7 @@ export function OrderDetail({
   mine,
   ownOrder,
   canManage,
+  eligibility,
 }: {
   order: ShopOrderRow;
   buyer?: BuyerDetails;
@@ -128,6 +131,7 @@ export function OrderDetail({
   mine: boolean;
   ownOrder: boolean;
   canManage: boolean;
+  eligibility: EligibilityResult | null;
 }) {
   const actionable = o.status !== "done" && o.status !== "cancelled";
   const budget = usdBudget(o.price);
@@ -207,6 +211,10 @@ export function OrderDetail({
           <Muted>(flagged by {o.flagged_by || "a fulfiller"} on {formatDate(o.flagged_at)})</Muted>
         </Callout>
       )}
+
+      <Panel title="Funding breakdown" icon="bolt">
+        <FundingBreakdown result={eligibility} orderId={o.id} />
+      </Panel>
 
       <div className="fw-cols">
         <div className="fw-col">

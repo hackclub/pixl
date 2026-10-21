@@ -2167,7 +2167,7 @@ html[data-density="compact"] .hc-main {
 
 .fw-row {
   display: grid;
-  grid-template-columns: minmax(110px, 2fr) minmax(70px, 1.2fr) 56px 64px 72px 74px 52px;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1.1fr) 50px 56px 60px 62px 128px 40px;
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
@@ -2185,6 +2185,7 @@ html[data-density="compact"] .hc-main {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
+.fw-head > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fw-item { min-height: 56px; border-left: 3px solid transparent; font-size: 13px; }
 .fw-item:hover { background: var(--surface-hover); }
 .fw-item[data-selected="true"] {
@@ -2217,6 +2218,7 @@ html[data-density="compact"] .hc-main {
   .fw-row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }
   .fw-row > .fw-cell:nth-child(n + 3):not(:last-child) { display: none; }
   .fw-row > .fw-cell:nth-child(6) { display: flex; }
+  .fw-row > .fw-cell:nth-child(7):not(:last-child) { display: flex; grid-column: 2; grid-row: 2; justify-self: end; }
   .fw-row > .fw-cell:nth-child(2) { grid-column: 1; }
 }
 
@@ -2250,3 +2252,26 @@ html[data-density="compact"] .hc-main {
 .fw-note { padding: 10px 12px; border-radius: var(--radius); background: color-mix(in srgb, var(--hc-orange) 14%, transparent); border: 1px solid color-mix(in srgb, var(--hc-orange) 40%, transparent); white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .fw-cell .hc-badge { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.fw-funding { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.fw-funding-scroll { overflow-x: auto; max-width: 100%; }
+@media (max-width: 640px) {
+  .fw-funding .hc-dl { grid-template-columns: minmax(0, 1fr); row-gap: 2px; }
+  .fw-funding .hc-dl dd { margin-bottom: 8px; overflow-wrap: anywhere; }
+}
+.fw-sync {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px;
+  padding: 8px 12px; border: 1px solid var(--border); border-left-width: 3px; border-radius: var(--radius);
+  background: var(--sunken); font-size: 13px;
+}
+.fw-sync[data-state="ok"] { border-left-color: var(--hc-green); }
+.fw-sync[data-state="stale"] { border-left-color: var(--hc-orange); }
+.fw-sync[data-state="down"] { border-left-color: var(--hc-red); }
+.fw-fund-sub { margin-top: 2px; }
+.fw-funding-verdict { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0; }
+.fw-funding-reasons { margin: 0; padding-left: 18px; font-size: 13px; color: var(--secondary); }
+.fw-funding-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.fw-funding-table th { text-align: left; color: var(--muted); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; padding: 4px 8px 4px 0; }
+.fw-funding-table td { vertical-align: top; padding: 6px 8px 6px 0; border-top: 1px solid var(--border); }
+.fw-funding-table tr[data-counted="excluded"] td { opacity: 0.7; }
+.fw-funding-list { margin: 4px 0 0; padding-left: 16px; font-size: 12px; }

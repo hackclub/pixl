@@ -232,6 +232,44 @@ export async function fetchAirtableRecord(recordId: string): Promise<FetchRecord
   return { ok: true, fields: body.fields };
 }
 
+const RECORD_ID_PATTERN = /^rec[A-Za-z0-9]{14}$/;
+
+export function airtableRecordUrl(recordId: string): string | null {
+  return RECORD_ID_PATTERN.test(recordId) ? `https://airtable.com/${BASE_ID}/${TABLE_ID}/${recordId}` : null;
+}
+
+export type SubmissionStateResult =
+  | { ok: true; submitted: boolean }
+  | { ok: false; missing: boolean; error: string };
+
+const SUBMIT_FIELD = "Automation - Submit to Unified YSWS";
+
+// GET only, one non-PII field. Feeds the fulfillment eligibility view, which
+// must never write to this base.
+export async function fetchSubmissionState(recordId: string): Promise<SubmissionStateResult> {
+  const token = process.env.AIRTABLE_PIXL_YSWS_UNIFIED_TOKEN;
+  if (!token) return { ok: false, missing: false, error: "AIRTABLE_PIXL_YSWS_UNIFIED_TOKEN is not set" };
+  if (!RECORD_ID_PATTERN.test(recordId)) return { ok: false, missing: true, error: "invalid record id" };
+
+  let res: Response;
+  try {
+    res = await fetch(
+      `https://api.airtable.com/v0/${BASE_ID}/${TABLE_ID}/${recordId}?fields%5B%5D=${encodeURIComponent(SUBMIT_FIELD)}`,
+      { method: "GET", headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(AIRTABLE_TIMEOUT_MS) },
+    );
+  } catch (err) {
+    return { ok: false, missing: false, error: `Airtable request failed: ${(err as Error).message}` };
+  }
+  if (res.status === 404) return { ok: false, missing: true, error: "record not found" };
+  const body = (await res.json().catch(() => null)) as
+    | { fields?: Record<string, unknown>; error?: { message?: string } }
+    | null;
+  if (!res.ok || !body?.fields) {
+    return { ok: false, missing: false, error: body?.error?.message ?? `Airtable returned ${res.status}` };
+  }
+  return { ok: true, submitted: body.fields[SUBMIT_FIELD] === true };
+}
+
 // Creates a new record, or PATCHes an existing one when existingRecordId is
 // given (the caller looks this up from projects.airtable_record_id - see
 // Task 4). Never include "Automation - Submit to Unified YSWS" in `fields`.

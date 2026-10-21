@@ -1,5 +1,8 @@
 "use server";
 
+import { claimOrderWithFunding, refreshCommitmentAmount } from "@/lib/eligibility/commit";
+import { manualShipsRefresh, shipsProvider } from "@/lib/eligibility/ships";
+import { FUNDING_ORDER_PREFIX } from "@/lib/eligibility/policy";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
@@ -1773,7 +1776,7 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
     const { error: fundingOrderError } = await db.from("shop_orders").insert({
       user_id: project.user_id,
       item_id: null,
-      item_name: `Hardware funding grant , ${project.name}`,
+      item_name: `${FUNDING_ORDER_PREFIX}${project.name}`,
       price: fundingPx,
       status: "pending",
       note: `$${fundingUsd.toFixed(2)} hardware funding grant approved with this ship, withheld from payout.`,
@@ -5387,19 +5390,33 @@ export const claimOrder = guardedAction("claimOrder", "fulfiller", async (access
   if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId)) {
     throw new Error("You can't fulfill your own shop order.");
   }
-  const now = new Date().toISOString();
-  const { error } = await db
-    .from("shop_orders")
-    .update({
-      status: "ordered",
-      claimed_by: actorName(access),
-      claimed_by_slack: access.session.slackId,
-      claimed_at: now,
-      ordered_at: now,
-    })
-    .eq("id", id)
-    .eq("status", "pending");
-  if (error) throw new Error(error.message);
+  const outcome = await claimOrderWithFunding({
+    orderId: id,
+    by: actorName(access),
+    bySlack: access.session.slackId,
+  }, { ships: shipsProvider() });
+  if (outcome.kind === "refused") {
+    if (outcome.code === "not_pending" || outcome.code === "not_found") {
+      revalidatePath("/fulfillment");
+      return;
+    }
+    throw new Error(outcome.message);
+  }
+  if (outcome.kind === "unledgered") {
+    const now = new Date().toISOString();
+    const { error } = await db
+      .from("shop_orders")
+      .update({
+        status: "ordered",
+        claimed_by: actorName(access),
+        claimed_by_slack: access.session.slackId,
+        claimed_at: now,
+        ordered_at: now,
+      })
+      .eq("id", id)
+      .eq("status", "pending");
+    if (error) throw new Error(error.message);
+  }
   // In-app only: the player is DMed once, when the order ships (shipOrder).
   const placedBody = `Your "${order.item_name}" order has been placed and is being fulfilled. We'll let you know when it ships.`;
   await db.from("notifications").insert({
@@ -5407,7 +5424,13 @@ export const claimOrder = guardedAction("claimOrder", "fulfiller", async (access
     title: "Order placed! 📦",
     body: placedBody,
   });
-  await logOrderAction(id, "order_claimed", "claimed and placed", actorName(access), order);
+  const claimNote =
+    outcome.kind === "unledgered"
+      ? "claimed and placed WITHOUT a funding ledger entry (migration 0228 not applied)"
+      : outcome.degraded
+        ? "claimed and placed; funding evidence unavailable, recorded as unverified"
+        : "claimed and placed";
+  await logOrderAction(id, "order_claimed", claimNote, actorName(access), order);
   revalidatePath("/fulfillment");
 });
 
@@ -5557,6 +5580,9 @@ export const markOrderCredited = guardedAction("markOrderCredited", "fulfiller",
     .eq("id", id)
     .eq("status", "ordered");
   if (error) throw new Error(error.message);
+  if ((await refreshCommitmentAmount(id, { ships: shipsProvider() })) === "failed") {
+    await logOrderAction(id, "ledger_refresh_failed", "funding ledger amount could not be updated", actorName(access));
+  }
   if (sourceUrl && order.item_id != null) {
     const { error: sourceErr } = await db
       .from("shop_items")
@@ -5720,6 +5746,9 @@ export const updateOrderFulfillmentInfo = guardedAction("updateOrderFulfillmentI
     .update({ hcb_link: hcbLink, actual_cost_usd: actualCostUsd, tracking })
     .eq("id", id);
   if (error) throw new Error(error.message);
+  if ((await refreshCommitmentAmount(id, { ships: shipsProvider() })) === "failed") {
+    await logOrderAction(id, "ledger_refresh_failed", "funding ledger amount could not be updated", actorName(access));
+  }
   if (sourceUrl && order.item_id != null) {
     const { error: sourceErr } = await db
       .from("shop_items")
@@ -6472,4 +6501,11 @@ export const claimReviewerFoodGrant = guardedAction("claimReviewerFoodGrant", "r
   }
   revalidatePath(back);
   redirect(`${back}?ok=${encodeURIComponent("Food grant claimed, 220 px spent. The team will reach out about getting it to you.")}`);
+});
+
+// Read-only: re-downloads the public Ships dataset into this server's cache.
+// Limited to one refresh a minute across all staff.
+export const refreshShipsSnapshot = guardedAction("refreshShipsSnapshot", "fulfiller", async (access): Promise<void> => {
+  await manualShipsRefresh(access.session.slackId);
+  revalidatePath("/fulfillment");
 });

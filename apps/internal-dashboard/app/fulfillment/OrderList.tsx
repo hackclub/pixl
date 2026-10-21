@@ -3,7 +3,10 @@ import type { ShopOrderRow } from "@/lib/db";
 import { SHOP_CATEGORY_LABELS } from "@/lib/shopCategories";
 import { isSafeImageUrl } from "@/lib/safeUrl";
 import { Badge, Icon, type Tone } from "@/app/_ui/ui";
+import type { EligibilityResult } from "@/lib/eligibility/engine";
 import { SlackHandle } from "./SlackHandle";
+import { FundingBadge } from "./Funding";
+import { listSummary } from "@/lib/eligibility/format";
 import { STAGE_LABEL, STAGE_TONE, ageLabel, lastUpdated, usdBudget } from "./shared";
 
 export function ItemThumb({ src, size = 40 }: { src: string | null | undefined; size?: number }) {
@@ -49,12 +52,14 @@ export function OrderList({
   hrefFor,
   nameFor,
   now,
+  eligibility,
 }: {
   orders: ShopOrderRow[];
   selectedId: number | null;
   hrefFor: (id: number) => string;
   nameFor: (o: ShopOrderRow) => string;
   now: number;
+  eligibility: Map<number, EligibilityResult>;
 }) {
   return (
     <div className="fw-table" role="list" aria-label="Fulfillment requests">
@@ -65,6 +70,7 @@ export function OrderList({
         <span>Pixels</span>
         <span>Type</span>
         <span>Status</span>
+        <span>Funding</span>
         <span>Updated</span>
       </div>
       {orders.map((o) => {
@@ -106,6 +112,12 @@ export function OrderList({
             <span className="fw-cell">
               <span className="fw-status" data-tone={STAGE_TONE[o.status] ?? "neutral"}>
                 {STAGE_LABEL[o.status] ?? o.status}
+              </span>
+            </span>
+            <span className="fw-cell">
+              <FundingBadge short status={eligibility.get(Number(o.id))?.status ?? null} />
+              <span className="fw-sub fw-fund-sub" title={eligibility.get(Number(o.id))?.verificationSummary}>
+                {listSummary(eligibility.get(Number(o.id)) ?? null)}
               </span>
             </span>
             <span className="fw-cell hc-muted whitespace-nowrap">{ageLabel(lastUpdated(o), now)}</span>

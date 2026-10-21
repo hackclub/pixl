@@ -16,6 +16,24 @@ import {
   type ShopEconomySummary,
 } from "@/lib/db";
 import { canOpenFulfillmentTab, canSeeBuyerDetails, isOwnOrder } from "@/lib/fulfillmentAccess";
+import { evaluateOrders } from "@/lib/eligibility/evidence";
+import type { EligibilityResult, EligibilityStatus } from "@/lib/eligibility/engine";
+import {
+  ELIGIBILITY_FILTERS,
+  ELIGIBILITY_LABEL,
+  SORT_KEYS,
+  SORT_LABEL,
+  VERIFICATION_FILTERS,
+  VERIFICATION_LABEL,
+  parseEligibilityFilter,
+  parseSort,
+  parseVerificationFilter,
+  sortKeyValue,
+  type SortKey,
+} from "@/lib/eligibility/format";
+import type { VerificationLabel } from "@/lib/eligibility/engine";
+import { shipsProvider } from "@/lib/eligibility/ships";
+import { ShipsSyncBar } from "./Funding";
 import { addFulfillerAction, removeFulfillerAction } from "@/app/actions";
 import { config } from "@/app/_generated/config";
 import {
@@ -151,12 +169,15 @@ async function FulfillerManager() {
 export default async function FulfillmentPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; mine?: string; q?: string; order?: string }>;
+  searchParams: Promise<{ status?: string; mine?: string; q?: string; order?: string; elig?: string; verify?: string; sort?: string }>;
 }) {
   const access = await requirePage("fulfiller");
   if (await getLiveMode()) return <LiveBlocked what="Fulfillment" />;
   const me = access.session.slackId;
-  const { status, mine, q, order: orderParam } = await searchParams;
+  const { status, mine, q, order: orderParam, elig, verify, sort } = await searchParams;
+  const eligFilter = parseEligibilityFilter(elig);
+  const verifyFilter = parseVerificationFilter(verify);
+  const sortKey = parseSort(sort);
   const active: TabKey = TAB_KEYS.includes(status as TabKey) ? (status as TabKey) : "pending";
   if (!canOpenFulfillmentTab(active, access)) redirect("/fulfillment");
   const keepMine = mine === "1";
@@ -187,16 +208,45 @@ export default async function FulfillmentPage({
   }
 
   const nameFor = (o: ShopOrderRow) => (canSeeBuyerDetails(o, access) ? o.player_name : o.player_display_name);
+  let eligibility = new Map<number, EligibilityResult>();
+  const shipsView = showingQueue ? await shipsProvider().get() : null;
+  if (showingQueue && loaded.length > 0) {
+    try {
+      eligibility = await evaluateOrders(loaded, { liveAirtable: false, ships: shipsView ?? undefined });
+    } catch (e) {
+      console.error("fulfillment eligibility", (e as Error).message);
+    }
+  }
   const needle = query.toLowerCase();
-  const orders = needle
-    ? loaded.filter((o) =>
-        [o.item_name, o.option, nameFor(o), o.player_slack ?? ""].some((v) => v.toLowerCase().includes(needle)),
-      )
-    : loaded;
+  const searchable = (o: ShopOrderRow): string[] => {
+    const r = eligibility.get(Number(o.id));
+    const project = (r?.projects ?? []).flatMap((p) => [p.name, p.repoKey ?? "", p.ships?.githubUsername ?? ""]);
+    return [o.item_name, o.option, nameFor(o), o.player_slack ?? "", ...project];
+  };
+  const searched = needle ? loaded.filter((o) => searchable(o).some((v) => v.toLowerCase().includes(needle))) : loaded;
+  const filtered = searched
+    .filter((o) => !eligFilter || (eligibility.get(Number(o.id))?.status ?? "unverified") === eligFilter)
+    .filter((o) => !verifyFilter || eligibility.get(Number(o.id))?.verification === verifyFilter);
+  const orders =
+    sortKey === "newest"
+      ? filtered
+      : [...filtered].sort(
+          (a, b) =>
+            sortKeyValue(eligibility.get(Number(b.id)), sortKey) - sortKeyValue(eligibility.get(Number(a.id)), sortKey),
+        );
 
   const requestedId = Number(orderParam);
   const selected = orders.find((o) => Number(o.id) === requestedId) ?? orders[0] ?? null;
   const explicitSelection = selected !== null && Number(selected.id) === requestedId;
+
+  if (selected) {
+    try {
+      const fresh = await evaluateOrders([selected], { liveAirtable: true, ships: shipsView ?? undefined });
+      for (const [id, r] of fresh) eligibility.set(id, r);
+    } catch (e) {
+      console.error("fulfillment eligibility (selected)", (e as Error).message);
+    }
+  }
 
   const counts = showingQueue ? await shopOrderStatusCounts() : null;
 
@@ -220,13 +270,27 @@ export default async function FulfillmentPage({
     { key: "all", label: "All", count: counts?.all },
   ];
 
-  const hrefFor = (next: { status?: TabKey; mine?: boolean; q?: string; order?: number }) => {
+  const hrefFor = (next: {
+    status?: TabKey;
+    mine?: boolean;
+    q?: string;
+    order?: number;
+    elig?: EligibilityStatus | null;
+    verify?: VerificationLabel | null;
+    sort?: SortKey;
+  }) => {
     const params = new URLSearchParams();
     const st = next.status ?? active;
     if (st !== "pending") params.set("status", st);
     if (next.mine ?? keepMine) params.set("mine", "1");
     const qv = next.q ?? query;
     if (qv) params.set("q", qv);
+    const ev = next.elig === undefined ? eligFilter : next.elig;
+    if (ev) params.set("elig", ev);
+    const vv = next.verify === undefined ? verifyFilter : next.verify;
+    if (vv) params.set("verify", vv);
+    const sv = next.sort ?? sortKey;
+    if (sv !== "newest") params.set("sort", sv);
     if (next.order !== undefined) params.set("order", String(next.order));
     const qs = params.toString();
     return qs ? `/fulfillment?${qs}` : "/fulfillment";
@@ -234,7 +298,11 @@ export default async function FulfillmentPage({
 
   const emptyTitle = query
     ? `No requests match "${query}"`
-    : mineOnly
+    : verifyFilter
+      ? `No "${VERIFICATION_LABEL[verifyFilter].toLowerCase()}" orders in this view`
+    : eligFilter
+      ? `No ${ELIGIBILITY_LABEL[eligFilter].toLowerCase()} orders in this view`
+      : mineOnly
       ? "Nothing in your queue"
       : active === "pending"
         ? "No orders waiting to be claimed"
@@ -285,6 +353,8 @@ export default async function FulfillmentPage({
         </Details>
       )}
 
+      {shipsView && <ShipsSyncBar view={shipsView} />}
+
       {showingFulfillers ? (
         <FulfillerManager />
       ) : showingLeaderboard ? (
@@ -299,7 +369,10 @@ export default async function FulfillmentPage({
               <form action="/fulfillment" method="get" role="search" className="fw-search">
                 {active !== "pending" && <input type="hidden" name="status" value={active} />}
                 {mineOnly && <input type="hidden" name="mine" value="1" />}
-                <Input name="q" type="search" defaultValue={query} maxLength={100} placeholder="Search items, players..." aria-label="Search requests" />
+                {eligFilter && <input type="hidden" name="elig" value={eligFilter} />}
+                {verifyFilter && <input type="hidden" name="verify" value={verifyFilter} />}
+                {sortKey !== "newest" && <input type="hidden" name="sort" value={sortKey} />}
+                <Input name="q" type="search" defaultValue={query} maxLength={100} placeholder="Search players, GitHub, projects, items..." aria-label="Search requests" />
                 <button type="submit" className={buttonClass("outline")}>
                   Search
                 </button>
@@ -320,6 +393,54 @@ export default async function FulfillmentPage({
                 ))}
               </nav>
             )}
+            {showingQueue && (
+              <nav className="fw-chips" aria-label="Filter by funding">
+                <Link href={hrefFor({ elig: null, order: undefined })} className="fw-chip" aria-current={eligFilter ? undefined : "true"}>
+                  Any funding
+                </Link>
+                {ELIGIBILITY_FILTERS.map((f) => (
+                  <Link
+                    key={f}
+                    href={hrefFor({ elig: f, order: undefined })}
+                    className="fw-chip"
+                    aria-current={f === eligFilter ? "true" : undefined}
+                  >
+                    {ELIGIBILITY_LABEL[f]}
+                  </Link>
+                ))}
+              </nav>
+            )}
+            {showingQueue && (
+              <nav className="fw-chips" aria-label="Filter by verification">
+                <Link href={hrefFor({ verify: null, order: undefined })} className="fw-chip" aria-current={verifyFilter ? undefined : "true"}>
+                  Any verification
+                </Link>
+                {VERIFICATION_FILTERS.map((f) => (
+                  <Link
+                    key={f}
+                    href={hrefFor({ verify: f, order: undefined })}
+                    className="fw-chip"
+                    aria-current={f === verifyFilter ? "true" : undefined}
+                  >
+                    {VERIFICATION_LABEL[f]}
+                  </Link>
+                ))}
+              </nav>
+            )}
+            {showingQueue && (
+              <nav className="fw-chips" aria-label="Sort">
+                {SORT_KEYS.map((k) => (
+                  <Link
+                    key={k}
+                    href={hrefFor({ sort: k, order: undefined })}
+                    className="fw-chip"
+                    aria-current={k === sortKey ? "true" : undefined}
+                  >
+                    {SORT_LABEL[k]}
+                  </Link>
+                ))}
+              </nav>
+            )}
             {orders.length === 0 ? (
               <EmptyState title={emptyTitle} icon="package" />
             ) : (
@@ -329,6 +450,7 @@ export default async function FulfillmentPage({
                 hrefFor={(id) => hrefFor({ order: id })}
                 nameFor={nameFor}
                 now={Date.now()}
+                eligibility={eligibility}
               />
             )}
           </section>
@@ -343,6 +465,7 @@ export default async function FulfillmentPage({
                 ownOrder={isOwnOrder(selected, me)}
                 mine={selected.claimed_by_slack === me}
                 canManage={access.isOwner}
+                eligibility={eligibility.get(Number(selected.id)) ?? null}
               />
             ) : (
               <EmptyState title="No request selected" icon="package" />
