@@ -24,6 +24,24 @@ export function slugify(s: string): string {
     .replace(/^-|-$/g, "");
 }
 
+// The rendered body goes into dangerouslySetInnerHTML on the public /docs
+// page, and the link target is the one piece of source text that lands in an
+// attribute. esc() leaves quotes alone (fine for text nodes), so the target
+// gets its own treatment: http(s), mailto, site-relative and anchor links
+// only, with quotes escaped so the target cannot close the attribute and add
+// an event handler. Anything else renders as plain text instead of a link.
+//
+// Backslashes and control characters are rejected outright: the trailing
+// backslash-unescape pass in inline() runs after this check, so "java\:script"
+// would otherwise become "javascript:" on the way out, and browsers strip
+// leading control characters before reading the scheme.
+function safeHref(target: string): string | null {
+  if (/[\\\u0000-\u001f\u007f]/.test(target)) return null;
+  const scheme = target.match(/^([a-z][a-z0-9+.-]*):/i);
+  if (scheme && !/^(https?|mailto)$/i.test(scheme[1]!)) return null;
+  return target.replace(/"/g, "&quot;");
+}
+
 function inline(raw: string): string {
   return esc(raw)
     .replace(/`([^`]+)`/g, "<code>$1</code>")
@@ -33,7 +51,10 @@ function inline(raw: string): string {
     // start before, space/punctuation/end after) so it doesn't fire inside
     // snake_case identifiers in prose.
     .replace(/(^|[\s(])_([^_\s][^_]*?)_(?=[\s.,!?)]|$)/g, "$1<i>$2</i>")
-    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>')
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_match, text: string, target: string) => {
+      const href = safeHref(target);
+      return href === null ? text : `<a href="${href}">${text}</a>`;
+    })
     // Markdown escape syntax (\! \- \. etc) - without this, a literal
     // backslash shows up in the rendered page instead of the punctuation it
     // was there to protect (e.g. "seems\!" a few docs write for emphasis).
