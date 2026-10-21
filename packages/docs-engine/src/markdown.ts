@@ -17,11 +17,29 @@ export interface Doc {
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
+const escAttr = (s: string) =>
+  s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
 export function slugify(s: string): string {
   return s
     .toLowerCase()
     .replace(/[^\w]+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+function safeHref(target: string): string | null {
+  // The caller has already HTML-escaped the Markdown source. Reject URL parser
+  // normalization characters before checking the scheme, then encode quotes
+  // for the generated double-quoted attribute.
+  if (/[\\\u0000-\u001f\u007f]/.test(target)) return null;
+  const scheme = target.match(/^([a-z][a-z0-9+.-]*):/i);
+  if (scheme && !/^(https?|mailto)$/i.test(scheme[1]!)) return null;
+  return target.replace(/"/g, "&quot;");
 }
 
 function inline(raw: string): string {
@@ -33,7 +51,10 @@ function inline(raw: string): string {
     // start before, space/punctuation/end after) so it doesn't fire inside
     // snake_case identifiers in prose.
     .replace(/(^|[\s(])_([^_\s][^_]*?)_(?=[\s.,!?)]|$)/g, "$1<i>$2</i>")
-    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>')
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_match, label: string, target: string) => {
+      const href = safeHref(target);
+      return href ? `<a href="${href}">${label}</a>` : label;
+    })
     // Markdown escape syntax (\! \- \. etc) - without this, a literal
     // backslash shows up in the rendered page instead of the punctuation it
     // was there to protect (e.g. "seems\!" a few docs write for emphasis).
@@ -95,7 +116,7 @@ export function render(src: string, tokens: Record<string, string>): Doc {
       i++;
       while (i < lines.length && !/^```/.test(lines[i]!)) buf.push(lines[i++]!);
       i++;
-      const cls = lang ? ` class="language-${lang}"` : "";
+      const cls = lang ? ` class="language-${escAttr(lang)}"` : "";
       html += `<pre><code${cls}>${esc(buf.join("\n"))}</code></pre>\n`;
       continue;
     }
