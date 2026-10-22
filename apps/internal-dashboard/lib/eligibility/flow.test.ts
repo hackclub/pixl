@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { claimOrderWithFunding, claimRpcArgs, evidenceSnapshot, refreshCommitmentAmount } from "./commit";
-import { evaluateFromEvidence, evaluateOrders, loadPlayerEvidence, toOrderInput, type SqlLike, type UnifiedVerifier } from "./evidence";
+import { clearAirtableCache, evaluateFromEvidence, evaluateOrders, loadPlayerEvidence, toOrderInput, type SqlLike, type UnifiedVerifier } from "./evidence";
+import type { SubmissionLookup } from "../airtable";
 import { POLICIES } from "./policy";
 import { buildSnapshot, type ShipsProvider } from "./ships";
 
@@ -248,21 +249,25 @@ describe("evidence loading", () => {
   });
 });
 
+const identityLookup = async (ids: string[]) =>
+  new Map<string, SubmissionLookup>(ids.map((id) => [id, { kind: "found", info: { submitted: true, unifiedId: id } }]));
+
 describe("read-only Airtable", () => {
-  test("only issues GETs with a single non-PII field", async () => {
-    stubAirtable(() => new Response(JSON.stringify({ fields: { "Automation - Submit to Unified YSWS": true } }), { status: 200 }));
+  test("only issues GETs with two non-PII fields", async () => {
+    stubAirtable(() => new Response(JSON.stringify({ records: [{ id: "recCCCCCCCCCCCCCC", fields: { "Automation - Submit to Unified YSWS": true } }] }), { status: 200 }));
     const ev = await loadPlayerEvidence([U1], { liveAirtable: true, sql: fakeSql({ owned: [proj({ airtable_record_id: "recCCCCCCCCCCCCCC" })] }), now: NOW });
     expect(ev.get(U1)!.projects[0]!.airtable).toBe("submitted");
     expect(calls.length).toBeGreaterThan(0);
     for (const c of calls) {
       expect(c.method).toBe("GET");
-      expect(decodeURIComponent(c.url)).toContain("fields[]=Automation - Submit to Unified YSWS");
+      expect(decodeURIComponent(c.url).replace(/\+/g, " ")).toContain("fields[]=Automation - Submit to Unified YSWS");
+      expect(decodeURIComponent(c.url).replace(/\+/g, " ")).toContain("fields[]=Automation - YSWS Record ID");
       expect(c.url).not.toMatch(/Email|Birthday|Address|First%20Name/);
     }
   });
 
-  test("a 404 marks the record missing and requires review", async () => {
-    stubAirtable(() => new Response("{}", { status: 404 }));
+  test("a record absent from the response is missing and requires review", async () => {
+    stubAirtable(() => new Response(JSON.stringify({ records: [] }), { status: 200 }));
     const ev = await loadPlayerEvidence([U1], { liveAirtable: true, sql: fakeSql({ owned: [proj({ airtable_record_id: "recDDDDDDDDDDDDDD" })] }), verifier: confirming, now: NOW });
     expect(ev.get(U1)!.projects[0]!.airtable).toBe("missing");
     const r = evaluateFromEvidence(ev.get(U1)!, toOrderInput(orderRow() as never), POLICIES["2026-10-22.1"], NOW);
@@ -493,7 +498,7 @@ describe("authorization and existing actions", () => {
 
   test("the Airtable read helper issues GET only", () => {
     const src = read("lib/airtable.ts");
-    const fn = src.slice(src.indexOf("export async function fetchSubmissionState"), src.indexOf("// Creates a new record"));
+    const fn = src.slice(src.indexOf("async function lookupChunk"), src.indexOf("// Creates a new record"));
     expect(fn).toContain('method: "GET"');
     expect(fn).not.toMatch(/PATCH|POST|DELETE/);
   });
@@ -518,7 +523,7 @@ describe("Ships in the evidence loader", () => {
   const tables = (extra: Tables = {}): Tables => ({ owned: [proj()], users: [{ id: U1, slack_id: "UPLAYER001" }], ...extra });
 
   test("a matching record verifies the project and covers an affordable order", async () => {
-    const ev = await loadPlayerEvidence([U1], { liveAirtable: false, sql: fakeSql(tables()), now: NOW, ships: viewOf(rowsFor()) });
+    const ev = await loadPlayerEvidence([U1], { liveAirtable: false, airtable: identityLookup, sql: fakeSql(tables()), now: NOW, ships: viewOf(rowsFor()) });
     const p = ev.get(U1)!;
     expect(p.projects[0]!.ships!.state).toBe("approved");
     expect(p.meta.shipsAvailable).toBe(true);
@@ -530,7 +535,7 @@ describe("Ships in the evidence loader", () => {
 
   test("a Slack id on the Ships row that is not the player's is flagged", async () => {
     const ev = await loadPlayerEvidence([U1], {
-      liveAirtable: false,
+      liveAirtable: false, airtable: identityLookup,
       sql: fakeSql(tables()),
       now: NOW,
       ships: viewOf(rowsFor({ slack_id: "UOTHER0001" })),
@@ -546,7 +551,7 @@ describe("Ships in the evidence loader", () => {
       fetched++;
       return new Response("[]");
     }) as typeof fetch;
-    const ev = await loadPlayerEvidence([U1], { liveAirtable: false, sql: fakeSql(tables()), now: NOW });
+    const ev = await loadPlayerEvidence([U1], { liveAirtable: false, airtable: identityLookup, sql: fakeSql(tables()), now: NOW });
     expect(fetched).toBe(0);
     expect(ev.get(U1)!.meta.shipsAvailable).toBe(false);
     const r = evaluateFromEvidence(ev.get(U1)!, toOrderInput(orderRow({ price: 100 }) as never), POLICIES["2026-10-22.2"], NOW);
@@ -563,14 +568,14 @@ describe("Ships in the evidence loader", () => {
       },
     } as unknown as ShipsProvider;
     const orders = Array.from({ length: 40 }, (_, i) => orderRow({ id: 500 + i, price: 10 }));
-    const results = await evaluateOrders(orders as never[], { liveAirtable: false, sql: fakeSql(tables()), ships: provider });
+    const results = await evaluateOrders(orders as never[], { liveAirtable: false, airtable: identityLookup, sql: fakeSql(tables()), ships: provider });
     expect(gets).toBe(1);
     expect(results.size).toBe(40);
   });
 
   test("a collaborator project is matched through their own record id", async () => {
     const ev = await loadPlayerEvidence([U1], {
-      liveAirtable: false,
+      liveAirtable: false, airtable: identityLookup,
       sql: fakeSql({
         users: [{ id: U1, slack_id: "UPLAYER001" }],
         collab: [{ id: 2, name: "Shared", status: "approved", banned_at: null, repo_url: "https://github.com/c/d", system_note: "", funding_usd: 0, hours_deflated_at: null, collab_user_id: U1, collab_hours: "6", collab_record_id: REC_B, collab_prior_hours: 0 }],
@@ -595,7 +600,7 @@ describe("first submission, update and re-ship hours", () => {
     return { snapshot, fetchedAt: snapshot.fetchedAt, ageMs: 60_000, fresh: true, error: null, lastAttemptAt: NOW, nextRetryAt: null };
   };
   const evalWith = async (p: Record<string, unknown>, rows: Record<string, unknown>[], priceUsd = 1) => {
-    const ev = await loadPlayerEvidence([U1], { liveAirtable: false, sql: fakeSql({ owned: [proj(p)] }), now: NOW, ships: ships(rows) });
+    const ev = await loadPlayerEvidence([U1], { liveAirtable: false, airtable: identityLookup, sql: fakeSql({ owned: [proj(p)] }), now: NOW, ships: ships(rows) });
     return evaluateFromEvidence(ev.get(U1)!, toOrderInput(orderRow({ price: priceUsd * 10 }) as never), POLICIES["2026-10-22.2"], NOW);
   };
 
@@ -657,7 +662,7 @@ describe("first submission, update and re-ship hours", () => {
 
   test("a collaborator's update uses their own baseline", async () => {
     const ev = await loadPlayerEvidence([U1], {
-      liveAirtable: false,
+      liveAirtable: false, airtable: identityLookup,
       sql: fakeSql({
         collab: [{ id: 2, name: "Shared", status: "shipped", banned_at: null, repo_url: "https://github.com/c/d", system_note: "", funding_usd: 0, hours_deflated_at: null, collab_user_id: U1, collab_hours: "20", collab_record_id: null, collab_prior_hours: "20" }],
       }),
@@ -667,5 +672,121 @@ describe("first submission, update and re-ship hours", () => {
     const p = ev.get(U1)!.projects[0]!;
     expect(p.status).toBe("approved");
     expect(p.approvedHours).toBe(20);
+  });
+});
+
+describe("staging to Unified record mapping", () => {
+  beforeEach(clearAirtableCache);
+  const STAGING = "recVBJwAiV440SX4V";
+  const UNIFIED = "recpBUYp5RAB3JEaE";
+  const SIBLING = "recwFAtNLs7sscrtE";
+  const REPO = "https://github.com/polarnl/polarlearn-v2";
+  const lookupOf = (m: Record<string, SubmissionLookup>) => async (ids: string[]) =>
+    new Map<string, SubmissionLookup>(ids.map((id) => [id, m[id] ?? { kind: "missing" }]));
+  const found = (unifiedId: string | null): SubmissionLookup => ({ kind: "found", info: { submitted: true, unifiedId } });
+  const viewOf = (rows: Record<string, unknown>[]) => {
+    const snapshot = buildSnapshot(
+      rows.map((r) => ({ ysws: "Pixl", approved_at: Math.floor(NOW / 1000) - 86400, code_url: REPO, github_username: "polarnl", slack_id: "null", ...r })),
+      NOW - 60_000,
+    );
+    return { snapshot, fetchedAt: snapshot.fetchedAt, ageMs: 60_000, fresh: true, error: null, lastAttemptAt: NOW, nextRetryAt: null };
+  };
+  const ships = viewOf([
+    { id: UNIFIED, hours: 87 },
+    { id: SIBLING, hours: 3 },
+  ]);
+  const andrei = (over: Record<string, unknown> = {}) => proj({ id: 1406, name: "PolarLearn V2", approved_hours: "87", repo_url: REPO, airtable_record_id: STAGING, ...over });
+  const load = (owned: Record<string, unknown>[], lookup: Record<string, SubmissionLookup>, extra: Partial<Tables> = {}) =>
+    loadPlayerEvidence([U1], { liveAirtable: false, airtable: lookupOf(lookup), sql: fakeSql({ owned, users: [{ id: U1, slack_id: "UANDREI001" }], ...extra }), now: NOW, ships });
+
+  test("Andrei's staging id is not in Ships, but its mapped Unified id is and resolves to the 87h record", async () => {
+    expect(ships.snapshot.byId.has(STAGING)).toBe(false);
+    const ev = await load([andrei()], { [STAGING]: found(UNIFIED) });
+    const s = ev.get(U1)!.projects[0]!.ships!;
+    expect(s.state).toBe("approved");
+    expect(s.recordId).toBe(UNIFIED);
+    expect(s.hours).toBe(87);
+  });
+
+  test("a collaborator's own staging record maps to their own 3h Unified record on the same repository", async () => {
+    const ev = await load(
+      [andrei()],
+      { [STAGING]: found(UNIFIED), recCOLLAB0000000A: found(SIBLING) },
+      {
+        collab: [{ id: 2, name: "PolarLearn V2", status: "approved", banned_at: null, repo_url: REPO, system_note: "", funding_usd: 0, hours_deflated_at: null, collab_user_id: U1, collab_hours: "3", collab_record_id: "recCOLLAB0000000A", collab_prior_hours: 0 }],
+      },
+    );
+    const lines = ev.get(U1)!.projects;
+    const owner = lines.find((l) => l.role === "owner")!;
+    expect(owner.ships!.recordId).toBe(UNIFIED);
+    expect(owner.ships!.hours).toBe(87);
+  });
+
+  test("repository and hours alone never verify when the mapping is empty", async () => {
+    const ev = await load([andrei()], { [STAGING]: found(null) });
+    const p = ev.get(U1)!;
+    expect(p.projects[0]!.ships!.state).toBe("no_record");
+    const r = evaluateFromEvidence(p, toOrderInput(orderRow({ price: 10 }) as never), POLICIES["2026-10-22.2"], NOW);
+    expect(r.status).not.toBe("covered");
+    expect(r.verifiedHours).toBe(0);
+  });
+
+  test("a missing staging record is not matched to Ships", async () => {
+    const ev = await load([andrei()], { [STAGING]: { kind: "missing" } });
+    expect(ev.get(U1)!.projects[0]!.ships!.state).toBe("no_record");
+  });
+
+  test("an unreachable Airtable shows Unverified, never Covered", async () => {
+    const ev = await load([andrei()], { [STAGING]: { kind: "error", error: "offline" } });
+    const p = ev.get(U1)!;
+    expect(p.projects[0]!.ships!.state).toBe("unavailable");
+    expect(p.meta.airtableAvailable).toBe(false);
+    const r = evaluateFromEvidence(p, toOrderInput(orderRow({ price: 10 }) as never), POLICIES["2026-10-22.2"], NOW);
+    expect(r.status).not.toBe("covered");
+  });
+
+  test("an uncached list render cannot map, so it never claims Covered", async () => {
+    clearAirtableCache();
+    const ev = await loadPlayerEvidence([U1], { liveAirtable: false, sql: fakeSql({ owned: [andrei()], users: [{ id: U1, slack_id: "UANDREI001" }] }), now: NOW, ships });
+    expect(ev.get(U1)!.projects[0]!.ships!.state).toBe("unavailable");
+  });
+
+  test("two projects mapping to one Unified record are both ambiguous", async () => {
+    const ev = await load([andrei(), andrei({ id: 1407, airtable_record_id: "recSTAGING2222222" })], {
+      [STAGING]: found(UNIFIED),
+      recSTAGING2222222: found(UNIFIED),
+    });
+    for (const l of ev.get(U1)!.projects) expect(l.ships!.state).toBe("ambiguous");
+  });
+
+  test("a mapped record on a different repository is an identity mismatch", async () => {
+    const ev = await load([andrei({ repo_url: "https://github.com/other/thing" })], { [STAGING]: found(UNIFIED) });
+    expect(ev.get(U1)!.projects[0]!.ships!.state).toBe("identity_mismatch");
+  });
+
+  test("a mapped Unified id absent from Ships is not_found", async () => {
+    const ev = await load([andrei()], { [STAGING]: found("recNOTINSHIPS0000") });
+    expect(ev.get(U1)!.projects[0]!.ships!.state).toBe("not_found");
+  });
+
+  test("a project with no staging id still matches only by repository and Slack id", async () => {
+    const ev = await load([andrei({ airtable_record_id: null })], {});
+    expect(ev.get(U1)!.projects[0]!.ships!.state).toBe("ambiguous");
+  });
+
+  test("Andrei's real spending leaves him $60.09 over, so nothing further is covered", async () => {
+    const orders = [
+      orderRow({ id: 71, item_name: "Sony WH-1000XM5", quantity: 1, price: 2258, status: "shipped", actual_cost_usd: 218.09 }),
+      orderRow({ id: 72, item_name: "10$ Storage grant", quantity: 16, price: 1792, status: "done", actual_cost_usd: 160 }),
+      orderRow({ id: 73, item_name: "AI subscription/credits", quantity: 20, price: 2240, status: "cancelled", actual_cost_usd: null }),
+      orderRow({ id: 86, item_name: "AI subscription/credits", quantity: 3, price: 336, status: "done", actual_cost_usd: 30 }),
+      orderRow({ id: 107, item_name: "Signed Org Photo", quantity: 1, price: 85, status: "pending", actual_cost_usd: null }),
+    ];
+    const ev = await load([andrei()], { [STAGING]: found(UNIFIED) }, { orders });
+    const r = evaluateFromEvidence(ev.get(U1)!, toOrderInput(orders[4] as never), POLICIES["2026-10-22.2"], NOW);
+    expect(r.verifiedFundingCents).toBe(34800);
+    expect(r.committedCents).toBe(40809);
+    expect(r.remainingCents).toBe(-6009);
+    expect(r.status).toBe("insufficient");
   });
 });

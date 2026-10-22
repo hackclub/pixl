@@ -7,11 +7,13 @@ const TABLE = "tbl8UpMm6gsLPKEN0";
 const API = process.env.AIRTABLE_API_URL ?? "https://api.airtable.com";
 const SUBMIT = "Automation - Submit to Unified YSWS";
 const HOURS = "Optional - Override Hours Spent";
+const UNIFIED = "Automation - YSWS Record ID";
 const token = process.env.AIRTABLE_PIXL_YSWS_UNIFIED_TOKEN;
 if (!token) throw new Error("AIRTABLE_PIXL_YSWS_UNIFIED_TOKEN is not set");
 
 interface Row {
   id: string;
+  unifiedId: string | null;
   submitted: boolean;
   hours: number | null;
   repoKey: string | null;
@@ -22,7 +24,7 @@ async function airtableRows(): Promise<Row[]> {
   let offset = "";
   do {
     const q = new URLSearchParams();
-    for (const f of ["Code URL", HOURS, SUBMIT]) q.append("fields[]", f);
+    for (const f of ["Code URL", HOURS, SUBMIT, UNIFIED]) q.append("fields[]", f);
     if (process.env.AIRTABLE_VIEW) q.set("view", process.env.AIRTABLE_VIEW);
     if (offset) q.set("offset", offset);
     const res = await fetch(`${API}/v0/${BASE}/${TABLE}?${q}`, { method: "GET", headers: { Authorization: `Bearer ${token}` } });
@@ -32,6 +34,7 @@ async function airtableRows(): Promise<Row[]> {
       const h = r.fields[HOURS];
       out.push({
         id: r.id,
+        unifiedId: typeof r.fields[UNIFIED] === "string" && /^rec[A-Za-z0-9]{14}$/.test((r.fields[UNIFIED] as string).trim()) ? (r.fields[UNIFIED] as string).trim() : null,
         submitted: r.fields[SUBMIT] === true,
         hours: typeof h === "number" ? h : null,
         repoKey: repoKeyOf(typeof r.fields["Code URL"] === "string" ? (r.fields["Code URL"] as string) : null),
@@ -50,15 +53,16 @@ const ships = view.snapshot;
 
 const all = await airtableRows();
 const submitted = all.filter((r) => r.submitted);
-const matched = submitted.filter((r) => ships.byId.has(r.id));
-const missing = submitted.filter((r) => !ships.byId.has(r.id));
-const shipsOnly = [...ships.byId.values()].filter((e) => !submitted.some((r) => r.id === e.id));
+const matched = submitted.filter((r) => r.unifiedId && ships.byId.has(r.unifiedId));
+const unmapped = submitted.filter((r) => !r.unifiedId);
+const missing = submitted.filter((r) => r.unifiedId && !ships.byId.has(r.unifiedId));
+const shipsOnly = [...ships.byId.values()].filter((e) => !submitted.some((r) => r.unifiedId === e.id));
 const discrepancies = matched
-  .map((r) => ({ id: r.id, airtable: r.hours, ships: ships.byId.get(r.id)!.hours }))
+  .map((r) => ({ staging: r.id, unified: r.unifiedId, airtable: r.hours, ships: ships.byId.get(r.unifiedId!)!.hours }))
   .filter((d) => d.airtable != null && Math.abs(d.airtable - d.ships) > 1e-9);
 const noHours = matched.filter((r) => r.hours == null).map((r) => r.id);
-const ambiguous = submitted.filter((r) => ships.ambiguousIds.has(r.id) || ships.invalidIds.has(r.id)).map((r) => r.id);
-const repoMismatch = matched.filter((r) => r.repoKey && ships.byId.get(r.id)!.repoKey !== r.repoKey).map((r) => r.id);
+const ambiguous = submitted.filter((r) => r.unifiedId && (ships.ambiguousIds.has(r.unifiedId) || ships.invalidIds.has(r.unifiedId))).map((r) => r.id);
+const repoMismatch = matched.filter((r) => r.repoKey && ships.byId.get(r.unifiedId!)!.repoKey !== r.repoKey).map((r) => r.id);
 
 const report: Record<string, unknown> = {
   shipsFetchedAt: new Date(view.fetchedAt!).toISOString(),
@@ -66,9 +70,10 @@ const report: Record<string, unknown> = {
   airtableRecords: all.length,
   airtableSubmitted: submitted.length,
   matched: matched.length,
-  matchedIds: matched.map((r) => r.id),
-  submittedMissingFromShips: missing.map((r) => ({ id: r.id, airtableHours: r.hours })),
-  shipsMissingFromAirtableSubmitted: shipsOnly.map((e) => ({ id: e.id, hours: e.hours, inAirtableUnsubmitted: all.some((r) => r.id === e.id) })),
+  matchedIds: matched.map((r) => ({ staging: r.id, unified: r.unifiedId })),
+  submittedWithoutUnifiedId: unmapped.map((r) => r.id),
+  submittedMissingFromShips: missing.map((r) => ({ staging: r.id, unified: r.unifiedId, airtableHours: r.hours })),
+  shipsMissingFromAirtableSubmitted: shipsOnly.map((e) => ({ id: e.id, hours: e.hours, inAirtableUnsubmitted: all.some((r) => r.unifiedId === e.id) })),
   hourDiscrepancies: discrepancies,
   matchedWithoutAirtableHours: noHours,
   ambiguous,

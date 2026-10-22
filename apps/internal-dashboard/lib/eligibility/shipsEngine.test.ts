@@ -1,8 +1,23 @@
 import { describe, expect, test } from "bun:test";
 import { evaluateEligibility, type EligibilityInput, type OrderInput, type ProjectEvidence } from "./engine";
 import { currentPolicy } from "./policy";
-import { matchShips } from "./shipsMatch";
+import { matchShips as matchMapped, type MatchTarget } from "./shipsMatch";
 import { buildSnapshot, type ShipsView } from "./ships";
+
+const matchShips = (
+  v: Parameters<typeof matchMapped>[0],
+  t: { recordId: string | null; repoKey: string | null; playerSlackId: string | null },
+  now?: number,
+) =>
+  matchMapped(
+    v,
+    {
+      mapping: t.recordId ? { kind: "mapped", stagingId: "recSTAGING0000000", unifiedId: t.recordId } : { kind: "none" },
+      repoKey: t.repoKey,
+      playerSlackId: t.playerSlackId,
+    } satisfies MatchTarget,
+    now,
+  );
 
 const NOW = 1_800_000_000_000;
 const PX = 0.1;

@@ -1,8 +1,16 @@
 import type { ShipsEvidence } from "./engine";
 import type { ShipsEntry, ShipsView } from "./ships";
 
+export type UnifiedMapping =
+  | { kind: "none" }
+  | { kind: "mapped"; stagingId: string; unifiedId: string }
+  | { kind: "empty"; stagingId: string }
+  | { kind: "missing"; stagingId: string }
+  | { kind: "duplicate"; stagingId: string; unifiedId: string }
+  | { kind: "unavailable"; stagingId: string };
+
 export interface MatchTarget {
-  recordId: string | null;
+  mapping: UnifiedMapping;
   repoKey: string | null;
   playerSlackId: string | null;
 }
@@ -62,21 +70,34 @@ const blank = (state: ShipsEvidence["state"], note: string, recordId: string | n
 
 export function matchShips(view: ShipsView, target: MatchTarget, nowMs: number = Date.now()): ShipsEvidence {
   const snap = view.snapshot;
-  if (!snap) return blank("unavailable", "Ships has not been reached yet.", target.recordId);
+  if (!snap) return blank("unavailable", "Ships has not been reached yet.");
 
-  if (target.recordId) {
-    const id = target.recordId;
-    if (snap.ambiguousIds.has(id)) return blank("ambiguous", "Ships lists this record id more than once.", id);
-    if (snap.invalidIds.has(id)) return blank("ambiguous", "Ships has a malformed entry for this record id.", id);
+  const m = target.mapping;
+  if (m.kind === "unavailable") {
+    return blank("unavailable", "The Airtable record could not be read, so its Unified record id is unknown.", m.stagingId);
+  }
+  if (m.kind === "duplicate") {
+    return blank("ambiguous", "More than one PIXL project maps to this Unified record.", m.unifiedId);
+  }
+  if (m.kind === "missing") {
+    return blank("no_record", "The Airtable staging record no longer exists, so it cannot be matched to Ships.", m.stagingId);
+  }
+  if (m.kind === "empty") {
+    return blank("no_record", "The Airtable record has no Unified record id yet, so it cannot be matched to Ships.", m.stagingId);
+  }
+  if (m.kind === "mapped") {
+    const id = m.unifiedId;
+    if (snap.ambiguousIds.has(id)) return blank("ambiguous", "Ships lists this Unified record more than once.", id);
+    if (snap.invalidIds.has(id)) return blank("ambiguous", "Ships has a malformed entry for this Unified record.", id);
     const entry = snap.byId.get(id);
-    if (!entry) return blank("not_found", "Not present in the current Ships dataset.", id);
+    if (!entry) return blank("not_found", "The Unified record is not present in the current Ships dataset.", id);
     if (!target.repoKey || !entry.repoKey || entry.repoKey !== target.repoKey) {
-      return blank("identity_mismatch", "The Ships entry for this record points at a different repository.", id);
+      return blank("identity_mismatch", "The Ships entry for this Unified record points at a different repository.", id);
     }
     if (sameSlack(entry, target.playerSlackId) === false) {
-      return blank("identity_mismatch", "The Ships entry for this record belongs to a different Slack user.", id);
+      return blank("identity_mismatch", "The Ships entry for this Unified record belongs to a different Slack user.", id);
     }
-    return evidenceOf(entry, "record_id", nowMs, view);
+    return evidenceOf(entry, "record_id", nowMs, view, " (matched by Unified record id)");
   }
 
   if (!target.repoKey) return blank("no_record", "No Airtable record id and no repository to match on.");

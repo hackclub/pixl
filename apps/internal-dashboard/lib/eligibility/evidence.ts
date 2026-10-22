@@ -1,5 +1,5 @@
 import { sql } from "../pgCompat";
-import { fetchSubmissionState } from "../airtable";
+import { fetchSubmissionStates, type SubmissionLookup } from "../airtable";
 import { config } from "@/app/_generated/config";
 import {
   evaluateEligibility,
@@ -12,7 +12,7 @@ import {
   type ProjectEvidence,
   type UnifiedState,
 } from "./engine";
-import { matchShips } from "./shipsMatch";
+import { matchShips, type UnifiedMapping } from "./shipsMatch";
 import { repoKeyOf, type ShipsProvider, type ShipsView } from "./ships";
 import { currentPolicy, FUNDING_ORDER_PREFIX, type EligibilityPolicy } from "./policy";
 
@@ -26,29 +26,51 @@ export const unavailableUnifiedVerifier: UnifiedVerifier = {
   verify: async () => new Map(),
 };
 
+export type AirtableLookup = (ids: string[]) => Promise<Map<string, SubmissionLookup>>;
+
 const AIRTABLE_CACHE_MS = 5 * 60 * 1000;
-const airtableCache = new Map<string, { at: number; state: AirtableState }>();
+const airtableCache = new Map<string, { at: number; lookup: SubmissionLookup }>();
 
 export function clearAirtableCache(): void {
   airtableCache.clear();
 }
 
-async function airtableStateFor(recordId: string | null, live: boolean): Promise<{ state: AirtableState; ok: boolean }> {
-  if (!recordId) return { state: "none", ok: true };
-  const cached = airtableCache.get(recordId);
-  if (cached && Date.now() - cached.at < AIRTABLE_CACHE_MS) return { state: cached.state, ok: true };
-  if (!live) return { state: cached ? cached.state : "present", ok: true };
-  const r = await fetchSubmissionState(recordId);
-  if (r.ok) {
-    const state: AirtableState = r.submitted ? "submitted" : "present";
-    airtableCache.set(recordId, { at: Date.now(), state });
-    return { state, ok: true };
+async function airtableLookups(ids: string[], live: boolean, lookup: AirtableLookup): Promise<Map<string, SubmissionLookup | null>> {
+  const out = new Map<string, SubmissionLookup | null>();
+  const need: string[] = [];
+  for (const id of ids) {
+    const c = airtableCache.get(id);
+    if (c && Date.now() - c.at < AIRTABLE_CACHE_MS) out.set(id, c.lookup);
+    else need.push(id);
   }
-  if (r.missing) {
-    airtableCache.set(recordId, { at: Date.now(), state: "missing" });
-    return { state: "missing", ok: true };
+  if (need.length === 0) return out;
+  if (!live) {
+    for (const id of need) out.set(id, null);
+    return out;
   }
+  const got = await lookup(need);
+  for (const id of need) {
+    const l = got.get(id) ?? { kind: "error" as const, error: "no result" };
+    out.set(id, l);
+    if (l.kind !== "error") airtableCache.set(id, { at: Date.now(), lookup: l });
+  }
+  return out;
+}
+
+function airtableStateOf(l: SubmissionLookup | null | undefined): { state: AirtableState; ok: boolean } {
+  if (l === null || l === undefined) return { state: "present", ok: true };
+  if (l.kind === "found") return { state: l.info.submitted ? "submitted" : "present", ok: true };
+  if (l.kind === "missing") return { state: "missing", ok: true };
   return { state: "unavailable", ok: false };
+}
+
+function mappingOf(stagingId: string | null, l: SubmissionLookup | null | undefined): UnifiedMapping {
+  if (!stagingId) return { kind: "none" };
+  if (l && l.kind === "found") {
+    return l.info.unifiedId ? { kind: "mapped", stagingId, unifiedId: l.info.unifiedId } : { kind: "empty", stagingId };
+  }
+  if (l && l.kind === "missing") return { kind: "missing", stagingId };
+  return { kind: "unavailable", stagingId };
 }
 
 const repoKey = repoKeyOf;
@@ -124,7 +146,7 @@ export interface PlayerEvidence {
 
 export async function loadPlayerEvidence(
   userIds: string[],
-  opts: { liveAirtable: boolean; verifier?: UnifiedVerifier; sql?: SqlLike; now?: number; ships?: ShipsProvider | ShipsView } = { liveAirtable: false },
+  opts: { liveAirtable: boolean; verifier?: UnifiedVerifier; sql?: SqlLike; now?: number; ships?: ShipsProvider | ShipsView; airtable?: AirtableLookup } = { liveAirtable: false },
 ): Promise<Map<string, PlayerEvidence>> {
   const out = new Map<string, PlayerEvidence>();
   if (userIds.length === 0) return out;
@@ -210,16 +232,11 @@ export async function loadPlayerEvidence(
   let airtableOk = true;
   const approved = raw.filter((x) => x.p.status === "approved" && !x.p.banned);
   const uniqueIds = [...new Set(approved.map((x) => x.recordId).filter((x): x is string => !!x))];
-  const states = new Map<string, { state: AirtableState; ok: boolean }>();
-  for (let i = 0; i < uniqueIds.length; i += 4) {
-    await Promise.all(
-      uniqueIds.slice(i, i + 4).map(async (id) => states.set(id, await airtableStateFor(id, opts.liveAirtable))),
-    );
-  }
+  const lookups = await airtableLookups(uniqueIds, opts.liveAirtable || !!opts.airtable, opts.airtable ?? fetchSubmissionStates);
   for (const x of raw) {
     if (!x.recordId) continue;
-    const s = states.get(x.recordId);
-    if (s) {
+    if (lookups.has(x.recordId)) {
+      const s = airtableStateOf(lookups.get(x.recordId));
       x.p.airtable = s.state;
       if (!s.ok) airtableOk = false;
     } else {
@@ -229,13 +246,19 @@ export async function loadPlayerEvidence(
 
   if (shipsView) {
     const nowMs = loadedAt;
+    const mappings = new Map<(typeof raw)[number], UnifiedMapping>();
     for (const x of raw) {
       if (x.p.status !== "approved" || x.p.banned) continue;
-      x.p.ships = matchShips(
-        shipsView,
-        { recordId: x.recordId, repoKey: x.p.repoKey, playerSlackId: slackOf.get(x.p.userId) ?? null },
-        nowMs,
-      );
+      const mapping = mappingOf(x.recordId, x.recordId ? lookups.get(x.recordId) : null);
+      mappings.set(x, mapping);
+      x.p.ships = matchShips(shipsView, { mapping, repoKey: x.p.repoKey, playerSlackId: slackOf.get(x.p.userId) ?? null }, nowMs);
+    }
+    const usage = new Map<string, number>();
+    for (const m of mappings.values()) if (m.kind === "mapped") usage.set(m.unifiedId, (usage.get(m.unifiedId) ?? 0) + 1);
+    for (const [x, m] of mappings) {
+      if (m.kind === "mapped" && (usage.get(m.unifiedId) ?? 0) > 1) {
+        x.p.ships = matchShips(shipsView, { mapping: { kind: "duplicate", stagingId: m.stagingId, unifiedId: m.unifiedId }, repoKey: x.p.repoKey, playerSlackId: null }, nowMs);
+      }
     }
   }
 
@@ -388,7 +411,7 @@ export function toOrderInput(o: {
 
 export async function evaluateOrders(
   orders: Parameters<typeof toOrderInput>[0][],
-  opts: { liveAirtable: boolean; verifier?: UnifiedVerifier; sql?: SqlLike; ships?: ShipsProvider | ShipsView },
+  opts: { liveAirtable: boolean; verifier?: UnifiedVerifier; sql?: SqlLike; ships?: ShipsProvider | ShipsView; airtable?: AirtableLookup },
 ): Promise<Map<number, EligibilityResult>> {
   const evidence = await loadPlayerEvidence([...new Set(orders.map((o) => o.user_id))], opts);
   const results = new Map<number, EligibilityResult>();

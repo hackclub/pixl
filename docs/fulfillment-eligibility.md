@@ -37,7 +37,7 @@ Provider: server side only, one GET of the whole dataset (about 10.9 MB, 9.9k en
 
 Cache: per server process, TTL 5 minutes (`SHIPS_CACHE_TTL_MS`, clamped 1 to 60 minutes), one shared in-flight request, exponential backoff (30 s up to 15 min) after failures. It is not globally coherent: each dashboard replica keeps its own snapshot and shows its own sync time. That is acceptable because the source is public and idempotent and cost is one request per replica per TTL; a shared cache is not needed for correctness. `SHIPS_API_URL` may override the endpoint (https, or http on localhost, for tests). A failed refresh keeps the old snapshot with its true age and an error, never a new timestamp. Staff can force a refresh (`refreshShipsSnapshot`, fulfiller role, one refresh per minute across staff); the call is read-only.
 
-Matching: primary is the exact `airtable_record_id` stored on the project or collaborator row, plus the same normalized repository and, when Ships has one, the same Slack id. Secondary (no stored id) needs the unique entry for that repository with the player's Slack id. A GitHub username never verifies anything. Outcomes: approved, approval unconfirmed (no or future `approved_at`), not found, ambiguous, identity mismatch, no record. Not found is not a rejection.
+Matching: the stored `airtable_record_id` is the Airtable staging record, whose id space differs from Ships. The staging record's field `Automation - YSWS Record ID` holds the Unified record id, which is the id Ships uses. That field is read with batched GETs (up to 40 ids per request, cached 5 minutes) and matched exactly against the Ships snapshot, then the normalized repository and, when Ships has one, the Slack id must agree. A project with no staging id falls back to repository plus a unique matching Slack id. Repository and hours alone never verify. An unreadable Airtable, a missing staging record, an empty mapping, or two projects mapping to one Unified record all stay Unverified or go to Review. A collaborator has their own staging record and so their own Unified record.
 
 Freshness: `Covered` requires the snapshot to be at most 30 minutes old (`shipsMaxAgeMs` in the policy); older snapshots yield `Unverified` with reason `ships_stale`.
 
@@ -121,12 +121,12 @@ The code never writes to Airtable (one GET helper, `fetchSubmissionState`, limit
 
 ## Read-only reconciliation script
 
-`scripts/shipsReconcile.ts` does GET-only Airtable reads (three non-PII fields), one Ships fetch, and optionally a read-only SQL transaction for given Slack ids. Needs `AIRTABLE_PIXL_YSWS_UNIFIED_TOKEN`, and `DATABASE_URL` for player history. `AIRTABLE_VIEW` can select the `2-Submitted` view; otherwise records with the submit checkbox set are used. It prints record ids and hours, no personal fields.
+`scripts/shipsReconcile.ts` does GET-only Airtable reads (four non-PII fields), one Ships fetch, and optionally a read-only SQL transaction for given Slack ids. Needs `AIRTABLE_PIXL_YSWS_UNIFIED_TOKEN`, and `DATABASE_URL` for player history. `AIRTABLE_VIEW` can select the `2-Submitted` view; otherwise records with the submit checkbox set are used. It prints record ids and hours, no personal fields.
 
 ## Ships limitations
 
 - Ships approval is evidence, not a guarantee; later deflation or deletion is only seen on the next refresh.
-- Only 18 of 87 PIXL entries carry a Slack id, so participant identity is usually confirmed by record id plus repository, not by person.
+- Only 18 of 87 PIXL entries carry a Slack id, so participant identity is usually confirmed by Unified record id plus repository, not by person.
 - Airtable-staging counts (submitted versus missing) and hour comparisons for real players need Airtable and production data and were not run here (no credentials used).
 - Per-process cache: replicas may differ by up to one TTL.
 - Policy `2026-10-22.2` adds `shipsMaxAgeMs`; `enforceOnClaim` stays false.

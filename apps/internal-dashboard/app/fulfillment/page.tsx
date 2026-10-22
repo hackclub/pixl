@@ -212,7 +212,7 @@ export default async function FulfillmentPage({
   const shipsView = showingQueue ? await shipsProvider().get() : null;
   if (showingQueue && loaded.length > 0) {
     try {
-      eligibility = await evaluateOrders(loaded, { liveAirtable: false, ships: shipsView ?? undefined });
+      eligibility = await evaluateOrders(loaded, { liveAirtable: true, ships: shipsView ?? undefined });
     } catch (e) {
       console.error("fulfillment eligibility", (e as Error).message);
     }
