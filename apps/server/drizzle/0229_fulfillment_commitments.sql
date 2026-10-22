@@ -1,5 +1,5 @@
 -- Funding commitment ledger for the fulfillment eligibility engine (see
--- docs/fulfillment-eligibility.md). One row per claimed shop order: who
+-- apps/internal-dashboard/docs/fulfillment-eligibility.md). One row per claimed shop order: who
 -- authorized it, when, the dollar amount counted against the player's eligible
 -- funding, and a snapshot of the evidence and policy version it was judged on.
 --
