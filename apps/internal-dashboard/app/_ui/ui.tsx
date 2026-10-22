@@ -436,9 +436,17 @@ export function Stat({
   return <CardLink href={href}>{body}</CardLink>;
 }
 
-export function Table({ headers, children }: { headers: ReactNode[]; children: ReactNode }) {
+export function Table({
+  headers,
+  children,
+  className = "",
+}: {
+  headers: ReactNode[];
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <div className="hc-table-wrap">
+    <div className={`hc-table-wrap ${className}`}>
       <table className="hc-table">
         <thead>
           <tr>

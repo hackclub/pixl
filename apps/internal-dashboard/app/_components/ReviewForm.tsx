@@ -352,8 +352,8 @@ function VerdictButtons({
     if (!onVerdictSelect(verdict)) e.preventDefault();
   };
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Button type="button" variant="outline" onClick={onBack} disabled={busy}>
+    <div className="hc-verdict-actions flex flex-wrap items-center gap-2">
+      <Button type="button" variant="outline" onClick={onBack} disabled={busy} className="hc-verdict-back">
         ← Back
       </Button>
       <Button
@@ -363,13 +363,29 @@ function VerdictButtons({
         variant="success"
         disabled={busy}
         onClick={(e) => select("approved", e)}
+        className="hc-verdict-primary"
       >
         {pendingVerdict === "approved" ? "Approving…" : secondPass ? "Approve & credit pixels" : "Approve"}
       </Button>
-      <Button type="submit" name="verdict" value="needs_changes" disabled={busy} onClick={(e) => select("needs_changes", e)}>
+      <Button
+        type="submit"
+        name="verdict"
+        value="needs_changes"
+        disabled={busy}
+        onClick={(e) => select("needs_changes", e)}
+        className="hc-verdict-changes"
+      >
         {pendingVerdict === "needs_changes" ? "Sending back…" : "Request changes"}
       </Button>
-      <Button type="submit" name="verdict" value="ban" variant="danger" disabled={busy} onClick={(e) => select("ban", e)}>
+      <Button
+        type="submit"
+        name="verdict"
+        value="ban"
+        variant="danger"
+        disabled={busy}
+        onClick={(e) => select("ban", e)}
+        className="hc-verdict-danger"
+      >
         {pendingVerdict === "ban"
           ? secondPass
             ? "Banning…"
@@ -1012,8 +1028,8 @@ export function ReviewForm({
         <input type="hidden" name="demoSeconds" defaultValue="0" ref={demoSeconds} />
         <input type="hidden" name="totalSeconds" defaultValue="0" ref={totalSeconds} />
 
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2 text-sm">
+        <div className="hc-review-form-head flex flex-wrap items-center justify-between gap-2">
+          <div className="hc-form-steps flex flex-wrap items-center gap-2 text-sm">
             {STEPS.map((s, i) => (
               <span key={s.n} className="flex items-center gap-2">
                 {i > 0 && <span className="hc-muted">→</span>}

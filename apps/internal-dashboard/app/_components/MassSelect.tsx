@@ -1,9 +1,11 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 // Native checkboxes for the players table's mass action form. RowSelect
 // submits as userIds; SelectAllBox ticks every row on the current page.
 
-export function SelectAllBox() {
+export function SelectAllBox({ children }: { children?: ReactNode }) {
   return (
     <label className="hc-check">
       <input
@@ -15,6 +17,7 @@ export function SelectAllBox() {
           }
         }}
       />
+      {children}
     </label>
   );
 }

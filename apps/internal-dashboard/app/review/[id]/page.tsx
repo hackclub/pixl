@@ -55,6 +55,7 @@ import { hackatimeCutoffUnix, hackatimeCutoffLabel } from "@/app/_generated/conf
 import { ReviewDetailTabs } from "@/app/_components/ReviewDetailTabs";
 import { ReviewSplit } from "./ReviewSplit";
 import { ReviewShortcuts } from "./ReviewShortcuts";
+import { MobileReviewButton, MobileReviewSheetHeader } from "./MobileReviewPanel";
 import { getStaffSettings } from "@/lib/db";
 import { ReviewHeartbeat } from "@/app/_components/ReviewHeartbeat";
 import { ProjectNotes } from "@/app/_components/ProjectNotes";
@@ -1494,7 +1495,13 @@ export default async function ReviewDetail({
           </Suspense>
         </div>
 
-        <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-20 lg:max-h-[calc(100vh-10rem)] lg:self-start lg:overflow-y-auto lg:pr-1">
+        <aside
+          id="review-panel"
+          className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-20 lg:max-h-[calc(100vh-10rem)] lg:self-start lg:overflow-y-auto lg:pr-1"
+        >
+          <MobileReviewSheetHeader
+            title={isProposedBan ? "Final review" : spotCheckStage ? "Spot check" : "First pass review"}
+          />
           {/* Pinned above the tabs, never behind a click: the "stop and look
               at this before you decide" states. */}
           {isHeld && (
@@ -1561,21 +1568,33 @@ export default async function ReviewDetail({
         </aside>
       </ReviewSplit>
 
-      <nav className="sticky bottom-0 z-10 -mx-6 flex items-center gap-4 border-t border-[var(--border)] bg-[var(--background)] px-6 py-3">
+      <nav className="hc-review-dock">
         <ReviewShortcuts />
-        <Suspense fallback={<QueueNav prevId={null} nextId={null} index={-1} total={0} />}>
+        <Suspense
+          fallback={
+            <div className="hc-dock-desktop">
+              <QueueNav prevId={null} nextId={null} index={-1} total={0} />
+            </div>
+          }
+        >
           <Await promise={queuePromise}>
             {(queue) => {
               // projects.id is a Postgres bigint; compare numerically so a
               // bigint serialized as a string doesn't miss the match.
               const idx = queue.findIndex((q) => Number(q.id) === projectId);
+              const prevId = idx > 0 ? queue[idx - 1].id : null;
+              const nextId = idx >= 0 && idx < queue.length - 1 ? queue[idx + 1].id : null;
               return (
-                <QueueNav
-                  prevId={idx > 0 ? queue[idx - 1].id : null}
-                  nextId={idx >= 0 && idx < queue.length - 1 ? queue[idx + 1].id : null}
-                  index={idx}
-                  total={queue.length}
-                />
+                <>
+                  <div className="hc-dock-desktop">
+                    <QueueNav prevId={prevId} nextId={nextId} index={idx} total={queue.length} />
+                  </div>
+                  <div className="hc-dock-mobile">
+                    <QueueStep id={prevId} prev index={idx} total={queue.length} />
+                    <MobileReviewButton index={idx} total={queue.length} />
+                    <QueueStep id={nextId} prev={false} index={idx} total={queue.length} />
+                  </div>
+                </>
               );
             }}
           </Await>
@@ -1597,44 +1616,58 @@ function QueueNav({
   index: number;
   total: number;
 }) {
-  // The position goes on the buttons ("Next · 4/21") so it's readable at a
-  // glance; the middle of the bar lists the keyboard shortcuts instead.
-  const position = (i: number) => (index >= 0 ? ` · ${i + 1}/${total}` : "");
-  const step = (id: number | string | null, prev: boolean) => {
-    const body = prev ? (
-      <>
-        <Icon glyph="view-back" size={18} /> Prev{id != null && position(index - 1)}
-      </>
-    ) : (
-      <>
-        Next{id != null && position(index + 1)} <Icon glyph="view-forward" size={18} />
-      </>
-    );
-    return id != null ? (
-      <Link
-        href={`/review/${id}`}
-        prefetch={false}
-        data-shortcut={prev ? "prev" : "next"}
-        className={buttonClass("outline", "md")}
-      >
-        {body}
-      </Link>
-    ) : (
-      <span className={`${buttonClass("outline", "md")} pointer-events-none opacity-40`} aria-disabled>
-        {body}
-      </span>
-    );
-  };
   return (
     <>
-      {step(prevId, true)}
+      <QueueStep id={prevId} prev index={index} total={total} />
       <span className="hc-caption flex-1 text-center text-xs">
         {index < 0 && total > 0 ? "Not in queue · " : ""}
         <kbd className="hc-mono">←</kbd> <kbd className="hc-mono">→</kbd> move · <kbd className="hc-mono">R</kbd> repo ·{" "}
         <kbd className="hc-mono">D</kbd> demo
       </span>
-      {step(nextId, false)}
+      <QueueStep id={nextId} prev={false} index={index} total={total} />
     </>
+  );
+}
+
+function QueueStep({
+  id,
+  prev,
+  index,
+  total,
+}: {
+  id: number | string | null;
+  prev: boolean;
+  index: number;
+  total: number;
+}) {
+  // The position goes on the buttons ("Next · 4/21") so it's readable at a
+  // glance; the middle of the bar lists the keyboard shortcuts instead.
+  const position = (i: number) => (index >= 0 ? ` · ${i + 1}/${total}` : "");
+  const body = prev ? (
+    <>
+      <Icon glyph="view-back" size={18} />
+      <span className="hc-step-label">Prev{id != null && position(index - 1)}</span>
+    </>
+  ) : (
+    <>
+      <span className="hc-step-label">Next{id != null && position(index + 1)}</span>
+      <Icon glyph="view-forward" size={18} />
+    </>
+  );
+  return id != null ? (
+    <Link
+      href={`/review/${id}`}
+      prefetch={false}
+      data-shortcut={prev ? "prev" : "next"}
+      aria-label={prev ? "Previous submission" : "Next submission"}
+      className={`${buttonClass("outline", "md")} hc-queue-step`}
+    >
+      {body}
+    </Link>
+  ) : (
+    <span className={`${buttonClass("outline", "md")} hc-queue-step pointer-events-none opacity-40`} aria-disabled>
+      {body}
+    </span>
   );
 }
 

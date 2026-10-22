@@ -99,7 +99,7 @@ export default function CommandPalette({ nav }: { nav: NavModel }) {
 
   return (
     <>
-      <button type="button" className="hc-search-trigger" onClick={open}>
+      <button type="button" className="hc-search-trigger" aria-label="Search" onClick={open}>
         <Icon glyph="search" size={18} aria-hidden />
         <span className="flex-1 truncate text-left">Search pages, players, projects...</span>
         <span className="flex shrink-0 gap-1">

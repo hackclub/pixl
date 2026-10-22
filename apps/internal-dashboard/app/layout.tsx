@@ -31,6 +31,7 @@ export const metadata: Metadata = {
 export const viewport = {
   width: "device-width",
   initialScale: 1,
+  viewportFit: "cover",
 };
 
 // Badge counts in the top bar. Each is best effort: a slow or failing count
@@ -91,16 +92,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <Tooltips />
             <header className="hc-topbar sticky top-0 z-20">
               <div className="hc-topbar-inner mx-auto flex min-h-14 max-w-[1840px] flex-wrap items-center gap-x-6 gap-y-2 px-6 py-2">
-                <Link href="/" className="flex shrink-0 items-center gap-2">
+                <Link href="/" className="hc-brand flex shrink-0 items-center gap-2">
                   <img src="/logo.png" alt="Pixl" width={28} height={28} />
-                  <span className="hc-heading">Pixl</span>
+                  <span className="hc-brand-text hc-heading">Pixl</span>
                 </Link>
                 <TopNav nav={nav} counts={counts} />
-                <div className="flex min-w-48 flex-1 justify-center">
+                <div className="hc-search-slot flex min-w-48 flex-1 justify-center">
                   <CommandPalette nav={nav} />
                 </div>
-                <div className="flex shrink-0 items-center gap-3">
-                  <form action={setLiveMode} className="flex items-center gap-2">
+                <div className="hc-account-actions flex shrink-0 items-center gap-3">
+                  <form action={setLiveMode} className="hc-live-toggle flex items-center gap-2" data-live={live || undefined}>
                     <input type="hidden" name="on" value={live ? "0" : "1"} />
                     <span
                       title={
@@ -129,8 +130,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                     <Icon glyph="settings" size={20} />
                   </Link>
                   <form action="/api/auth/logout" method="post">
-                    <Button type="submit" variant="ghost" size="sm" icon="door-leave">
-                      Log out
+                    <Button type="submit" variant="ghost" size="sm" icon="door-leave" className="hc-logout" aria-label="Log out">
+                      <span className="hc-logout-label">Log out</span>
                     </Button>
                   </form>
                 </div>

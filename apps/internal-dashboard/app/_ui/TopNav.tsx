@@ -81,7 +81,7 @@ function MoreMenu({
 export default function TopNav({ nav, counts }: { nav: NavModel; counts: Record<string, number> }) {
   const activeHref = activeNavHref(usePathname(), nav);
   return (
-    <nav className="flex items-center gap-1">
+    <nav className="hc-topnav flex items-center gap-1">
       {nav.primary.map((item) => (
         <NavLink key={item.href} item={item} count={counts[item.href]} active={item.href === activeHref} />
       ))}

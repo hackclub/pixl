@@ -197,17 +197,17 @@ export default async function ReviewListPage({
               </Link>
             ))}
           </div>
-          <form method="get" action="/review" className="flex flex-wrap items-end gap-3 px-4 py-3">
+          <form method="get" action="/review" className="hc-queue-filters flex flex-wrap items-end gap-3 px-4 py-3">
             <input type="hidden" name="sort" value={sortKey} />
             {kind === "hardware" && <input type="hidden" name="kind" value="hardware" />}
             {onlyBlackout && <input type="hidden" name="blackout" value="1" />}
-            <label className="flex flex-col gap-1 text-sm">
+            <label className="hc-filter-field flex flex-1 flex-col gap-1 text-sm sm:flex-none">
               <span className="hc-caption">Min hours</span>
-              <Input name="minh" type="number" min={0} step="any" defaultValue={minHours ?? ""} placeholder="0" className="w-28" />
+              <Input name="minh" type="number" min={0} step="any" defaultValue={minHours ?? ""} placeholder="0" className="w-full sm:w-28" />
             </label>
-            <label className="flex flex-col gap-1 text-sm">
+            <label className="hc-filter-field flex flex-1 flex-col gap-1 text-sm sm:flex-none">
               <span className="hc-caption">Max hours</span>
-              <Input name="maxh" type="number" min={0} step="any" defaultValue={maxHours ?? ""} placeholder="any" className="w-28" />
+              <Input name="maxh" type="number" min={0} step="any" defaultValue={maxHours ?? ""} placeholder="any" className="w-full sm:w-28" />
             </label>
             <Button type="submit" variant="outline" size="sm">
               Filter
