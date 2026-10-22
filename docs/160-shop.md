@@ -16,6 +16,16 @@ Shipping and customs differ everywhere, so the catalogue filters itself by regio
 
 Some items are **level trophies**. You don't buy those. They unlock on their own when your account passes certain levels.
 
+## Beacon unlocks
+
+A reviewer can nominate a standout project as a **Beacon**. Every live Beacon project earns you one **Beacon unlock**, which claims one item marked **Beacon reward** in the shop.
+
+- Unlocks are a shared pool: one unlock claims one Beacon reward, whatever the item costs.
+- An item you already own stays unlocked, so buying it again never spends another unlock.
+- Cancelling a pending order refunds the pixels and returns the unlock.
+
+Your dashboard shows how many Beacon projects you have, how many unlocks you've used, and how many are still unspent.
+
 ## Address verification
 
 Save a valid mailing address on your profile before ordering. Checkout stays blocked until you do.

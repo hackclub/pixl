@@ -1,33 +1,33 @@
 "use client";
 
 import type { Commit } from "@/lib/commits";
-import { classifyAiEditorTime } from "@/lib/aiEditorTime";
 import type { HackatimeReport } from "@/lib/hackatime";
+import type { FraudyAiCheck } from "@/lib/fraudy";
+import { fraudyHours } from "@/lib/fraudy";
 import { Badge, Callout, EmptyState, Mono, Muted, Stat, StatGrid } from "@/app/_ui/ui";
 
-function fmtSecs(s: number): string {
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
-}
-
-// Cross-references what the maker declared, what Hackatime tracked them
-// coding in, and which commits an AI tool signed - three independent,
-// imperfect signals that corroborate (or contradict) each other.
+// Cross-references what the maker declared, Fraudy's own human/AI split of
+// their tracked Hackatime time, and which commits an AI tool signed - three
+// independent, imperfect signals that corroborate (or contradict) each
+// other.
 export function AiTimePanel({
   commits,
   hackatime,
   usedAi,
   aiNotes,
+  fraudyChecks,
 }: {
   commits: Commit[];
   hackatime: HackatimeReport | null;
   usedAi: boolean;
   aiNotes: string | null;
+  /** Hackatime project name -> Fraudy's check-ai result, null when Fraudy had
+   * no numbers for that project. */
+  fraudyChecks: Record<string, FraudyAiCheck | null>;
 }) {
   const aiCommits = commits.filter((c) => c.ai);
-  const split = hackatime?.ok ? classifyAiEditorTime(hackatime.editors) : null;
   const mismatch = aiCommits.length > 0 && !usedAi;
+  const linked = (hackatime?.projects ?? []).filter((p) => p.linked);
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -51,23 +51,37 @@ export function AiTimePanel({
       )}
 
       <div>
-        <p className="hc-eyebrow mb-2">Hackatime editor time</p>
-        {split && split.totalSeconds > 0 ? (
-          <StatGrid>
-            <Stat
-              label="In AI-assisted editors"
-              value={fmtSecs(split.aiSeconds)}
-              icon="clock"
-              tone={split.aiSeconds > 0 ? "warning" : undefined}
-              hint={`of ${fmtSecs(split.totalSeconds)} tracked`}
-            />
-            <Stat
-              label="AI editors used"
-              value={split.aiEditors.length > 0 ? split.aiEditors.map((e) => e.name).join(", ") : "none"}
-            />
-          </StatGrid>
+        <p className="hc-eyebrow mb-2">Fraudy AI check</p>
+        {linked.length === 0 ? (
+          <p className="hc-caption text-sm">No linked Hackatime projects to check.</p>
         ) : (
-          <p className="hc-caption text-sm">No Hackatime editor data available for this maker.</p>
+          <ul className="flex flex-col gap-2">
+            {linked.map((hp) => {
+              const check = fraudyChecks[hp.name];
+              return (
+                <li key={hp.name} className="flex flex-col gap-2 border-b border-[var(--border)] pb-2 last:border-b-0">
+                  <span className="text-sm font-bold">{hp.name}</span>
+                  {!check ? (
+                    <Badge outline>Fraudy has no data for {hp.name}</Badge>
+                  ) : (
+                    <StatGrid>
+                      <Stat label="Human seconds" value={`${fraudyHours(check.humanSeconds)}h`} icon="clock" />
+                      <Stat
+                        label="AI seconds"
+                        value={`${fraudyHours(check.aiSeconds)}h`}
+                        tone={check.aiSeconds > 0 ? "warning" : undefined}
+                      />
+                      <Stat
+                        label="Recommended deflation"
+                        value={check.deflationSeconds > 0 ? `${fraudyHours(check.deflationSeconds)}h` : "none"}
+                        tone={check.deflationSeconds > 0 ? "danger" : "success"}
+                      />
+                    </StatGrid>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         )}
       </div>
 

@@ -10,6 +10,7 @@ import { foldOrderCounts, type OrderCounts } from "./fulfillmentView";
 import { reviewerName } from "./liveMode";
 import { slackIdFromActorName } from "./reviewAccess";
 import { PRECHECK_HIDE_MS, isPrecheckRunning } from "./precheck";
+import { lockedForViewer, openableQueueIds, type AssignmentFields } from "./reviewAssignment";
 
 // Orchard Postgres over DATABASE_URL. pgCompat connects lazily, so this module
 // stays importable while Next prerenders static pages (e.g. /_not-found)
@@ -224,6 +225,12 @@ export interface ProjectRow {
   hold_at: string | null;
   hold_by: string;
   hold_reason: string;
+  // The reviewer who first requested changes on this project, when it's back
+  // in first pass: only they (and owners) can review it for 3 days after the
+  // re-ship, see lib/reviewAssignment.ts. '' = nobody.
+  assigned_reviewer_slack_id: string;
+  assigned_at: string | null;
+  assignment_reminded_at: string | null;
   // Optional super-admin QA pass over second_review projects (the Spot check
   // tab, markSpotChecked in app/actions.ts). Doesn't gate the project - purely
   // a "has a super looked at how this was reviewed" marker. Global once set
@@ -755,6 +762,42 @@ export async function claimReview(
   return { ok: true };
 }
 
+// Whether a reviewer may open and act on a first-pass project. The queue page
+// greys out what they can't click, but the project URL and the verdict form
+// are reachable without it, so the rules are enforced here too (the review
+// page and reviewProject call this). Owners are exempt. A project that isn't
+// in first pass, or isn't in the queue list at all, is left to the existing
+// checks.
+export async function firstPassAccess(
+  projectId: number,
+  viewer: string,
+  isOwner: boolean,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (isOwner) return { ok: true };
+  const { data } = await db
+    .from("projects")
+    .select("status, kind, assigned_reviewer_slack_id, assigned_at, shipped_at")
+    .eq("id", projectId)
+    .maybeSingle();
+  if (!data || data.status !== "shipped") return { ok: true };
+  const now = Date.now();
+  if (lockedForViewer(data as AssignmentFields, viewer, false, now))
+    return {
+      ok: false,
+      message:
+        "This project is reserved for the reviewer who requested its changes. It goes back to the shared queue if they don't review it within 3 days of the re-ship.",
+    };
+  const queue = await listShippedProjects(viewer, data.kind === "hardware" ? "hardware" : "software", {
+    includeClaimed: true,
+  });
+  if (!queue.some((p) => Number(p.id) === projectId)) return { ok: true };
+  if (openableQueueIds(queue, viewer, false, now).has(projectId)) return { ok: true };
+  return {
+    ok: false,
+    message: "You can only open the first page of the queue. Review those projects first.",
+  };
+}
+
 // Second pass tab: projects that passed a first review and are parked
 // awaiting Robert's fraud review (lib/robertSync.ts) - read-only now, no
 // human fraud/not_fraud triage anymore (see 0206_robert_fraud_review.sql).
@@ -829,9 +872,14 @@ export async function nextReviewId(opts: {
   // A held project (hold_at set) blocks canReview for everyone, including a
   // super admin - they'd have to release the hold first, a separate action -
   // so it must never be what "next" jumps a reviewer onto.
-  const firstPass = (await listShippedProjects(viewer, kind)).filter(
+  // Only what the reviewer could open from the queue: the first page, plus
+  // projects assigned to them (owners can open everything). See
+  // openableQueueIds, which also skips rows claimed by someone else.
+  const queue = await listShippedProjects(viewer, kind, { includeClaimed: true });
+  const openIds = openableQueueIds(queue, viewer, isSuper, Date.now());
+  const firstPass = queue.filter(
     // Nobody, owners included, is advanced onto their own submission.
-    (p) => p.id !== excludeId && !p.hold_at && !p.own,
+    (p) => p.id !== excludeId && !p.hold_at && !p.own && !p.claimedBy && openIds.has(Number(p.id)),
   );
   const finalPass =
     spotCheck && isSuper
@@ -2614,6 +2662,10 @@ export interface ShopOrderRow {
   item_alt_source_url?: string | null;
   item_image_url?: string | null;
   item_category?: ShopCategory | null;
+  // The shop item is a Beacon reward, so this order spent one of the player's
+  // Beacon unlocks. Fulfilment treats it like any other order; the badge is
+  // just context for why the player could claim it.
+  item_beacon_locked?: boolean | null;
 }
 
 // Shop orders players placed with pixels, newest first. Player name + Slack are
@@ -2639,7 +2691,10 @@ export async function listShopOrders(status?: string, limit = 500): Promise<Shop
   );
   const itemIds = [...new Set(rows.map((r) => r.item_id).filter((id): id is number => id != null))];
   const items = itemIds.length
-    ? await db.from("shop_items").select("id, price_source_url, alt_source_url, image_url, category").in("id", itemIds)
+    ? await db
+        .from("shop_items")
+        .select("id, price_source_url, alt_source_url, image_url, category, beacon_locked")
+        .in("id", itemIds)
     : { data: [] };
   const itemInfo = new Map(
     (items.data ?? []).map((i) => [
@@ -2649,6 +2704,7 @@ export async function listShopOrders(status?: string, limit = 500): Promise<Shop
         altSource: (i.alt_source_url as string | null) || null,
         image: (i.image_url as string | null) || null,
         category: (i.category as ShopCategory | null) ?? null,
+        beaconLocked: Boolean(i.beacon_locked),
       },
     ]),
   );
@@ -2661,6 +2717,7 @@ export async function listShopOrders(status?: string, limit = 500): Promise<Shop
     r.item_alt_source_url = info?.altSource ?? null;
     r.item_image_url = info?.image ?? null;
     r.item_category = info?.category ?? null;
+    r.item_beacon_locked = info?.beaconLocked ?? false;
   }
   return rows;
 }

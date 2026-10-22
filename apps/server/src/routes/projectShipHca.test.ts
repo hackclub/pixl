@@ -158,9 +158,22 @@ describe("POST /api/projects/:id/ship eligibility attestation", () => {
     project: {
       id: 1, user_id: "user-1", name: "Ready", status: "draft", kind: "software",
       repo_url: "https://github.com/pixl/ready", demo_url: "https://github.com/pixl/ready",
+      description: "A project that is ready to ship.",
       image_url: "https://cdn.hackclub.com/ready.png",
     },
   };
+
+  test("a ship without a description is refused", async () => {
+    for (const description of ["", "   ", null]) {
+      const r = await callAs(
+        { ...ready, project: { ...ready.project, description } },
+        "/api/projects/1/ship",
+        { eligibilityAttested: true },
+      );
+      expect(r.status).toBe(400);
+      expect(r.body.error).toBe("description_required");
+    }
+  });
 
   test("the attestation survives validation and lets the ship through", async () => {
     const r = await callAs(ready, "/api/projects/1/ship", { eligibilityAttested: true });

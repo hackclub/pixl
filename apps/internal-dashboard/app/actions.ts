@@ -49,6 +49,7 @@ import {
   getTeamChange,
   decideBanProposal,
   nextReviewId,
+  firstPassAccess,
   EVENT_TYPES,
   REFERRAL_BOOST_PX_PER_HOUR,
   REFERRAL_BOOST_SHIP_CAP,
@@ -113,6 +114,7 @@ import {
 import { audit } from "@/lib/audit";
 import { clampReviewPanelWidth, parseStaffSettings, type StaffSettings } from "@/lib/staffSettings";
 import { getStaffSettings, saveStaffSettingsRow } from "@/lib/db";
+import { assigneeOf, earnsChangesHold, isAssignmentOverdue, type AssignmentFields } from "@/lib/reviewAssignment";
 import { GUIDELINES_VERSION } from "@/lib/guidelines";
 import { applyBlackoutDecision } from "@/lib/operationsReview";
 import { BLACKOUT_SLUG, getBlackoutEntry, operationRpc } from "@/lib/operations";
@@ -443,6 +445,35 @@ async function recordSettledPayout(
   await dmPayout(access.session.slackId, projectName, full, full, credited, blitzApplied);
   // What the reviewer actually got, for the "+6 pixels" celebration.
   return credited === "credited" ? full : 0;
+}
+
+const ASSIGNMENT_FORFEIT_REASON = "did not review the resubmission within 3 days";
+
+// The pixel for a first request for changes is set aside, not paid: it sits
+// 'pending' until the assigned reviewer approves the project (see the
+// first-pass approval branch of reviewProject, which releases it through
+// settleFirstPassPayouts), and is forfeited if they let their 3 days run out
+// (voidFirstPassPayouts, from the review-assignments cron or the next verdict).
+// No DM and no credit yet. Skipped for an excluded reviewer and when the
+// configured rate is 0, same as recordSettledPayout.
+async function recordHeldChangesPayout(
+  projectId: number,
+  access: AdminAccess,
+): Promise<void> {
+  if (DM_EXCLUDED_SLACK_IDS.has(access.session.slackId)) return;
+  const { full, blitzApplied } = await payoutBasePixels("needs_changes");
+  if (full <= 0) return;
+  const { error } = await db.from("review_payouts").insert({
+    project_id: projectId,
+    reviewer: actorName(access),
+    reviewer_slack_id: access.session.slackId,
+    verdict: "needs_changes",
+    status: "pending",
+    full_pixels: full,
+    paid_pixels: 0,
+    blitz_applied: blitzApplied,
+  });
+  if (error) console.error("held changes payout insert failed", error.message);
 }
 
 // Hands the pixels this verdict paid to the page the reviewer lands on next
@@ -1003,7 +1034,7 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
   const { data: current } = await db
     .from("projects")
     .select(
-      "status, banned_at, user_id, kind, name, description, image_url, first_pass_by, first_pass_hours, first_pass_verdict, second_pass_hours, second_pass_verdict, shipped_at, sidequest_id, trial_reward_choice, needs_funding, funding_usd, robert_project_id, robert_state",
+      "status, banned_at, user_id, kind, name, description, image_url, first_pass_by, first_pass_hours, first_pass_verdict, second_pass_hours, second_pass_verdict, shipped_at, sidequest_id, trial_reward_choice, needs_funding, funding_usd, robert_project_id, robert_state, assigned_reviewer_slack_id, assigned_at",
     )
     .eq("id", projectId)
     .single();
@@ -1034,6 +1065,13 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
   // not only on the page.
   if (!queueAllows(access.reviewQueues, (current as { kind?: string | null }).kind ?? null))
     redirect(`${back}?error=${encodeURIComponent("This project isn't in your review queue.")}`);
+  // First pass: only the first page of the queue, and projects assigned to
+  // this reviewer, can be acted on (owners exempt). The queue greys the rest
+  // out, this keeps a hand-made form post from getting around it.
+  if (stage === "shipped") {
+    const gate = await firstPassAccess(projectId, access.session.slackId, access.isOwner);
+    if (!gate.ok) redirect(`${back}?error=${encodeURIComponent(gate.message)}`);
+  }
   const own = await isOwnProject(access, current.user_id, projectId);
   // Self-review is denied for everyone, owners included. The only carve-out is
   // a self_review_exceptions row, and only at first pass (see
@@ -1240,6 +1278,10 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
         // A real verdict resolves whatever a prior revert was waiting on -
         // clear the queue-jump so a later revert-back-to-shipped starts fresh.
         reverted_at: null,
+        // Leaving first pass ends the assignment.
+        assigned_reviewer_slack_id: "",
+        assigned_at: null,
+        assignment_reminded_at: null,
       })
       .eq("id", projectId)
       // "shipped" for a normal first pass; "second_review" when a non-owner
@@ -1259,6 +1301,13 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
     // eventual ban confirmation is what settles a real payout, if any.
     if (!own && proposedKey === "approved")
       rewardPx = await recordSettledPayout(projectId, access, "first_pass_approved", project.name);
+    // The pixel held for the first request for changes is released with the
+    // approval, or forfeited when the assignee let their 3 days run out.
+    if (stage === "shipped" && proposedKey === "approved") {
+      if (assigneeOf(current as AssignmentFields) && isAssignmentOverdue({ ...(current as AssignmentFields), status: "shipped" }, Date.now()))
+        await voidFirstPassPayouts(projectId, ASSIGNMENT_FORFEIT_REASON);
+      else await settleFirstPassPayouts(projectId, project.name);
+    }
     if (proposedKey === "approved") {
       const ownerBody = `"${project.name}" passed first-pass review by ${playerFacingReviewer}. It still needs a second reviewer to confirm before your pixels are credited , hang tight!`;
       const collabBody = `A project you collaborate on, "${project.name}", passed first-pass review by ${playerFacingReviewer}. It still needs a second reviewer to confirm before pixels are credited.`;
@@ -1300,6 +1349,31 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
 
   // Request changes , bounce back to the maker.
   if (verdict === "needs_changes") {
+    // Reviewer assignment (lib/reviewAssignment.ts): at first pass the reviewer
+    // who first requests changes owns the project from then on, unless an
+    // active assignee already does. Owners review for control, not throughput,
+    // so they never take a project over.
+    const nowMs = Date.now();
+    const staleAssignee = assigneeOf(current as AssignmentFields);
+    const activeAssignee =
+      staleAssignee && !isAssignmentOverdue({ ...(current as AssignmentFields), status: "shipped" }, nowMs)
+        ? staleAssignee
+        : "";
+    // An assignee who let their 3 days run out forfeits the pixel they held.
+    if (stage === "shipped" && staleAssignee && !activeAssignee)
+      await voidFirstPassPayouts(projectId, ASSIGNMENT_FORFEIT_REASON);
+    const takesAssignment = stage === "shipped" && !own && !access.isOwner && !activeAssignee;
+    const assignFields = takesAssignment
+      ? {
+          assigned_reviewer_slack_id: access.session.slackId,
+          assigned_at: new Date().toISOString(),
+          assignment_reminded_at: null,
+        }
+      : {};
+    // The assignee is DMed when the maker re-ships (the server's resubmit DM).
+    const notifySlack = takesAssignment
+      ? access.session.slackId
+      : activeAssignee || (formData.get("notifyOnResubmit") === "1" ? access.session.slackId : "");
     const { data: project, error } = await db
       .from("projects")
       .update({
@@ -1322,7 +1396,8 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
         review_draft_by: "",
         review_draft_at: null,
         reverted_at: null,
-        notify_reviewer_slack_id: formData.get("notifyOnResubmit") === "1" ? access.session.slackId : "",
+        ...assignFields,
+        notify_reviewer_slack_id: notifySlack,
       })
       .eq("id", projectId)
       .in("status", ["shipped", "second_review"])
@@ -1346,10 +1421,21 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
     }
     if (stage === "second_review")
       await voidFirstPassPayouts(projectId, "final verdict was needs_changes, not an approval");
-    // Pays out only when an admin has set needs_changes_pixels above 0 (see
-    // updateReviewPayoutSettings) - 0 keeps the historical "only approvals
-    // pay" behavior with no special-casing here.
-    if (!own) rewardPx = await recordSettledPayout(projectId, access, "needs_changes", project.name);
+    // Only the first request for changes pays (needs_changes_pixels, 1 by
+    // default; 0 turns it off, see updateReviewPayoutSettings). When it takes
+    // the project over the pixel is held until they approve; an owner's or a
+    // final reviewer's is paid at once. Requests after the first pay nothing.
+    if (!own) {
+      const { data: priorPayouts } = await db
+        .from("review_payouts")
+        .select("verdict, status")
+        .eq("project_id", projectId);
+      if (earnsChangesHold(priorPayouts ?? [])) {
+        if (takesAssignment) await recordHeldChangesPayout(projectId, access);
+        else if (!activeAssignee)
+          rewardPx = await recordSettledPayout(projectId, access, "needs_changes", project.name);
+      }
+    }
     const changesOwnerBody = `"${project.name}" needs changes before it can be approved , ${playerFacingReviewer}:\n\n${note}\n\nUpdate your project and ship it again.`;
     const changesCollabBody = `"${project.name}" needs changes before it can be approved , ${playerFacingReviewer}:\n\n${note}`;
     const changesCollaboratorIds = await acceptedCollaboratorUserIds(projectId);
@@ -5426,7 +5512,7 @@ export const claimOrder = guardedAction("claimOrder", "fulfiller", async (access
   });
   const claimNote =
     outcome.kind === "unledgered"
-      ? "claimed and placed WITHOUT a funding ledger entry (migration 0228 not applied)"
+      ? "claimed and placed WITHOUT a funding ledger entry (migration 0229 not applied)"
       : outcome.degraded
         ? "claimed and placed; funding evidence unavailable, recorded as unverified"
         : "claimed and placed";

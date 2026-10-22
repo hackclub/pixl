@@ -6,7 +6,7 @@ import { useRef, useState } from "react";
 import { Markdown } from "@/components/markdown";
 import { textareaField } from "@/components/ui/primitives";
 import { cn } from "@/lib/cn";
-import { countJournalImages, journalCharsNeeded, journalImagesNeeded } from "../format";
+import { countJournalImages, journalCharsNeeded, journalImagesNeeded, journalTextLength } from "../format";
 import { clipboardImage } from "./file-button";
 import { hint } from "./styles";
 import { uploadImageFile } from "./upload";
@@ -96,7 +96,7 @@ export function MdEditor({
     onChange(value.slice(0, pos) + (pos && value[pos - 1] !== "\n" ? "\n" : "") + md + "\n" + value.slice(pos));
   }
 
-  const len = value.trim().length;
+  const len = journalTextLength(value);
   const need = journalCharsNeeded(hours);
   const imgNeed = journalImagesNeeded(hours);
   const imgHave = countJournalImages(value);

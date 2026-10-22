@@ -5,6 +5,7 @@ import { AiTimePanel } from "@/app/_components/AiTimePanel";
 import { ReadmePanel } from "@/app/_components/ReadmePanel";
 import type { CommitResult } from "@/lib/commits";
 import type { HackatimeReport } from "@/lib/hackatime";
+import type { FraudyAiCheck } from "@/lib/fraudy";
 import type { JournalRow, ReviewAuditRow } from "@/lib/db";
 import type { YswsShip } from "@/lib/ysws";
 import { CommitList } from "@/app/_components/CommitList";
@@ -171,6 +172,7 @@ export function ReviewDetailTabs({
   projectKind,
   usedAi,
   aiNotes,
+  fraudyChecks,
   canViewAiTime,
 }: {
   projectId: number;
@@ -187,6 +189,8 @@ export function ReviewDetailTabs({
   projectKind: string;
   usedAi: boolean;
   aiNotes: string | null;
+  /** Hackatime project name -> Fraudy's check-ai result. */
+  fraudyChecks: Record<string, FraudyAiCheck | null>;
   /** Owner or second-pass reviewer only - hidden from first-pass-only reviewers. */
   canViewAiTime: boolean;
 }) {
@@ -467,7 +471,13 @@ export function ReviewDetailTabs({
 
       {canViewAiTime && (
         <div role="tabpanel" hidden={tab !== "ai_time"}>
-          <AiTimePanel commits={commitsState.commits} hackatime={hackatime} usedAi={usedAi} aiNotes={aiNotes} />
+          <AiTimePanel
+            commits={commitsState.commits}
+            hackatime={hackatime}
+            usedAi={usedAi}
+            aiNotes={aiNotes}
+            fraudyChecks={fraudyChecks}
+          />
         </div>
       )}
     </Card>

@@ -1,6 +1,6 @@
 # Fulfillment eligibility engine
 
-Advisory funding check shown on every order in the internal dashboard's `/fulfillment` queue. Code lives in `apps/internal-dashboard/lib/eligibility/`; the ledger migration is `apps/server/drizzle/0228_fulfillment_commitments.sql` (not applied by this change).
+Advisory funding check shown on every order in the internal dashboard's `/fulfillment` queue. Code lives in `apps/internal-dashboard/lib/eligibility/`; the ledger migration is `apps/server/drizzle/0229_fulfillment_commitments.sql` (not applied by this change).
 
 ## Sources of truth, and their limits
 
@@ -96,7 +96,7 @@ Enforcement is off (`enforceOnClaim: false`). In that mode the claim always proc
 No claim is accounted silently:
 
 - Evidence cannot be loaded (advisory mode): the claim is still written to the ledger, as `unverified`, at the order's own amount, with evidence `{degraded: evidence_unavailable}`; the audit log says so. With enforcement on it is refused.
-- Migration not applied (`42883` / `42P01`): the claim is refused with a "migration 0228" error because `allowUnledgeredClaim` is false in every shipped policy. Apply 0228 before claims are used. Setting the flag to true in a new policy version restores the old direct update, which is audit-logged as claimed WITHOUT a funding ledger entry.
+- Migration not applied (`42883` / `42P01`): the claim is refused with a "migration 0229" error because `allowUnledgeredClaim` is false in every shipped policy. Apply 0229 before claims are used. Setting the flag to true in a new policy version restores the old direct update, which is audit-logged as claimed WITHOUT a funding ledger entry.
 - Anything else (permissions, runtime errors, a failed order lookup): the action throws and nothing is claimed.
 - A failed ledger amount refresh after `markOrderCredited` or `updateOrderFulfillmentInfo` is written to the order audit log (`ledger_refresh_failed`).
 
@@ -108,7 +108,7 @@ The code never writes to Airtable (one GET helper, `fetchSubmissionState`, limit
 
 - The queue badge uses cached Airtable state (5 min) and never calls Airtable per row; the selected order does a live read. A record deleted from Airtable shows as `Review required` only on the detail view until the cache turns over.
 - `Restricted` is only derived from banned projects. Other compliance restrictions need a data source.
-- `lib/eligibility/claim.db.test.ts` runs against a real Postgres when `PIXL_TEST_DATABASE_URL` is set (it replays every migration, then 0228) and is skipped otherwise. It was run against PostgreSQL 18; with the advisory lock removed its concurrency tests fail.
+- `lib/eligibility/claim.db.test.ts` runs against a real Postgres when `PIXL_TEST_DATABASE_URL` is set (it replays every migration, then 0229) and is skipped otherwise. It was run against PostgreSQL 18; with the advisory lock removed its concurrency tests fail.
 - Funding grants are linked to their order by name only; see reconciliation above. Historical grants approved before the order was inserted have no order and are counted as prior grants.
 - Hours are not reduced for commitments made against hours that were later deflated; a deflation can leave a negative balance, which shows as Insufficient for the player's next order.
 

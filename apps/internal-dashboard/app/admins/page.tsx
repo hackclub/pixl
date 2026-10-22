@@ -256,9 +256,11 @@ export default async function AdminsPage() {
       <Card>
         <CardHeader title="Reviewer payouts" icon="purse-fill" />
         <p className="hc-caption mb-4 max-w-2xl text-sm">
-          Pixels a reviewer earns per review, set separately for an approval and a request-changes
-          verdict. Set either to 0 to turn off payouts for that verdict. Both still stack with an
-          active Review Blitz multiplier and get cut for rushed reviews.
+          Pixels a reviewer earns for an approval, and the pixels held for the first request for
+          changes on a project: they are paid when that reviewer approves the project, and
+          forfeited if they don&apos;t review the re-ship within 3 days. Later requests for changes
+          on the same project pay nothing. Set either to 0 to turn it off. Both stack with an
+          active Review Blitz multiplier.
         </p>
         <form action={updateReviewPayoutSettings} className="flex flex-col gap-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -271,7 +273,7 @@ export default async function AdminsPage() {
                 defaultValue={payoutSettings.approvedPixels}
               />
             </Field>
-            <Field label="Pixels per request-changes">
+            <Field label="Pixels held for the first request-changes">
               <Input
                 name="needsChangesPixels"
                 type="number"

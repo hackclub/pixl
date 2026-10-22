@@ -8,7 +8,7 @@ import { Notice, panel } from "@/components/ui/primitives";
 import { cn } from "@/lib/cn";
 import { deleteJournal, editJournal, postJournal } from "../collab-actions";
 import { projectError, projectErrorWith } from "../errors";
-import { timeAgo } from "../format";
+import { journalTextLength, timeAgo } from "../format";
 import type { JournalEntry } from "../types";
 import { journalDraftKey as draftKey } from "@/lib/local-state";
 import { JournalForm, type JournalDraft } from "./journal-form";
@@ -50,7 +50,7 @@ export function Journal({ projectId, entries, locked }: { projectId: number; ent
     const r = await postJournal({ projectId, entry: d });
     setPending(false);
     if (!r.ok) {
-      setMsg({ tone: "bad", text: projectErrorWith(r.error, r.details, { contentLength: d.content.length }) });
+      setMsg({ tone: "bad", text: projectErrorWith(r.error, r.details, { contentLength: journalTextLength(d.content) }) });
       return false;
     }
     try {
@@ -68,7 +68,7 @@ export function Journal({ projectId, entries, locked }: { projectId: number; ent
     const r = await editJournal({ projectId, entryId: id, entry: d });
     setPending(false);
     if (!r.ok) {
-      setMsg({ tone: "bad", text: projectErrorWith(r.error, r.details, { contentLength: d.content.length }) });
+      setMsg({ tone: "bad", text: projectErrorWith(r.error, r.details, { contentLength: journalTextLength(d.content) }) });
       return false;
     }
     setEditing(null);

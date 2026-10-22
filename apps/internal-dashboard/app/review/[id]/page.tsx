@@ -2,7 +2,7 @@
 import { Fragment, Suspense, type ReactNode } from "react";
 import { precheckView, type PrecheckView } from "@/lib/precheck";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requirePage, requireGuidelinesAck } from "@/lib/guard";
 import { decryptPII } from "@/lib/crypto";
 import { builderDetailsView, builderNameFor, canSeeBuilderPII } from "@/lib/reviewAccess";
@@ -11,6 +11,7 @@ import {
   listShippedProjects,
   listSecondReviewProjects,
   claimReview,
+  firstPassAccess,
   turnedNineteenSinceShipping,
   listCollaboratorsForProject,
   lifetimeRe,
@@ -59,6 +60,7 @@ import { ReviewHeartbeat } from "@/app/_components/ReviewHeartbeat";
 import { ProjectNotes } from "@/app/_components/ProjectNotes";
 import { LevelBadge, TypeBadge, ShipBadges, StatusBadge, BeaconBadge, FundingBadge } from "@/app/_components/ProjectBadges";
 import { FraudyAiSummary } from "@/app/_components/FraudyAiSummary";
+import { fraudyCheckAi, type FraudyAiCheck } from "@/lib/fraudy";
 import { CardSkeleton } from "@/app/_components/Loading";
 import { slackHandle } from "@/lib/slack";
 import { getLiveMode, getHideReviewers } from "@/lib/liveModeServer";
@@ -179,6 +181,8 @@ export default async function ReviewDetail({
   const canSecondPass = access.canSecondPass;
   // Only admins (ban perm) may permanently ban a project from the review page.
   const canModerate = access.isOwner;
+  // Gates the "AI time" tab: owner or second-pass reviewer, either stage.
+  const canViewAiTime = access.isOwner || canSecondPass;
   const { id } = await params;
   const { error } = await searchParams;
   const projectId = Number(id);
@@ -208,6 +212,13 @@ export default async function ReviewDetail({
   // reviewers and owners. A normal reviewer gets the same "not found" as a
   // missing project, so Robert's score and notes never reach them.
   if ((p.status === "fraud_review" || p.status === "second_review") && !access.canFraudReview) notFound();
+  // First pass: a plain reviewer can only open the first page of the queue and
+  // the projects assigned to them (owners exempt). The queue greys the rest
+  // out, this covers someone typing the URL. See lib/reviewAssignment.ts.
+  if (p.status === "shipped" && !access.isOwner) {
+    const gate = await firstPassAccess(projectId, viewer, false);
+    if (!gate.ok) redirect(`/review?error=${encodeURIComponent(gate.message)}`);
+  }
   // The Trial this project was shipped for, if the player flagged one at ship
   // time (joined in getProject). null = they built their own idea.
   const trial = (
@@ -309,6 +320,21 @@ export default async function ReviewDetail({
   const hackatimeReportPromise = hackatimeProjects.length
     ? tokenPromise.then((tok) => fetchHackatimeReport(p.users?.slack_id, tok, hackatimeProjects))
     : Promise.resolve(null);
+  // Fraudy's own human/AI split per linked Hackatime project, for the AI time
+  // tab. Skipped in live mode (no real Hackatime id to send) and for viewers
+  // who can't see that tab anyway, since every call is logged under the
+  // Fraudy key's owner.
+  const fraudyChecksPromise: Promise<Record<string, FraudyAiCheck | null>> =
+    !live && canViewAiTime
+      ? hackatimeReportPromise.then(async (report) => {
+          if (!report?.ok || !report.hackatimeUserId) return {};
+          const linked = report.projects.filter((hp) => hp.linked);
+          const entries = await Promise.all(
+            linked.map(async (hp) => [hp.name, await fraudyCheckAi(report.hackatimeUserId, hp.name)] as const),
+          );
+          return Object.fromEntries(entries);
+        })
+      : Promise.resolve({});
   const trustPromise = fetchTrustFactor(p.users?.slack_id);
   const yswsPromise = yswsShipsFor(p.users?.slack_id, p.repo_url, p.demo_url);
   const ownerHandlePromise = slackHandle(p.users?.slack_id);
@@ -671,23 +697,42 @@ export default async function ReviewDetail({
   // Beacon sits next to the verdict: reviewers decide it while grading.
   // toggleProjectPeak re-checks the reviewer role and own-project rule.
   const beaconCard = !isOwn && (
-    <Card padding="compact">
-      <form action={toggleProjectPeak} className="flex items-center justify-between gap-3">
-        <input type="hidden" name="projectId" value={p.id} />
-        {!p.is_peak && <input type="hidden" name="isPeak" value="1" />}
-        <div>
-          <p className="hc-heading text-sm">Beacon</p>
-          <p className="hc-caption text-xs">Nominate a standout project. Cosmetic only, never affects payout.</p>
+    <Card
+      padding="compact"
+      className="border-[color-mix(in_srgb,var(--hc-yellow)_45%,var(--border))] bg-[color-mix(in_srgb,var(--hc-yellow)_7%,var(--surface))]"
+    >
+      <div className="flex items-start gap-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[color-mix(in_srgb,var(--hc-yellow)_18%,transparent)] text-[var(--hc-yellow)]">
+          <Icon glyph="rep" size={20} />
+        </span>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="hc-heading text-sm">Beacon</p>
+            {p.is_peak ? <Badge tone="yellow">Active</Badge> : <Badge>Not nominated</Badge>}
+          </div>
+          <form action={toggleProjectPeak}>
+            <input type="hidden" name="projectId" value={p.id} />
+            {!p.is_peak && <input type="hidden" name="isPeak" value="1" />}
+            <ActionButton
+              size="sm"
+              variant={p.is_peak ? "outline" : "cream"}
+              icon={p.is_peak ? undefined : "rep"}
+              pendingLabel={p.is_peak ? "Removing..." : "Marking..."}
+            >
+              {p.is_peak ? "Remove" : "Mark Beacon"}
+            </ActionButton>
+          </form>
         </div>
-        <ActionButton
-          size="sm"
-          variant={p.is_peak ? "outline" : "cream"}
-          icon={p.is_peak ? undefined : "rep"}
-          pendingLabel={p.is_peak ? "Removing..." : "Marking..."}
-        >
-          {p.is_peak ? "Remove" : "Mark"}
-        </ActionButton>
-      </form>
+      </div>
+      <p className="hc-caption mt-2 text-xs">
+        A standout project. Every live Beacon earns its maker one unlock for a Beacon-locked shop reward. Cosmetic on
+        the project itself and never affects payout.
+      </p>
+      {p.is_peak && (
+        <p className="hc-caption mt-2 text-xs">
+          <strong>This project is a Beacon.</strong> Its unlock is ready to spend unless the maker already used it.
+        </p>
+      )}
     </Card>
   );
 
@@ -1403,9 +1448,15 @@ export default async function ReviewDetail({
 
           <Suspense fallback={<CardSkeleton lines={6} />}>
             <Await
-              promise={Promise.all([commitsPromise, yswsPromise, hackatimeReportPromise, ownerHandlePromise])}
+              promise={Promise.all([
+                commitsPromise,
+                yswsPromise,
+                hackatimeReportPromise,
+                ownerHandlePromise,
+                fraudyChecksPromise,
+              ])}
             >
-              {([commits, yswsShips, hackatimeReport, ownerHandle]) => (
+              {([commits, yswsShips, hackatimeReport, ownerHandle, fraudyChecks]) => (
                 <ReviewDetailTabs
                   projectId={p.id}
                   commits={commits}
@@ -1435,7 +1486,8 @@ export default async function ReviewDetail({
                   projectKind={p.kind}
                   usedAi={!!p.used_ai}
                   aiNotes={p.ai_notes ?? null}
-                  canViewAiTime={access.isOwner || canSecondPass}
+                  fraudyChecks={fraudyChecks}
+                  canViewAiTime={canViewAiTime}
                 />
               )}
             </Await>

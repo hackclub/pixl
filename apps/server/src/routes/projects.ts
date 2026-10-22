@@ -19,6 +19,7 @@ import { urlAlive } from "./urlLiveness.js";
 import { recordShipForOperations } from "../operations/service.js";
 import { z } from "zod";
 import { validate, v, optStr, optBool, optNum, params } from "../http/validate.js";
+import { countJournalImages, journalImagesNeeded, journalTextLength } from "./journalRules.js";
 
 const router = Router();
 
@@ -1401,19 +1402,6 @@ async function journalLockedForReview(projectId: number): Promise<boolean> {
   return ["shipped", "second_review", "fraud_review"].includes(String(data?.status ?? ""));
 }
 
-// How many images a journal entry's content needs, by the hours logged: at
-// least 1 always (even a 0h entry), plus one more per 4h on top of that.
-function journalImagesNeeded(hours: number): number {
-  return Math.max(1, Math.ceil(hours / 4));
-}
-
-// Images are embedded as markdown image syntax (![alt](url)) by the client's
-// IMAGE toolbar button (attachImageToJournal in apps/game/web/projects) , this
-// just counts how many are actually in the saved content.
-function countJournalImages(content: string): number {
-  return (content.match(/!\[[^\]]*\]\([^)]+\)/g) ?? []).length;
-}
-
 // Add a journal entry (markdown content + optional hours) to an own project.
 router.post("/api/projects/:id/journal", validate({ query: v.noQuery, params: params({ id: v.id }), body: journalBody }), async (req, res) => {
   const session = req.session;
@@ -1442,7 +1430,7 @@ router.post("/api/projects/:id/journal", validate({ query: v.noQuery, params: pa
   // (min 100 for any logged time), so "4h" can't be a one-liner.
   if (hours > 0) {
     const need = Math.max(100, Math.round(hours * 100));
-    if (content.length < need)
+    if (journalTextLength(content) < need)
       return res.status(400).json({ ok: false, error: "journal_too_short", need, hours });
   }
   const imagesNeed = journalImagesNeeded(hours);
@@ -1490,7 +1478,7 @@ router.patch("/api/projects/:id/journal/:entryId", validate({ query: v.noQuery, 
 
   if (hours > 0) {
     const need = Math.max(100, Math.round(hours * 100));
-    if (content.length < need)
+    if (journalTextLength(content) < need)
       return res.status(400).json({ ok: false, error: "journal_too_short", need, hours });
   }
   const imagesNeed = journalImagesNeeded(hours);

@@ -20,6 +20,7 @@ export function checklist(form: FormState, stats: HtStats | null, cutoffMs: numb
   const items: CheckItem[] = [
     { ok: !!form.repoUrl.trim(), label: "GitHub repo linked" },
     { ok: !!form.demoUrl.trim(), label: "Demo link added" },
+    { ok: !!form.description.trim(), label: "Description written" },
     { ok: !!form.imageUrl, label: "Thumbnail uploaded" },
     isHw
       ? { ok: true, label: "Hardware: hours come from your journal (Hackatime optional)" }
@@ -45,6 +46,7 @@ export function shipBlockers(
   const b: string[] = [];
   if (!form.repoUrl.trim()) b.push("add a GitHub repo");
   if (!form.demoUrl.trim()) b.push("add a demo / playable link");
+  if (!form.description.trim()) b.push("write a description");
   if (!form.imageUrl) b.push("upload a thumbnail");
   const isHw = form.kind === "hardware";
   if (!isHw && htTotals(stats, form.hackatime).counted < 3600) b.push(htBlockerText(stats, form.hackatime, cutoffMs));

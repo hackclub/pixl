@@ -77,6 +77,10 @@ export function journalImagesNeeded(h: number): number {
 export function countJournalImages(content: string): number {
   return (content.match(/!\[[^\]]*\]\([^)]+\)/g) || []).length;
 }
+/** Characters that count toward the writing minimum; screenshots are evidence, not text. */
+export function journalTextLength(content: string): number {
+  return content.replace(/!\[[^\]]*\]\([^)]+\)/g, "").trim().length;
+}
 
 const VIDEO_HOSTS = ["youtube.com", "youtu.be", "vimeo.com", "loom.com", "streamable.com", "drive.google.com"];
 function host(url: string): string | null {

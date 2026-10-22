@@ -9,6 +9,7 @@ const ERRORS: Record<string, string> = {
   ai_notes_required: "Describe how you used AI (at least 10 characters).",
   repo_required: "Add a GitHub repo link before shipping.",
   demo_required: "Add a demo / playable link before shipping.",
+  description_required: "Add a description before shipping.",
   image_required: "Upload a thumbnail before shipping.",
   repo_not_found: "That repo link doesn't load. Is it public?",
   demo_unreachable: "The demo link is unreachable.",
@@ -36,7 +37,7 @@ const ERRORS: Record<string, string> = {
   busy: "Uploads are busy, try again in a moment.",
   // Redeeming a join code for a project whose owner removed you.
   removed: "You were removed from this project.",
-  journal_too_short: "Log more detail: journals need about 100 characters per hour.",
+  journal_too_short: "Log more detail: journals need about 100 characters of writing per hour (images don't count).",
   journal_images_required: "Add at least one image to this entry, more for longer sessions.",
   not_in_review: "A reviewer has already started on this project, so it can't be unshipped now. You'll be able to edit it once the review is done.",
   project_in_review: "This project is in review, so its journal is locked until the review is done.",
@@ -77,7 +78,7 @@ export function projectErrorWith(
   const d = details ?? {};
   if (code === "journal_too_short" && d.need != null && d.hours != null) {
     const have = ctx.contentLength != null ? ` (you have ${ctx.contentLength})` : "";
-    return `Logging ${d.hours}h needs at least ${d.need} characters${have}.`;
+    return `Logging ${d.hours}h needs at least ${d.need} characters of writing${have}.`;
   }
   if (code === "journal_images_required" && d.need != null) {
     const have = d.have != null ? ` (you have ${d.have})` : "";

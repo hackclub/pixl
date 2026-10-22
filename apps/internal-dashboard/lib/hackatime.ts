@@ -449,8 +449,6 @@ export async function hackatimeUserIdsFor(rows: ShippedProject[]): Promise<Map<n
   return out;
 }
 
-export { classifyAiEditorTime, type AiEditorTime } from "@/lib/aiEditorTime";
-
 function overlap(spans: Span[], from: number, to: number): number {
   let sum = 0;
   for (const s of spans) {

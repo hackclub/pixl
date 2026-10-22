@@ -8,6 +8,13 @@ import { listBlackoutQueueProjectIds } from "@/lib/operations";
 import { getHideReviewers } from "@/lib/liveModeServer";
 import { reviewerName } from "@/lib/liveMode";
 import { ReviewTable } from "@/app/_components/ReviewTable";
+import {
+  assigneeOf,
+  assignmentDeadlineMs,
+  lockedForViewer,
+  openableQueueIds,
+  type QueueLock,
+} from "@/lib/reviewAssignment";
 import { LiveReview } from "@/app/_components/LiveReview";
 import {
   REVIEW_SORTS,
@@ -20,6 +27,7 @@ import {
   Badge,
   ButtonLink,
   Button,
+  Callout,
   Card,
   CardHeader,
   Input,
@@ -45,12 +53,13 @@ export default async function ReviewListPage({
     blackout?: string;
     minh?: string;
     maxh?: string;
+    error?: string;
   }>;
 }) {
   const access = await requirePage("reviewer");
   await requireGuidelinesAck(access);
   const viewer = access.session.slackId;
-  const { page, sort: sortParam, kind: rawKind, blackout, minh, maxh } = await searchParams;
+  const { page, sort: sortParam, kind: rawKind, blackout, minh, maxh, error } = await searchParams;
   // No ?sort= in the URL: use the reviewer's last pick (set by proxy.ts).
   const sort = sortParam ?? (await cookies()).get(REVIEW_SORT_COOKIE)?.value;
   const onlyBlackout = blackout === "1";
@@ -70,6 +79,12 @@ export default async function ReviewListPage({
     listBlackoutQueueProjectIds(),
   ]);
   const blackoutSet = new Set(blackoutIds);
+  const nowMs = Date.now();
+  // Owners can open anything. A plain reviewer sees the whole queue but can
+  // only open its first page (counted in the queue's own order, whatever the
+  // sort tabs show, so re-sorting can't open more) plus what is assigned to
+  // them. See lib/reviewAssignment.ts.
+  const openIds = openableQueueIds(rowsAll, viewer, access.isOwner, nowMs);
   const inBlackout = (p: { id: number | string }) => blackoutSet.has(Number(p.id));
   const blackoutCount = rowsAll.filter(inBlackout).length;
   const minHours = parseHoursBound(minh);
@@ -100,8 +115,23 @@ export default async function ReviewListPage({
   // One handle lookup for every visible row: makers plus the reviewers
   // holding a claim, so the "is reviewing" tag can name them.
   const handles = await slackHandles(
-    slice.flatMap((p) => [p.users?.slack_id, claimId(p.claimedBy)]),
+    slice.flatMap((p) => [p.users?.slack_id, claimId(p.claimedBy), claimId(assigneeOf(p) || null)]),
   );
+  // Rows this viewer can't open: reserved for another reviewer, or past the
+  // first page. Owners get none. The reviewer's name stays hidden while live.
+  const locks: Record<number, QueueLock> = {};
+  for (const p of slice) {
+    if (openIds.has(Number(p.id))) continue;
+    const assignee = assigneeOf(p);
+    const deadline = assignmentDeadlineMs(p);
+    locks[Number(p.id)] = lockedForViewer(p, viewer, access.isOwner, nowMs)
+      ? {
+          reason: "assigned",
+          assignee: claimId(assignee) ? (handles.get(assignee) ?? null) : null,
+          until: deadline === null ? null : new Date(deadline).toISOString(),
+        }
+      : { reason: "page" };
+  }
 
   const sortKey = SORTS.some((s) => s.key === sort) ? sort : "oldest";
   const blackoutQ = onlyBlackout ? "&blackout=1" : "";
@@ -110,6 +140,11 @@ export default async function ReviewListPage({
 
   return (
     <div className="flex flex-col gap-6">
+      {error && (
+        <Callout tone="warning" icon="private">
+          {error.slice(0, 300)}
+        </Callout>
+      )}
       {access.reviewQueues === "both" && (
         <div className="hc-segmented self-start" role="tablist">
           {(["software", "hardware"] as const).map((k) => (
@@ -196,6 +231,7 @@ export default async function ReviewListPage({
             rows={masked(slice)}
             handles={handles}
             blackoutIds={blackoutIds}
+            locks={locks}
             emptyLabel="Queue's clear. Nothing waiting for review."
           />
         </Card>

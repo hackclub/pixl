@@ -34,9 +34,9 @@ suite("claim_shop_order_with_commitment", () => {
     }
     await migrator.unsafe("create extension if not exists pgcrypto; create schema if not exists extensions;");
     const dir = join(import.meta.dir, "../../../server/drizzle");
-    const files = readdirSync(dir).filter((f) => /^\d{4}_.*\.sql$/.test(f) && !f.startsWith("0228")).sort();
+    const files = readdirSync(dir).filter((f) => /^\d{4}_.*\.sql$/.test(f) && !f.startsWith("0229")).sort();
     for (const f of files) await migrator.unsafe(readFileSync(join(dir, f), "utf8"));
-    await migrator.unsafe(readFileSync(join(dir, "0228_fulfillment_commitments.sql"), "utf8"));
+    await migrator.unsafe(readFileSync(join(dir, "0229_fulfillment_commitments.sql"), "utf8"));
     await migrator.end({ timeout: 2 });
     sql = postgres(url.toString(), { max: 8, onnotice: () => {} });
     userId = (await sql`insert into users (oauth_provider, oauth_id, display_name) values ('test', gen_random_uuid()::text, 'Test') returning id`)[0]!.id as string;

@@ -119,7 +119,7 @@ export async function claimOrderWithFunding(
       return { kind: "unledgered", reason: "ledger_not_installed" };
     }
     if (LEDGER_MISSING.has(error.code ?? "")) {
-      throw new Error("Funding ledger is not installed (migration 0228). Claim refused.");
+      throw new Error("Funding ledger is not installed (migration 0229). Claim refused.");
     }
     throw new Error(error.message);
   }

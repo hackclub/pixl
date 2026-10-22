@@ -64,7 +64,9 @@ export function priceState(opts: {
 
   const isConfig = !!item.config_options;
   const discounted = isConfig ? Number(item.discount_percent) > 0 : item.original_price != null;
-  const beaconNote = item.beacon_locked ? ` · Uses a Beacon unlock (${item.beaconAvailable ?? 0} available)` : "";
+  const beaconNote = item.beacon_locked
+    ? ` · USES 1 BEACON UNLOCK (${item.beaconAvailable ?? 0} LEFT)`
+    : "";
   const have = pixels ?? 0;
   const afford = pixels !== null && pixels >= total;
   const pct = Math.max(0, Math.min(100, (have / Math.max(1, total)) * 100));

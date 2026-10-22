@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { queueWaitSince } from "@/lib/queueWait";
 import type { ShippedProject } from "@/lib/db";
-import { LevelBadge, StatusBadge, FundingBadge, TypeBadge } from "@/app/_components/ProjectBadges";
+import type { QueueLock } from "@/lib/reviewAssignment";
+import { LevelBadge, StatusBadge, FundingBadge, TypeBadge, BeaconBadge } from "@/app/_components/ProjectBadges";
 import { BlackoutBadge } from "@/app/_components/BlackoutBadge";
 import { useLiveMode, useReviewerName } from "@/app/_components/LiveMode";
 import { RowSelect, SelectAllBox } from "@/app/_components/MassSelect";
@@ -35,6 +36,7 @@ export function ReviewTable({
   blackoutIds = [],
   makerLinks = false,
   selectName,
+  locks,
 }: {
   rows: ShippedProject[];
   handles: Map<string, string>;
@@ -51,6 +53,9 @@ export function ReviewTable({
   /** Adds a checkbox column whose ticked rows submit under this field name
    * (the table must sit inside a <form>). */
   selectName?: string;
+  /** project id -> why the row can't be opened. Locked rows stay visible but
+   * aren't clickable (first-pass queue only, see openableQueueIds). */
+  locks?: Record<number, QueueLock>;
 }) {
   const blackoutSet = new Set(blackoutIds);
   const router = useRouter();
@@ -86,11 +91,22 @@ export function ReviewTable({
             p.user_id;
         const href = `/review/${p.id}`;
         const telescreenId = !live ? hackatimeUserIds?.get(p.id) : undefined;
+        const lock = locks?.[Number(p.id)];
+        const lockLabel = !lock
+          ? null
+          : lock.reason === "page"
+            ? "Locked: only the first page can be opened"
+            : `Reserved for ${lock.assignee ?? "the reviewer who asked for changes"}${
+                lock.until
+                  ? ` until ${new Date(lock.until).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })}`
+                  : ""
+              }`;
         return (
           <tr
             key={p.id}
-            className="cursor-pointer"
-            onClick={() => router.push(href)}
+            className={lock ? "cursor-not-allowed opacity-60" : "cursor-pointer"}
+            onClick={lock ? undefined : () => router.push(href)}
+            title={lockLabel ?? undefined}
           >
             {selectName && (
               <td onClick={(e) => e.stopPropagation()}>
@@ -102,7 +118,7 @@ export function ReviewTable({
                 The overlay is scoped to this <td> because position:relative on
                 a <tr> isn't a reliable containing block across browsers. */}
             <td className="relative">
-              <Link href={href} prefetch={false} aria-label={p.name} className="absolute inset-0 z-10" />
+              {!lock && <Link href={href} prefetch={false} aria-label={p.name} className="absolute inset-0 z-10" />}
               <div className="flex min-w-0 items-center gap-3">
                 {p.image_url ? (
                   <img
@@ -122,9 +138,11 @@ export function ReviewTable({
                     <Muted className="text-xs">
                       <Mono>#{p.id}</Mono>
                     </Muted>
+                    {lockLabel && <Badge icon="private">{lockLabel}</Badge>}
                     <LevelBadge level={p.level} />
                     <TypeBadge type={p.project_type} />
                     <FundingBadge needsFunding={p.needs_funding} fundingUsd={p.funding_usd} />
+                    {p.is_peak && <BeaconBadge />}
                   </div>
                 </div>
               </div>

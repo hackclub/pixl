@@ -374,7 +374,7 @@ describe("claim flow", () => {
     for (const policy of Object.values(POLICIES)) {
       expect(policy.allowUnledgeredClaim).toBe(false);
       const { db } = fakeDb(orderRow(), () => ({ data: null, error: { code: "42883", message: "function does not exist" } }));
-      await expect(claimOrderWithFunding(base, { db, sql: fakeSql(tables), policy })).rejects.toThrow("migration 0228");
+      await expect(claimOrderWithFunding(base, { db, sql: fakeSql(tables), policy })).rejects.toThrow("migration 0229");
     }
   });
 
