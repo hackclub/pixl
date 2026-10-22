@@ -88,6 +88,9 @@ interface ProjectRow {
   funding_usd: string | number | null;
   needs_funding: boolean | null;
   funding_deducted_px: string | number | null;
+  trial_reward_choice: string | null;
+  trial_prize_px: string | number | null;
+  trial_prize_order_id: string | number | null;
   hours_deflated_at: string | null;
   prior_approved_hours: string | number | null;
 }
@@ -157,7 +160,7 @@ export async function loadPlayerEvidence(
   const shipsView: ShipsView | null = !opts.ships ? null : "get" in opts.ships ? await opts.ships.get() : opts.ships;
 
   const [owned, collab, orders, ledger, audits, userRows, payoutRows] = await Promise.all([
-    q`select id, name, user_id, status, approved_hours, banned_at, repo_url, airtable_record_id, system_note, funding_usd, needs_funding, funding_deducted_px, hours_deflated_at, prior_approved_hours
+    q`select id, name, user_id, status, approved_hours, banned_at, repo_url, airtable_record_id, system_note, funding_usd, needs_funding, funding_deducted_px, trial_reward_choice, trial_prize_px, trial_prize_order_id, hours_deflated_at, prior_approved_hours
         from projects where user_id in ${q(userIds)}`,
     q`select p.id, p.name, p.status, p.banned_at, p.repo_url, p.system_note, p.funding_usd, p.hours_deflated_at,
                c.user_id as collab_user_id, c.approved_hours as collab_hours, c.airtable_record_id as collab_record_id, c.prior_approved_hours as collab_prior_hours
@@ -252,13 +255,19 @@ export async function loadPlayerEvidence(
     const px = num(r.funding_deducted_px);
     if (r.needs_funding && px > 0) withheld.set(Number(r.id), px);
   }
+  const prizes = new Map<number, number>();
+  for (const r of owned as unknown as ProjectRow[]) {
+    const px = num(r.trial_prize_px);
+    if (r.trial_reward_choice === "item" && r.trial_prize_order_id != null && px > 0) prizes.set(Number(r.id), px);
+  }
   for (const x of raw) {
     if (payoutRows === null) {
       x.p.payout = null;
       continue;
     }
     const h = history.get(`${x.p.userId}:${x.p.projectId}`);
-    x.p.payout = h ? { ...h, withheldPx: x.p.role === "owner" ? (withheld.get(x.p.projectId) ?? 0) : 0 } : null;
+    const owner = x.p.role === "owner";
+    x.p.payout = h ? { ...h, withheldPx: owner ? (withheld.get(x.p.projectId) ?? 0) : 0, trialPrizePx: owner ? (prizes.get(x.p.projectId) ?? 0) : 0 } : null;
   }
 
   let airtableOk = true;

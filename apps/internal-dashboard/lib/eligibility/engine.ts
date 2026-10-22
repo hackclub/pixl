@@ -57,6 +57,7 @@ export interface ProjectEvidence {
 export interface PayoutHistory {
   netPx: number;
   withheldPx: number;
+  trialPrizePx: number;
   creditedHours: number;
   rows: number;
 }
@@ -267,7 +268,7 @@ function fundingOf(
   if (!h || h.rows <= 0 || !(h.creditedHours > 0)) {
     return { fundingSource: "none", payoutHours: null, payoutCents: null, payoutGrossCents: null, payoutCapped: false, effectiveRateUsd: null };
   }
-  const gross = Math.max(0, Math.round((h.netPx + h.withheldPx) * pixelValueUsd * 100));
+  const gross = Math.max(0, Math.round((h.netPx + h.withheldPx + h.trialPrizePx) * pixelValueUsd * 100));
   const cap = Math.round(h.creditedHours * policy.maxRateUsd * 100);
   const cents = Math.min(gross, cap);
   return {

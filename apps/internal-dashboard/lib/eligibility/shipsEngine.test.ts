@@ -447,7 +447,7 @@ describe("several projects and collaborators", () => {
 
 describe("funding from historical payouts", () => {
   const PAYOUT = POLICIES["2026-10-22.3"]!;
-  const hist = (netPx: number, creditedHours: number, over: Record<string, unknown> = {}) => ({ netPx, withheldPx: 0, creditedHours, rows: 1, ...over });
+  const hist = (netPx: number, creditedHours: number, over: Record<string, unknown> = {}) => ({ netPx, withheldPx: 0, trialPrizePx: 0, creditedHours, rows: 1, ...over });
   const runP = (rows: unknown[], payout: unknown, over: Partial<EligibilityInput> = {}, projOver: Record<string, unknown> = {}) => {
     const v = viewOf(rows);
     return evaluateEligibility({
@@ -542,6 +542,27 @@ describe("funding from historical payouts", () => {
     expect(r.verifiedFundingCents).toBe(48000);
     expect(r.priorGrantCents).toBe(8000);
     expect(r.remainingCents).toBe(40000);
+  });
+
+  test("a Trial prize forfeited from the payout is added back so the prize order is counted once", () => {
+    const prizeOrder = { itemName: "Pixl Sticker Sheet", quantity: 1, pricePx: 121 };
+    const r = runP([shipsRow({ hours: 6 })], hist(121, 6, { trialPrizePx: 121 }), {
+      playerOrders: [{ ...order({ itemName: "Art Supply Grant", quantity: 1, pricePx: 112 }), id: 89, status: "done", actualCostUsd: 10 }],
+      order: order(prizeOrder),
+    });
+    expect(r.verifiedFundingCents).toBe(2420);
+    expect(r.projects[0]!.effectiveRateUsd).toBe(4.03);
+    expect(r.remainingCents).toBe(1420);
+    expect(r.status).toBe("covered");
+  });
+
+  test("without the add-back the same player would be short by the prize", () => {
+    const r = runP([shipsRow({ hours: 6 })], hist(121, 6), {
+      playerOrders: [{ ...order({ itemName: "Art Supply Grant", quantity: 1, pricePx: 112 }), id: 89, status: "done", actualCostUsd: 10 }],
+      order: order({ itemName: "Pixl Sticker Sheet", quantity: 1, pricePx: 121 }),
+    });
+    expect(r.verifiedFundingCents).toBe(1210);
+    expect(r.status).not.toBe("covered");
   });
 
   test("a fully reversed payout funds nothing", () => {
