@@ -83,3 +83,6 @@ export const MORE_ICON: readonly Rect[] = [
 export const PALETTE_ICON: readonly Rect[] = [
   [4, 2, 8, 2], [2, 4, 2, 7], [12, 4, 2, 6], [4, 11, 7, 2], [10, 10, 2, 2], [5, 5, 2, 2], [9, 5, 2, 2], [5, 8, 2, 2],
 ];
+export const FONT_ICON: readonly Rect[] = [
+  [6, 2, 4, 2], [5, 4, 2, 2], [9, 4, 2, 2], [4, 6, 2, 2], [10, 6, 2, 2], [3, 8, 2, 6], [11, 8, 2, 6], [5, 9, 6, 2],
+];

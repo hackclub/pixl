@@ -7,7 +7,7 @@ import { PixelIcon, ReIcon } from "@/components/pixel-icon";
 import { Button, buttonVariants, railButton } from "@/components/ui/primitives";
 import { cn } from "@/lib/cn";
 import { clearPlayerLocalState } from "@/lib/local-state";
-import { ICONS, MOBILE_PRIMARY, MORE_ICON, NAV_GROUPS, PALETTE_ICON } from "./nav-data";
+import { FONT_ICON, ICONS, MOBILE_PRIMARY, MORE_ICON, NAV_GROUPS, PALETTE_ICON } from "./nav-data";
 
 const DARK_PALETTES = [
   { id: "cabinet", label: "Cabinet", swatches: ["#121a23", "#68c7cb", "#ffad68"] },
@@ -294,16 +294,15 @@ export function ShellNav({
         <button
           className={cn(
             railButton,
-            "w-auto px-[10px] text-[12px] tracking-[.5px] whitespace-nowrap",
             "aria-pressed:bg-button-dark aria-pressed:text-button-dark-ink aria-pressed:hover:bg-button-dark aria-pressed:hover:text-button-dark-ink",
           )}
           type="button"
-          title="Switch to Phantom Sans"
-          aria-label="Phantom Sans font"
+          title={phantom ? "Switch back to the default font" : "Switch to Phantom Sans"}
+          aria-label="Toggle Phantom Sans font"
           aria-pressed={phantom}
           onClick={togglePhantom}
         >
-          PHANTOM SANS
+          <PixelIcon rects={FONT_ICON} />
         </button>
         <div className="relative" data-theme-picker>
           <button
