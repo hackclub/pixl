@@ -83,6 +83,8 @@ const realFetch = globalThis.fetch;
 const realToken = process.env.AIRTABLE_PIXL_YSWS_UNIFIED_TOKEN;
 let calls: { url: string; method: string }[] = [];
 
+const SUBMITTED = "2\u2013Submitted";
+
 function stubAirtable(handler: (url: string) => Response) {
   calls = [];
   globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
@@ -257,18 +259,36 @@ const identityLookup = async (ids: string[]) =>
   new Map<string, SubmissionLookup>(ids.map((id) => [id, { kind: "found", info: { submitted: true, unifiedId: id } }]));
 
 describe("read-only Airtable", () => {
+  beforeEach(clearAirtableCache);
+
   test("only issues GETs with two non-PII fields", async () => {
-    stubAirtable(() => new Response(JSON.stringify({ records: [{ id: "recCCCCCCCCCCCCCC", fields: { "Automation - Submit to Unified YSWS": true } }] }), { status: 200 }));
+    stubAirtable(() => new Response(JSON.stringify({ records: [{ id: "recCCCCCCCCCCCCCC", fields: { "Automation - Status": SUBMITTED } }] }), { status: 200 }));
     const ev = await loadPlayerEvidence([U1], { liveAirtable: true, sql: fakeSql({ owned: [proj({ airtable_record_id: "recCCCCCCCCCCCCCC" })] }), now: NOW });
     expect(ev.get(U1)!.projects[0]!.airtable).toBe("submitted");
     expect(calls.length).toBeGreaterThan(0);
     for (const c of calls) {
       expect(c.method).toBe("GET");
-      expect(decodeURIComponent(c.url).replace(/\+/g, " ")).toContain("fields[]=Automation - Submit to Unified YSWS");
+      expect(decodeURIComponent(c.url).replace(/\+/g, " ")).toContain("fields[]=Automation - Status");
       expect(decodeURIComponent(c.url).replace(/\+/g, " ")).toContain("fields[]=Automation - YSWS Record ID");
       expect(c.url).not.toMatch(/Email|Birthday|Address|First%20Name/);
     }
   });
+
+  test("submitted comes from Automation - Status, even with the trigger checkbox absent", async () => {
+    stubAirtable(() => new Response(JSON.stringify({ records: [{ id: "recCCCCCCCCCCCCCC", createdTime: "2026-10-01T00:00:00.000Z", fields: { "Automation - Status": SUBMITTED, "Automation - YSWS Record ID": "recpBUYp5RAB3JEaE" } }] }), { status: 200 }));
+    const ev = await loadPlayerEvidence([U1], { liveAirtable: true, sql: fakeSql({ owned: [proj({ airtable_record_id: "recCCCCCCCCCCCCCC" })] }), now: NOW });
+    expect(ev.get(U1)!.projects[0]!.airtable).toBe("submitted");
+  });
+
+  for (const status of ["1.5–Processing", "0–Error – See Notes", "1–Pending Submission", "2-Submitted", undefined]) {
+    test(`status ${JSON.stringify(status)} is never submitted, even with the checkbox checked`, async () => {
+      const fields: Record<string, unknown> = { "Automation - Submit to Unified YSWS": true };
+      if (status !== undefined) fields["Automation - Status"] = status;
+      stubAirtable(() => new Response(JSON.stringify({ records: [{ id: "recCCCCCCCCCCCCCC", fields }] }), { status: 200 }));
+      const ev = await loadPlayerEvidence([U1], { liveAirtable: true, sql: fakeSql({ owned: [proj({ airtable_record_id: "recCCCCCCCCCCCCCC" })] }), now: NOW });
+      expect(ev.get(U1)!.projects[0]!.airtable).toBe("present");
+    });
+  }
 
   test("a record absent from the response is missing and requires review", async () => {
     stubAirtable(() => new Response(JSON.stringify({ records: [] }), { status: 200 }));
@@ -784,7 +804,7 @@ describe("staging to Unified record mapping", () => {
         new Response(
           JSON.stringify({
             records: [
-              { id: STAGING, createdTime: "2026-10-01T00:00:00.000Z", fields: { "Automation - Submit to Unified YSWS": true, "Automation - YSWS Record ID": UNIFIED } },
+              { id: STAGING, createdTime: "2026-10-01T00:00:00.000Z", fields: { "Automation - Status": SUBMITTED, "Automation - YSWS Record ID": UNIFIED } },
             ],
           }),
           { status: 200 },
@@ -805,7 +825,7 @@ describe("staging to Unified record mapping", () => {
   });
 
   test("Airtable omits the mapping field when it is empty, which stays unmatched", async () => {
-    stubAirtable(() => new Response(JSON.stringify({ records: [{ id: STAGING, fields: { "Automation - Submit to Unified YSWS": true } }] }), { status: 200 }));
+    stubAirtable(() => new Response(JSON.stringify({ records: [{ id: STAGING, fields: { "Automation - Status": SUBMITTED } }] }), { status: 200 }));
     const ev = await loadPlayerEvidence([U1], {
       liveAirtable: true,
       sql: fakeSql({ owned: [andrei()], users: [{ id: U1, slack_id: "UANDREI001" }] }),

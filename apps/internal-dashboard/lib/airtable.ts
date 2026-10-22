@@ -248,7 +248,8 @@ export type SubmissionLookup =
   | { kind: "missing" }
   | { kind: "error"; error: string };
 
-const SUBMIT_FIELD = "Automation - Submit to Unified YSWS";
+export const STATUS_FIELD = "Automation - Status";
+export const SUBMITTED_STATUS = "2\u2013Submitted";
 const UNIFIED_ID_FIELD = "Automation - YSWS Record ID";
 const LOOKUP_CHUNK = 40;
 
@@ -260,7 +261,7 @@ export function parseUnifiedId(value: unknown): string | null {
 async function lookupChunk(token: string, ids: string[], out: Map<string, SubmissionLookup>): Promise<void> {
   const formula = `OR(${ids.map((id) => `RECORD_ID()='${id}'`).join(",")})`;
   const q = new URLSearchParams({ filterByFormula: formula, pageSize: "100" });
-  q.append("fields[]", SUBMIT_FIELD);
+  q.append("fields[]", STATUS_FIELD);
   q.append("fields[]", UNIFIED_ID_FIELD);
   let error: string | null = null;
   try {
@@ -281,7 +282,7 @@ async function lookupChunk(token: string, ids: string[], out: Map<string, Submis
       for (const r of body.records) {
         seen.add(r.id);
         const f = r.fields ?? {};
-        out.set(r.id, { kind: "found", info: { submitted: f[SUBMIT_FIELD] === true, unifiedId: parseUnifiedId(f[UNIFIED_ID_FIELD]) } });
+        out.set(r.id, { kind: "found", info: { submitted: f[STATUS_FIELD] === SUBMITTED_STATUS, unifiedId: parseUnifiedId(f[UNIFIED_ID_FIELD]) } });
       }
       for (const id of ids) if (!seen.has(id)) out.set(id, { kind: "missing" });
     }

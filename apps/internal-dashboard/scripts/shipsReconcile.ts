@@ -1,11 +1,11 @@
 // Read-only: GET Airtable and Ships, optional SELECT-only order history.
 import postgres from "postgres";
+import { STATUS_FIELD, SUBMITTED_STATUS } from "../lib/airtable";
 import { createShipsProvider, repoKeyOf, shipsUrlFromEnv } from "../lib/eligibility/ships";
 
 const BASE = "app80yzut0bdMNdHJ";
 const TABLE = "tbl8UpMm6gsLPKEN0";
 const API = process.env.AIRTABLE_API_URL ?? "https://api.airtable.com";
-const SUBMIT = "Automation - Submit to Unified YSWS";
 const HOURS = "Optional - Override Hours Spent";
 const UNIFIED = "Automation - YSWS Record ID";
 const token = process.env.AIRTABLE_PIXL_YSWS_UNIFIED_TOKEN;
@@ -24,7 +24,7 @@ async function airtableRows(): Promise<Row[]> {
   let offset = "";
   do {
     const q = new URLSearchParams();
-    for (const f of ["Code URL", HOURS, SUBMIT, UNIFIED]) q.append("fields[]", f);
+    for (const f of ["Code URL", HOURS, STATUS_FIELD, UNIFIED]) q.append("fields[]", f);
     if (process.env.AIRTABLE_VIEW) q.set("view", process.env.AIRTABLE_VIEW);
     if (offset) q.set("offset", offset);
     const res = await fetch(`${API}/v0/${BASE}/${TABLE}?${q}`, { method: "GET", headers: { Authorization: `Bearer ${token}` } });
@@ -35,7 +35,7 @@ async function airtableRows(): Promise<Row[]> {
       out.push({
         id: r.id,
         unifiedId: typeof r.fields[UNIFIED] === "string" && /^rec[A-Za-z0-9]{14}$/.test((r.fields[UNIFIED] as string).trim()) ? (r.fields[UNIFIED] as string).trim() : null,
-        submitted: r.fields[SUBMIT] === true,
+        submitted: r.fields[STATUS_FIELD] === SUBMITTED_STATUS,
         hours: typeof h === "number" ? h : null,
         repoKey: repoKeyOf(typeof r.fields["Code URL"] === "string" ? (r.fields["Code URL"] as string) : null),
       });
