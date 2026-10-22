@@ -89,6 +89,7 @@ interface ProjectRow {
   needs_funding: boolean | null;
   funding_deducted_px: string | number | null;
   trial_reward_choice: string | null;
+  trial_held_px: string | number | null;
   trial_prize_px: string | number | null;
   trial_prize_order_id: string | number | null;
   hours_deflated_at: string | null;
@@ -160,7 +161,7 @@ export async function loadPlayerEvidence(
   const shipsView: ShipsView | null = !opts.ships ? null : "get" in opts.ships ? await opts.ships.get() : opts.ships;
 
   const [owned, collab, orders, ledger, audits, userRows, payoutRows] = await Promise.all([
-    q`select id, name, user_id, status, approved_hours, banned_at, repo_url, airtable_record_id, system_note, funding_usd, needs_funding, funding_deducted_px, trial_reward_choice, trial_prize_px, trial_prize_order_id, hours_deflated_at, prior_approved_hours
+    q`select id, name, user_id, status, approved_hours, banned_at, repo_url, airtable_record_id, system_note, funding_usd, needs_funding, funding_deducted_px, trial_reward_choice, trial_held_px, trial_prize_px, trial_prize_order_id, hours_deflated_at, prior_approved_hours
         from projects where user_id in ${q(userIds)}`,
     q`select p.id, p.name, p.status, p.banned_at, p.repo_url, p.system_note, p.funding_usd, p.hours_deflated_at,
                c.user_id as collab_user_id, c.approved_hours as collab_hours, c.airtable_record_id as collab_record_id, c.prior_approved_hours as collab_prior_hours
@@ -256,9 +257,13 @@ export async function loadPlayerEvidence(
     if (r.needs_funding && px > 0) withheld.set(Number(r.id), px);
   }
   const prizes = new Map<number, number>();
+  const allPrize = new Set<number>();
+  const ownOrders = new Set((orders as unknown as { id: string | number; user_id: string }[]).map((o) => `${o.user_id}:${Number(o.id)}`));
   for (const r of owned as unknown as ProjectRow[]) {
     const px = num(r.trial_prize_px);
-    if (r.trial_reward_choice === "item" && r.trial_prize_order_id != null && px > 0) prizes.set(Number(r.id), px);
+    if (r.trial_reward_choice !== "item" || r.trial_prize_order_id == null || px <= 0) continue;
+    prizes.set(Number(r.id), px);
+    if (num(r.trial_held_px) === px && ownOrders.has(`${r.user_id}:${Number(r.trial_prize_order_id)}`)) allPrize.add(Number(r.id));
   }
   for (const x of raw) {
     if (payoutRows === null) {
@@ -267,7 +272,13 @@ export async function loadPlayerEvidence(
     }
     const h = history.get(`${x.p.userId}:${x.p.projectId}`);
     const owner = x.p.role === "owner";
-    x.p.payout = h ? { ...h, withheldPx: owner ? (withheld.get(x.p.projectId) ?? 0) : 0, trialPrizePx: owner ? (prizes.get(x.p.projectId) ?? 0) : 0 } : null;
+    if (h) {
+      x.p.payout = { ...h, withheldPx: owner ? (withheld.get(x.p.projectId) ?? 0) : 0, trialPrizePx: owner ? (prizes.get(x.p.projectId) ?? 0) : 0 };
+    } else if (owner && allPrize.has(x.p.projectId) && x.p.status === "approved" && !x.p.banned && x.p.approvedHours > 0) {
+      x.p.payout = { netPx: 0, withheldPx: 0, trialPrizePx: prizes.get(x.p.projectId)!, creditedHours: x.p.approvedHours, rows: 1 };
+    } else {
+      x.p.payout = null;
+    }
   }
 
   let airtableOk = true;
