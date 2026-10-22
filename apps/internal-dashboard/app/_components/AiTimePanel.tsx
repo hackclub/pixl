@@ -1,7 +1,8 @@
 "use client";
 
 import type { Commit } from "@/lib/commits";
-import { classifyAiEditorTime, type HackatimeReport } from "@/lib/hackatime";
+import { classifyAiEditorTime } from "@/lib/aiEditorTime";
+import type { HackatimeReport } from "@/lib/hackatime";
 import { Badge, Callout, EmptyState, Mono, Muted, Stat, StatGrid } from "@/app/_ui/ui";
 
 function fmtSecs(s: number): string {

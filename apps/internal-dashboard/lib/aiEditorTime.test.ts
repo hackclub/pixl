@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { classifyAiEditorTime, type HackatimeBreakdown } from "./hackatime";
+import { classifyAiEditorTime, type HackatimeBreakdown } from "./aiEditorTime";
 
 function editor(name: string, seconds: number): HackatimeBreakdown {
   return { name, seconds, text: `${seconds}s`, percent: 0 };

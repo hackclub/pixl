@@ -1,5 +1,8 @@
 import type { Commit } from "@/lib/commits";
 import { db, type ShippedProject } from "@/lib/db";
+import type { HackatimeBreakdown } from "./aiEditorTime";
+
+export type { HackatimeBreakdown } from "./aiEditorTime";
 
 const BASE = (process.env.HACKATIME_BASE ?? "https://hackatime.hackclub.com").replace(/\/$/, "");
 
@@ -91,14 +94,6 @@ export async function fetchTrustFactor(
   } catch {
     return null;
   }
-}
-
-export interface HackatimeBreakdown {
-  name: string;
-  seconds: number;
-  text: string;
-  percent: number;
-  color?: string;
 }
 
 export interface LapseTimelapse {
@@ -447,32 +442,6 @@ export async function hackatimeUserIdsFor(rows: ShippedProject[]): Promise<Map<n
     }),
   );
   return out;
-}
-
-// Editor names Hackatime reports for AI-native/AI-assisted tools, matched
-// case-insensitively as a substring (Hackatime's editor field is whatever
-// the maker's Wakatime-compatible plugin reports, so "Claude Code" and
-// "claude-code.nvim" both need to land in the same bucket).
-const AI_EDITOR_PATTERNS = ["cursor", "windsurf", "copilot", "claude"];
-
-export interface AiEditorTime {
-  totalSeconds: number;
-  aiSeconds: number;
-  aiEditors: HackatimeBreakdown[];
-}
-
-// Splits a Hackatime editor breakdown into time spent in AI-assisted editors
-// vs everything else, so a reviewer can compare it against the maker's own
-// AI declaration and the per-commit AI-authorship heuristic.
-export function classifyAiEditorTime(editors: HackatimeBreakdown[]): AiEditorTime {
-  const aiEditors = editors.filter((e) =>
-    AI_EDITOR_PATTERNS.some((p) => e.name.toLowerCase().includes(p)),
-  );
-  return {
-    totalSeconds: editors.reduce((s, e) => s + e.seconds, 0),
-    aiSeconds: aiEditors.reduce((s, e) => s + e.seconds, 0),
-    aiEditors,
-  };
 }
 
 function overlap(spans: Span[], from: number, to: number): number {
