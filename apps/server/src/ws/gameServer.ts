@@ -594,11 +594,23 @@ function auditWsFailure(req: IncomingMessage, reason: string, userId?: string): 
   });
 }
 
+export function parseWebSocketUpgradeUrl(requestTarget: string | undefined, baseUrl: string): URL | null {
+  try {
+    return new URL(requestTarget ?? "/", baseUrl);
+  } catch {
+    return null;
+  }
+}
+
 export function attachWebSocketServer(httpServer: Server) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 32 * 1024 });
 
   httpServer.on("upgrade", (req, socket, head) => {
-    const url = new URL(req.url ?? "/", config.urls.server);
+    const url = parseWebSocketUpgradeUrl(req.url, config.urls.server);
+    if (!url) {
+      socket.destroy();
+      return;
+    }
     if (url.pathname !== "/ws") {
       socket.destroy();
       return;

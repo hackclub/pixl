@@ -13,9 +13,22 @@ import {
   LOBBY_JOIN_ATTEMPT_LIMIT,
   LOBBY_JOIN_IP_LIMIT,
   NPC_SAVE_LIMIT,
+  parseWebSocketUpgradeUrl,
   sanitizePlayerChat,
 } from "./gameServer.js";
 import type { Lobby } from "./lobbies.js";
+
+describe("parseWebSocketUpgradeUrl", () => {
+  test("returns null for a malformed upgrade request target", () => {
+    expect(parseWebSocketUpgradeUrl("//[invalid", "https://server.pixl.hackclub.com")).toBeNull();
+  });
+
+  test("preserves valid WebSocket paths and query strings", () => {
+    const url = parseWebSocketUpgradeUrl("/ws?token=test", "https://server.pixl.hackclub.com");
+    expect(url?.pathname).toBe("/ws");
+    expect(url?.searchParams.get("token")).toBe("test");
+  });
+});
 
 function makeLobby(overrides: Partial<Lobby> = {}): Lobby {
   return {
