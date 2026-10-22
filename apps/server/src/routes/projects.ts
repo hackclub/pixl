@@ -628,6 +628,8 @@ router.post("/api/projects/:id/ship", validate({ query: v.noQuery, params: param
     return res.status(400).json({ ok: false, error: "demo_required" });
   if (!String(project.image_url ?? "").trim())
     return res.status(400).json({ ok: false, error: "image_required" });
+  if (!String(project.description ?? "").trim())
+    return res.status(400).json({ ok: false, error: "description_required" });
   // Hard exclusion under Hack Club's YSWS "Project Exceptions" , school
   // assignments and paid Hack Club work can't go into the Unified Database.
   if (req.body?.eligibilityAttested !== true)
