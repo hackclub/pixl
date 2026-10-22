@@ -2,6 +2,10 @@
 
 Advisory funding check shown on every order in the internal dashboard's `/fulfillment` queue. Code lives in `apps/internal-dashboard/lib/eligibility/`; the ledger migration is `apps/server/drizzle/0229_fulfillment_commitments.sql` (not applied by this change).
 
+## Funding source
+
+Policy `2026-10-22.3` funds each project from what the player was actually paid, not from a flat rate. The pixel payout already encodes the RE-derived rate (about $4 to $6 per hour) at the time of the ship. Per project and beneficiary the engine sums `pixel_transactions` rows with reason `project_approved` and `review_reverted` (net pixels), takes the hours from the latest `project_approved` row, adds back any funding withheld for a hardware grant (`projects.funding_deducted_px`, so the grant order or prior grant is counted once as spending), and converts pixels at the configured pixel value. The result is capped at credited hours times the $6.00 maximum payout, which treats referral boosts and community multipliers above that as bonuses; a capped project is flagged. If Ships verifies fewer hours than were paid, funding scales down proportionally. A verified project with no payout rows is shown as Unverified with the reason `payout_unestablished`; it is never assumed to be $4 or $6. Other pixel reasons (review payouts, fulfillment payouts, manual grants, referral rewards, refunds, purchases) are not project funding. Earlier policy versions keep the flat $4 rate. The current rate of the player is never applied retroactively.
+
 ## Sources of truth, and their limits
 
 | Fact | Source | Limit |

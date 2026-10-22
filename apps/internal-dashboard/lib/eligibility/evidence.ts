@@ -156,7 +156,7 @@ export async function loadPlayerEvidence(
 
   const shipsView: ShipsView | null = !opts.ships ? null : "get" in opts.ships ? await opts.ships.get() : opts.ships;
 
-  const [owned, collab, orders, ledger, audits, userRows] = await Promise.all([
+  const [owned, collab, orders, ledger, audits, userRows, payoutRows] = await Promise.all([
     q`select id, name, user_id, status, approved_hours, banned_at, repo_url, airtable_record_id, system_note, funding_usd, needs_funding, funding_deducted_px, hours_deflated_at, prior_approved_hours
         from projects where user_id in ${q(userIds)}`,
     q`select p.id, p.name, p.status, p.banned_at, p.repo_url, p.system_note, p.funding_usd, p.hours_deflated_at,
@@ -169,6 +169,13 @@ export async function loadPlayerEvidence(
     q`select distinct on (project_id) project_id, claimed_hours
         from review_audits where verdict = 'hours_deflated' order by project_id, created_at asc`.catch(() => []),
     q`select id, slack_id from users where id in ${q(userIds)}`,
+    q`select id, user_id, project_id, amount, hours, reason
+        from pixel_transactions
+        where user_id in ${q(userIds)} and project_id is not null and reason in ('project_approved', 'review_reverted')
+        order by id`.catch((e: Error) => {
+      console.error("eligibility payouts", e.message);
+      return null;
+    }),
   ]);
   const slackOf = new Map<string, string | null>(
     (userRows as unknown as { id: string; slack_id: string | null }[]).map((u) => [u.id, u.slack_id]),
@@ -227,6 +234,31 @@ export async function loadPlayerEvidence(
         priorApprovedHours: e.prior,
       },
     });
+  }
+
+  const history = new Map<string, { netPx: number; creditedHours: number; rows: number }>();
+  for (const t of (payoutRows ?? []) as unknown as { user_id: string; project_id: number; amount: string | number; hours: string | number; reason: string }[]) {
+    const key = `${t.user_id}:${Number(t.project_id)}`;
+    const h = history.get(key) ?? { netPx: 0, creditedHours: 0, rows: 0 };
+    h.netPx += num(t.amount);
+    if (t.reason === "project_approved") {
+      h.creditedHours = num(t.hours);
+      h.rows++;
+    }
+    history.set(key, h);
+  }
+  const withheld = new Map<number, number>();
+  for (const r of owned as unknown as ProjectRow[]) {
+    const px = num(r.funding_deducted_px);
+    if (r.needs_funding && px > 0) withheld.set(Number(r.id), px);
+  }
+  for (const x of raw) {
+    if (payoutRows === null) {
+      x.p.payout = null;
+      continue;
+    }
+    const h = history.get(`${x.p.userId}:${x.p.projectId}`);
+    x.p.payout = h ? { ...h, withheldPx: x.p.role === "owner" ? (withheld.get(x.p.projectId) ?? 0) : 0 } : null;
   }
 
   let airtableOk = true;

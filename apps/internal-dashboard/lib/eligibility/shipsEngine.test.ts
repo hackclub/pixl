@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { evaluateEligibility, type EligibilityInput, type OrderInput, type ProjectEvidence } from "./engine";
-import { currentPolicy } from "./policy";
+import { currentPolicy, POLICIES } from "./policy";
+
+const FLAT = POLICIES["2026-10-22.2"]!;
 import { matchShips as matchMapped, type MatchTarget } from "./shipsMatch";
 import { buildSnapshot, type ShipsView } from "./ships";
 
@@ -106,7 +108,7 @@ const meta = (view: ShipsView = viewOf([])) => ({
 function run(rows: unknown[], over: Partial<EligibilityInput> = {}, view?: ShipsView) {
   const v = view ?? viewOf(rows);
   return evaluateEligibility({
-    policy: currentPolicy(),
+    policy: FLAT,
     pixelValueUsd: PX,
     now: NOW,
     order: order(),
@@ -440,5 +442,111 @@ describe("several projects and collaborators", () => {
     const v = viewOf([shipsRow(), shipsRow({ id: C, ysws: "Macondo", hours: 500 })]);
     const r = run([], { playerOrders: [], order: order({ itemName: "Cable", quantity: 1, pricePx: 100 }) }, v);
     expect(r.verifiedHours).toBe(87);
+  });
+});
+
+describe("funding from historical payouts", () => {
+  const PAYOUT = POLICIES["2026-10-22.3"]!;
+  const hist = (netPx: number, creditedHours: number, over: Record<string, unknown> = {}) => ({ netPx, withheldPx: 0, creditedHours, rows: 1, ...over });
+  const runP = (rows: unknown[], payout: unknown, over: Partial<EligibilityInput> = {}, projOver: Record<string, unknown> = {}) => {
+    const v = viewOf(rows);
+    return evaluateEligibility({
+      policy: PAYOUT,
+      pixelValueUsd: PX,
+      now: NOW,
+      order: order({ itemName: "Signed Org Photo", quantity: 1, pricePx: 85 }),
+      playerOrders: [],
+      ledger: [],
+      projects: [project(rows, { payout, ...projOver }, v)],
+      priorGrants: [],
+      meta: meta(v),
+      ...over,
+    });
+  };
+
+  test("the current policy funds from payout history, flat policies keep the old rate", () => {
+    expect(currentPolicy().fundingBasis).toBe("payout_history");
+    expect(POLICIES["2026-10-22.1"]!.fundingBasis).toBe("flat_rate");
+    expect(POLICIES["2026-10-22.2"]!.fundingBasis).toBe("flat_rate");
+  });
+
+  test("a 300h project paid 18000 px funds 1800 dollars, so 1700 spent leaves 100", () => {
+    const r = runP(
+      [shipsRow({ hours: 300 })],
+      hist(18000, 300),
+      { playerOrders: [order({ id: 102, itemName: "100$ laptop grant", quantity: 17, pricePx: 17561, status: "done", actualCostUsd: 1700 })] },
+      { approvedHours: 300 },
+    );
+    expect(r.verifiedFundingCents).toBe(180000);
+    expect(r.committedCents).toBe(170000);
+    expect(r.remainingCents).toBe(10000);
+    expect(r.projects[0]!.effectiveRateUsd).toBe(6);
+    expect(r.projects[0]!.fundingSource).toBe("payout");
+    expect(r.status).toBe("covered");
+  });
+
+  test("Andrei's credit of 6399 px minus the 1910 px reversal funds 448.90, leaving 40.81", () => {
+    const r = runP(
+      [shipsRow()],
+      hist(6399 - 1910, 87),
+      {
+        playerOrders: [
+          xm5({ id: 71, status: "shipped", actualCostUsd: 218.09 }),
+          order({ id: 72, itemName: "10$ Storage grant", quantity: 16, pricePx: 1792, status: "done", actualCostUsd: 160 }),
+          order({ id: 86, itemName: "AI subscription/credits", quantity: 3, pricePx: 336, status: "done", actualCostUsd: 30 }),
+          order({ id: 73, itemName: "AI subscription/credits", quantity: 20, pricePx: 2240, status: "cancelled" }),
+        ],
+      },
+    );
+    expect(r.verifiedFundingCents).toBe(44890);
+    expect(r.committedCents).toBe(40809);
+    expect(r.remainingCents).toBe(4081);
+    expect(r.projects[0]!.effectiveRateUsd).toBe(5.16);
+    expect(r.status).toBe("covered");
+  });
+
+  test("an order above what is left is insufficient, not covered", () => {
+    const r = runP(
+      [shipsRow()],
+      hist(4489, 87),
+      { order: order({ itemName: "Big thing", quantity: 1, pricePx: 600 }), playerOrders: [xm5({ actualCostUsd: 218.09 }), order({ id: 72, itemName: "10$ Storage grant", quantity: 16, pricePx: 1792, status: "done", actualCostUsd: 160 }), order({ id: 86, itemName: "AI", pricePx: 336, status: "done", actualCostUsd: 30 })] },
+    );
+    expect(r.remainingCents).toBe(4081);
+    expect(r.status).toBe("insufficient");
+  });
+
+  test("a verified project with no payout history is Unverified, never guessed at 4 or 6", () => {
+    const r = runP([shipsRow()], null);
+    expect(r.verifiedFundingCents).toBe(0);
+    expect(r.unestablishedHours).toBe(87);
+    expect(r.projects[0]!.fundingSource).toBe("none");
+    expect(r.reasons.some((x) => x.code === "payout_unestablished")).toBe(true);
+    expect(r.status).not.toBe("covered");
+  });
+
+  test("a payout above the 6 dollar maximum is capped and flagged", () => {
+    const r = runP([shipsRow()], hist(10000, 87));
+    expect(r.projects[0]!.payoutCapped).toBe(true);
+    expect(r.verifiedFundingCents).toBe(52200);
+    expect(r.reasons.some((x) => x.code === "payout_capped")).toBe(true);
+  });
+
+  test("when Ships verifies fewer hours than were paid, funding scales down with them", () => {
+    const r = runP([shipsRow({ hours: 43.5 })], hist(5220, 87), {}, { approvedHours: 87 });
+    expect(r.projects[0]!.countedHours).toBe(43.5);
+    expect(r.verifiedFundingCents).toBe(26100);
+  });
+
+  test("funding withheld for a hardware grant is added back so the grant order is counted once", () => {
+    const r = runP([shipsRow()], hist(4000, 87, { withheldPx: 800 }), { priorGrants: [{ projectId: 1, name: "Proj", usd: 80, deductedPx: 800, ambiguous: false }] });
+    expect(r.verifiedFundingCents).toBe(48000);
+    expect(r.priorGrantCents).toBe(8000);
+    expect(r.remainingCents).toBe(40000);
+  });
+
+  test("a fully reversed payout funds nothing", () => {
+    const r = runP([shipsRow()], hist(0, 87));
+    expect(r.verifiedFundingCents).toBe(0);
+    expect(r.status).not.toBe("covered");
   });
 });

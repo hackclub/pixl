@@ -51,6 +51,14 @@ export interface ProjectEvidence {
   disputed: boolean;
   ships?: ShipsEvidence | null;
   priorApprovedHours?: number;
+  payout?: PayoutHistory | null;
+}
+
+export interface PayoutHistory {
+  netPx: number;
+  withheldPx: number;
+  creditedHours: number;
+  rows: number;
 }
 
 export interface PriorGrant {
@@ -135,6 +143,12 @@ export interface ProjectLine {
   discrepancy: "none" | "rounding" | "material";
   multiRecord: boolean;
   repoKey: string | null;
+  fundingSource: "flat" | "payout" | "none";
+  payoutHours: number | null;
+  payoutCents: number | null;
+  payoutGrossCents: number | null;
+  payoutCapped: boolean;
+  effectiveRateUsd: number | null;
 }
 
 export interface CommitmentLine {
@@ -155,6 +169,8 @@ export interface EligibilityResult {
   status: EligibilityStatus;
   reasons: Reason[];
   rateUsd: number;
+  fundingBasis: "flat_rate" | "payout_history";
+  unestablishedHours: number;
   projects: ProjectLine[];
   verifiedHours: number;
   provisionalHours: number;
@@ -239,7 +255,38 @@ function verificationOf(p: ProjectEvidence, counted: ProjectLine["counted"]): { 
   }
 }
 
-function classifyProjects(projects: ProjectEvidence[]): ProjectLine[] {
+function fundingOf(
+  p: ProjectEvidence,
+  policy: EligibilityPolicy,
+  pixelValueUsd: number,
+): Pick<ProjectLine, "fundingSource" | "payoutHours" | "payoutCents" | "payoutGrossCents" | "payoutCapped" | "effectiveRateUsd"> {
+  if (policy.fundingBasis !== "payout_history") {
+    return { fundingSource: "flat", payoutHours: null, payoutCents: null, payoutGrossCents: null, payoutCapped: false, effectiveRateUsd: policy.ratePerHourUsd };
+  }
+  const h = p.payout;
+  if (!h || h.rows <= 0 || !(h.creditedHours > 0)) {
+    return { fundingSource: "none", payoutHours: null, payoutCents: null, payoutGrossCents: null, payoutCapped: false, effectiveRateUsd: null };
+  }
+  const gross = Math.max(0, Math.round((h.netPx + h.withheldPx) * pixelValueUsd * 100));
+  const cap = Math.round(h.creditedHours * policy.maxRateUsd * 100);
+  const cents = Math.min(gross, cap);
+  return {
+    fundingSource: "payout",
+    payoutHours: h.creditedHours,
+    payoutCents: cents,
+    payoutGrossCents: gross,
+    payoutCapped: gross > cap,
+    effectiveRateUsd: Math.round((cents / 100 / h.creditedHours) * 100) / 100,
+  };
+}
+
+function lineFundingCents(l: ProjectLine, hours: number, policy: EligibilityPolicy): number | null {
+  if (l.fundingSource === "flat") return Math.round(hours * policy.ratePerHourUsd * 100);
+  if (l.fundingSource !== "payout" || l.payoutCents == null || !l.payoutHours) return null;
+  return Math.round(l.payoutCents * Math.min(1, hours / l.payoutHours));
+}
+
+function classifyProjects(projects: ProjectEvidence[], policy: EligibilityPolicy, pixelValueUsd: number): ProjectLine[] {
   const ordered = [...projects].sort(
     (a, b) => (a.role === b.role ? a.projectId - b.projectId : a.role === "owner" ? -1 : 1),
   );
@@ -276,7 +323,9 @@ function classifyProjects(projects: ProjectEvidence[]): ProjectLine[] {
       multiRecord = prior > 0;
     }
     const v = verificationOf(p, counted);
+    const funding = fundingOf(p, policy, pixelValueUsd);
     lines.push({
+      ...funding,
       projectId: p.projectId,
       name: p.name,
       role: p.role,
@@ -341,7 +390,7 @@ function commitmentsFor(input: EligibilityInput): CommitmentLine[] {
 export function evaluateEligibility(input: EligibilityInput): EligibilityResult {
   const { policy, order, meta } = input;
   const amount = orderAmount(order, policy, input.pixelValueUsd);
-  const lines = classifyProjects(input.projects);
+  const lines = classifyProjects(input.projects, policy, input.pixelValueUsd);
   const verifiedLines = lines.filter((l) => l.counted === "verified");
   const verifiedHours = round1(verifiedLines.reduce((s, l) => s + l.countedHours, 0));
   const verifiedHighHours = round1(verifiedLines.reduce((s, l) => s + l.highHours, 0));
@@ -349,10 +398,32 @@ export function evaluateEligibility(input: EligibilityInput): EligibilityResult 
     lines.filter((l) => l.counted === "provisional").reduce((s, l) => s + l.hours, 0) +
       verifiedLines.filter((l) => l.multiRecord).reduce((s, l) => s + Math.max(0, l.hours - (l.expectedShipsHours ?? l.hours)), 0),
   );
-  const fund = (hours: number): number => Math.round(hours * policy.ratePerHourUsd * 100);
-  const verifiedFundingCents = fund(verifiedHours);
-  const verifiedHighFundingCents = fund(verifiedHighHours);
-  const upperBoundFundingCents = fund(round1(verifiedHighHours + provisionalHours));
+  const payoutBasis = policy.fundingBasis === "payout_history";
+  let verifiedFundingCents = 0;
+  let verifiedHighFundingCents = 0;
+  let upperBoundFundingCents = 0;
+  const unestablished: ProjectLine[] = [];
+  if (!payoutBasis) {
+    const fund = (hours: number): number => Math.round(hours * policy.ratePerHourUsd * 100);
+    verifiedFundingCents = fund(verifiedHours);
+    verifiedHighFundingCents = fund(verifiedHighHours);
+    upperBoundFundingCents = fund(round1(verifiedHighHours + provisionalHours));
+  } else {
+    for (const l of verifiedLines) {
+      const c = lineFundingCents(l, l.countedHours, policy);
+      if (c == null) unestablished.push(l);
+      else {
+        verifiedFundingCents += c;
+        verifiedHighFundingCents += lineFundingCents(l, l.highHours, policy) ?? 0;
+      }
+    }
+    for (const l of lines) {
+      if (l.counted === "excluded") continue;
+      const h = Math.max(l.hours, l.highHours);
+      upperBoundFundingCents += lineFundingCents(l, h, policy) ?? Math.round(h * policy.maxRateUsd * 100);
+    }
+  }
+  const unestablishedHours = round1(unestablished.reduce((s, l) => s + l.countedHours, 0));
 
   const commitments = commitmentsFor(input);
   const priorGrantCents = input.priorGrants.reduce((s, g) => s + toCents(g.usd), 0);
@@ -442,9 +513,10 @@ export function evaluateEligibility(input: EligibilityInput): EligibilityResult 
   } else if (provisionalRemainingCents < amount.cents) {
     status = "insufficient";
     add("insufficient_upper_bound", "Even counting every unverified approved hour, funding is below the order.");
-  } else if (provisionalHours > 0 || stale || verifiedFundingCents === 0) {
+  } else if (provisionalHours > 0 || unestablished.length > 0 || stale || verifiedFundingCents === 0) {
     status = "unverified";
     if (provisionalHours > 0) add("unverified_hours", "Some hours are not confirmed in Unified.");
+    for (const l of unestablished) add("payout_unestablished", `${l.name}: no pixel payout history was found, so its funding cannot be established.`);
     if (shipsStale) add("ships_stale", "The Ships snapshot is older than the policy freshness window.");
     else if (stale) add("stale_evidence", "Evidence is older than the policy freshness window.");
     if (verifiedFundingCents === 0 && provisionalHours === 0) add("no_hours", "No eligible hours found.");
@@ -472,6 +544,11 @@ export function evaluateEligibility(input: EligibilityInput): EligibilityResult 
       );
     }
   }
+  for (const l of lines) {
+    if (l.fundingSource === "payout" && l.payoutCapped) {
+      add("payout_capped", `${l.name}: the payout exceeded the ${policy.maxRateUsd.toFixed(2)} per hour maximum, so funding is capped there; the excess is treated as a bonus.`);
+    }
+  }
   const summary = summarize(lines, verifiedHours);
   if (!meta.airtableAvailable) add("airtable_unavailable", "Airtable could not be read; staging status unknown.");
 
@@ -479,7 +556,9 @@ export function evaluateEligibility(input: EligibilityInput): EligibilityResult 
     policyVersion: policy.version,
     status,
     reasons,
-    rateUsd: policy.ratePerHourUsd,
+    rateUsd: payoutBasis ? (verifiedHours > 0 ? Math.round((verifiedFundingCents / verifiedHours)) / 100 : 0) : policy.ratePerHourUsd,
+    fundingBasis: policy.fundingBasis,
+    unestablishedHours,
     projects: lines,
     verifiedHours,
     provisionalHours,

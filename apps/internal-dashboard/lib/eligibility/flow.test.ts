@@ -19,6 +19,7 @@ interface Tables {
   ledger?: Record<string, unknown>[] | "missing" | "error";
   audits?: Record<string, unknown>[];
   users?: Record<string, unknown>[];
+  payouts?: Record<string, unknown>[];
 }
 
 function fakeSql(t: Tables): SqlLike {
@@ -31,6 +32,7 @@ function fakeSql(t: Tables): SqlLike {
       if (t.ledger === "error") return Promise.reject(Object.assign(new Error("boom"), { code: "XX000" }));
       return Promise.resolve(t.ledger ?? []);
     }
+    if (text.includes("pixel_transactions")) return Promise.resolve(t.payouts ?? []);
     if (text.includes("from users")) return Promise.resolve(t.users ?? []);
     if (text.includes("project_collaborators")) return Promise.resolve(t.collab ?? []);
     if (text.includes("review_audits")) return Promise.resolve(t.audits ?? []);
@@ -40,6 +42,8 @@ function fakeSql(t: Tables): SqlLike {
   };
   return f as unknown as SqlLike;
 }
+
+const payout = (over: Record<string, unknown> = {}) => ({ id: 1, user_id: U1, project_id: 1, amount: 400, hours: 10, reason: "project_approved", ...over });
 
 const proj = (over: Record<string, unknown> = {}) => ({
   id: 1,
@@ -193,7 +197,7 @@ describe("evidence loading", () => {
 
   test("bigint ids returned as strings by Postgres still key the results by number", async () => {
     const rows = [orderRow({ id: "11" }), orderRow({ id: "12", price: 50 })] as never[];
-    const results = await evaluateOrders(rows, { liveAirtable: false, verifier: confirming, sql: fakeSql({ owned: [proj({ airtable_record_id: null })], orders: rows }) });
+    const results = await evaluateOrders(rows, { liveAirtable: false, verifier: confirming, sql: fakeSql({ owned: [proj({ airtable_record_id: null })], orders: rows, payouts: [payout()] }) });
     expect([...results.keys()]).toEqual([11, 12]);
     expect(results.get(Number("11"))!.status).toBe("covered");
   });
@@ -310,7 +314,7 @@ function fakeDb(order: Record<string, unknown> | null, rpc: (fn: string, args: R
 
 describe("claim flow", () => {
   const base = { orderId: 100, by: "Fulfiller", bySlack: "UF1" };
-  const tables = { owned: [proj({ airtable_record_id: null })] };
+  const tables = { owned: [proj({ airtable_record_id: null })], payouts: [payout()] };
 
   test("revalidates eligibility server-side and passes the evidence to the atomic claim", async () => {
     const { db, rpcCalls } = fakeDb(orderRow(), () => ({ data: { ok: true, code: "claimed" }, error: null }));
@@ -325,7 +329,7 @@ describe("claim flow", () => {
       p_amount_cents: 1000,
       p_verified_funding_cents: 4000,
       p_verdict: "covered",
-      p_policy_version: "2026-10-22.2",
+      p_policy_version: "2026-10-22.3",
       p_enforce: false,
     });
   });
@@ -836,5 +840,52 @@ describe("staging to Unified record mapping", () => {
     expect(r.committedCents).toBe(40809);
     expect(r.remainingCents).toBe(-6009);
     expect(r.status).toBe("insufficient");
+  });
+});
+
+describe("payout history in the evidence loader", () => {
+  const load = (payouts: Record<string, unknown>[] | "error", extra: Partial<Tables> = {}) =>
+    loadPlayerEvidence([U1], {
+      liveAirtable: false,
+      airtable: identityLookup,
+      sql: fakeSql({ owned: [proj({ approved_hours: "87" })], payouts: payouts === "error" ? [] : payouts, ...extra }),
+      now: NOW,
+    });
+
+  test("approval and reversal rows are summed and the hours come from the latest approval row", async () => {
+    const ev = await load([
+      payout({ id: 1, amount: 6399, hours: 115.5 }),
+      payout({ id: 2, amount: -1910, hours: 87 }),
+    ]);
+    expect(ev.get(U1)!.projects[0]!.payout).toEqual({ netPx: 4489, creditedHours: 87, rows: 2, withheldPx: 0 });
+  });
+
+  test("a review reversal is subtracted but does not change the credited hours", async () => {
+    const ev = await load([payout({ id: 1, amount: 400, hours: 10 }), payout({ id: 2, amount: -100, hours: 0, reason: "review_reverted" })]);
+    expect(ev.get(U1)!.projects[0]!.payout).toMatchObject({ netPx: 300, creditedHours: 10, rows: 1 });
+  });
+
+  test("other pixel reasons are not part of project funding", async () => {
+    const ev = await load([payout({ id: 1, amount: 400, hours: 10 })]);
+    expect(ev.get(U1)!.projects[0]!.payout!.netPx).toBe(400);
+  });
+
+  test("a project with no payout rows has no history", async () => {
+    const ev = await load([payout({ id: 1, project_id: 999 })]);
+    expect(ev.get(U1)!.projects[0]!.payout).toBeNull();
+  });
+
+  test("withheld hardware funding is carried for the owner only when the grant applies", async () => {
+    const ev = await load([payout()], { owned: [proj({ approved_hours: "10", needs_funding: true, funding_deducted_px: 80 })] });
+    expect(ev.get(U1)!.projects[0]!.payout!.withheldPx).toBe(80);
+    const none = await load([payout()], { owned: [proj({ approved_hours: "10", needs_funding: false, funding_deducted_px: 80 })] });
+    expect(none.get(U1)!.projects[0]!.payout!.withheldPx).toBe(0);
+  });
+
+  test("the old flat policies ignore payout rows", async () => {
+    const ev = await load([payout({ amount: 999, hours: 10 })]);
+    const r = evaluateFromEvidence(ev.get(U1)!, toOrderInput(orderRow({ price: 10 }) as never), POLICIES["2026-10-22.2"], NOW);
+    expect(r.fundingBasis).toBe("flat_rate");
+    expect(r.rateUsd).toBe(4);
   });
 });

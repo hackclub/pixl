@@ -99,13 +99,14 @@ export function FundingBreakdown({ result, orderId }: { result: EligibilityResul
             <th>Project</th>
             <th>Hours</th>
             <th>Verification</th>
+            <th>Funding</th>
             <th>Counted</th>
           </tr>
         </thead>
         <tbody>
           {r.projects.length === 0 && (
             <tr>
-              <td colSpan={4}>
+              <td colSpan={5}>
                 <Muted>No projects mapped to this player.</Muted>
               </td>
             </tr>
@@ -148,6 +149,19 @@ export function FundingBreakdown({ result, orderId }: { result: EligibilityResul
                     </>
                   )}
                 </td>
+                <td className="tabular-nums">
+                  {p.fundingSource === "payout" && p.payoutCents != null && (
+                    <>
+                      {usd(p.payoutCents)}
+                      <br />
+                      <Muted>
+                        ${p.effectiveRateUsd?.toFixed(2)}/h from payout history{p.payoutCapped ? ", capped at the maximum rate" : ""}
+                      </Muted>
+                    </>
+                  )}
+                  {p.fundingSource === "none" && <Muted>No payout history, funding not established</Muted>}
+                  {p.fundingSource === "flat" && <Muted>${p.effectiveRateUsd?.toFixed(2)}/h flat rate</Muted>}
+                </td>
                 <td>
                   {p.counted === "verified" && "Verified"}
                   {p.counted === "provisional" && "Unverified"}
@@ -163,7 +177,7 @@ export function FundingBreakdown({ result, orderId }: { result: EligibilityResul
       <DescriptionList
         items={[
           ["Eligible hours", `${r.verifiedHours.toFixed(1)}h verified${r.provisionalHours > 0 ? `, ${r.provisionalHours.toFixed(1)}h unverified` : ""}`],
-          ["Total earned funding", <span key="e">{usd(r.verifiedFundingCents)} <Muted>(${r.rateUsd.toFixed(2)} per verified hour)</Muted></span>],
+          ["Total earned funding", <span key="e">{usd(r.verifiedFundingCents)} <Muted>({r.fundingBasis === "payout_history" ? `average $${r.rateUsd.toFixed(2)} per verified hour, from payout history` : `$${r.rateUsd.toFixed(2)} per verified hour`})</Muted></span>],
           ["Earned if every unverified hour holds", usd(r.upperBoundFundingCents)],
           [
             "Already committed",

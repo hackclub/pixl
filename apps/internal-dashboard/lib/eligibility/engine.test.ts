@@ -6,7 +6,9 @@ import {
   type OrderInput,
   type ProjectEvidence,
 } from "./engine";
-import { currentPolicy } from "./policy";
+import { currentPolicy, POLICIES } from "./policy";
+
+const FLAT = POLICIES["2026-10-22.2"]!;
 
 const NOW = 1_800_000_000_000;
 const PX = 0.1;
@@ -43,7 +45,7 @@ const order = (over: Partial<OrderInput> = {}): OrderInput => ({
 });
 
 const input = (over: Partial<EligibilityInput> = {}): EligibilityInput => ({
-  policy: currentPolicy(),
+  policy: FLAT,
   pixelValueUsd: PX,
   now: NOW,
   order: order(),
@@ -404,11 +406,11 @@ describe("restrictions", () => {
 
 describe("policy versioning", () => {
   test("the result records the policy version it was judged under", () => {
-    expect(run().policyVersion).toBe(currentPolicy().version);
+    expect(run().policyVersion).toBe(FLAT.version);
   });
 
   test("a different rate changes funding", () => {
-    const r = run({ policy: { ...currentPolicy(), version: "test", ratePerHourUsd: 5 } });
+    const r = run({ policy: { ...FLAT, version: "test", ratePerHourUsd: 5 } });
     expect(r.verifiedFundingCents).toBe(5000);
     expect(r.policyVersion).toBe("test");
   });
