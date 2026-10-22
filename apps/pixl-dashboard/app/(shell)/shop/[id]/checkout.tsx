@@ -2,6 +2,7 @@
 
 // Checkout confirm steps: Beacon-unlock warning -> shipping address confirm
 // (or verify via Hack Club Auth) -> first-order phone -> buy.
+import Image from "next/image";
 import { useState } from "react";
 import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
 import { Button, Input, Notice } from "@/components/ui/primitives";
@@ -69,14 +70,48 @@ export function Checkout({
 
   return (
     <>
-      <ConfirmDialog
-        open={step === "beacon"}
-        onOpenChange={close}
-        title="This uses a Beacon unlock"
-        description={`Buying "${itemName}" spends one of your Beacon-project unlocks (${beaconAvailable} available). This can't be undone.`}
-        confirmLabel="Yes, use it"
-        onConfirm={() => setStep("address")}
-      />
+      <Dialog open={step === "beacon"} onOpenChange={close} title="Spend a Beacon unlock?">
+        <div className="flex items-start gap-3 border-2 border-stroke bg-[color-mix(in_srgb,var(--gold)_16%,var(--panel))] px-[13px] py-[11px]">
+          <Image
+            src="/img/pixl-ui/icon_beacon.png"
+            alt=""
+            aria-hidden
+            width={30}
+            height={30}
+            className="mt-[1px] size-[30px] shrink-0 [image-rendering:pixelated]"
+          />
+          <div className="min-w-0">
+            <p className="font-pixel text-[12px] tracking-[.8px] text-ink">BEACON REWARD</p>
+            <p className="mt-[5px] text-sm leading-[1.5] text-dim">
+              <strong className="text-ink">{itemName}</strong> costs one of your Beacon unlocks.
+            </p>
+          </div>
+        </div>
+        <dl className="mt-3 grid grid-cols-2 gap-2">
+          <div className="border-2 border-stroke bg-panel-2 px-3 py-2">
+            <dt className="font-pixel text-[9px] uppercase tracking-[.6px] text-faint">Unspent now</dt>
+            <dd className="mt-1 font-pixel text-xl leading-none text-ink tabular-nums">{beaconAvailable}</dd>
+          </div>
+          <div className="border-2 border-stroke bg-panel px-3 py-2">
+            <dt className="font-pixel text-[9px] uppercase tracking-[.6px] text-faint">After this order</dt>
+            <dd className="mt-1 font-pixel text-xl leading-none text-gold tabular-nums">
+              {Math.max(0, beaconAvailable - 1)}
+            </dd>
+          </div>
+        </dl>
+        <p className="mt-3 text-[13px] leading-[1.5] text-dim">
+          Once fulfillment starts, the unlock is spent for good. If you cancel while the order is still pending, your
+          pixels and the unlock come back.
+        </p>
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          <Button variant="ghost" onClick={() => setStep(null)}>
+            Keep my unlock
+          </Button>
+          <Button disabled={beaconAvailable < 1} onClick={() => setStep("address")}>
+            Use 1 Beacon unlock
+          </Button>
+        </div>
+      </Dialog>
 
       {eligibility.hasAddress ? (
         <Dialog open={step === "address"} onOpenChange={close} title="Confirm shipping address">

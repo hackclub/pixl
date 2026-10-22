@@ -190,6 +190,11 @@ export function OrderDetail({
           <div className="mt-1 flex flex-wrap gap-1.5">
             <Badge tone={STAGE_TONE[o.status] ?? "neutral"}>{STAGE_LABEL[o.status] ?? o.status}</Badge>
             {o.option && <Badge>{o.option}</Badge>}
+            {o.item_beacon_locked && (
+              <Badge tone="yellow" icon="rep">
+                Beacon reward
+              </Badge>
+            )}
           </div>
         </div>
         <dl className="fw-tiles">
@@ -200,6 +205,16 @@ export function OrderDetail({
       </header>
 
       <Stepper order={o} />
+
+      {o.item_beacon_locked && (
+        <div className="flex items-start gap-3 rounded-[var(--radius-lg)] border border-[color-mix(in_srgb,var(--hc-yellow)_45%,var(--border))] bg-[color-mix(in_srgb,var(--hc-yellow)_10%,var(--surface))] px-4 py-3">
+          <Icon glyph="rep" size={20} className="mt-0.5 shrink-0 text-[var(--hc-yellow)]" />
+          <p className="text-sm">
+            <strong>Beacon reward.</strong> This item is Beacon-locked, so the player needed a Beacon unlock to order
+            it. Nothing changes for fulfillment: order and ship it like any other request.
+          </p>
+        </div>
+      )}
 
       {o.flagged_at && (
         <Callout tone="danger" icon="important">

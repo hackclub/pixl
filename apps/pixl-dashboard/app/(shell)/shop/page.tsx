@@ -8,12 +8,19 @@ export const metadata = { title: "Shop" };
 
 interface Wallet {
   pixels: number;
+  beaconProjects?: number;
+  beaconUnlocks?: number;
 }
 
-export default async function ShopPage() {
-  const [data, wallet] = await Promise.all([
+export default async function ShopPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ beacon?: string }>;
+}) {
+  const [data, wallet, sp] = await Promise.all([
     serverApi<ShopItemsResponse>("/api/shop/items"),
     serverApi<Wallet>("/api/profile/wallet"),
+    searchParams,
   ]);
 
   return (
@@ -26,6 +33,9 @@ export default async function ShopPage() {
           claimed={(data.claimed ?? []).map(Number)}
           region={data.region ?? "US"}
           pixels={wallet ? Number(wallet.pixels) : null}
+          beaconUnlocks={wallet ? Number(wallet.beaconUnlocks ?? 0) : null}
+          beaconProjects={wallet ? Number(wallet.beaconProjects ?? 0) : null}
+          initialBeaconOnly={sp.beacon === "1"}
           rates={earnRates()}
         />
       ) : (

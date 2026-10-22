@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { bbstrip } from "@/components/markdown";
 import { SafeImage } from "@/components/safe-image";
@@ -10,6 +11,7 @@ import { hoursHint } from "./hours-hint";
 import { PriceTag } from "./price-tag";
 import { basePrice, isDiscounted, isPending, lockReason, metaBits, originalBasePrice, type ShopItem } from "./shop-lib";
 import {
+  beaconTag,
   discountTag,
   imgPlaceholder,
   itemDesc,
@@ -67,7 +69,17 @@ function Foot({ item, canAfford, hint }: { item: ShopItem; canAfford: boolean; h
         />
         {hint ? <span className={priceHours}>{hint}</span> : null}
         {item.beacon_locked ? (
-          <span className={cn(priceHours, "text-gold")}>Uses a Beacon unlock ({item.beaconAvailable ?? 0} available)</span>
+          <span className={beaconTag}>
+            <Image
+              src="/img/pixl-ui/icon_beacon.png"
+              alt=""
+              aria-hidden
+              width={10}
+              height={10}
+              className="size-[10px] shrink-0 [image-rendering:pixelated]"
+            />
+            BEACON · {item.beaconAvailable ?? 0} LEFT
+          </span>
         ) : null}
       </div>
       <span

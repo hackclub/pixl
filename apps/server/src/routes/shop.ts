@@ -5,6 +5,7 @@ import { activeEvents } from "../events.js";
 import { levelFor } from "../xp.js";
 import { addNotification } from "./notifications.js";
 import { decryptPII, encryptPII } from "../crypto.js";
+import { beaconUnlocks } from "../beacons.js";
 import { z } from "zod";
 import { validate, v, optStr, optNum, params } from "../http/validate.js";
 
@@ -317,37 +318,6 @@ export async function unlockedTrialIds(userId: string): Promise<Set<number>> {
     .in("reason", ["project_approved", "review_reverted"]);
   if (txError) return approvedTrialIds(projects as never[], []);
   return approvedTrialIds(projects as never[], (approvals ?? []) as never[]);
-}
-
-// How many Beacon-locked items this player can still unlock: one unlock per
-// Beacon project they have (projects.is_peak, live/not banned/rejected/
-// archived), minus however many distinct beacon_locked items they already
-// own (a non-cancelled order). Shared pool across every beacon_locked item,
-// not one-per-item - see toggleProjectPeak in apps/dashboard/app/actions.ts
-// for how a project becomes a Beacon. An owned item stays unlocked for good:
-// buying it again never spends another unlock.
-async function beaconUnlocks(userId: string): Promise<{ available: number; owned: Set<number> }> {
-  const [{ count: beaconCount }, { data: beaconItemIds }] = await Promise.all([
-    db
-      .from("projects")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .eq("is_peak", true)
-      .is("archived_at", null)
-      .is("rejected_at", null)
-      .is("banned_at", null),
-    db.from("shop_items").select("id").eq("beacon_locked", true),
-  ]);
-  const ids = ((beaconItemIds ?? []) as { id: number }[]).map((i) => i.id);
-  if (ids.length === 0) return { available: beaconCount ?? 0, owned: new Set() };
-  const { data: orders } = await db
-    .from("shop_orders")
-    .select("item_id")
-    .eq("user_id", userId)
-    .neq("status", "cancelled")
-    .in("item_id", ids);
-  const owned = new Set(((orders ?? []) as { item_id: number }[]).map((o) => Number(o.item_id)));
-  return { available: Math.max((beaconCount ?? 0) - owned.size, 0), owned };
 }
 
 // The Reviewer Food Grant progress for one player, straight from

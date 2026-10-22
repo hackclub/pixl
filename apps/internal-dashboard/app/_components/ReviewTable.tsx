@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { queueWaitSince } from "@/lib/queueWait";
 import type { ShippedProject } from "@/lib/db";
 import type { QueueLock } from "@/lib/reviewAssignment";
-import { LevelBadge, StatusBadge, FundingBadge, TypeBadge } from "@/app/_components/ProjectBadges";
+import { LevelBadge, StatusBadge, FundingBadge, TypeBadge, BeaconBadge } from "@/app/_components/ProjectBadges";
 import { BlackoutBadge } from "@/app/_components/BlackoutBadge";
 import { useLiveMode, useReviewerName } from "@/app/_components/LiveMode";
 import { RowSelect, SelectAllBox } from "@/app/_components/MassSelect";
@@ -142,6 +142,7 @@ export function ReviewTable({
                     <LevelBadge level={p.level} />
                     <TypeBadge type={p.project_type} />
                     <FundingBadge needsFunding={p.needs_funding} fundingUsd={p.funding_usd} />
+                    {p.is_peak && <BeaconBadge />}
                   </div>
                 </div>
               </div>

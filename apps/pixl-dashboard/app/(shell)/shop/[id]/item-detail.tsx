@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -20,6 +21,7 @@ import { hoursHint } from "../hours-hint";
 import { priceState } from "./price-state";
 import { TrophyDetail } from "./trophy-detail";
 import {
+  beaconTag,
   btnRow,
   detailDesc,
   detailImg,
@@ -122,7 +124,11 @@ export function ItemDetail({
     });
     if (r.ok) {
       setBought(true);
-      setNotice("ORDER PLACED! The team will reach out.");
+      setNotice(
+        item.beacon_locked
+          ? "ORDER PLACED! One Beacon unlock is now spent."
+          : "ORDER PLACED! The team will reach out.",
+      );
       router.refresh();
     } else if (r.error === "phone_required") {
       buy.setError(null);
@@ -151,6 +157,41 @@ export function ItemDetail({
           <DetailPrice ps={ps} hint={item.locked ? "" : hoursHint(total, rates)} />
           <div className={detailDesc}>{bbstrip(item.description || "")}</div>
           {metaBits(item).length ? <div className={itemMeta}>{metaBits(item).join(" · ")}</div> : null}
+
+          {item.beacon_locked ? (
+            <div
+              className={cn(
+                "flex items-start gap-[12px] border-2 border-stroke px-[13px] py-[11px]",
+                (item.beaconAvailable ?? 0) > 0
+                  ? "bg-[color-mix(in_srgb,var(--gold)_16%,var(--panel))]"
+                  : "bg-panel-2",
+              )}
+            >
+              <Image
+                src="/img/pixl-ui/icon_beacon.png"
+                alt=""
+                aria-hidden
+                width={30}
+                height={30}
+                className="mt-[1px] size-[30px] shrink-0 [image-rendering:pixelated]"
+              />
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-[8px]">
+                  <span className={beaconTag}>BEACON REWARD</span>
+                  <span className="font-pixel text-[10px] tracking-[.5px] text-dim">
+                    {item.beaconAvailable ?? 0} UNSPENT
+                  </span>
+                </div>
+                <p className="mt-[6px] text-[13.5px] leading-[1.5] text-dim">
+                  {(item.beaconAvailable ?? 0) > 0
+                    ? `Buying this spends 1 of your ${item.beaconAvailable} Beacon unlock${
+                        item.beaconAvailable === 1 ? "" : "s"
+                      }. An item you already own stays unlocked, so buying it again won't spend another.`
+                    : "You have no unspent Beacon unlocks. Get a project nominated as a Beacon to earn one."}
+                </p>
+              </div>
+            </div>
+          ) : null}
 
           {browsable && isConfig ? (
             <Configurator
@@ -224,7 +265,7 @@ export function ItemDetail({
                 disabled={ps.buyDisabled || buy.pending}
                 onClick={() => setStep(firstStep(!!item.beacon_locked))}
               >
-                {buy.pending ? "BUYING..." : ps.buyLabel}
+                {buy.pending ? "BUYING..." : item.beacon_locked ? "BUY WITH BEACON" : ps.buyLabel}
               </Button>
             )}
             <Button variant={saved ? "teal" : "dark"} onClick={toggleSave}>

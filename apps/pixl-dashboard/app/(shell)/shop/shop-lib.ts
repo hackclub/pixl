@@ -134,7 +134,7 @@ export function isPending(item: ShopItem): boolean {
 
 export function lockReason(item: ShopItem): string {
   if (item.lock_note) return item.lock_note;
-  if (item.beacon_locked) return "Get a project nominated as a Beacon to unlock this.";
+  if (item.beacon_locked) return "Beacon reward: no unlocks left. A nominated Beacon project earns one.";
   const trials = (item.unlock_trials ?? []).map((t) => `"${t}"`).join(" or ");
   // Trial-gated items unlock once the Trial project is APPROVED in review,
   // not merely shipped (apps/server's shop gate).

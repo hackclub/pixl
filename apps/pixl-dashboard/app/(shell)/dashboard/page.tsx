@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { config } from "@/app/_generated/config";
-import { pageSub, pageTitle } from "@/components/ui/primitives";
+import { badgeVariants, buttonVariants, pageSub, pageTitle } from "@/components/ui/primitives";
 import { cn } from "@/lib/cn";
 import { serverApi } from "@/lib/server-api";
 import {
@@ -51,6 +51,12 @@ interface Wallet {
   maxLevel: number;
   /** Not sent by apps/server yet; when it is, the level bar measures within the current level. */
   reForCurrentLevel?: number;
+  /** Live Beacon projects this player owns. */
+  beaconProjects?: number;
+  /** Beacon-locked shop items they can still claim. */
+  beaconUnlocks?: number;
+  /** Unlocks already spent on items they own. */
+  beaconSpent?: number;
 }
 interface Notification {
   body?: string;
@@ -135,6 +141,12 @@ export default async function DashboardPage() {
 
   const recent = (notifsResp?.notifications ?? []).slice(0, 5);
   const activeEvents = (eventsResp?.events ?? []).filter((event) => event && String(event.name || "").trim());
+  const beaconProjects = Math.max(0, wallet?.beaconProjects ?? 0);
+  const beaconLeft = Math.max(0, wallet?.beaconUnlocks ?? 0);
+  const beaconUsed = Math.max(0, wallet?.beaconSpent ?? beaconProjects - beaconLeft);
+  // A row of pips per Beacon project (capped so a prolific builder's card
+  // doesn't turn into a wall of squares). Gold = still unspent.
+  const beaconPips = Math.min(beaconProjects, 12);
 
   return (
     <>
@@ -234,7 +246,7 @@ export default async function DashboardPage() {
             </div>
             <div className={cn("min-w-0 border-b pb-3", rackRule)}>
               <div className={cn("flex min-w-0 items-center gap-2", rackLabel)}>
-                <Image src="/img/pixl-ui/icon_beacon.png" alt="" aria-hidden width={14} height={14} className="size-[14px] shrink-0 [image-rendering:pixelated]" />
+                <Image src="/img/pixl-ui/icon_level.png" alt="" aria-hidden width={14} height={14} className="size-[14px] shrink-0 [image-rendering:pixelated]" />
                 <span className="break-words">Restoration Energy</span>
               </div>
               <div className={cn(rackValue, "text-teal")}>{Math.round(re).toLocaleString()}</div>
@@ -264,6 +276,81 @@ export default async function DashboardPage() {
           </div>
         </aside>
       </div>
+
+      <section
+        className={cn(panel, "mt-4")}
+        aria-labelledby="beacon-heading"
+      >
+        <div className="flex flex-wrap items-center gap-4 px-5 py-4">
+          <Image
+            src="/img/pixl-ui/icon_beacon.png"
+            alt=""
+            aria-hidden
+            width={44}
+            height={44}
+            className="size-11 shrink-0 [image-rendering:pixelated]"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 id="beacon-heading" className={panelHTitle}>
+                BEACON UNLOCKS
+              </h2>
+              {beaconProjects > 0 ? (
+                <span className={badgeVariants({ tone: beaconLeft > 0 ? "gold" : "default" })}>
+                  {beaconLeft} LEFT
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-1 max-w-[62ch] text-[13.5px] leading-[1.5] text-dim">
+              {beaconProjects === 0
+                ? "A reviewer can pick a standout project as a Beacon. Each Beacon earns one unlock for Beacon-locked shop rewards."
+                : "One Beacon project earns one unlock. Spending it claims one Beacon-locked shop reward, and an item you already own stays unlocked."}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="text-right">
+              <div className="font-pixel text-[34px] leading-none tracking-[.4px] text-gold tabular-nums">
+                {beaconLeft}
+              </div>
+              <div className="mt-1 font-pixel text-[10px] uppercase tracking-[.8px] text-faint">
+                unspent
+              </div>
+            </div>
+            <Link href="/shop?beacon=1" className={buttonVariants({ variant: "dark", size: "sm" })}>
+              SHOP BEACON REWARDS
+            </Link>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t-2 border-stroke px-5 py-2.5">
+          {beaconPips > 0 ? (
+            <div className="flex items-center gap-1" aria-hidden>
+              {Array.from({ length: beaconPips }, (_, i) => (
+                <i
+                  key={i}
+                  className={cn(
+                    "h-2.5 w-4 border-2 border-stroke",
+                    i < beaconLeft ? "bg-gold" : "bg-panel-deep",
+                  )}
+                />
+              ))}
+              {beaconProjects > beaconPips ? (
+                <span className="ml-1 text-xs tabular-nums text-faint">+{beaconProjects - beaconPips}</span>
+              ) : null}
+            </div>
+          ) : null}
+          <span className="text-[12.5px] tabular-nums text-faint">
+            {beaconProjects === 0
+              ? "No Beacon projects yet"
+              : `${beaconProjects} Beacon project${beaconProjects === 1 ? "" : "s"} · ${beaconUsed} used`}
+          </span>
+          <Link
+            href="/docs/shop#h-beacon-unlocks"
+            className="ml-auto text-[12.5px] text-ink underline decoration-gold underline-offset-[3px] hover:decoration-accent"
+          >
+            How Beacons work
+          </Link>
+        </div>
+      </section>
 
       <div className="mt-4 grid grid-cols-2 items-stretch gap-4 max-[760px]:grid-cols-1">
         <section className={cn(panel, "px-5 py-4")} aria-labelledby="your-projects-heading">

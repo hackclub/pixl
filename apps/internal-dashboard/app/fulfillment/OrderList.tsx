@@ -87,6 +87,13 @@ export function OrderList({
                   {o.item_name || "(item removed)"}
                 </span>
                 {o.option && <span className="fw-sub">{o.option}</span>}
+                {o.item_beacon_locked && (
+                  <span className="mt-1 flex">
+                    <Badge tone="yellow" icon="rep">
+                      Beacon reward
+                    </Badge>
+                  </span>
+                )}
                 {o.flagged_at && <span className="fw-flag">Over budget</span>}
               </span>
             </span>

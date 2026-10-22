@@ -2662,6 +2662,10 @@ export interface ShopOrderRow {
   item_alt_source_url?: string | null;
   item_image_url?: string | null;
   item_category?: ShopCategory | null;
+  // The shop item is a Beacon reward, so this order spent one of the player's
+  // Beacon unlocks. Fulfilment treats it like any other order; the badge is
+  // just context for why the player could claim it.
+  item_beacon_locked?: boolean | null;
 }
 
 // Shop orders players placed with pixels, newest first. Player name + Slack are
@@ -2687,7 +2691,10 @@ export async function listShopOrders(status?: string, limit = 500): Promise<Shop
   );
   const itemIds = [...new Set(rows.map((r) => r.item_id).filter((id): id is number => id != null))];
   const items = itemIds.length
-    ? await db.from("shop_items").select("id, price_source_url, alt_source_url, image_url, category").in("id", itemIds)
+    ? await db
+        .from("shop_items")
+        .select("id, price_source_url, alt_source_url, image_url, category, beacon_locked")
+        .in("id", itemIds)
     : { data: [] };
   const itemInfo = new Map(
     (items.data ?? []).map((i) => [
@@ -2697,6 +2704,7 @@ export async function listShopOrders(status?: string, limit = 500): Promise<Shop
         altSource: (i.alt_source_url as string | null) || null,
         image: (i.image_url as string | null) || null,
         category: (i.category as ShopCategory | null) ?? null,
+        beaconLocked: Boolean(i.beacon_locked),
       },
     ]),
   );
@@ -2709,6 +2717,7 @@ export async function listShopOrders(status?: string, limit = 500): Promise<Shop
     r.item_alt_source_url = info?.altSource ?? null;
     r.item_image_url = info?.image ?? null;
     r.item_category = info?.category ?? null;
+    r.item_beacon_locked = info?.beaconLocked ?? false;
   }
   return rows;
 }

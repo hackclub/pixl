@@ -12,6 +12,7 @@ import {
   MAX_LEVEL,
 } from "../xp.js";
 import { decryptPII } from "../crypto.js";
+import { beaconUnlocks } from "../beacons.js";
 import { allowedImageUrl } from "../http/imageUrls.js";
 import { z } from "zod";
 import { validate, v, optStr, optBool, optNum } from "../http/validate.js";
@@ -78,12 +79,18 @@ router.get("/api/profile/wallet", async (req, res) => {
   const session = req.session;
   if (!session) return res.status(401).json({ ok: false });
 
-  const [{ data: user }, approvedHours, re] = await Promise.all([
+  const [{ data: user }, approvedHours, re, beacons] = await Promise.all([
     db.from("users").select("pixels").eq("id", session.userId).single(),
     approvedHoursFor(session.userId),
     lifetimeRe(session.userId),
+    beaconUnlocks(session.userId),
   ]);
   const pixels = Math.round(Number(user?.pixels) || 0);
+  // Beacon projects earn one Beacon-locked shop unlock each. Sent separately
+  // from the shop catalog so the dashboard can show the count even when the
+  // player's region has no Beacon-locked items listed.
+  const beaconProjects = beacons.projects;
+  const beaconUnlocksLeft = beacons.available;
   // Both are sent: hours is the raw work, RE is that work weighted by the tier
   // it was shipped at, and RE is what the level and the rate come from.
   res.json({
@@ -99,6 +106,9 @@ router.get("/api/profile/wallet", async (req, res) => {
     reForNextLevel: reForLevel(Math.min(levelForRe(re) + 1, MAX_LEVEL)),
     pxPerHour: pxPerHourFor(re),
     usdPerHour: payoutUsdPerHour(re),
+    beaconProjects,
+    beaconUnlocks: beaconUnlocksLeft,
+    beaconSpent: Math.max(beaconProjects - beaconUnlocksLeft, 0),
   });
 });
 

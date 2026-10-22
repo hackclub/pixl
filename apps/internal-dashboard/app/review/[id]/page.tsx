@@ -679,23 +679,42 @@ export default async function ReviewDetail({
   // Beacon sits next to the verdict: reviewers decide it while grading.
   // toggleProjectPeak re-checks the reviewer role and own-project rule.
   const beaconCard = !isOwn && (
-    <Card padding="compact">
-      <form action={toggleProjectPeak} className="flex items-center justify-between gap-3">
-        <input type="hidden" name="projectId" value={p.id} />
-        {!p.is_peak && <input type="hidden" name="isPeak" value="1" />}
-        <div>
-          <p className="hc-heading text-sm">Beacon</p>
-          <p className="hc-caption text-xs">Nominate a standout project. Cosmetic only, never affects payout.</p>
+    <Card
+      padding="compact"
+      className="border-[color-mix(in_srgb,var(--hc-yellow)_45%,var(--border))] bg-[color-mix(in_srgb,var(--hc-yellow)_7%,var(--surface))]"
+    >
+      <div className="flex items-start gap-3">
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[color-mix(in_srgb,var(--hc-yellow)_18%,transparent)] text-[var(--hc-yellow)]">
+          <Icon glyph="rep" size={20} />
+        </span>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="hc-heading text-sm">Beacon</p>
+            {p.is_peak ? <Badge tone="yellow">Active</Badge> : <Badge>Not nominated</Badge>}
+          </div>
+          <form action={toggleProjectPeak}>
+            <input type="hidden" name="projectId" value={p.id} />
+            {!p.is_peak && <input type="hidden" name="isPeak" value="1" />}
+            <ActionButton
+              size="sm"
+              variant={p.is_peak ? "outline" : "cream"}
+              icon={p.is_peak ? undefined : "rep"}
+              pendingLabel={p.is_peak ? "Removing..." : "Marking..."}
+            >
+              {p.is_peak ? "Remove" : "Mark Beacon"}
+            </ActionButton>
+          </form>
         </div>
-        <ActionButton
-          size="sm"
-          variant={p.is_peak ? "outline" : "cream"}
-          icon={p.is_peak ? undefined : "rep"}
-          pendingLabel={p.is_peak ? "Removing..." : "Marking..."}
-        >
-          {p.is_peak ? "Remove" : "Mark"}
-        </ActionButton>
-      </form>
+      </div>
+      <p className="hc-caption mt-2 text-xs">
+        A standout project. Every live Beacon earns its maker one unlock for a Beacon-locked shop reward. Cosmetic on
+        the project itself and never affects payout.
+      </p>
+      {p.is_peak && (
+        <p className="hc-caption mt-2 text-xs">
+          <strong>This project is a Beacon.</strong> Its unlock is ready to spend unless the maker already used it.
+        </p>
+      )}
     </Card>
   );
 

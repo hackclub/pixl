@@ -27,6 +27,12 @@ export const priceWas = "ml-[5px] text-[11px] font-medium text-faint line-throug
 export const priceHours = "max-w-[220px] text-[10.5px] leading-[1.4] font-medium text-faint";
 export const discountTag = "self-start bg-bad px-[5px] py-[2px] font-pixel text-[9px] tracking-[.5px] text-btn-ink";
 
+/** Beacon reward flag on a catalog card / item detail. */
+export const beaconTag = cn(
+  "inline-flex w-fit items-center gap-[5px] border-2 border-stroke bg-gold px-[6px] py-[2px]",
+  "font-pixel text-[9px] tracking-[.6px] text-btn-ink",
+);
+
 // Item detail page.
 export const detailRow = "grid grid-cols-[minmax(0,340px)_1fr] gap-[24px] max-[760px]:grid-cols-1";
 export const detailImg = cn(

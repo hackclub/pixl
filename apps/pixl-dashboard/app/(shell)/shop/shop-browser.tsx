@@ -2,6 +2,7 @@
 
 // Catalog grid: search, sort, price tiers, categories, saved/unlocked
 // toggles, region switch. All filtering is over the server's item list.
+import Image from "next/image";
 import { useMemo, useState } from "react";
 import { autoGrid, divider, emptyNote, field, Notice, selectField } from "@/components/ui/primitives";
 import { cn } from "@/lib/cn";
@@ -37,6 +38,9 @@ export function ShopBrowser({
   claimed,
   region,
   pixels,
+  beaconUnlocks,
+  beaconProjects,
+  initialBeaconOnly,
   rates,
 }: {
   items: ShopItem[];
@@ -44,6 +48,11 @@ export function ShopBrowser({
   claimed: number[];
   region: string;
   pixels: number | null;
+  /** Unspent Beacon-locked shop unlocks, or null if the wallet failed. */
+  beaconUnlocks: number | null;
+  /** Beacon projects the player owns (earned, not necessarily unspent). */
+  beaconProjects: number | null;
+  initialBeaconOnly: boolean;
   rates: EarnRates | null;
 }) {
   const [items, setItems] = useState(initialItems);
@@ -53,6 +62,7 @@ export function ShopBrowser({
   const [category, setCategory] = useState("all");
   const [unlockedOnly, setUnlockedOnly] = useState(false);
   const [savedOnly, setSavedOnly] = useState(false);
+  const [beaconOnly, setBeaconOnly] = useState(initialBeaconOnly);
   const claimedSet = useMemo(() => new Set(claimed), [claimed]);
   const save = useAction(saveItem);
   const unsave = useAction(unsaveItem);
@@ -65,6 +75,7 @@ export function ShopBrowser({
   }
 
   const canAfford = (i: ShopItem) => pixels !== null && pixels >= basePrice(i);
+  const hasBeaconItems = items.some((i) => i.beacon_locked);
   const needle = q.trim().toLowerCase();
   const match = (i: ShopItem) =>
     !needle || i.name.toLowerCase().includes(needle) || String(i.description || "").toLowerCase().includes(needle);
@@ -81,7 +92,8 @@ export function ShopBrowser({
       match(i) &&
       tierMatch(i) &&
       (category === "all" || (i.category || "other") === category) &&
-      (!savedOnly || i.saved),
+      (!savedOnly || i.saved) &&
+      (!beaconOnly || i.beacon_locked),
   );
   if (sort === "cheap") list = [...list].sort((a, b) => basePrice(a) - basePrice(b));
   else if (sort === "pricey") list = [...list].sort((a, b) => basePrice(b) - basePrice(a));
@@ -107,6 +119,34 @@ export function ShopBrowser({
         Heads up: the photo is a representative example, not a guarantee. For hardware items especially, the exact brand
         or model you receive may differ based on what&apos;s actually available in your region.
       </Notice>
+
+      {beaconUnlocks !== null ? (
+        <div className="mb-[14px] flex flex-wrap items-center gap-[12px] border-2 border-stroke bg-[color-mix(in_srgb,var(--gold)_16%,var(--panel))] px-[14px] py-[12px] shadow-drop">
+          <Image
+            src="/img/pixl-ui/icon_beacon.png"
+            alt=""
+            aria-hidden
+            width={34}
+            height={34}
+            className="size-[34px] shrink-0 [image-rendering:pixelated]"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="font-pixel text-[12px] tracking-[.8px] text-ink">BEACON UNLOCKS</div>
+            <p className="mt-[3px] text-[13px] leading-[1.45] text-dim">
+              {beaconUnlocks > 0
+                ? `${beaconUnlocks} unspent · One unlock claims one Beacon-locked reward. An item you already own stays unlocked.`
+                : beaconProjects
+                  ? "All unlocks spent · Another Beacon project earns another Beacon-locked reward."
+                  : "No unlocks yet · A reviewer-nominated Beacon project earns one unlock for a Beacon-locked reward."}
+            </p>
+          </div>
+          {hasBeaconItems ? (
+            <button type="button" className={tierBtn(beaconOnly)} onClick={() => setBeaconOnly((v) => !v)}>
+              {beaconOnly ? "SHOW ALL ITEMS" : "SHOW BEACON REWARDS"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="mb-[14px] flex flex-wrap gap-[10px]">
         <input
@@ -138,6 +178,11 @@ export function ShopBrowser({
         <button type="button" className={tierBtn(savedOnly)} onClick={() => setSavedOnly((v) => !v)}>
           ★ SAVED
         </button>
+        {hasBeaconItems ? (
+          <button type="button" className={tierBtn(beaconOnly)} onClick={() => setBeaconOnly((v) => !v)}>
+            BEACON REWARDS
+          </button>
+        ) : null}
       </div>
       <div className={tiersRow}>
         {CATEGORIES.map(([v, l]) => (
