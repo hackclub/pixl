@@ -774,6 +774,54 @@ describe("staging to Unified record mapping", () => {
     expect(ev.get(U1)!.projects[0]!.ships!.state).toBe("ambiguous");
   });
 
+  test("the live Airtable response shape (plain string field) maps Andrei's staging record to the 87h Unified record", async () => {
+    stubAirtable(
+      () =>
+        new Response(
+          JSON.stringify({
+            records: [
+              { id: STAGING, createdTime: "2026-10-01T00:00:00.000Z", fields: { "Automation - Submit to Unified YSWS": true, "Automation - YSWS Record ID": UNIFIED } },
+            ],
+          }),
+          { status: 200 },
+        ),
+    );
+    const ev = await loadPlayerEvidence([U1], {
+      liveAirtable: true,
+      sql: fakeSql({ owned: [andrei()], users: [{ id: U1, slack_id: "UANDREI001" }] }),
+      now: NOW,
+      ships,
+    });
+    const p = ev.get(U1)!.projects[0]!;
+    expect(p.airtable).toBe("submitted");
+    expect(p.ships!.state).toBe("approved");
+    expect(p.ships!.recordId).toBe(UNIFIED);
+    expect(p.ships!.hours).toBe(87);
+    for (const c of calls) expect(c.method).toBe("GET");
+  });
+
+  test("Airtable omits the mapping field when it is empty, which stays unmatched", async () => {
+    stubAirtable(() => new Response(JSON.stringify({ records: [{ id: STAGING, fields: { "Automation - Submit to Unified YSWS": true } }] }), { status: 200 }));
+    const ev = await loadPlayerEvidence([U1], {
+      liveAirtable: true,
+      sql: fakeSql({ owned: [andrei()], users: [{ id: U1, slack_id: "UANDREI001" }] }),
+      now: NOW,
+      ships,
+    });
+    expect(ev.get(U1)!.projects[0]!.ships!.state).toBe("no_record");
+  });
+
+  test("a non-record-id value in the mapping field is ignored", async () => {
+    stubAirtable(() => new Response(JSON.stringify({ records: [{ id: STAGING, fields: { "Automation - YSWS Record ID": "not-a-record" } }] }), { status: 200 }));
+    const ev = await loadPlayerEvidence([U1], {
+      liveAirtable: true,
+      sql: fakeSql({ owned: [andrei()], users: [{ id: U1, slack_id: "UANDREI001" }] }),
+      now: NOW,
+      ships,
+    });
+    expect(ev.get(U1)!.projects[0]!.ships!.state).toBe("no_record");
+  });
+
   test("Andrei's real spending leaves him $60.09 over, so nothing further is covered", async () => {
     const orders = [
       orderRow({ id: 71, item_name: "Sony WH-1000XM5", quantity: 1, price: 2258, status: "shipped", actual_cost_usd: 218.09 }),
