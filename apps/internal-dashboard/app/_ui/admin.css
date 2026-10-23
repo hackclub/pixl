@@ -627,6 +627,125 @@ html[data-theme="light"] .admin-shell {
 .hc-callout[data-tone="success"] { --tone: var(--hc-green); }
 .hc-callout[data-tone="neutral"] { --tone: var(--hc-muted); }
 
+/* A live review claim ("someone else has this open"). Sits above the review
+   detail split: a calm blue card so it reads as status, not an alarm. The
+   stage was already badged next to it, so the accent stays consistent. */
+.hc-claim {
+  --claim-tone: var(--hc-blue);
+  position: relative;
+  overflow: hidden;
+  padding: 14px 16px 13px 18px;
+  border: 1px solid color-mix(in srgb, var(--claim-tone) 36%, var(--border));
+  border-radius: var(--radius-lg);
+  color: var(--text);
+  background:
+    radial-gradient(
+      120% 180% at 100% 0%,
+      color-mix(in srgb, var(--claim-tone) 15%, transparent),
+      transparent 62%
+    ),
+    color-mix(in srgb, var(--claim-tone) 5%, var(--surface));
+}
+
+.hc-claim::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--claim-tone);
+}
+
+.hc-claim[data-stage="spot-check"] {
+  --claim-tone: var(--hc-cyan);
+}
+
+.hc-claim[data-stage="final-pass"] {
+  --claim-tone: var(--hc-red);
+}
+
+.hc-claim-avatar {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  font-size: 16px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--claim-tone, var(--hc-blue)) 82%, var(--text));
+  background: color-mix(in srgb, var(--claim-tone, var(--hc-blue)) 16%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--claim-tone, var(--hc-blue)) 35%, transparent);
+}
+
+.hc-claim-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-monospace);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--claim-tone) 76%, var(--text));
+}
+
+.hc-claim-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--claim-tone);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--claim-tone) 18%, transparent);
+  animation: hc-claim-pulse 2.2s ease-in-out infinite;
+}
+
+.hc-claim-title {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.hc-claim-copy {
+  max-width: 72ch;
+  color: var(--secondary);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.hc-claim-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--claim-tone) 18%, var(--border));
+}
+
+.hc-claim-free {
+  color: var(--hc-green);
+  font-weight: 700;
+}
+
+@keyframes hc-claim-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--claim-tone) 18%, transparent);
+  }
+  50% {
+    opacity: 0.55;
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--claim-tone) 8%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hc-claim-dot {
+    animation: none;
+  }
+}
+
 .hc-avatar {
   border-radius: 50%;
   object-fit: cover;

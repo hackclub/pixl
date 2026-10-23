@@ -167,3 +167,11 @@ describe("routes", () => {
     expect(body).not.toMatch(/await fetch\(/);
   });
 });
+
+describe("review claims", () => {
+  test("reviewProject re-takes the claim atomically before applying a verdict", () => {
+    const body = fnBody("app/actions.ts", "export const reviewProject");
+    expect(body).toContain("await claimReview(projectId, access.session.slackId)");
+    expect(body).not.toContain("activeReviewClaim(current");
+  });
+});

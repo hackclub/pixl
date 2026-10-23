@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { annotateClaims, REVIEW_LOCK_MS, type ShippedProject } from "./db";
+import { activeReviewClaim, annotateClaims, REVIEW_LOCK_MS, type ShippedProject } from "./db";
 
 // Only the claim fields matter here; the rest of ShippedProject is filler.
 function project(over: Partial<ShippedProject> = {}): ShippedProject {
@@ -13,13 +13,42 @@ function project(over: Partial<ShippedProject> = {}): ShippedProject {
 
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 
+describe("activeReviewClaim", () => {
+  test("returns the holder and heartbeat time for a live claim", () => {
+    const at = ago(5 * 60_000);
+    expect(activeReviewClaim({ reviewing_by: "U_OTHER", reviewing_at: at }, "U_ME")).toEqual({
+      by: "U_OTHER",
+      at,
+    });
+  });
+
+  test("ignores the viewer's own claim", () => {
+    expect(
+      activeReviewClaim({ reviewing_by: "U_ME", reviewing_at: ago(60_000) }, "U_ME"),
+    ).toBeNull();
+  });
+
+  test("ignores stale and timestamp-less claims", () => {
+    expect(
+      activeReviewClaim(
+        { reviewing_by: "U_OTHER", reviewing_at: ago(REVIEW_LOCK_MS + 1) },
+        "U_ME",
+      ),
+    ).toBeNull();
+    expect(activeReviewClaim({ reviewing_by: "U_OTHER" }, "U_ME")).toBeNull();
+    expect(activeReviewClaim({ reviewing_by: "", reviewing_at: ago(60_000) }, "U_ME")).toBeNull();
+  });
+});
+
 describe("annotateClaims", () => {
   test("tags a project another reviewer is actively holding", () => {
+    const at = ago(60_000);
     const [p] = annotateClaims(
-      [project({ reviewing_by: "U_OTHER", reviewing_at: ago(60_000) })],
+      [project({ reviewing_by: "U_OTHER", reviewing_at: at })],
       "U_ME",
     );
     expect(p!.claimedBy).toBe("U_OTHER");
+    expect(p!.claimedAt).toBe(at);
   });
 
   test("keeps the row rather than dropping it", () => {

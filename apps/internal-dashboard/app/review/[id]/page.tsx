@@ -17,6 +17,7 @@ import {
   lifetimeRe,
   getFirstPassAuditNote,
   listProjectNotes,
+  REVIEW_LOCK_MS,
 } from "@/lib/db";
 import { parseAuditNote } from "@/lib/auditNote";
 import { fetchCommits, attachCommitStats } from "@/lib/commits";
@@ -61,6 +62,8 @@ import { ProjectNotes } from "@/app/_components/ProjectNotes";
 import { LevelBadge, TypeBadge, ShipBadges, StatusBadge, BeaconBadge, FundingBadge } from "@/app/_components/ProjectBadges";
 import { FraudyAiSummary } from "@/app/_components/FraudyAiSummary";
 import { fraudyCheckAi, type FraudyAiCheck } from "@/lib/fraudy";
+import { ReviewClaimNotice, type ReviewClaimStage } from "@/app/_components/ReviewClaimNotice";
+import { ClaimRefreshButton } from "@/app/_components/ReviewClaimLive";
 import { CardSkeleton } from "@/app/_components/Loading";
 import { slackHandle } from "@/lib/slack";
 import { getLiveMode, getHideReviewers } from "@/lib/liveModeServer";
@@ -272,7 +275,7 @@ export default async function ReviewDetail({
   const shippedAt = (p as { shipped_at?: string | null }).shipped_at ?? null;
 
   const [claim, playerReBefore, firstPassAuditNote, bountyEventsResult] = await Promise.all([
-    canReview ? claimReview(projectId, viewer) : Promise.resolve({ ok: true as const, by: undefined }),
+    canReview ? claimReview(projectId, viewer) : Promise.resolve({ ok: true as const, by: undefined, at: null }),
     // The RE the player already holds, excluding this project. It sets the
     // rate they'll be paid at, so the reviewer sees it before deciding.
     lifetimeRe(p.user_id, projectId),
@@ -529,11 +532,21 @@ export default async function ReviewDetail({
   const cartScreenshots = p.cart_screenshot_urls ?? [];
   const returnTo = `/review/${p.id}`;
 
+  const claimStage: ReviewClaimStage = isProposedBan ? "final-pass" : spotCheckStage ? "spot-check" : "first-pass";
+  const claimedAtMs = claim.at ? new Date(claim.at).getTime() : NaN;
+  const claimExpiresAt = Number.isFinite(claimedAtMs)
+    ? new Date(claimedAtMs + REVIEW_LOCK_MS).toISOString()
+    : null;
   const claimCallout = (handle: string | null) => (
-    <Callout tone="warning" icon="private">
-      Heads up: {handle ?? (claimByShown ? claim.by : "another reviewer")} is already reviewing this submission.
-      Avoid double-grading it.
-    </Callout>
+    <ReviewClaimNotice
+      stage={claimStage}
+      name={handle ?? "Another reviewer"}
+      handle={claimByShown ? handle : null}
+      slackId={claimByShown ? (claim.by ?? null) : null}
+      claimedAt={claim.at ?? null}
+      expiresAt={claimExpiresAt}
+      serverNow={Date.now()}
+    />
   );
 
   // Repo, README, demo (and Fraudy on the final pass) sit right under the
@@ -785,57 +798,77 @@ export default async function ReviewDetail({
               </form>
             </Card>
           )}
-          <Card>
-            <h3 className="hc-heading text-base">
-              {isProposedBan ? "Final pass" : spotCheckStage ? "Spot check" : "First pass"}
-            </h3>
-            <p className="hc-caption mt-1 mb-4 text-sm">
-              {isProposedBan
-                ? "A first-pass reviewer proposed banning this. Confirm it, or approve to overturn. Approving credits pixels at the player's level rate ($4-6/hr in px) and ships it. Every verdict needs a note. You can only lower the credited hours."
-                : spotCheckStage
-                  ? "The real final verdict, after Robert's fraud review. Approving credits pixels at the player's level rate ($4-6/hr in px) and ships it. Every verdict needs a note. You can only lower the credited hours."
-                  : "Every verdict needs a note. Approving sends this to Robert for fraud review before pixels are credited, so even with final-reviewer rights your first look is still a proposal. You can only lower the credited hours."}
-            </p>
-            <ReviewForm
-              projectId={p.id}
-              repoUrl={p.repo_url}
-              demoUrl={p.demo_url}
-              claimedHours={payoutHours}
-              defaultHours={formDefaultHours}
-              journalDeflatedHours={journalDeflatedHours}
-              isSuper={access.isOwner}
-              canAiDraft={access.canAiDraft}
-              canEditSubmission={access.canEditSubmission}
-              secondPass={spotCheckStage || isProposedBan}
-              bounties={bounties}
-              trial={trial?.name ? { name: trial.name, minHours: trial.min_hours ?? null } : null}
-              ageFlag={ageFlag}
-              collaborators={collaboratorHours}
-              blackout={blackoutForReview}
-              tier={Number(p.level) || 1}
-              playerReBefore={playerReBefore}
-              fundingUsd={p.needs_funding ? Number(p.funding_usd ?? 0) : 0}
-              currentName={p.name}
-              currentDescription={p.description}
-              currentImageUrl={p.image_url}
-              defaultRevealName={staffSettings.reviewRevealName}
-              defaultNotifyOnResubmit={staffSettings.reviewNotifyOnResubmit}
-              firstPass={
-                firstPassAudit
-                  ? {
-                      technicalFeatures: firstPassAudit["TECHNICAL FEATURES"],
-                      deflationReason: firstPassAudit["DEFLATION REASON"],
-                      ageJustification: firstPassAudit["AGE JUSTIFICATION"],
-                      notes: firstPassAudit["NOTES"],
-                      note: p.first_pass_note,
-                    }
-                  : undefined
-              }
-              serverDraft={
-                p.review_draft ? { draft: p.review_draft, by: p.review_draft_by, at: p.review_draft_at } : undefined
-              }
-            />
-          </Card>
+          {claim.ok ? (
+            <Card>
+              <h3 className="hc-heading text-base">
+                {isProposedBan ? "Final pass" : spotCheckStage ? "Spot check" : "First pass"}
+              </h3>
+              <p className="hc-caption mt-1 mb-4 text-sm">
+                {isProposedBan
+                  ? "A first-pass reviewer proposed banning this. Confirm it, or approve to overturn. Approving credits pixels at the player's level rate ($4-6/hr in px) and ships it. Every verdict needs a note. You can only lower the credited hours."
+                  : spotCheckStage
+                    ? "The real final verdict, after Robert's fraud review. Approving credits pixels at the player's level rate ($4-6/hr in px) and ships it. Every verdict needs a note. You can only lower the credited hours."
+                    : "Every verdict needs a note. Approving sends this to Robert for fraud review before pixels are credited, so even with final-reviewer rights your first look is still a proposal. You can only lower the credited hours."}
+              </p>
+              <ReviewForm
+                projectId={p.id}
+                repoUrl={p.repo_url}
+                demoUrl={p.demo_url}
+                claimedHours={payoutHours}
+                defaultHours={formDefaultHours}
+                journalDeflatedHours={journalDeflatedHours}
+                isSuper={access.isOwner}
+                canAiDraft={access.canAiDraft}
+                canEditSubmission={access.canEditSubmission}
+                secondPass={spotCheckStage || isProposedBan}
+                bounties={bounties}
+                trial={trial?.name ? { name: trial.name, minHours: trial.min_hours ?? null } : null}
+                ageFlag={ageFlag}
+                collaborators={collaboratorHours}
+                blackout={blackoutForReview}
+                tier={Number(p.level) || 1}
+                playerReBefore={playerReBefore}
+                fundingUsd={p.needs_funding ? Number(p.funding_usd ?? 0) : 0}
+                currentName={p.name}
+                currentDescription={p.description}
+                currentImageUrl={p.image_url}
+                defaultRevealName={staffSettings.reviewRevealName}
+                defaultNotifyOnResubmit={staffSettings.reviewNotifyOnResubmit}
+                firstPass={
+                  firstPassAudit
+                    ? {
+                        technicalFeatures: firstPassAudit["TECHNICAL FEATURES"],
+                        deflationReason: firstPassAudit["DEFLATION REASON"],
+                        ageJustification: firstPassAudit["AGE JUSTIFICATION"],
+                        notes: firstPassAudit["NOTES"],
+                        note: p.first_pass_note,
+                      }
+                    : undefined
+                }
+                serverDraft={
+                  p.review_draft ? { draft: p.review_draft, by: p.review_draft_by, at: p.review_draft_at } : undefined
+                }
+              />
+            </Card>
+          ) : (
+            <Card padding="compact">
+              <div className="flex items-start gap-3">
+                <span className="hc-claim-avatar" aria-hidden>
+                  <Icon glyph="private" size={18} />
+                </span>
+                <div className="min-w-0">
+                  <p className="hc-heading text-sm">Grading is locked</p>
+                  <p className="hc-caption mt-1 text-sm">
+                    Another reviewer has this {claimStage === "spot-check" ? "spot check" : "review"} claimed. The
+                    form unlocks here when they release it or their claim expires.
+                  </p>
+                  <div className="mt-3">
+                    <ClaimRefreshButton />
+                  </div>
+                </div>
+              </div>
+            </Card>
+          )}
         </>
       ) : p.banned_at ? (
         <Callout tone="danger" icon="important">

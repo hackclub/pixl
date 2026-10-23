@@ -50,6 +50,7 @@ import {
   decideBanProposal,
   nextReviewId,
   firstPassAccess,
+  claimReview,
   EVENT_TYPES,
   REFERRAL_BOOST_PX_PER_HOUR,
   REFERRAL_BOOST_SHIP_CAP,
@@ -1034,7 +1035,7 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
   const { data: current } = await db
     .from("projects")
     .select(
-      "status, banned_at, user_id, kind, name, description, image_url, first_pass_by, first_pass_hours, first_pass_verdict, second_pass_hours, second_pass_verdict, shipped_at, sidequest_id, trial_reward_choice, needs_funding, funding_usd, robert_project_id, robert_state, assigned_reviewer_slack_id, assigned_at",
+      "status, banned_at, user_id, kind, name, description, image_url, first_pass_by, first_pass_hours, first_pass_verdict, second_pass_hours, second_pass_verdict, shipped_at, sidequest_id, trial_reward_choice, needs_funding, funding_usd, robert_project_id, robert_state, assigned_reviewer_slack_id, assigned_at, reviewing_by, reviewing_at",
     )
     .eq("id", projectId)
     .single();
@@ -1087,6 +1088,16 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
     redirect(`${back}?error=${encodeURIComponent("You can't give the final verdict on a project you own or collaborate on.")}`);
   if (stage !== "shipped" && stage !== "second_review")
     redirect(`${back}?error=${encodeURIComponent("This project isn't awaiting review anymore.")}`);
+  // Opening the review page claims it (see claimReview) so two reviewers can't
+  // grade the same submission at once. Re-taking the claim here atomically is
+  // what actually closes the race: a plain read lets the claim expire between
+  // two open tabs, then both post a verdict. claimReview either wins the next
+  // 30 minutes for us or fails because someone else already holds it.
+  const claim = await claimReview(projectId, access.session.slackId);
+  if (!claim.ok)
+    redirect(
+      `${back}?error=${encodeURIComponent("Another reviewer is grading this right now. Wait for them to release it, or for their claim to expire, then refresh.")}`,
+    );
   // A ban leaves the status where it was (only banned_at is set), so without
   // this a banned project could be opened again and banned again, paying the
   // reviewer every time.

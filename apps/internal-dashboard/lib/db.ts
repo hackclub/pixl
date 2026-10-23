@@ -16,7 +16,7 @@ import { lockedForViewer, openableQueueIds, type AssignmentFields } from "./revi
 // stays importable while Next prerenders static pages (e.g. /_not-found)
 // where env vars may be absent.
 export { db } from "./pgCompat";
-import { db, sql } from "./pgCompat";
+import { db, orValue, sql } from "./pgCompat";
 import { PUBLIC_USER_COLUMNS, publicOwnerLabel } from "./publicLabels";
 
 export interface UserRow {
@@ -619,6 +619,8 @@ export interface ShippedProject extends Omit<ProjectWithUser, "users"> {
   own?: boolean;
   /** Slack id of another reviewer actively holding this, if any. */
   claimedBy?: string;
+  /** When that claim last heartbeated, for "reviewing for 12m" labels. */
+  claimedAt?: string;
 }
 
 export interface IdeaWithUser {
@@ -667,10 +669,35 @@ async function hydrateHours(projects: ShippedProject[]): Promise<ShippedProject[
 // ever expires once they've actually left.
 export const REVIEW_LOCK_MS = 30 * 60 * 1000;
 
+export interface ReviewClaimFields {
+  reviewing_by?: string | null;
+  reviewing_at?: string | null;
+}
+
+export interface ActiveReviewClaim {
+  by: string;
+  at: string;
+}
+
+// The one place that decides whether a claim is still live. A claim needs a
+// holder, a heartbeat timestamp and to be within REVIEW_LOCK_MS; anything else
+// is treated as free. Shared by the queues, the detail page and the verdict
+// action so they can't disagree about who holds a review.
+export function activeReviewClaim(
+  p: ReviewClaimFields,
+  viewer?: string,
+  now = Date.now(),
+): ActiveReviewClaim | null {
+  const by = (p.reviewing_by || "").trim();
+  const at = p.reviewing_at ?? null;
+  if (!by || by === viewer || !at) return null;
+  const beat = new Date(at).getTime();
+  if (!Number.isFinite(beat) || now - beat >= REVIEW_LOCK_MS) return null;
+  return { by, at };
+}
+
 function claimedByOther(p: ShippedProject, viewer?: string): boolean {
-  if (!p.reviewing_by || p.reviewing_by === viewer) return false;
-  if (!p.reviewing_at) return false;
-  return Date.now() - new Date(p.reviewing_at).getTime() < REVIEW_LOCK_MS;
+  return activeReviewClaim(p, viewer) !== null;
 }
 
 // Tags rows another reviewer is actively holding instead of dropping them.
@@ -682,7 +709,11 @@ function claimedByOther(p: ShippedProject, viewer?: string): boolean {
 // lying about its own length.
 export function annotateClaims(rows: ShippedProject[], viewer?: string): ShippedProject[] {
   for (const p of rows) {
-    if (claimedByOther(p, viewer)) p.claimedBy = p.reviewing_by as string;
+    const claim = activeReviewClaim(p, viewer);
+    if (claim) {
+      p.claimedBy = claim.by;
+      p.claimedAt = claim.at;
+    }
   }
   return rows;
 }
@@ -739,27 +770,52 @@ export async function listShippedProjects(
   return hydrateHours(visible);
 }
 
-// Claim a submission for a reviewer. Returns { ok:false, by } if someone else
-// holds an active claim.
+// Claim a submission for a reviewer. Returns { ok:false, by, at } if someone
+// else holds an active claim. The UPDATE itself is conditional on the claim
+// being free or stale, so two reviewers opening the same project at once can't
+// both "win" the old read-then-write race and silently overwrite each other.
 export async function claimReview(
   projectId: number,
   viewer: string,
-): Promise<{ ok: boolean; by?: string }> {
+): Promise<{ ok: boolean; by?: string; at?: string | null }> {
+  const tryClaim = async (): Promise<string | null> => {
+    const now = new Date().toISOString();
+    const staleBefore = new Date(Date.now() - REVIEW_LOCK_MS).toISOString();
+    const { data, error } = await db
+      .from("projects")
+      .update({ reviewing_by: viewer, reviewing_at: now })
+      .eq("id", projectId)
+      .or(
+        [
+          "reviewing_by.is.null",
+          "reviewing_by.eq.",
+          "reviewing_at.is.null",
+          `reviewing_by.eq.${orValue(viewer)}`,
+          `reviewing_at.lte.${orValue(staleBefore)}`,
+        ].join(","),
+      )
+      .select("id");
+    if (error) console.error("claimReview", error.message);
+    return !error && Array.isArray(data) && data.length > 0 ? now : null;
+  };
+
+  const claimedAt = await tryClaim();
+  if (claimedAt) return { ok: true, at: claimedAt };
+
   const { data } = await db
     .from("projects")
     .select("reviewing_by, reviewing_at")
     .eq("id", projectId)
-    .single();
-  const by = (data?.reviewing_by as string) || "";
-  const at = (data?.reviewing_at as string | null) ?? null;
-  const active =
-    by && by !== viewer && at && Date.now() - new Date(at).getTime() < REVIEW_LOCK_MS;
-  if (active) return { ok: false, by };
-  await db
-    .from("projects")
-    .update({ reviewing_by: viewer, reviewing_at: new Date().toISOString() })
-    .eq("id", projectId);
-  return { ok: true };
+    .maybeSingle();
+  const holder = data as ReviewClaimFields | null;
+  const active = activeReviewClaim(holder ?? {}, viewer);
+  if (active) return { ok: false, by: active.by, at: active.at };
+
+  // The holder released it between our failed update and this read. One retry
+  // closes that window without looping forever under contention.
+  const retriedAt = await tryClaim();
+  if (retriedAt) return { ok: true, at: retriedAt };
+  return { ok: false, by: (holder?.reviewing_by || "").trim() || undefined, at: holder?.reviewing_at ?? null };
 }
 
 // Whether a reviewer may open and act on a first-pass project. The queue page

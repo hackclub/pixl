@@ -26,6 +26,19 @@ function waited(iso: string | null): string {
   return `${Math.floor(d / 3_600_000)}h`;
 }
 
+// How long the current reviewer has held their claim, for the queue badge.
+// Coarse on purpose: the queue refreshes on its own and a minute-resolution
+// label doesn't make hydration twitchy.
+function claimAge(iso: string | undefined): string | null {
+  if (!iso) return null;
+  const d = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(d) || d < 0) return null;
+  const mins = Math.floor(d / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m`;
+  return `${Math.floor(mins / 60)}h`;
+}
+
 // The queue's project list. Renders a bare table: callers put it inside a
 // <Card padding="flush"> (or a Details) with their own header.
 export function ReviewTable({
@@ -92,6 +105,7 @@ export function ReviewTable({
         const href = `/review/${p.id}`;
         const telescreenId = !live ? hackatimeUserIds?.get(p.id) : undefined;
         const lock = locks?.[Number(p.id)];
+        const claimingFor = p.claimedBy ? claimAge(p.claimedAt) : null;
         const lockLabel = !lock
           ? null
           : lock.reason === "page"
@@ -172,10 +186,18 @@ export function ReviewTable({
                 )}
                 {p.claimedBy && (
                   <span
-                    title={`${claimer(p.claimedBy)} opened this for review in the last 30 minutes. You can still open it, but you can't grade it while their claim is live.`}
+                    title={`${claimer(p.claimedBy)} has this review claimed. Their claim refreshes while they're on the page and frees up after 30 minutes idle. You can open it, but grading is locked while their claim is live.`}
                   >
-                    <Badge tone="info" icon="view">
-                      {claimer(p.claimedBy)} is reviewing
+                    <Badge tone="info">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span
+                          className="hc-dot animate-pulse motion-reduce:animate-none"
+                          style={{ background: "var(--hc-blue)" }}
+                          aria-hidden
+                        />
+                        {claimer(p.claimedBy)} is reviewing
+                        {claimingFor && <Mono>{claimingFor}</Mono>}
+                      </span>
                     </Badge>
                   </span>
                 )}
