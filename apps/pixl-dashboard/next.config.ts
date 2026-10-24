@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import type { NextConfig } from "next";
 import { config } from "./app/_generated/config";
@@ -21,7 +22,12 @@ const SECURITY_HEADERS = [
   },
 ];
 
+// Give each production build an ID so Next can detect tabs and assets from an
+// older build during a rollout. Local development leaves this unset.
+const deploymentId = existsSync(".deployment-id") ? readFileSync(".deployment-id", "utf8").trim() : undefined;
+
 const nextConfig: NextConfig = {
+  deploymentId,
   devIndicators: false,
   poweredByHeader: false,
   // Traces the real runtime dependency graph into .next/standalone as
