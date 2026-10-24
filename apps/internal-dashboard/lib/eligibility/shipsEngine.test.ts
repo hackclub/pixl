@@ -4,7 +4,7 @@ import { currentPolicy, POLICIES } from "./policy";
 
 const FLAT = POLICIES["2026-10-22.2"]!;
 import { matchShips as matchMapped, type MatchTarget } from "./shipsMatch";
-import { buildSnapshot, type ShipsView } from "./ships";
+import { buildSnapshot, repoKeyOf, type ShipsView } from "./ships";
 
 const matchShips = (
   v: Parameters<typeof matchMapped>[0],
@@ -191,6 +191,67 @@ describe("Ships matching", () => {
 
   test("an unreachable Ships is unavailable", () => {
     expect(matchShips(unavailable, target, NOW).state).toBe("unavailable");
+  });
+
+  test("Sainath's three Unified records match only their exact record and repository", () => {
+    const records = [
+      {
+        id: "recoEKmMJsNo12EXN",
+        ysws: "Pixl",
+        approved_at: 1790553600,
+        code_url: "https://github.com/shiz1ee/My-Builder-Page.git",
+        github_username: "shiz1ee",
+        hours: 3,
+        slack_id: "null",
+      },
+      {
+        id: "recUssha7qVewUeyt",
+        ysws: "Pixl",
+        approved_at: 1792627200,
+        code_url: "https://github.com/shiz1ee/Minecraft-Mod",
+        github_username: "shiz1ee",
+        hours: 6,
+        slack_id: "null",
+      },
+      {
+        id: "recHexi2Ad6GBSRZQ",
+        ysws: "Pixl",
+        approved_at: 1792022400,
+        code_url: "https://github.com/shiz1ee/SaveTheCat.git",
+        github_username: "shiz1ee",
+        hours: 10,
+        slack_id: "null",
+      },
+    ];
+    const snapshot = viewOf(records);
+    expect(snapshot.snapshot!.byId.size).toBe(3);
+
+    for (const record of records) {
+      const repoKey = repoKeyOf(record.code_url)!;
+      const matched = matchShips(snapshot, { recordId: record.id, repoKey, playerSlackId: SLACK }, NOW);
+      expect(matched.state).toBe("approved");
+      expect(matched.recordId).toBe(record.id);
+      expect(matched.hours).toBe(record.hours);
+      expect(matched.siblings).toEqual({ count: 0, hours: 0 });
+    }
+
+    expect(
+      matchShips(
+        snapshot,
+        { recordId: records[0]!.id, repoKey: "github.com/shiz1ee/minecraft-mod", playerSlackId: SLACK },
+        NOW,
+      ).state,
+    ).toBe("identity_mismatch");
+
+    // Ships currently has no Slack ID for any of these records. A shared
+    // GitHub username or repository by itself cannot identify the player.
+    expect(
+      matchShips(
+        snapshot,
+        { recordId: null, repoKey: "github.com/shiz1ee/minecraft-mod", playerSlackId: SLACK },
+        NOW,
+      ).state,
+    ).toBe("ambiguous");
   });
 });
 
