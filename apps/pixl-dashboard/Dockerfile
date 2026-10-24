@@ -29,7 +29,7 @@ FROM node:26-slim AS node-build
 WORKDIR /repo
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=build /repo /repo
-RUN cd apps/pixl-dashboard && node node_modules/next/dist/bin/next build
+RUN cd apps/pixl-dashboard && echo "b$(date +%s%N)" > .deployment-id && node node_modules/next/dist/bin/next build
 
 FROM node:26-slim AS runtime
 WORKDIR /repo
@@ -49,6 +49,8 @@ COPY --from=node-build --chown=node:node /repo/apps/pixl-dashboard/.next/standal
 # paths server.js expects relative to its own directory.
 COPY --from=node-build --chown=node:node /repo/apps/pixl-dashboard/.next/static ./apps/pixl-dashboard/.next/static
 COPY --from=node-build --chown=node:node /repo/apps/pixl-dashboard/public ./apps/pixl-dashboard/public
+# Keep the build's deployment ID beside the standalone server config.
+COPY --from=node-build --chown=node:node /repo/apps/pixl-dashboard/.deployment-id ./apps/pixl-dashboard/.deployment-id
 # lib/docs.ts reads the markdown at request time.
 COPY --from=node-build --chown=node:node /repo/docs ./docs
 
