@@ -8,6 +8,7 @@ import {
   repoKeyOf,
   resetManualRefreshLimits,
   shipsUrlFromEnv,
+  shipsSnapshotReaderEnabled,
   ttlFromEnv,
 } from "./ships";
 
@@ -343,6 +344,12 @@ describe("provider cache", () => {
     );
     expect(shipsUrlFromEnv("http://evil.example/x")).toBe("https://api.ships.hackclub.com/api/v1/ysws_entries?all=true&boba=false");
     expect(shipsUrlFromEnv("file:///etc/passwd")).toBe("https://api.ships.hackclub.com/api/v1/ysws_entries?all=true&boba=false");
+  });
+
+  test("durable Ships reader is disabled until explicitly enabled", () => {
+    expect(shipsSnapshotReaderEnabled(undefined)).toBe(false);
+    expect(shipsSnapshotReaderEnabled("false")).toBe(false);
+    expect(shipsSnapshotReaderEnabled("true")).toBe(true);
   });
 
   test("env ttl is clamped to a sane range", () => {
