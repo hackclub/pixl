@@ -100,6 +100,25 @@ export interface EvidenceMeta {
   shipsError?: string | null;
 }
 
+export type ReviewerLedgerState = "verified" | "unavailable" | "inconsistent";
+
+export interface ReviewerEarningsEvidence {
+  /** Positive pixels from actual reviewer credit transactions. */
+  creditedPixels: number;
+  /** Signed sum of reviewer corrections; valid corrections are negative. */
+  correctionPixels: number;
+  /** Number of distinct ledger transactions inspected. */
+  rows: number;
+  /** Only a complete, internally consistent ledger is eligible for funding. */
+  state: ReviewerLedgerState;
+}
+
+export interface ReviewerEarningsBreakdown extends ReviewerEarningsEvidence {
+  netPixels: number;
+  verifiedPixels: number;
+  fundingCents: number;
+}
+
 export interface EligibilityInput {
   policy: EligibilityPolicy;
   pixelValueUsd: number;
@@ -108,6 +127,7 @@ export interface EligibilityInput {
   playerOrders: OrderInput[];
   ledger: LedgerEntry[];
   projects: ProjectEvidence[];
+  reviewerEarnings?: ReviewerEarningsEvidence;
   priorGrants: PriorGrant[];
   meta: EvidenceMeta;
 }
@@ -173,6 +193,9 @@ export interface EligibilityResult {
   fundingBasis: "flat_rate" | "payout_history";
   unestablishedHours: number;
   projects: ProjectLine[];
+  projectVerifiedFundingCents: number;
+  unverifiedProjectFundingCents: number;
+  reviewerEarnings: ReviewerEarningsBreakdown;
   verifiedHours: number;
   provisionalHours: number;
   verifiedFundingCents: number;
@@ -392,6 +415,37 @@ export function evaluateEligibility(input: EligibilityInput): EligibilityResult 
   const { policy, order, meta } = input;
   const amount = orderAmount(order, policy, input.pixelValueUsd);
   const lines = classifyProjects(input.projects, policy, input.pixelValueUsd);
+  const rawReviewer = input.reviewerEarnings;
+  const reviewerCreditsValid = !rawReviewer || (Number.isSafeInteger(rawReviewer.creditedPixels) && rawReviewer.creditedPixels >= 0);
+  const reviewerCorrectionsValid = !rawReviewer || (Number.isSafeInteger(rawReviewer.correctionPixels) && rawReviewer.correctionPixels <= 0);
+  const reviewerRowsValid = !rawReviewer || (Number.isSafeInteger(rawReviewer.rows) && rawReviewer.rows >= 0);
+  const reviewerStateValid = !rawReviewer || ["verified", "unavailable", "inconsistent"].includes(rawReviewer.state);
+  let reviewerState: ReviewerLedgerState = rawReviewer
+    ? !reviewerCreditsValid || !reviewerCorrectionsValid || !reviewerRowsValid || !reviewerStateValid
+      ? "inconsistent"
+      : rawReviewer.state
+    : "unavailable";
+  const reviewerCredits = rawReviewer && reviewerCreditsValid ? rawReviewer.creditedPixels : 0;
+  const reviewerCorrections = rawReviewer && reviewerCorrectionsValid ? rawReviewer.correctionPixels : 0;
+  const reviewerNetPixels = reviewerCredits + reviewerCorrections;
+  const rawReviewerFundingCents = Math.round(reviewerNetPixels * input.pixelValueUsd * 100);
+  if (
+    reviewerState === "verified" &&
+    (!Number.isSafeInteger(reviewerNetPixels) || reviewerNetPixels < 0 || !Number.isSafeInteger(rawReviewerFundingCents))
+  ) {
+    reviewerState = "inconsistent";
+  }
+  const reviewerVerifiedPixels = reviewerState === "verified" ? reviewerNetPixels : 0;
+  const reviewerFundingCents = reviewerState === "verified" ? rawReviewerFundingCents : 0;
+  const reviewerEarnings: ReviewerEarningsBreakdown = {
+    creditedPixels: reviewerCredits,
+    correctionPixels: reviewerCorrections,
+    rows: rawReviewer && reviewerRowsValid ? rawReviewer.rows : 0,
+    state: reviewerState,
+    netPixels: reviewerNetPixels,
+    verifiedPixels: reviewerVerifiedPixels,
+    fundingCents: reviewerFundingCents,
+  };
   const verifiedLines = lines.filter((l) => l.counted === "verified");
   const verifiedHours = round1(verifiedLines.reduce((s, l) => s + l.countedHours, 0));
   const verifiedHighHours = round1(verifiedLines.reduce((s, l) => s + l.highHours, 0));
@@ -400,30 +454,34 @@ export function evaluateEligibility(input: EligibilityInput): EligibilityResult 
       verifiedLines.filter((l) => l.multiRecord).reduce((s, l) => s + Math.max(0, l.hours - (l.expectedShipsHours ?? l.hours)), 0),
   );
   const payoutBasis = policy.fundingBasis === "payout_history";
-  let verifiedFundingCents = 0;
-  let verifiedHighFundingCents = 0;
-  let upperBoundFundingCents = 0;
+  let projectVerifiedFundingCents = 0;
+  let projectVerifiedHighFundingCents = 0;
+  let projectUpperBoundFundingCents = 0;
   const unestablished: ProjectLine[] = [];
   if (!payoutBasis) {
     const fund = (hours: number): number => Math.round(hours * policy.ratePerHourUsd * 100);
-    verifiedFundingCents = fund(verifiedHours);
-    verifiedHighFundingCents = fund(verifiedHighHours);
-    upperBoundFundingCents = fund(round1(verifiedHighHours + provisionalHours));
+    projectVerifiedFundingCents = fund(verifiedHours);
+    projectVerifiedHighFundingCents = fund(verifiedHighHours);
+    projectUpperBoundFundingCents = fund(round1(verifiedHighHours + provisionalHours));
   } else {
     for (const l of verifiedLines) {
       const c = lineFundingCents(l, l.countedHours, policy);
       if (c == null) unestablished.push(l);
       else {
-        verifiedFundingCents += c;
-        verifiedHighFundingCents += lineFundingCents(l, l.highHours, policy) ?? 0;
+        projectVerifiedFundingCents += c;
+        projectVerifiedHighFundingCents += lineFundingCents(l, l.highHours, policy) ?? 0;
       }
     }
     for (const l of lines) {
       if (l.counted === "excluded") continue;
       const h = Math.max(l.hours, l.highHours);
-      upperBoundFundingCents += lineFundingCents(l, h, policy) ?? Math.round(h * policy.maxRateUsd * 100);
+      projectUpperBoundFundingCents += lineFundingCents(l, h, policy) ?? Math.round(h * policy.maxRateUsd * 100);
     }
   }
+  const unverifiedProjectFundingCents = Math.max(0, projectUpperBoundFundingCents - projectVerifiedFundingCents);
+  const verifiedFundingCents = projectVerifiedFundingCents + reviewerFundingCents;
+  const verifiedHighFundingCents = projectVerifiedHighFundingCents + reviewerFundingCents;
+  const upperBoundFundingCents = projectUpperBoundFundingCents + reviewerFundingCents;
   const unestablishedHours = round1(unestablished.reduce((s, l) => s + l.countedHours, 0));
 
   const commitments = commitmentsFor(input);
@@ -456,8 +514,11 @@ export function evaluateEligibility(input: EligibilityInput): EligibilityResult 
   if (lines.some((l) => l.excludedReason === "same repository already counted")) {
     reviewReasons.push({ code: "duplicate_submission", message: "Two projects share a repository; hours were counted once." });
   }
-  if (input.projects.length === 0) {
+  if (input.projects.length === 0 && !(reviewerState === "verified" && reviewerVerifiedPixels > 0)) {
     reviewReasons.push({ code: "no_projects", message: "No project mapped to this player; hours cannot be attributed." });
+  }
+  if (reviewerState === "inconsistent") {
+    reviewReasons.push({ code: "reviewer_ledger_inconsistent", message: "Reviewer payout transactions could not be reconciled; reviewer pixels were excluded." });
   }
   const liveLines = lines.filter((l) => l.counted !== "excluded");
   if (liveLines.some((l) => l.ships?.state === "ambiguous" || l.ships?.state === "identity_mismatch")) {
@@ -526,7 +587,10 @@ export function evaluateEligibility(input: EligibilityInput): EligibilityResult 
     add("insufficient_verified", "Verified funding is below the order after previous commitments.");
   }
 
-  if (!meta.unifiedAvailable) add("unified_unavailable", "Ships could not be read, so hours cannot be confirmed.");
+  if (!meta.unifiedAvailable && input.projects.length > 0) add("unified_unavailable", "Ships could not be read, so project hours cannot be confirmed.");
+  if (reviewerState === "unavailable" && rawReviewer) {
+    add("reviewer_ledger_unavailable", "Reviewer payout ledger could not be loaded; reviewer pixels were excluded.");
+  }
   if (meta.shipsError && dependsOnShips) add("ships_refresh_failing", `Last Ships refresh failed (${meta.shipsError}); using the snapshot from ${shipsAgeMs == null ? "an unknown time" : `${Math.round(shipsAgeMs / 60000)}m ago`}.`);
   for (const l of verifiedLines) {
     if (l.discrepancy !== "none" && l.ships?.hours != null) {
@@ -557,10 +621,13 @@ export function evaluateEligibility(input: EligibilityInput): EligibilityResult 
     policyVersion: policy.version,
     status,
     reasons,
-    rateUsd: payoutBasis ? (verifiedHours > 0 ? Math.round((verifiedFundingCents / verifiedHours)) / 100 : 0) : policy.ratePerHourUsd,
+    rateUsd: payoutBasis ? (verifiedHours > 0 ? Math.round((projectVerifiedFundingCents / verifiedHours)) / 100 : 0) : policy.ratePerHourUsd,
     fundingBasis: policy.fundingBasis,
     unestablishedHours,
     projects: lines,
+    projectVerifiedFundingCents,
+    unverifiedProjectFundingCents,
+    reviewerEarnings,
     verifiedHours,
     provisionalHours,
     verifiedFundingCents,

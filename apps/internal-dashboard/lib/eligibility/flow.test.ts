@@ -9,6 +9,7 @@ import { buildSnapshot, type ShipsProvider } from "./ships";
 
 const NOW = 1_800_000_000_000;
 const U1 = "11111111-1111-1111-1111-111111111111";
+const U2 = "22222222-2222-2222-2222-222222222222";
 const REC_A = "recAAAAAAAAAAAAAA";
 const REC_B = "recBBBBBBBBBBBBBB";
 
@@ -20,19 +21,31 @@ interface Tables {
   audits?: Record<string, unknown>[];
   users?: Record<string, unknown>[];
   payouts?: Record<string, unknown>[];
+  reviewerTransactions?: Record<string, unknown>[] | "missing" | "error";
+  reviewPayouts?: Record<string, unknown>[] | "error";
 }
 
-function fakeSql(t: Tables): SqlLike {
+function fakeSql(t: Tables, queries: string[] = []): SqlLike {
   const f = (strings: unknown, ...vals: unknown[]) => {
     if (!(strings && typeof strings === "object" && "raw" in (strings as object))) return strings;
     const text = (strings as TemplateStringsArray).join("?");
     void vals;
+    queries.push(text);
     if (text.includes("fulfillment_commitments")) {
       if (t.ledger === "missing") return Promise.reject(Object.assign(new Error("no table"), { code: "42P01" }));
       if (t.ledger === "error") return Promise.reject(Object.assign(new Error("boom"), { code: "XX000" }));
       return Promise.resolve(t.ledger ?? []);
     }
+    if (text.includes("pixel_transactions") && text.includes("review_payout_backfill")) {
+      if (t.reviewerTransactions === "missing") return Promise.reject(Object.assign(new Error("no table"), { code: "42P01" }));
+      if (t.reviewerTransactions === "error") return Promise.reject(Object.assign(new Error("boom"), { code: "XX000" }));
+      return Promise.resolve(t.reviewerTransactions ?? []);
+    }
     if (text.includes("pixel_transactions")) return Promise.resolve(t.payouts ?? []);
+    if (text.includes("from review_payouts")) {
+      if (t.reviewPayouts === "error") return Promise.reject(Object.assign(new Error("boom"), { code: "XX000" }));
+      return Promise.resolve(t.reviewPayouts ?? []);
+    }
     if (text.includes("from users")) return Promise.resolve(t.users ?? []);
     if (text.includes("project_collaborators")) return Promise.resolve(t.collab ?? []);
     if (text.includes("review_audits")) return Promise.resolve(t.audits ?? []);
@@ -44,6 +57,14 @@ function fakeSql(t: Tables): SqlLike {
 }
 
 const payout = (over: Record<string, unknown> = {}) => ({ id: 1, user_id: U1, project_id: 1, amount: 400, hours: 10, reason: "project_approved", ...over });
+const reviewerTransaction = (over: Record<string, unknown> = {}) => ({
+  id: "9001",
+  user_id: U1,
+  project_id: null,
+  amount: 300,
+  reason: "review_payout",
+  ...over,
+});
 
 const proj = (over: Record<string, unknown> = {}) => ({
   id: 1,
@@ -475,7 +496,7 @@ describe("claim flow", () => {
     const r = evaluateFromEvidence(ev.get(U1)!, toOrderInput(orderRow() as never), POLICIES["2026-10-22.1"], NOW);
     const text = JSON.stringify(evidenceSnapshot(r));
     expect(text).not.toMatch(/@|address|email|birthday|github\.com/i);
-    expect(text).not.toContain("Proj");
+    expect(text).not.toContain('"name":"Proj"');
     expect(claimRpcArgs(r, { ...base, enforce: false }).p_evidence).toEqual(evidenceSnapshot(r));
   });
 });
@@ -950,5 +971,230 @@ describe("payout history in the evidence loader", () => {
     const r = evaluateFromEvidence(ev.get(U1)!, toOrderInput(orderRow({ price: 10 }) as never), POLICIES["2026-10-22.2"], NOW);
     expect(r.fundingBasis).toBe("flat_rate");
     expect(r.rateUsd).toBe(4);
+  });
+});
+
+describe("reviewer earnings in fulfillment eligibility", () => {
+  const PAYOUT = POLICIES["2026-10-22.3"]!;
+  const loadReviewer = (
+    reviewerTransactions: Tables["reviewerTransactions"] = [],
+    extra: Partial<Tables> = {},
+    userIds = [U1],
+    verifier?: UnifiedVerifier,
+  ) => loadPlayerEvidence(userIds, {
+    liveAirtable: false,
+    ...(verifier ? { verifier } : {}),
+    sql: fakeSql({
+      ...extra,
+      users: extra.users ?? userIds.map((id) => ({ id, slack_id: `slack-${id}` })),
+      reviewPayouts: extra.reviewPayouts ?? [],
+      reviewerTransactions,
+    }),
+    now: NOW,
+  });
+  const evaluateReviewer = (
+    evidence: Awaited<ReturnType<typeof loadReviewer>>,
+    userId = U1,
+    row: Record<string, unknown> = orderRow({ price: 200 }),
+  ) => evaluateFromEvidence(evidence.get(userId)!, toOrderInput(row as never), PAYOUT, NOW);
+
+  test("a reviewer with no Ships projects is covered by actual credited wallet pixels", async () => {
+    const ev = await loadReviewer([reviewerTransaction({ amount: 400 })]);
+    const r = evaluateReviewer(ev);
+
+    expect(r.status).toBe("covered");
+    expect(r.verifiedHours).toBe(0);
+    expect(r.projectVerifiedFundingCents).toBe(0);
+    expect(r.reviewerEarnings).toMatchObject({ creditedPixels: 400, correctionPixels: 0, netPixels: 400, verifiedPixels: 400, fundingCents: 4000, state: "verified" });
+    expect(r.verifiedFundingCents).toBe(4000);
+    expect(evidenceSnapshot(r)).toMatchObject({
+      projectVerifiedFundingCents: 0,
+      reviewerEarnings: { creditedPixels: 400, correctionPixels: 0, verifiedPixels: 400, fundingCents: 4000 },
+      verifiedFundingCents: 4000,
+    });
+    expect(r.ships.available).toBe(false);
+  });
+
+  test("verified project and reviewer sources combine without changing the project cap", async () => {
+    const ev = await loadReviewer(
+      [reviewerTransaction({ amount: 150 })],
+      { owned: [proj({ approved_hours: "5" })], payouts: [payout({ amount: 300, hours: 5 })] },
+      [U1],
+      confirming,
+    );
+    const r = evaluateReviewer(ev, U1, orderRow({ price: 400 }));
+
+    expect(r.status).toBe("covered");
+    expect(r.projectVerifiedFundingCents).toBe(3000);
+    expect(r.reviewerEarnings.fundingCents).toBe(1500);
+    expect(r.verifiedFundingCents).toBe(4500);
+  });
+
+  test("reviewer voids and cuts reduce the net ledger funding", async () => {
+    const ev = await loadReviewer([
+      reviewerTransaction({ amount: 300 }),
+      reviewerTransaction({ id: "9002", amount: -100, reason: "review_payout_voided" }),
+      reviewerTransaction({ id: "9003", amount: -100, reason: "review_payout_cut" }),
+    ], {
+      reviewPayouts: [
+        { id: 1, reviewer_slack_id: `slack-${U1}`, status: "paid", full_pixels: 100, paid_pixels: 100, credited: true },
+        { id: 2, reviewer_slack_id: `slack-${U1}`, status: "voided", full_pixels: 100, paid_pixels: 0, credited: true },
+      ],
+    });
+    const r = evaluateReviewer(ev, U1, orderRow({ price: 150 }));
+
+    expect(r.reviewerEarnings).toMatchObject({ creditedPixels: 300, correctionPixels: -200, netPixels: 100, verifiedPixels: 100, fundingCents: 1000, state: "verified" });
+    expect(r.verifiedFundingCents).toBe(1000);
+    expect(r.status).toBe("insufficient");
+  });
+
+  test("pending or uncredited payout records without wallet transactions do not count", async () => {
+    const queries: string[] = [];
+    const payoutRows = [
+      { id: 1, reviewer_slack_id: `slack-${U1}`, status: "pending", full_pixels: 300, paid_pixels: 0, credited: false },
+      { id: 2, reviewer_slack_id: `slack-${U1}`, status: "paid", full_pixels: 300, paid_pixels: 300, credited: false },
+      { id: 3, reviewer_slack_id: `slack-${U1}`, status: "paid", full_pixels: 300, paid_pixels: 300, credited: true },
+    ];
+    const ev = await loadPlayerEvidence([U1], {
+      liveAirtable: false,
+      sql: fakeSql({
+        users: [{ id: U1, slack_id: `slack-${U1}` }],
+        reviewPayouts: payoutRows,
+        reviewerTransactions: [],
+      }, queries),
+      now: NOW,
+    });
+    const r = evaluateReviewer(ev);
+
+    expect(r.reviewerEarnings.verifiedPixels).toBe(0);
+    expect(r.verifiedFundingCents).toBe(0);
+    expect(r.status).not.toBe("covered");
+    expect(queries.some((query) => query.includes("from review_payouts"))).toBe(true);
+  });
+
+  test("a historical backfill is counted once even when settlement rows also exist", async () => {
+    const queries: string[] = [];
+    const ev = await loadPlayerEvidence([U1], {
+      liveAirtable: false,
+      sql: fakeSql({
+        reviewerTransactions: [reviewerTransaction({ id: "9004", amount: 300, reason: "review_payout_backfill" })],
+        users: [{ id: U1, slack_id: `slack-${U1}` }],
+        reviewPayouts: [
+          { id: 4, reviewer_slack_id: `slack-${U1}`, status: "paid", full_pixels: 300, paid_pixels: 300, credited: true },
+          { id: 5, reviewer_slack_id: `slack-${U1}`, status: "paid", full_pixels: 300, paid_pixels: 300, credited: true },
+        ],
+      }, queries),
+      now: NOW,
+    });
+    const r = evaluateReviewer(ev);
+
+    expect(r.reviewerEarnings.creditedPixels).toBe(300);
+    expect(r.reviewerEarnings.rows).toBe(1);
+    expect(r.verifiedFundingCents).toBe(3000);
+    expect(queries.some((query) => query.includes("from review_payouts"))).toBe(true);
+  });
+
+  test("a repeated transaction id is counted only once", async () => {
+    const tx = reviewerTransaction({ amount: 300 });
+    const ev = await loadReviewer([tx, { ...tx }]);
+    const r = evaluateReviewer(ev);
+
+    expect(r.reviewerEarnings).toMatchObject({ creditedPixels: 300, rows: 1, verifiedPixels: 300 });
+    expect(r.verifiedFundingCents).toBe(3000);
+  });
+
+  test("previous fulfillment commitments consume reviewer funding", async () => {
+    const ev = await loadReviewer([reviewerTransaction({ amount: 300 })], {
+      orders: [orderRow({ id: 10, price: 250, status: "done" })],
+    });
+    const r = evaluateReviewer(ev, U1, orderRow({ id: 11, price: 100 }));
+
+    expect(r.verifiedFundingCents).toBe(3000);
+    expect(r.committedCents).toBe(2500);
+    expect(r.remainingCents).toBe(500);
+    expect(r.status).toBe("insufficient");
+  });
+
+  test("reviewer-only eligibility remains covered when Ships cannot be read", async () => {
+    const ev = await loadReviewer([reviewerTransaction({ amount: 400 })]);
+    const r = evaluateReviewer(ev);
+
+    expect(r.status).toBe("covered");
+    expect(r.ships.available).toBe(false);
+    expect(r.projects).toHaveLength(0);
+  });
+
+  test("unverified project work contributes zero verified funding when reviewer pixels cover the order", async () => {
+    const ev = await loadReviewer([reviewerTransaction({ amount: 500 })], {
+      owned: [proj({ approved_hours: "30" })],
+    });
+    const r = evaluateReviewer(ev, U1, orderRow({ price: 200 }));
+
+    expect(r.status).toBe("covered");
+    expect(r.projectVerifiedFundingCents).toBe(0);
+    expect(r.unverifiedProjectFundingCents).toBeGreaterThan(0);
+    expect(r.reviewerEarnings.fundingCents).toBe(5000);
+    expect(r.verifiedFundingCents).toBe(5000);
+  });
+
+  test("reviewer ledger failures and inconsistent rows fail closed", async () => {
+    const failed = await loadReviewer("error");
+    const unavailable = evaluateReviewer(failed);
+    expect(unavailable.reviewerEarnings.state).toBe("unavailable");
+    expect(unavailable.verifiedFundingCents).toBe(0);
+    expect(unavailable.status).not.toBe("covered");
+
+    const inconsistent = await loadReviewer([
+      reviewerTransaction({ amount: 300 }),
+      reviewerTransaction({ id: "9005", amount: 200, reason: "review_payout_voided" }),
+    ]);
+    const invalid = evaluateReviewer(inconsistent);
+    expect(invalid.reviewerEarnings.state).toBe("inconsistent");
+    expect(invalid.reviewerEarnings.verifiedPixels).toBe(0);
+    expect(invalid.verifiedFundingCents).toBe(0);
+    expect(invalid.status).toBe("review_required");
+
+    const reconciliationFailed = await loadReviewer([reviewerTransaction({ amount: 300 })], { reviewPayouts: "error" });
+    const unresolved = evaluateReviewer(reconciliationFailed);
+    expect(unresolved.reviewerEarnings.state).toBe("unavailable");
+    expect(unresolved.reviewerEarnings.verifiedPixels).toBe(0);
+    expect(unresolved.verifiedFundingCents).toBe(0);
+    expect(unresolved.status).not.toBe("covered");
+  });
+
+  test("a credited payout marked voided without its wallet reversal is not verified", async () => {
+    const ev = await loadReviewer([reviewerTransaction({ amount: 300 })], {
+      reviewPayouts: [{ id: 9, reviewer_slack_id: `slack-${U1}`, status: "voided", full_pixels: 300, paid_pixels: 0, credited: true }],
+    });
+    const r = evaluateReviewer(ev);
+
+    expect(r.reviewerEarnings.state).toBe("inconsistent");
+    expect(r.reviewerEarnings.verifiedPixels).toBe(0);
+    expect(r.verifiedFundingCents).toBe(0);
+    expect(r.status).toBe("review_required");
+  });
+
+  test("transactions are attributed only to their owning user account", async () => {
+    const ev = await loadReviewer([reviewerTransaction({ user_id: U2, amount: 400 })], {}, [U1, U2]);
+    const u1 = evaluateReviewer(ev, U1);
+    const u2 = evaluateReviewer(ev, U2);
+
+    expect(u1.verifiedFundingCents).toBe(0);
+    expect(u1.status).not.toBe("covered");
+    expect(u2.verifiedFundingCents).toBe(4000);
+    expect(u2.status).toBe("covered");
+  });
+
+  test("project-only funding retains its existing payout-history value", async () => {
+    const ev = await loadReviewer([], {
+      owned: [proj({ approved_hours: "5" })],
+      payouts: [payout({ amount: 300, hours: 5 })],
+    }, [U1], confirming);
+    const r = evaluateReviewer(ev, U1, orderRow({ price: 200 }));
+
+    expect(r.projectVerifiedFundingCents).toBe(3000);
+    expect(r.reviewerEarnings.fundingCents).toBe(0);
+    expect(r.verifiedFundingCents).toBe(3000);
+    expect(r.status).toBe("covered");
   });
 });

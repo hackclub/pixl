@@ -10,6 +10,8 @@ import {
   type OrderInput,
   type PriorGrant,
   type ProjectEvidence,
+  type ReviewerEarningsEvidence,
+  type ReviewerLedgerState,
   type UnifiedState,
 } from "./engine";
 import { matchShips, type UnifiedMapping } from "./shipsMatch";
@@ -139,10 +141,215 @@ async function ledgerFor(q: SqlLike, userIds: string[]): Promise<{ rows: LedgerE
   }
 }
 
+// Reviewer earnings are wallet transactions, not project payouts. These are
+// the exact earning/correction reasons used by the reviewer payout code and
+// the server's earnings ledger. review_payouts is read only to reconcile
+// credited payouts marked voided; its paid_pixels are never added to funding.
+const REVIEWER_CREDIT_REASONS = new Set(["review_payout", "review_payout_backfill"]);
+const REVIEWER_CORRECTION_REASONS = new Set(["review_payout_voided", "review_payout_cut"]);
+
+interface ReviewerTransactionRow {
+  id: string | number | bigint | null;
+  user_id: string | null;
+  project_id: string | number | null;
+  amount: string | number | null;
+  reason: string | null;
+}
+
+interface ReviewerSettlementRow {
+  id: string | number | bigint | null;
+  reviewer_slack_id: string | null;
+  status: string | null;
+  full_pixels: string | number | null;
+  paid_pixels: string | number | null;
+  credited: boolean | null;
+}
+
+interface ReviewerAggregate {
+  creditedPixels: number;
+  correctionPixels: number;
+  standardPayoutNetPixels: number;
+  rows: number;
+  state: ReviewerLedgerState;
+}
+
+function transactionId(value: ReviewerTransactionRow["id"]): string | null {
+  if (typeof value === "bigint" && value > 0n) return value.toString();
+  if (typeof value === "number" && Number.isSafeInteger(value) && value > 0) return String(value);
+  if (typeof value === "string" && /^\d+$/.test(value)) {
+    try {
+      const id = BigInt(value);
+      return id > 0n ? id.toString() : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function reviewerEarningsFor(
+  userIds: string[],
+  rows: ReviewerTransactionRow[] | null,
+  settlementRows: ReviewerSettlementRow[] | null,
+  slackOf: Map<string, string | null>,
+): Map<string, ReviewerEarningsEvidence> {
+  const ids = new Set(userIds);
+  const totals = new Map<string, ReviewerAggregate>(
+    userIds.map((id) => [id, {
+      creditedPixels: 0,
+      correctionPixels: 0,
+      standardPayoutNetPixels: 0,
+      rows: 0,
+      state: rows === null || settlementRows === null ? "unavailable" : "verified",
+    }]),
+  );
+  if (rows === null) return new Map([...totals].map(([id, value]) => [id, value]));
+
+  const seen = new Map<string, { userId: string; projectId: string | number | null; amount: number; reason: string | null }>();
+  const markInconsistent = (userId?: string | null) => {
+    if (userId && totals.has(userId)) {
+      totals.get(userId)!.state = "inconsistent";
+      return;
+    }
+    for (const value of totals.values()) value.state = "inconsistent";
+  };
+
+  for (const row of rows) {
+    const userId = typeof row.user_id === "string" ? row.user_id : null;
+    if (!userId || !ids.has(userId)) {
+      markInconsistent();
+      continue;
+    }
+    const total = totals.get(userId)!;
+    const id = transactionId(row.id);
+    const amount = row.amount == null || String(row.amount).trim() === "" ? Number.NaN : Number(row.amount);
+    if (!id || !Number.isSafeInteger(amount)) {
+      total.state = "inconsistent";
+      continue;
+    }
+
+    const prior = seen.get(id);
+    if (prior) {
+      if (
+        prior.userId !== userId ||
+        String(prior.projectId) !== String(row.project_id) ||
+        prior.amount !== amount ||
+        prior.reason !== row.reason
+      ) {
+        markInconsistent(prior.userId);
+        markInconsistent(userId);
+      }
+      // A repeated result row for the same transaction id is one ledger row,
+      // never a second source of funding.
+      continue;
+    }
+    seen.set(id, { userId, projectId: row.project_id, amount, reason: row.reason });
+    total.rows++;
+
+    // adjust_user_pixels writes reviewer credits with project_id = NULL. A
+    // project-linked reviewer reason is inconsistent, not extra project or
+    // reviewer funding.
+    if (row.project_id != null) {
+      total.state = "inconsistent";
+      continue;
+    }
+    if (row.reason && REVIEWER_CREDIT_REASONS.has(row.reason) && amount > 0) {
+      const next = total.creditedPixels + amount;
+      if (!Number.isSafeInteger(next)) total.state = "inconsistent";
+      else total.creditedPixels = next;
+      if (row.reason === "review_payout") {
+        const nextStandard = total.standardPayoutNetPixels + amount;
+        if (!Number.isSafeInteger(nextStandard)) total.state = "inconsistent";
+        else total.standardPayoutNetPixels = nextStandard;
+        if (!slackOf.get(userId)) total.state = "inconsistent";
+      }
+      continue;
+    }
+    if (row.reason && REVIEWER_CORRECTION_REASONS.has(row.reason) && amount < 0) {
+      const next = total.correctionPixels + amount;
+      if (!Number.isSafeInteger(next)) total.state = "inconsistent";
+      else total.correctionPixels = next;
+      if (row.reason === "review_payout_voided" || row.reason === "review_payout_cut") {
+        const nextStandard = total.standardPayoutNetPixels + amount;
+        if (!Number.isSafeInteger(nextStandard)) total.state = "inconsistent";
+        else total.standardPayoutNetPixels = nextStandard;
+        if (row.reason === "review_payout_voided" && !slackOf.get(userId)) total.state = "inconsistent";
+      }
+      continue;
+    }
+    // Zero-value rows and reason/sign mismatches cannot establish a payout.
+    total.state = "inconsistent";
+  }
+
+  if (settlementRows !== null) {
+    const usersBySlack = new Map<string, string>();
+    const ambiguousSlackIds = new Set<string>();
+    for (const [userId, slackId] of slackOf) {
+      if (!slackId || !ids.has(userId)) continue;
+      if (usersBySlack.has(slackId) && usersBySlack.get(slackId) !== userId) {
+        ambiguousSlackIds.add(slackId);
+        markInconsistent(usersBySlack.get(slackId));
+        markInconsistent(userId);
+      } else {
+        usersBySlack.set(slackId, userId);
+      }
+    }
+
+    const expectedActive = new Map<string, number>();
+    const voidedUsers = new Set<string>();
+    const seenSettlements = new Map<string, { userId: string; status: string | null; fullPixels: number; paidPixels: number; credited: boolean | null }>();
+    for (const row of settlementRows) {
+      const slackId = typeof row.reviewer_slack_id === "string" ? row.reviewer_slack_id : null;
+      const userId = slackId && !ambiguousSlackIds.has(slackId) ? usersBySlack.get(slackId) : undefined;
+      if (!userId) {
+        markInconsistent();
+        continue;
+      }
+      const id = transactionId(row.id);
+      const fullPixels = row.full_pixels == null || String(row.full_pixels).trim() === "" ? Number.NaN : Number(row.full_pixels);
+      const paidPixels = row.paid_pixels == null || String(row.paid_pixels).trim() === "" ? Number.NaN : Number(row.paid_pixels);
+      if (!id || !Number.isSafeInteger(fullPixels) || fullPixels < 0 || !Number.isSafeInteger(paidPixels) || paidPixels < 0) {
+        markInconsistent(userId);
+        continue;
+      }
+      const prior = seenSettlements.get(id);
+      if (prior) {
+        if (
+          prior.userId !== userId ||
+          prior.status !== row.status ||
+          prior.fullPixels !== fullPixels ||
+          prior.paidPixels !== paidPixels ||
+          prior.credited !== row.credited
+        ) {
+          markInconsistent(prior.userId);
+          markInconsistent(userId);
+        }
+        continue;
+      }
+      seenSettlements.set(id, { userId, status: row.status, fullPixels, paidPixels, credited: row.credited });
+      if (row.status === "voided") voidedUsers.add(userId);
+      if (row.status !== "paid" || row.credited !== true) continue;
+      const next = (expectedActive.get(userId) ?? 0) + paidPixels;
+      if (!Number.isSafeInteger(next)) markInconsistent(userId);
+      else expectedActive.set(userId, next);
+    }
+
+    for (const userId of userIds) {
+      if (!voidedUsers.has(userId)) continue;
+      const actualNetPixels = totals.get(userId)!.standardPayoutNetPixels;
+      const expectedActivePixels = expectedActive.get(userId) ?? 0;
+      if (actualNetPixels !== expectedActivePixels) markInconsistent(userId);
+    }
+  }
+
+  return new Map([...totals].map(([id, value]) => [id, value]));
+}
+
 export interface PlayerEvidence {
   userId: string;
   projects: ProjectEvidence[];
   priorGrants: PriorGrant[];
+  reviewerEarnings: ReviewerEarningsEvidence;
   orders: OrderInput[];
   ledger: LedgerEntry[];
   meta: EvidenceMeta;
@@ -160,7 +367,7 @@ export async function loadPlayerEvidence(
 
   const shipsView: ShipsView | null = !opts.ships ? null : "get" in opts.ships ? await opts.ships.get() : opts.ships;
 
-  const [owned, collab, orders, ledger, audits, userRows, payoutRows] = await Promise.all([
+  const [owned, collab, orders, ledger, audits, userRows, payoutRows, reviewerRows] = await Promise.all([
     q`select id, name, user_id, status, approved_hours, banned_at, repo_url, airtable_record_id, system_note, funding_usd, needs_funding, funding_deducted_px, trial_reward_choice, trial_held_px, trial_prize_px, trial_prize_order_id, hours_deflated_at, prior_approved_hours
         from projects where user_id in ${q(userIds)}`,
     q`select p.id, p.name, p.status, p.banned_at, p.repo_url, p.system_note, p.funding_usd, p.hours_deflated_at,
@@ -180,9 +387,37 @@ export async function loadPlayerEvidence(
       console.error("eligibility payouts", e.message);
       return null;
     }),
+    q`select id, user_id, project_id, amount, reason
+        from pixel_transactions
+        where user_id in ${q(userIds)}
+          and reason in ('review_payout', 'review_payout_backfill', 'review_payout_voided', 'review_payout_cut')
+        order by id`.catch((e: Error) => {
+      console.error("eligibility reviewer payouts", e.message);
+      return null;
+    }),
   ]);
   const slackOf = new Map<string, string | null>(
     (userRows as unknown as { id: string; slack_id: string | null }[]).map((u) => [u.id, u.slack_id]),
+  );
+  const reviewerSlackIds = [...new Set([...slackOf.values()].filter((id): id is string => !!id))];
+  let reviewerSettlementRows: ReviewerSettlementRow[] | null = [];
+  if (reviewerSlackIds.length > 0) {
+    try {
+      reviewerSettlementRows = await q`
+        select id, reviewer_slack_id, status, full_pixels, paid_pixels, credited
+        from review_payouts
+        where reviewer_slack_id in ${q(reviewerSlackIds)}
+        order by id` as unknown as ReviewerSettlementRow[];
+    } catch (e) {
+      console.error("eligibility reviewer payout reconciliation", (e as Error).message);
+      reviewerSettlementRows = null;
+    }
+  }
+  const reviewerEarnings = reviewerEarningsFor(
+    userIds,
+    reviewerRows as unknown as ReviewerTransactionRow[] | null,
+    reviewerSettlementRows,
+    slackOf,
   );
 
   const originalHours = new Map<number, number>();
@@ -395,6 +630,7 @@ export async function loadPlayerEvidence(
       userId: uid,
       projects,
       priorGrants: grantsByUser.get(uid) ?? [],
+      reviewerEarnings: reviewerEarnings.get(uid) ?? { creditedPixels: 0, correctionPixels: 0, rows: 0, state: "unavailable" },
       orders: ordersByUser.get(uid) ?? [],
       ledger: ledger.rows.filter((l) => orderOwner.get(l.orderId) === uid),
       meta: {
@@ -434,6 +670,7 @@ export function evaluateFromEvidence(
     playerOrders: ev.orders,
     ledger: ev.ledger,
     projects: ev.projects,
+    reviewerEarnings: ev.reviewerEarnings,
     priorGrants: ev.priorGrants,
     meta: ev.meta,
   });
