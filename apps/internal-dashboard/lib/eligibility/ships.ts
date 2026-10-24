@@ -7,7 +7,8 @@ import {
   type StoredShipsState,
 } from "./shipsSnapshotStore";
 
-export const SHIPS_URL = "https://ships.hackclub.com/api/v1/ysws_entries";
+// Ships defaults to only three months unless all=true; fulfillment needs full historical records.
+export const SHIPS_URL = "https://api.ships.hackclub.com/api/v1/ysws_entries?all=true&boba=false";
 
 const RECORD_ID = /^rec[A-Za-z0-9]{14}$/;
 const MIN_TTL_MS = 60_000;
@@ -542,7 +543,17 @@ export function shipsUrlFromEnv(raw: string | undefined): string {
   try {
     const u = new URL(raw);
     const local = u.hostname === "localhost" || u.hostname === "127.0.0.1";
-    if (u.protocol === "https:" || (u.protocol === "http:" && local)) return u.toString();
+    if (u.protocol === "https:" || (u.protocol === "http:" && local)) {
+      // A production override must not accidentally fall back to Ships' three-month view.
+      if (
+        (u.hostname === "ships.hackclub.com" || u.hostname === "api.ships.hackclub.com") &&
+        u.pathname === "/api/v1/ysws_entries"
+      ) {
+        u.searchParams.set("all", "true");
+        u.searchParams.set("boba", "false");
+      }
+      return u.toString();
+    }
   } catch {
     // fall through
   }
