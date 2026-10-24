@@ -123,7 +123,7 @@ describe("provider fetch", () => {
     const v = await p.get();
     expect(v.snapshot!.pixlCount).toBe(1);
     expect(seen.length).toBe(1);
-    expect(seen[0]!.url).toBe("https://ships.hackclub.com/api/v1/ysws_entries");
+    expect(seen[0]!.url).toBe("https://api.ships.hackclub.com/api/v1/ysws_entries?all=true&boba=false");
     expect(seen[0]!.init.method).toBe("GET");
     expect(seen[0]!.init.body).toBeUndefined();
     const h = seen[0]!.init.headers as Record<string, string>;
