@@ -22,6 +22,7 @@ import {
   notifyShopInsert,
   notifyShopDelete,
   notifyShopUpdates,
+  notifyNewShopOrder,
   type ShopRowSnapshot,
 } from "@/lib/shopNotify";
 import {
@@ -1837,16 +1838,21 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
     // withheld from the payout above rather than deducted from a balance.
     // item_id null + a price-only row is exactly what a non-catalog order
     // looks like elsewhere in this table.
-    const { error: fundingOrderError } = await db.from("shop_orders").insert({
-      user_id: project.user_id,
-      item_id: null,
-      item_name: `${FUNDING_ORDER_PREFIX}${project.name}`,
-      price: fundingPx,
-      status: "pending",
-      note: `$${fundingUsd.toFixed(2)} hardware funding grant approved with this ship, withheld from payout.`,
-    });
+    const { data: fundingOrder, error: fundingOrderError } = await db
+      .from("shop_orders")
+      .insert({
+        user_id: project.user_id,
+        item_id: null,
+        item_name: `${FUNDING_ORDER_PREFIX}${project.name}`,
+        price: fundingPx,
+        status: "pending",
+        note: `$${fundingUsd.toFixed(2)} hardware funding grant approved with this ship, withheld from payout.`,
+      })
+      .select("id")
+      .single();
     if (fundingOrderError)
       console.error("reviewProject (funding order)", fundingOrderError.message);
+    else if (fundingOrder) void notifyNewShopOrder(Number(fundingOrder.id));
   }
   // Fire-and-log: a failed Airtable push (bad address data, Airtable being
   // down, etc.) must never block the approval itself - the "Re-send to

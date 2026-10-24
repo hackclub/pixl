@@ -69,6 +69,27 @@ export async function notifyShopInsert(row: ShopRowSnapshot): Promise<void> {
   await post("INSERT", row, null);
 }
 
+// A funding grant approved with a project ships directly into shop_orders,
+// outside the player's /api/shop/buy route. Notify opted-in fulfillers from
+// that insertion too, using the same authenticated Pixo endpoint as the game
+// server. Callers should fire-and-forget this so the approval never waits on
+// Slack.
+export async function notifyNewShopOrder(orderId: number): Promise<void> {
+  const secret = process.env.EXTERNAL_API_KEY;
+  if (!secret) {
+    console.error("[shop-notify] EXTERNAL_API_KEY is not set; order alert was not sent");
+    return;
+  }
+  await callPixo("shop-order-alert", `${pixorpheusUrl()}/api/external/shop-order-alert`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": secret,
+    },
+    body: JSON.stringify({ orderId }),
+  });
+}
+
 export async function notifyShopDelete(row: ShopRowSnapshot): Promise<void> {
   await post("DELETE", null, row);
 }

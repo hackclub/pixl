@@ -28,6 +28,7 @@ import "./shop/webhook.js";
 import "./external/ticketApi.js";
 import "./external/dmApi.js";
 import "./external/reviewPostApi.js";
+import "./external/shopOrderAlertApi.js";
 
 (async () => {
   // Slack over Socket Mode (no inbound Slack traffic), then the in-cluster

@@ -36,6 +36,7 @@ import {
   seedDMHistory,
 } from "./thread.js";
 import { getStoredCompact, computeCompactSince, compactDateStr } from "./dailyCompact.js";
+import { handleFulfillmentAlertCommand, parseFulfillmentAlertCommand } from "../commands/fulfillmentAlerts.js";
 
 // Matches "pixo:compact", "pixo /compact", "pixorpheus /compact", and
 // "@pixorpheus /compact", always requires a leading bot reference (mention
@@ -85,6 +86,19 @@ app.message(async ({ message, client }) => {
   if (text.startsWith("##")) return;
 
   const isDM = m.channel_type === "im";
+  const fulfillmentAlertAction = parseFulfillmentAlertCommand(text);
+  if (fulfillmentAlertAction) {
+    if (typeof m.user !== "string") return;
+    const reply = isDM
+      ? await handleFulfillmentAlertCommand(m.user, fulfillmentAlertAction)
+      : "DM Pixorpheus to manage your new-order alerts.";
+    if (isDM) {
+      await client.chat.postMessage({ channel: m.channel, text: reply });
+    } else {
+      await client.chat.postEphemeral({ channel: m.channel, user: m.user, text: reply });
+    }
+    return;
+  }
   // Slack emoji shortcodes like :yay-pixo: or :pix-wave: literally contain
   // "pixo"/"pix" and used to falsely trigger the bot. Strip every :shortcode:
   // before any name-mention check so only the name in actual prose counts.

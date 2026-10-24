@@ -4,6 +4,8 @@ import { orValue } from "../db/pgCompat.js";
 import { activeEvents } from "../events.js";
 import { levelFor } from "../xp.js";
 import { addNotification } from "./notifications.js";
+import { callPixo } from "../pixoCall.js";
+import { pixorpheusUrl } from "../pixoUrl.js";
 import { decryptPII, encryptPII } from "../crypto.js";
 import { beaconUnlocks } from "../beacons.js";
 import { z } from "zod";
@@ -892,6 +894,7 @@ router.post("/api/shop/buy/:id", validate({ query: v.noQuery, params: params({ i
     error?: string;
     balance?: number;
     price?: number;
+    order_id?: number;
     item_name?: string;
     quantity?: number;
   };
@@ -900,6 +903,24 @@ router.post("/api/shop/buy/:id", validate({ query: v.noQuery, params: params({ i
     // lock (0217), same meaning as the route's own 403 locked above.
     const status = result.error === "insufficient" ? 400 : result.error === "locked" ? 403 : 409;
     return res.status(status).json(result);
+  }
+
+  // Best effort and deliberately not awaited: Pixo being offline must never
+  // delay or fail a player's successful purchase.
+  const orderId = Number(result.order_id);
+  if (Number.isSafeInteger(orderId) && orderId > 0) {
+    void callPixo(
+      "shop-order-alert",
+      `${pixorpheusUrl()}/api/external/shop-order-alert`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": process.env.EXTERNAL_API_KEY ?? "",
+        },
+        body: JSON.stringify({ orderId }),
+      },
+    ).catch((error) => console.error("[shop] order alert call failed:", (error as Error)?.message ?? error));
   }
 
   const qtyPrefix = (result.quantity ?? 1) > 1 ? `${result.quantity}x ` : "";
