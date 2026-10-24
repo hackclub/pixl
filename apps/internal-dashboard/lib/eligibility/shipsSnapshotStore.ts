@@ -82,7 +82,7 @@ export function createShipsSnapshotStore(client: Sql = defaultSql): ShipsSnapsho
     // Keep the active pointer, snapshot metadata, and its records from one
     // committed generation even if another refresher activates while we read.
     return client.begin(async (tx) => {
-      await tx`set transaction isolation level repeatable read read only`;
+      await tx`set transaction isolation level repeatable read`;
       const [row] = await tx`
       select
         st.active_snapshot_id,
