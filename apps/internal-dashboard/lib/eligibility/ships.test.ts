@@ -331,11 +331,18 @@ describe("provider cache", () => {
   });
 
   test("the API url can only be overridden with https or localhost", () => {
-    expect(shipsUrlFromEnv(undefined)).toBe("https://ships.hackclub.com/api/v1/ysws_entries");
+    expect(shipsUrlFromEnv(undefined)).toBe("https://api.ships.hackclub.com/api/v1/ysws_entries?all=true&boba=false");
     expect(shipsUrlFromEnv("http://127.0.0.1:4920/x")).toBe("http://127.0.0.1:4920/x");
     expect(shipsUrlFromEnv("https://ships.example.test/x")).toBe("https://ships.example.test/x");
-    expect(shipsUrlFromEnv("http://evil.example/x")).toBe("https://ships.hackclub.com/api/v1/ysws_entries");
-    expect(shipsUrlFromEnv("file:///etc/passwd")).toBe("https://ships.hackclub.com/api/v1/ysws_entries");
+    // Never silently query only the last three months when using a real Ships endpoint.
+    expect(shipsUrlFromEnv("https://ships.hackclub.com/api/v1/ysws_entries")).toBe(
+      "https://ships.hackclub.com/api/v1/ysws_entries?all=true&boba=false",
+    );
+    expect(shipsUrlFromEnv("https://api.ships.hackclub.com/api/v1/ysws_entries?boba=true")).toBe(
+      "https://api.ships.hackclub.com/api/v1/ysws_entries?boba=false&all=true",
+    );
+    expect(shipsUrlFromEnv("http://evil.example/x")).toBe("https://api.ships.hackclub.com/api/v1/ysws_entries?all=true&boba=false");
+    expect(shipsUrlFromEnv("file:///etc/passwd")).toBe("https://api.ships.hackclub.com/api/v1/ysws_entries?all=true&boba=false");
   });
 
   test("env ttl is clamped to a sane range", () => {
