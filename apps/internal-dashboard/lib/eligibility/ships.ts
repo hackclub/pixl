@@ -1,3 +1,12 @@
+import { randomUUID } from "node:crypto";
+import {
+  createShipsSnapshotStore,
+  SHIPS_REFRESH_LEASE_MS,
+  type ShipsSnapshotStore,
+  type StoredShipsSnapshot,
+  type StoredShipsState,
+} from "./shipsSnapshotStore";
+
 export const SHIPS_URL = "https://ships.hackclub.com/api/v1/ysws_entries";
 
 const RECORD_ID = /^rec[A-Za-z0-9]{14}$/;
@@ -7,6 +16,7 @@ const DEFAULT_TTL_MS = 5 * 60_000;
 const BACKOFF_BASE_MS = 30_000;
 const BACKOFF_MAX_MS = 15 * 60_000;
 const SHRINK_GUARD = 0.5;
+const MAX_INVALID_RATIO = 0.1;
 
 export interface ShipsEntry {
   id: string;
@@ -49,6 +59,25 @@ export interface ShipsProviderOptions {
   maxBytes?: number;
   fetchImpl?: typeof fetch;
   now?: () => number;
+}
+
+export interface PersistentShipsProviderOptions extends ShipsProviderOptions {
+  store?: ShipsSnapshotStore;
+}
+
+export type ShipsRefreshOutcome = "refreshed" | "not_modified" | "skipped_fresh" | "skipped_busy" | "skipped_backoff" | "failed";
+
+export interface ShipsRefreshResult {
+  outcome: ShipsRefreshOutcome;
+  view: ShipsView;
+  error: string | null;
+}
+
+export interface ShipsProvider {
+  get(): Promise<ShipsView>;
+  refresh(force?: boolean): Promise<void>;
+  view(): ShipsView;
+  ttlMs: number;
 }
 
 export function repoKeyOf(url: string | null | undefined): string | null {
@@ -153,6 +182,66 @@ export function buildSnapshot(data: unknown, fetchedAt: number, bytes = 0): Ship
   };
 }
 
+function validateSnapshotResponse(data: unknown, next: ShipsSnapshot, previous: ShipsSnapshot | null): void {
+  if (!Array.isArray(data)) throw new Error("Ships response is not a JSON array");
+  if (data.length === 0) throw new Error("Ships response was empty; keeping the previous snapshot");
+  for (const raw of data) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw) || typeof (raw as Record<string, unknown>).ysws !== "string") {
+      throw new Error("Ships response contained a malformed archive record; keeping the previous snapshot");
+    }
+  }
+  if (next.pixlCount === 0 || next.byId.size === 0) {
+    throw new Error("Ships response contained no valid PIXL records; keeping the previous snapshot");
+  }
+  if (next.invalidCount / next.pixlCount > MAX_INVALID_RATIO) {
+    throw new Error(`Ships response had too many malformed PIXL records (${next.invalidCount}/${next.pixlCount}); keeping the previous snapshot`);
+  }
+  if (previous && next.totalReturned < previous.totalReturned * SHRINK_GUARD) {
+    throw new Error(`Ships dataset shrank from ${previous.totalReturned} to ${next.totalReturned} entries; keeping the previous snapshot`);
+  }
+  if (previous && next.pixlCount < previous.pixlCount * SHRINK_GUARD) {
+    throw new Error(`PIXL Ships records shrank from ${previous.pixlCount} to ${next.pixlCount}; keeping the previous snapshot`);
+  }
+}
+
+function snapshotFromStored(stored: StoredShipsSnapshot): ShipsSnapshot {
+  const entries = stored.entries.map((entry) => ({ ...entry, repoKey: repoKeyOf(entry.codeUrl) }));
+  const byId = new Map(entries.map((entry) => [entry.id, entry]));
+  const byRepo = new Map<string, ShipsEntry[]>();
+  const byGithub = new Map<string, ShipsEntry[]>();
+  for (const entry of entries) {
+    if (entry.repoKey) byRepo.set(entry.repoKey, [...(byRepo.get(entry.repoKey) ?? []), entry]);
+    const github = normalizeGithub(entry.githubUsername);
+    if (github) byGithub.set(github, [...(byGithub.get(github) ?? []), entry]);
+  }
+  return {
+    fetchedAt: stored.fetchedAt,
+    byId,
+    byRepo,
+    byGithub,
+    invalidIds: new Set(stored.invalidIds),
+    ambiguousIds: new Set(stored.ambiguousIds),
+    totalReturned: stored.totalReturned,
+    pixlCount: stored.pixlCount,
+    invalidCount: stored.invalidCount,
+    duplicateCount: stored.duplicateCount,
+    bytes: stored.bytes,
+  };
+}
+
+function emptyStoredState(): StoredShipsState {
+  return {
+    snapshot: null,
+    lastAttemptAt: null,
+    lastSuccessAt: null,
+    error: null,
+    consecutiveFailures: 0,
+    nextRetryAt: null,
+    lastDurationMs: null,
+    refreshing: false,
+  };
+}
+
 async function readBody(res: Response, maxBytes: number): Promise<{ text: string; bytes: number }> {
   const declared = Number(res.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > maxBytes) throw new Error(`Ships response too large (${declared} bytes)`);
@@ -227,9 +316,7 @@ export function createShipsProvider(opts: ShipsProviderOptions = {}) {
         throw new Error("Ships response was not valid JSON");
       }
       const next = buildSnapshot(data, now(), bytes);
-      if (snapshot && next.totalReturned < snapshot.totalReturned * SHRINK_GUARD) {
-        throw new Error(`Ships dataset shrank from ${snapshot.totalReturned} to ${next.totalReturned} entries; keeping the previous snapshot`);
-      }
+      validateSnapshotResponse(data, next, snapshot);
       snapshot = next;
       etag = res.headers.get("etag");
     } catch (e) {
@@ -296,7 +383,159 @@ export function createShipsProvider(opts: ShipsProviderOptions = {}) {
   return { get, refresh, view, reset, ttlMs };
 }
 
-export type ShipsProvider = ReturnType<typeof createShipsProvider>;
+export function createPersistentShipsProvider(opts: PersistentShipsProviderOptions = {}) {
+  const url = opts.url ?? SHIPS_URL;
+  const ttlMs = clampTtl(opts.ttlMs ?? DEFAULT_TTL_MS);
+  const timeoutMs = opts.timeoutMs ?? 25_000;
+  const maxBytes = opts.maxBytes ?? 64 * 1024 * 1024;
+  const doFetch = opts.fetchImpl ?? fetch;
+  const now = opts.now ?? Date.now;
+  const store = opts.store ?? createShipsSnapshotStore();
+
+  let state = emptyStoredState();
+  let cachedSnapshot: ShipsSnapshot | null = null;
+  let localError: string | null = null;
+  let inflight: Promise<ShipsRefreshResult> | null = null;
+
+  async function reload(): Promise<void> {
+    try {
+      state = await store.read();
+      cachedSnapshot = state.snapshot ? snapshotFromStored(state.snapshot) : null;
+      localError = null;
+    } catch (e) {
+      localError = `Ships snapshot storage unavailable: ${(e as Error).message}`;
+    }
+  }
+
+  function view(): ShipsView {
+    const fetchedAt = cachedSnapshot?.fetchedAt ?? null;
+    const ageMs = fetchedAt == null ? null : Math.max(0, now() - fetchedAt);
+    const error = localError ?? state.error;
+    return {
+      snapshot: cachedSnapshot,
+      fetchedAt,
+      ageMs,
+      fresh: ageMs != null && ageMs < ttlMs && error === null,
+      error,
+      lastAttemptAt: state.lastAttemptAt,
+      nextRetryAt: state.nextRetryAt,
+    };
+  }
+
+  async function get(): Promise<ShipsView> {
+    await reload();
+    return view();
+  }
+
+  async function refreshDetailed(force = false): Promise<ShipsRefreshResult> {
+    if (inflight) return inflight;
+    const token = randomUUID();
+    const startedAt = now();
+    const current = (async (): Promise<ShipsRefreshResult> => {
+      try {
+        const acquired = await store.acquire({
+          token,
+          now: startedAt,
+          ttlMs,
+          leaseMs: SHIPS_REFRESH_LEASE_MS,
+          force,
+        });
+        if (!acquired.acquired) {
+          await reload();
+          const outcome: ShipsRefreshOutcome =
+            acquired.reason === "fresh" ? "skipped_fresh" : acquired.reason === "busy" ? "skipped_busy" : "skipped_backoff";
+          return { outcome, view: view(), error: view().error };
+        }
+
+        try {
+          const before = await store.read();
+          const previous = before.snapshot ? snapshotFromStored(before.snapshot) : null;
+          const ctl = new AbortController();
+          const timer = setTimeout(() => ctl.abort(), timeoutMs);
+          try {
+            const headers: Record<string, string> = { Accept: "application/json" };
+            if (before.snapshot?.etag) headers["If-None-Match"] = before.snapshot.etag;
+            const response = await doFetch(url, {
+              method: "GET",
+              headers,
+              signal: ctl.signal,
+              redirect: "error",
+            });
+            if (response.status === 304) {
+              if (!before.snapshot) throw new Error("Ships returned 304 without an active snapshot");
+              await store.notModified({
+                token,
+                fetchedAt: now(),
+                etag: response.headers.get("etag"),
+                durationMs: now() - startedAt,
+              });
+              await reload();
+              return { outcome: "not_modified", view: view(), error: null };
+            }
+            if (!response.ok) throw new Error(`Ships returned HTTP ${response.status}`);
+            const { text, bytes } = await readBody(response, maxBytes);
+            let data: unknown;
+            try {
+              data = JSON.parse(text);
+            } catch {
+              throw new Error("Ships response was not valid JSON");
+            }
+            const next = buildSnapshot(data, now(), bytes);
+            validateSnapshotResponse(data, next, previous);
+            await store.activate({
+              token,
+              snapshot: next,
+              etag: response.headers.get("etag"),
+              durationMs: now() - startedAt,
+            });
+            await reload();
+            return { outcome: "refreshed", view: view(), error: null };
+          } catch (e) {
+            const error = e as Error;
+            throw new Error(error.name === "AbortError" ? `Ships request timed out after ${timeoutMs}ms` : error.message);
+          } finally {
+            clearTimeout(timer);
+          }
+        } catch (e) {
+          const error = (e as Error).message;
+          let diagnosticError: string | null = null;
+          try {
+            await store.fail({ token, now: now(), error, durationMs: now() - startedAt });
+          } catch (recordError) {
+            diagnosticError = `${error}; unable to persist Ships refresh diagnostics: ${(recordError as Error).message}`;
+          }
+          await reload();
+          // A storage error during fail() should remain visible even if the
+          // following read succeeds and returns the previous diagnostic state.
+          if (diagnosticError) localError = diagnosticError;
+          return { outcome: "failed", view: view(), error: view().error ?? error };
+        }
+      } catch (e) {
+        const error = (e as Error).message;
+        await reload();
+        localError = error;
+        return { outcome: "failed", view: view(), error: view().error };
+      }
+    })().finally(() => {
+      inflight = null;
+    });
+    inflight = current;
+    return current;
+  }
+
+  async function refresh(force = false): Promise<void> {
+    await refreshDetailed(force);
+  }
+
+  async function reset(): Promise<void> {
+    state = emptyStoredState();
+    cachedSnapshot = null;
+    localError = null;
+    inflight = null;
+  }
+
+  return { get, refresh, refreshDetailed, view, reset, ttlMs };
+}
 
 export function shipsUrlFromEnv(raw: string | undefined): string {
   if (!raw) return SHIPS_URL;
@@ -311,11 +550,19 @@ export function shipsUrlFromEnv(raw: string | undefined): string {
   return SHIPS_URL;
 }
 
-let shared: ShipsProvider | null = null;
+let shared: ReturnType<typeof createPersistentShipsProvider> | null = null;
 
-export function shipsProvider(): ShipsProvider {
-  if (!shared) shared = createShipsProvider({ url: shipsUrlFromEnv(process.env.SHIPS_API_URL), ttlMs: ttlFromEnv(process.env.SHIPS_CACHE_TTL_MS) });
+export function shipsProvider(): ReturnType<typeof createPersistentShipsProvider> {
+  if (!shared)
+    shared = createPersistentShipsProvider({
+      url: shipsUrlFromEnv(process.env.SHIPS_API_URL),
+      ttlMs: ttlFromEnv(process.env.SHIPS_CACHE_TTL_MS),
+    });
   return shared;
+}
+
+export async function refreshShipsSnapshotForJob(): Promise<ShipsRefreshResult> {
+  return shipsProvider().refreshDetailed(false);
 }
 
 const REFRESH_COOLDOWN_MS = 60_000;
