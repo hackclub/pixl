@@ -13,6 +13,7 @@ The route returns only aggregate counts, timestamps, and the last error. It requ
 
 ## Refresh behavior
 
+- The source is `https://api.ships.hackclub.com/api/v1/ysws_entries?all=true&boba=false` so all historical active entries are included (Ships otherwise returns only the last three months). Real Ships host overrides are normalized to keep these query parameters.
 - Each response is read with a timeout and a 64 MB limit, then validated as the complete archive array.
 - Only exact, case-insensitive `ysws = "PIXL"` rows are persisted. Descriptions, display names, screenshots, and other program rows are never written.
 - Candidate entries are indexed and checked before a transaction inserts the generation and changes the active pointer. The current and immediately previous generations are retained.
