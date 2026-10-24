@@ -1,0 +1,28 @@
+name: Refresh PIXL Ships snapshot
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+
+permissions: {}
+
+concurrency:
+  group: ships-snapshot-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Refresh the persistent PIXL Ships snapshot
+        env:
+          SHIPS_SNAPSHOT_CRON_SECRET: ${{ secrets.SHIPS_SNAPSHOT_CRON_SECRET }}
+        run: |
+          if [[ -z "$SHIPS_SNAPSHOT_CRON_SECRET" ]]; then
+            echo "Repository secret SHIPS_SNAPSHOT_CRON_SECRET is required."
+            exit 1
+          fi
+          curl --fail-with-body --silent --show-error --max-time 65 \
+            -H "Authorization: Bearer $SHIPS_SNAPSHOT_CRON_SECRET" \
+            https://dash.pixl.hackclub.com/api/cron/ships-snapshot
