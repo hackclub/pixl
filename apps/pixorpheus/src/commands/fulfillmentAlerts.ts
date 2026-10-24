@@ -42,8 +42,8 @@ export async function handleFulfillmentAlertCommand(
         .maybeSingle();
       if (error) throw error;
       return data
-        ? "You're opted in to new shop order DMs. Use `pixo:order-alerts off` to stop them."
-        : "You're opted out of new shop order DMs. Use `pixo:order-alerts on` to get them.";
+        ? "You're opted in to new order DMs. Use `pixo:order-alerts off` to stop them."
+        : "You're opted out of new order DMs. Use `pixo:order-alerts on` to get them.";
     }
 
     if (action === "on") {
@@ -60,7 +60,7 @@ export async function handleFulfillmentAlertCommand(
         },
         true,
       );
-      return "You're opted in. I'll DM you when a new shop order arrives; use `pixo:order-alerts off` any time to stop them.";
+      return "You're opted in. I'll DM you when a new order arrives; use `pixo:order-alerts off` any time to stop them.";
     }
 
     const { error } = await db().from("fulfiller_order_alerts").delete().eq("slack_user_id", slackUserId);
@@ -74,7 +74,7 @@ export async function handleFulfillmentAlertCommand(
       },
       true,
     );
-    return "You're opted out. I won't DM you about new shop orders.";
+    return "You're opted out. I won't DM you about new orders.";
   } catch (error) {
     console.error("[fulfillment-alerts] preference update failed:", (error as Error)?.message ?? error);
     await audit(

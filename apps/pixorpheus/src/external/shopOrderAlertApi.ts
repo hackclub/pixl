@@ -47,7 +47,7 @@ http.post(
     const [orderResult, recipientResult] = await Promise.all([
       db()
         .from("shop_orders")
-        .select("id, item_name, option, quantity, price")
+        .select("id, user_id, item_name, option, quantity, price")
         .eq("id", orderId)
         .maybeSingle(),
       db().from("fulfiller_order_alerts").select("slack_user_id"),
@@ -67,15 +67,25 @@ http.post(
     if (recipients.length === 0) return res.json({ ok: true, sent: 0, failed: 0 });
 
     const order = orderResult.data;
+    const { data: player, error: playerError } = await db()
+      .from("users")
+      .select("display_name")
+      .eq("id", order.user_id)
+      .maybeSingle();
+    if (playerError) {
+      console.error("[shop-order-alert] player lookup failed:", playerError.message);
+    }
+
     const itemName = safeLabel(order.item_name, 120) || "Shop item";
     const option = safeLabel(order.option, 100);
     const rawQuantity = Number(order.quantity);
     const quantity = Number.isSafeInteger(rawQuantity) && rawQuantity > 0 ? rawQuantity : 1;
     const rawPrice = Number(order.price);
     const total = Number.isSafeInteger(rawPrice) && rawPrice >= 0 ? `${rawPrice.toLocaleString("en-US")} px` : "unknown";
+    const playerName = safeLabel(player?.display_name, 80) || "Player";
     const queueUrl = `${config.urls.dash}/fulfillment?status=all&order=${orderId}`;
     const itemLine = `${quantity > 1 ? `${quantity}× ` : ""}${itemName}${option ? ` · ${option}` : ""}`;
-    const message = `*New Pixl shop order*\n${itemLine}\nTotal: ${total}\n<${queueUrl}|Open order #${orderId}>`;
+    const message = `*New order received!*\nOrder: #${orderId}\nItem: ${itemLine}\nOrdered by: ${playerName}\nTotal: ${total}\n<${queueUrl}|View order>`;
 
     let sent = 0;
     let failed = 0;
