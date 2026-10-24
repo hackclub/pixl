@@ -7,7 +7,9 @@ The fulfillment eligibility reader uses a durable snapshot of the public Ships a
 1. Apply `apps/server/drizzle/0231_ships_snapshot.sql` to the database used by the internal dashboard. Migrations in this repository are applied explicitly; this file is not run by a dashboard request.
 2. Set `CRON_SECRET` on the dashboard deployment.
 3. Add repository Actions secret `SHIPS_SNAPSHOT_CRON_SECRET` with the same value as the deployment's `CRON_SECRET`.
-4. Once this workflow is on the default branch, GitHub Actions calls `/api/cron/ships-snapshot` every ten minutes. The first successful call creates the active generation.
+4. Deploy with `SHIPS_SNAPSHOT_READER_ENABLED=false` (the default). The existing Ships reader remains active until the durable snapshot is ready.
+5. Once this workflow is on the default branch, GitHub Actions calls `/api/cron/ships-snapshot` every ten minutes. The first successful call creates the active generation. Check the authenticated cron response for `snapshot.indexedPixlCount > 0`, a fresh timestamp, and no errors.
+6. **Only after verifying the persisted generation**, set `SHIPS_SNAPSHOT_READER_ENABLED=true` and redeploy the dashboard. If the new reader fails unexpectedly, set it back to `false` while investigating.
 
 The route returns only aggregate counts, timestamps, and the last error. It requires `Authorization: Bearer <CRON_SECRET>`. An absent or wrong secret fails closed. The workflow serializes its own runs; the database lease also prevents overlap with a manual refresh or another caller.
 
