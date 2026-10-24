@@ -561,19 +561,38 @@ export function shipsUrlFromEnv(raw: string | undefined): string {
   return SHIPS_URL;
 }
 
-let shared: ReturnType<typeof createPersistentShipsProvider> | null = null;
+// The reader only switches to DB-backed evidence after the schema is migrated
+// and a first complete snapshot exists. Until explicitly enabled, the legacy
+// provider remains available so a code deploy cannot interrupt fulfillment.
+export function shipsSnapshotReaderEnabled(raw: string | undefined): boolean {
+  return raw === "true";
+}
 
-export function shipsProvider(): ReturnType<typeof createPersistentShipsProvider> {
-  if (!shared)
-    shared = createPersistentShipsProvider({
+let persistentShared: ReturnType<typeof createPersistentShipsProvider> | null = null;
+let legacyShared: ReturnType<typeof createShipsProvider> | null = null;
+
+function persistentShipsProvider(): ReturnType<typeof createPersistentShipsProvider> {
+  if (!persistentShared)
+    persistentShared = createPersistentShipsProvider({
       url: shipsUrlFromEnv(process.env.SHIPS_API_URL),
       ttlMs: ttlFromEnv(process.env.SHIPS_CACHE_TTL_MS),
     });
-  return shared;
+  return persistentShared;
+}
+
+export function shipsProvider(): ShipsProvider {
+  if (shipsSnapshotReaderEnabled(process.env.SHIPS_SNAPSHOT_READER_ENABLED)) return persistentShipsProvider();
+  if (!legacyShared)
+    legacyShared = createShipsProvider({
+      url: shipsUrlFromEnv(process.env.SHIPS_API_URL),
+      ttlMs: ttlFromEnv(process.env.SHIPS_CACHE_TTL_MS),
+    });
+  return legacyShared;
 }
 
 export async function refreshShipsSnapshotForJob(): Promise<ShipsRefreshResult> {
-  return shipsProvider().refreshDetailed(false);
+  // Always populate the durable snapshot, even while the reader flag is off.
+  return persistentShipsProvider().refreshDetailed(false);
 }
 
 const REFRESH_COOLDOWN_MS = 60_000;
