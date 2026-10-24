@@ -33,7 +33,7 @@ export function ShipsSyncBar({ view }: { view: ShipsView }) {
             {snap.invalidCount + snap.duplicateCount > 0 && ` (${snap.invalidCount + snap.duplicateCount} unusable)`}
           </>
         ) : (
-          <>Ships has not been reached. Hours cannot be verified, so nothing shows as covered.</>
+          <>Ships has not been reached. Project hours cannot be verified; reviewer payout ledger funding can still cover orders.</>
         )}
         {view.error && <Muted> · last refresh failed: {view.error}</Muted>}
       </span>
@@ -66,6 +66,14 @@ function ageText(ms: number): string {
   return `${Math.round(mins / 60)}h ago`;
 }
 
+function pixelsText(pixels: number): string {
+  return `${pixels.toLocaleString(undefined, { maximumFractionDigits: 2 })} px`;
+}
+
+function signedPixelsText(pixels: number): string {
+  return `${pixels < 0 ? "−" : ""}${Math.abs(pixels).toLocaleString(undefined, { maximumFractionDigits: 2 })} px`;
+}
+
 export function FundingBreakdown({ result, orderId }: { result: EligibilityResult | null; orderId: number }) {
   if (!result) {
     return (
@@ -75,11 +83,22 @@ export function FundingBreakdown({ result, orderId }: { result: EligibilityResul
     );
   }
   const r = result;
+  const shipsVerifiedHours = r.projects
+    .filter((p) => p.counted === "verified" && p.ships?.state === "approved")
+    .reduce((sum, p) => sum + p.countedHours, 0);
+  const otherVerifiedProjectHours = Math.max(0, r.verifiedHours - shipsVerifiedHours);
   return (
     <div className="fw-funding">
-      <p className="fw-funding-verdict">
-        <VerificationBadge label={r.verification} /> <span>{r.verificationSummary}</span>
-      </p>
+      {r.projects.length > 0 ? (
+        <p className="fw-funding-verdict">
+          <VerificationBadge label={r.verification} /> <span>{r.verificationSummary}</span>
+        </p>
+      ) : (
+        <p className="fw-funding-verdict">
+          <Badge tone="neutral" outline>No project earnings</Badge>{" "}
+          <Muted>Reviewer earnings are checked independently against the payout ledger.</Muted>
+        </p>
+      )}
       <p className="fw-funding-verdict">
         <FundingBadge status={r.status} /> <Muted>{ELIGIBILITY_HINT[r.status]}</Muted>
       </p>
@@ -176,9 +195,29 @@ export function FundingBreakdown({ result, orderId }: { result: EligibilityResul
 
       <DescriptionList
         items={[
-          ["Eligible hours", `${r.verifiedHours.toFixed(1)}h verified${r.provisionalHours > 0 ? `, ${r.provisionalHours.toFixed(1)}h unverified` : ""}`],
-          ["Total earned funding", <span key="e">{usd(r.verifiedFundingCents)} <Muted>({r.fundingBasis === "payout_history" ? `average $${r.rateUsd.toFixed(2)} per verified hour, from payout history` : `$${r.rateUsd.toFixed(2)} per verified hour`})</Muted></span>],
-          ["Earned if every unverified hour holds", usd(r.upperBoundFundingCents)],
+          ["Ships verified hours", `${shipsVerifiedHours.toFixed(1)}h`],
+          ["Other verified project hours", `${otherVerifiedProjectHours.toFixed(1)}h (Unified)`],
+          ["Unverified project hours", `${r.provisionalHours.toFixed(1)}h`],
+          ["Verified project funding", <span key="project">{usd(r.projectVerifiedFundingCents)} <Muted>({r.fundingBasis === "payout_history" ? `average $${r.rateUsd.toFixed(2)} per verified project hour, from payout history` : `$${r.rateUsd.toFixed(2)} per verified hour`})</Muted></span>],
+          ["Unverified project funding", <span key="unverified-project">{usd(r.unverifiedProjectFundingCents)} <Muted>(upper bound only)</Muted></span>],
+          ["Reviewer pixels credited", pixelsText(r.reviewerEarnings.creditedPixels)],
+          ["Reviewer corrections / reversals", signedPixelsText(r.reviewerEarnings.correctionPixels)],
+          ["Net verified reviewer pixels", r.reviewerEarnings.state === "verified" ? pixelsText(r.reviewerEarnings.verifiedPixels) : "Not verified"],
+          [
+            "Reviewer funding (USD equivalent)",
+            <span key="reviewer">
+              {usd(r.reviewerEarnings.fundingCents)}{" "}
+              <Muted>
+                {r.reviewerEarnings.state === "verified"
+                  ? "Verified by payout ledger"
+                  : r.reviewerEarnings.state === "unavailable"
+                    ? "Payout ledger unavailable; reviewer funding excluded"
+                    : "Payout ledger inconsistent; reviewer funding excluded pending review"}
+              </Muted>
+            </span>,
+          ],
+          ["Combined verified earned funding", usd(r.verifiedFundingCents)],
+          ["Earned if every unverified project hour holds", usd(r.upperBoundFundingCents)],
           [
             "Already committed",
             r.commitments.length === 0 && r.priorGrants.length === 0 ? (
@@ -211,7 +250,7 @@ export function FundingBreakdown({ result, orderId }: { result: EligibilityResul
             </span>,
           ],
           ["Funding remaining after this order", usd(r.afterCents)],
-          ["Remaining after, if unverified holds", usd(r.provisionalRemainingCents - r.amount.cents)],
+          ["Remaining after, if unverified project hours hold", usd(r.provisionalRemainingCents - r.amount.cents)],
         ]}
       />
       <p className="hc-caption text-xs">

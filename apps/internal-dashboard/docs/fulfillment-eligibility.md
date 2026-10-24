@@ -4,7 +4,11 @@ Advisory funding check shown on every order in the internal dashboard's `/fulfil
 
 ## Funding source
 
-Policy `2026-10-22.3` funds each project from what the player was actually paid, not from a flat rate. The pixel payout already encodes the RE-derived rate (about $4 to $6 per hour) at the time of the ship. Per project and beneficiary the engine sums `pixel_transactions` rows with reason `project_approved` and `review_reverted` (net pixels), takes the hours from the latest `project_approved` row, adds back any funding withheld for a hardware grant (`projects.funding_deducted_px`, so the grant order or prior grant is counted once as spending), and converts pixels at the configured pixel value. The result is capped at credited hours times the $6.00 maximum payout, which treats referral boosts and community multipliers above that as bonuses; a capped project is flagged. If Ships verifies fewer hours than were paid, funding scales down proportionally. A verified project with no payout rows is shown as Unverified with the reason `payout_unestablished`; it is never assumed to be $4 or $6. Other pixel reasons (review payouts, fulfillment payouts, manual grants, referral rewards, refunds, purchases) are not project funding. Earlier policy versions keep the flat $4 rate. The current rate of the player is never applied retroactively.
+Policy `2026-10-22.3` funds each project from what the player was actually paid, not from a flat rate. The pixel payout already encodes the RE-derived rate (about $4 to $6 per hour) at the time of the ship. Per project and beneficiary the engine sums `pixel_transactions` rows with reason `project_approved` and `review_reverted` (net pixels), takes the hours from the latest `project_approved` row, adds back any funding withheld for a hardware grant (`projects.funding_deducted_px`, so the grant order or prior grant is counted once as spending), and converts pixels at the configured pixel value. The result is capped at credited hours times the $6.00 maximum payout, which treats referral boosts and community multipliers above that as bonuses; a capped project is flagged. If Ships verifies fewer hours than were paid, funding scales down proportionally. A verified project with no payout rows is shown as Unverified with the reason `payout_unestablished`; it is never assumed to be $4 or $6. Other pixel reasons do not enter project funding. Earlier policy versions keep the flat $4 rate. The current rate of the player is never applied retroactively.
+
+Reviewer earnings are a separate funding source. The engine reads the player's own `pixel_transactions` rows for `review_payout` and `review_payout_backfill`, then subtracts signed `review_payout_voided` and `review_payout_cut` rows. It converts the net pixels at the configured pixel value and does not apply project hour rates or Ships checks. Only a complete, consistent ledger read counts; missing or malformed evidence is excluded, and sign mismatches or project-linked reviewer transactions require review. `review_payouts` is not added to this total: it is workflow bookkeeping without a transaction ID, and pending or failed rows do not prove wallet credit. Ledger rows are keyed and deduplicated by transaction ID, so a payout row and its corresponding wallet transaction are never summed as two earnings sources.
+
+The server's `EARNING_REASONS` list also recognizes `bounty`, `referral_reward`, `fulfillment_payout`, and `operation_blackout` as leaderboard earnings. Fulfillment eligibility still excludes those categories, manual pixel grants, shop refunds, and purchases; this change only adds reviewer payouts.
 
 ## Sources of truth, and their limits
 
@@ -19,7 +23,7 @@ Policy `2026-10-22.3` funds each project from what the player was actually paid,
 | Previous fulfillment | `shop_orders` in `ordered / credited / shipped / done`, plus `fulfillment_commitments` | Orders claimed before the migration have no ledger row; their amount is derived from the order and labelled "not in ledger". |
 | Real cost | `shop_orders.actual_cost_usd`, `hcb_link` | Entered by the fulfiller at the credited stage. |
 
-Consequence: hours are verified only when a Ships entry matches (below). Without a fresh Ships snapshot nothing can be `Covered`; orders show `Unverified`, or `Insufficient` when even the unverified upper bound cannot pay.
+Consequence: project hours are verified only when a Ships entry matches (below). Without a fresh Ships snapshot, project funding remains unverified; a player can still be `Covered` when verified reviewer ledger earnings cover the order and no independent review reason blocks it.
 
 ## Project funding grants (reconciliation)
 
@@ -115,6 +119,7 @@ The code never writes to Airtable (one GET helper, `fetchSubmissionState`, limit
 - `lib/eligibility/claim.db.test.ts` runs against a real Postgres when `PIXL_TEST_DATABASE_URL` is set (it replays every migration, then 0229) and is skipped otherwise. It was run against PostgreSQL 18; with the advisory lock removed its concurrency tests fail.
 - Funding grants are linked to their order by name only; see reconciliation above. Historical grants approved before the order was inserted have no order and are counted as prior grants.
 - Hours are not reduced for commitments made against hours that were later deflated; a deflation can leave a negative balance, which shows as Insufficient for the player's next order.
+- `review_payouts` has no transaction ID or dedupe key. The engine therefore does not add its `paid_pixels` to wallet transactions. Repeated result rows with the same wallet transaction ID count once, but distinct transaction IDs that accidentally represent the same reviewer action cannot be correlated reliably from the current schema; there is no database-level uniqueness guarantee for reviewer wallet credits.
 
 ## First submissions, updates and re-ships
 
