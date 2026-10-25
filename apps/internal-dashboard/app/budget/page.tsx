@@ -153,13 +153,13 @@ export default async function BudgetPage({
           External USD reviewer payments must be recorded separately in the cash ledger.
         </p>
         <StatGrid>
-          <Stat label="Completed paid reviews" value={data.reviewerPaidCount.toLocaleString()} hint={`${data.reviewerPendingCount} pending payout records`} />
+          <Stat label="Payout records marked paid" value={data.reviewerPaidCount.toLocaleString()} hint={`${data.reviewerPendingCount} pending payout records`} />
           <Stat label="Reviewer pixels (net wallet)" value={px(data.reviewerNetPx)} hint={`Nominal value ${nominalUsd(data.reviewerNetPx)}`} />
           <Stat label="Fulfiller pixels credited" value={px(data.fulfillerNetPx)} hint={`Nominal value ${nominalUsd(data.fulfillerNetPx)}`} />
           <Stat label="Default review reward" value={data.reviewRates ? `${data.reviewRates.approved} px` : "Unavailable"} hint={data.reviewRates ? `Needs changes: ${data.reviewRates.changes} px` : "Review payout settings"} />
         </StatGrid>
         <div className="mt-4">
-          <Table headers={["Reviewer", "Paid reviews", "Pending", "Credited px", "Net reviewer px"]}>
+          <Table headers={["Reviewer", "Paid records", "Pending", "Credited px", "Net reviewer px", "Nominal value"]}>
             {data.reviewers.map((r) => (
               <tr key={r.slackId}>
                 <td><Link className="font-bold underline" href={`/reviewers/${encodeURIComponent(r.slackId)}`}>{r.slackId}</Link></td>
@@ -167,9 +167,10 @@ export default async function BudgetPage({
                 <td className="tabular-nums">{r.pendingReviews}</td>
                 <td className="tabular-nums">{px(r.creditedPx)}</td>
                 <td className="font-bold tabular-nums">{px(r.netWalletPx)}</td>
+                <td className="tabular-nums">{nominalUsd(r.netWalletPx)}</td>
               </tr>
             ))}
-            {reviewerCounts === 0 && <EmptyRow colSpan={5} title="No reviewer payout records found" icon="checkmark" />}
+            {reviewerCounts === 0 && <EmptyRow colSpan={6} title="No reviewer payout records found" icon="checkmark" />}
           </Table>
         </div>
         <p className="hc-caption mt-2 text-xs">Net reviewer pixels include payout backfills, reversals and cuts in the player transaction ledger. Different from nominal review payout totals.</p>
