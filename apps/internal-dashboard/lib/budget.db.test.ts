@@ -95,7 +95,11 @@ run("budget projections and cash entries against real PostgreSQL", () => {
     await recordManualBudgetEntry({
       ...income, label: "Hosting next month", direction: "expense", state: "planned", amountCents: 1000,
     }, db);
+    const raw = await db`SELECT id, app, action, result, meta FROM audit_log`;
+    expect(raw.length).toBe(2);
+    expect(raw[0]?.meta).toMatchObject({ amountCents: 5000, direction: "income" });
     let entries = await getManualLedger(db);
+    expect(entries.length).toBe(2);
     expect(summarizeManualLedger(entries)).toEqual({
       settledIncomeCents: 5000, settledExpenseCents: 0,
       plannedIncomeCents: 0, plannedExpenseCents: 1000,
