@@ -43,7 +43,7 @@ function RecordForm({ direction }: { direction: Direction }) {
             <Input name="amountUsd" type="number" min="0.01" max="999999999" step="0.01" placeholder="0.00" required />
           </Field>
           <Field label="Date">
-            <Input name="occurredOn" type="date" defaultValue={today()} max={today()} required />
+            <Input name="occurredOn" type="date" defaultValue={today()} required />
           </Field>
         </div>
         <Field label="What was this for?">
