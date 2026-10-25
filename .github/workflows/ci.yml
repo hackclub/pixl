@@ -71,6 +71,11 @@ jobs:
           bun run --cwd apps/pixl-dashboard test
           bun run --cwd apps/pixorpheus test
 
+      # The budget page is a server-rendered route; typechecks alone won't
+      # catch Next.js production build or route compilation errors.
+      - name: Build internal dashboard
+        run: bun run --cwd apps/internal-dashboard build
+
   vulnerabilities:
     name: Dependency vulnerabilities
     permissions:
