@@ -21,8 +21,6 @@ export interface BudgetData {
     processedWithActualCost: number;
     missingActualCost: number;
     coveragePercent: number | null;
-    openOrderCount: number;
-    openOrderPx: number;
   };
   recentMonths: BudgetMonth[];
   reviewers: ReviewerBudgetRow[];
@@ -48,8 +46,6 @@ export async function getBudgetData(): Promise<BudgetData> {
       processed_orders: string;
       processed_with_cost: string;
       missing_cost: string;
-      open_orders: string;
-      open_px: string;
     }[]>`SELECT
       COALESCE(SUM(ROUND(actual_cost_usd * 100)::bigint)
         FILTER (WHERE status <> 'cancelled' AND actual_cost_usd IS NOT NULL), 0)::text AS spent_cents,
@@ -58,9 +54,7 @@ export async function getBudgetData(): Promise<BudgetData> {
         FILTER (WHERE status <> 'cancelled' AND actual_cost_usd IS NOT NULL), 0)::text AS redeemed_px,
       COUNT(*) FILTER (WHERE status IN ('credited','shipped','done'))::text AS processed_orders,
       COUNT(*) FILTER (WHERE status IN ('credited','shipped','done') AND actual_cost_usd IS NOT NULL)::text AS processed_with_cost,
-      COUNT(*) FILTER (WHERE status IN ('credited','shipped','done') AND actual_cost_usd IS NULL)::text AS missing_cost,
-      COUNT(*) FILTER (WHERE status IN ('pending','ordered'))::text AS open_orders,
-      COALESCE(SUM(price) FILTER (WHERE status IN ('pending','ordered')), 0)::text AS open_px
+      COUNT(*) FILTER (WHERE status IN ('credited','shipped','done') AND actual_cost_usd IS NULL)::text AS missing_cost
     FROM shop_orders`,
     sql<{ project_px: string; operation_px: string; fulfiller_px: string }[]>`SELECT
       COALESCE(SUM(amount) FILTER (WHERE reason IN ('project_approved','review_reverted')), 0)::text AS project_px,
@@ -119,8 +113,6 @@ export async function getBudgetData(): Promise<BudgetData> {
       processedWithActualCost,
       missingActualCost: number(shopRow?.missing_cost),
       coveragePercent: costCoverage(processedOrders, processedWithActualCost),
-      openOrderCount: number(shopRow?.open_orders),
-      openOrderPx: number(shopRow?.open_px),
     },
     recentMonths: monthlyRows.map((r) => ({
       month: r.month,
