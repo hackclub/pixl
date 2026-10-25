@@ -59,6 +59,7 @@ export function buildNav(access: AdminAccess, live: boolean): NavModel {
       glyph: "bank",
       items: pick([
         [!live && owner, { href: "/pixels", label: "Pixels", glyph: "bank" }],
+        [!live && owner, { href: "/budget", label: "Budget", glyph: "payment" }],
         [owner, { href: "/shop", label: "Shop", glyph: "bag" }],
         [owner, { href: "/shop-detail", label: "Shop detail", glyph: "search" }],
         [owner, { href: "/events", label: "Events", glyph: "explore" }],
