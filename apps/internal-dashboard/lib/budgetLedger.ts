@@ -27,7 +27,7 @@ const number = (v: unknown) => Number(v ?? 0) || 0;
 
 export function parseMoneyCents(raw: string): number | null {
   const value = raw.trim();
-  if (!/^(?:0|[1-9]\d{0,6})(?:\.\d{1,2})?$/.test(value)) return null;
+  if (!/^(?:0|[1-9]\d{0,5})(?:\.\d{1,2})?$/.test(value)) return null;
   const [d, c = ""] = value.split(".");
   const amount = Number(d) * 100 + Number(c.padEnd(2, "0"));
   return Number.isSafeInteger(amount) && amount > 0 ? amount : null;
