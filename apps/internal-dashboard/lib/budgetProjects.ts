@@ -156,7 +156,7 @@ export async function getProjectBudgetData(): Promise<ProjectBudgetData> {
   const already = new Map<string, number>();
   for (const r of previous) already.set(r.project_id + ":" + r.user_id, num(r.paid_px));
 
-  const collabByProject = new Map<number, typeof collaborators>();
+  const collabByProject = new Map<number, Array<(typeof collaborators)[number]>>();
   for (const c of collaborators) {
     const id = num(c.project_id);
     const rows = collabByProject.get(id) ?? [];
