@@ -56,8 +56,8 @@ export function summarizeManualLedger(entries: readonly BudgetLedgerEntry[]) {
   return { settledIncomeCents, settledExpenseCents, plannedIncomeCents, plannedExpenseCents };
 }
 
-export async function getManualLedger(): Promise<BudgetLedgerEntry[]> {
-  const rows = await sql<{
+export async function getManualLedger(query: typeof sql = sql): Promise<BudgetLedgerEntry[]> {
+  const rows = await query<{
     id: string; at: Date | string; action: string; actor_id: string | null;
     meta: Record<string, unknown>;
   }[]>`
@@ -105,27 +105,27 @@ export async function getManualLedger(): Promise<BudgetLedgerEntry[]> {
 export async function recordManualBudgetEntry(input: {
   direction: LedgerDirection; state: LedgerState; label: string;
   note: string; amountCents: number; occurredOn: string; actor: string;
-}): Promise<void> {
+}, query: typeof sql = sql): Promise<void> {
   const meta = JSON.stringify({
     version: 1, direction: input.direction, state: input.state, label: input.label,
     note: input.note, amountCents: input.amountCents, occurredOn: input.occurredOn,
   });
-  await sql`
+  await query`
     INSERT INTO audit_log (app, actor_type, actor_id, slack_id, action, result, meta)
     VALUES (${APP}, 'staff', ${input.actor}, ${input.actor}, ${ENTRY}, 'ok', ${meta}::jsonb)
   `;
 }
 
-export async function voidManualBudgetEntry(id: number, actor: string, reason: string): Promise<boolean> {
+export async function voidManualBudgetEntry(id: number, actor: string, reason: string, query: typeof sql = sql): Promise<boolean> {
   // Corrections are separate audit events. Never erase original notes.
-  const original = await sql<{ found: boolean }[]>`
+  const original = await query<{ found: boolean }[]>`
     SELECT EXISTS(
       SELECT 1 FROM audit_log
       WHERE id = ${id} AND app = ${APP} AND action = ${ENTRY} AND result = 'ok'
     ) AS found
   `;
   if (!original[0]?.found) return false;
-  const already = await sql<{ found: boolean }[]>`
+  const already = await query<{ found: boolean }[]>`
     SELECT EXISTS(
       SELECT 1 FROM audit_log
       WHERE app = ${APP} AND action = ${VOID} AND result = 'ok'
@@ -134,7 +134,7 @@ export async function voidManualBudgetEntry(id: number, actor: string, reason: s
   `;
   if (already[0]?.found) return false;
   const meta = JSON.stringify({ entryId: id, reason });
-  await sql`
+  await query`
     INSERT INTO audit_log (app, actor_type, actor_id, slack_id, action, target, result, meta)
     VALUES (${APP}, 'staff', ${actor}, ${actor}, ${VOID}, ${"budget:" + id}, 'ok', ${meta}::jsonb)
   `;
