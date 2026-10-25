@@ -21,7 +21,7 @@ export const trialsHero = cn(
   "border-4 border-stroke bg-gold text-ink shadow-drop-lg",
 );
 
-// Positions of the four stat boxes baked into ticket_frame.png.
+// Positions of the four stat boxes baked into ticket_frame_trials.png.
 const STAT_POS = {
   level: "left-[232.3px] top-[177.2px] h-[69.2px] w-[83.9px]",
   hours: "left-[334.6px] top-[178px] h-[68.4px] w-[84.6px]",
@@ -29,8 +29,7 @@ const STAT_POS = {
   joined: "left-[334.6px] top-[263.3px] h-[69.2px] w-[84.6px]",
 };
 
-// The same ticket_frame.png raffle-ticket used for the Explore player card,
-// repurposed to show one Trial's story + reward.
+// Trial raffle-ticket frame. Explore keeps the original player-card frame.
 export function TrialCard({ q }: { q: TrialQuest }) {
   const giver = (q.npc_name || q.npc || "").trim();
   const letter = giver.charAt(0).toUpperCase() || "?";
@@ -41,7 +40,7 @@ export function TrialCard({ q }: { q: TrialQuest }) {
     : "Find the right villager in the world to unlock this trial's story.";
 
   return (
-    <div className="relative h-[599px] w-[460px] shrink-0 animate-toast-in bg-[url(/img/ticket_frame.png)] bg-size-[460px_599px] bg-no-repeat">
+    <div className="relative h-[599px] w-[460px] shrink-0 animate-toast-in bg-[url(/img/ticket_frame_trials.png)] bg-size-[460px_599px] bg-no-repeat">
       <div className="absolute top-[57.6px] left-[28px] flex h-[77.4px] w-[278px] items-center overflow-hidden">
         <div className="truncate font-pixel text-[23px] tracking-[.5px] text-white [text-shadow:1.5px_0_var(--stroke),-1.5px_0_var(--stroke),0_1.5px_var(--stroke),0_-1.5px_var(--stroke)]">
           {q.name}
