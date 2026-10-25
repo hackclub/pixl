@@ -67,9 +67,9 @@ export function estimatedOutstandingPx(
   return Math.max(0, gross - funding - Math.max(0, previouslyPaidPx));
 }
 
-export async function getProjectBudgetData(): Promise<ProjectBudgetData> {
+export async function getProjectBudgetData(query: typeof sql = sql): Promise<ProjectBudgetData> {
   const [waiting, collaborators, lifetime, previous, paid] = await Promise.all([
-    sql<{
+    query<{
       id: string; name: string; status: string; kind: string; level: string; user_id: string;
       slack_id: string | null; hackatime_seconds: string | null; first_pass_hours: string | null;
       first_pass_verdict: string | null; prior_approved_hours: string | null;
@@ -93,7 +93,7 @@ export async function getProjectBudgetData(): Promise<ProjectBudgetData> {
         AND p.banned_at IS NULL AND p.archived_at IS NULL AND p.rejected_at IS NULL
       ORDER BY p.shipped_at DESC NULLS LAST
     `,
-    sql<{
+    query<{
       project_id: string; user_id: string; approved_hours: string | null;
       prior_approved_hours: string | null; hackatime_seconds: string | null;
       journal_hours: string;
@@ -111,7 +111,7 @@ export async function getProjectBudgetData(): Promise<ProjectBudgetData> {
         AND p.status IN ('shipped', 'second_review', 'fraud_review')
         AND p.banned_at IS NULL AND p.archived_at IS NULL AND p.rejected_at IS NULL
     `,
-    sql<{
+    query<{
       id: string; user_id: string; approved_hours: string | null; hackatime_seconds: string | null;
       level: string; sidequest_id: string | null;
     }[]>`
@@ -119,7 +119,7 @@ export async function getProjectBudgetData(): Promise<ProjectBudgetData> {
         hackatime_seconds::text, level::text, sidequest_id::text
       FROM projects WHERE status = 'approved' AND banned_at IS NULL
     `,
-    sql<{ project_id: string; user_id: string; paid_px: string }[]>`
+    query<{ project_id: string; user_id: string; paid_px: string }[]>`
       SELECT t.project_id::text, t.user_id::text, SUM(t.amount)::text AS paid_px
       FROM pixel_transactions t
       JOIN projects p ON p.id = t.project_id
@@ -127,7 +127,7 @@ export async function getProjectBudgetData(): Promise<ProjectBudgetData> {
         AND p.status IN ('shipped','second_review','fraud_review')
       GROUP BY t.project_id, t.user_id
     `,
-    sql<{
+    query<{
       project_id: string; name: string; slack_id: string | null;
       paid_px: string; credited_hours: string;
     }[]>`
