@@ -59,9 +59,9 @@ export function summarizeManualLedger(entries: readonly BudgetLedgerEntry[]) {
 export async function getManualLedger(query: typeof sql = sql): Promise<BudgetLedgerEntry[]> {
   const rows = await query<{
     id: string; at: Date | string; action: string; actor_id: string | null;
-    meta: Record<string, unknown>;
+    meta: string;
   }[]>`
-    SELECT id::text, at, action, actor_id, meta
+    SELECT id::text, at, action, actor_id, meta::text AS meta
     FROM audit_log
     WHERE app = ${APP} AND action IN (${ENTRY}, ${VOID}) AND result = 'ok'
     ORDER BY id ASC
@@ -69,7 +69,14 @@ export async function getManualLedger(query: typeof sql = sql): Promise<BudgetLe
   const entries = new Map<number, BudgetLedgerEntry>();
   const corrections: { id: number; by: string; reason: string }[] = [];
   for (const r of rows) {
-    const metadata = r.meta ?? {};
+    let metadata: Record<string, unknown>;
+    try {
+      const parsed: unknown = JSON.parse(r.meta);
+      metadata = parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? parsed as Record<string, unknown> : {};
+    } catch {
+      continue;
+    }
     if (r.action === VOID) {
       const id = number(metadata.entryId);
       if (Number.isSafeInteger(id) && id > 0) {
