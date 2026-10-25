@@ -116,9 +116,9 @@ export async function recordManualBudgetEntry(input: {
   await query`
     INSERT INTO audit_log (app, actor_type, actor_id, slack_id, action, result, meta)
     VALUES (${APP}, 'staff', ${input.actor}, ${input.actor}, ${ENTRY}, 'ok',
-      jsonb_build_object('version', 1, 'direction', ${input.direction},
-        'state', ${input.state}, 'label', ${input.label}, 'note', ${input.note},
-        'amountCents', ${input.amountCents}, 'occurredOn', ${input.occurredOn}))
+      jsonb_build_object('version', 1, 'direction', ${input.direction}::text,
+        'state', ${input.state}::text, 'label', ${input.label}::text, 'note', ${input.note}::text,
+        'amountCents', ${input.amountCents}::integer, 'occurredOn', ${input.occurredOn}::text))
   `;
 }
 
@@ -142,7 +142,7 @@ export async function voidManualBudgetEntry(id: number, actor: string, reason: s
   await query`
     INSERT INTO audit_log (app, actor_type, actor_id, slack_id, action, target, result, meta)
     VALUES (${APP}, 'staff', ${actor}, ${actor}, ${VOID}, ${"budget:" + id}, 'ok',
-      jsonb_build_object('entryId', ${id}, 'reason', ${reason}))
+      jsonb_build_object('entryId', ${id}::bigint, 'reason', ${reason}::text))
   `;
   return true;
 }
