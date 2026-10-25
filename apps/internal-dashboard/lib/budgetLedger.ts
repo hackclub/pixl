@@ -113,13 +113,12 @@ export async function recordManualBudgetEntry(input: {
   direction: LedgerDirection; state: LedgerState; label: string;
   note: string; amountCents: number; occurredOn: string; actor: string;
 }, query: typeof sql = sql): Promise<void> {
-  const meta = JSON.stringify({
-    version: 1, direction: input.direction, state: input.state, label: input.label,
-    note: input.note, amountCents: input.amountCents, occurredOn: input.occurredOn,
-  });
   await query`
     INSERT INTO audit_log (app, actor_type, actor_id, slack_id, action, result, meta)
-    VALUES (${APP}, 'staff', ${input.actor}, ${input.actor}, ${ENTRY}, 'ok', ${meta}::jsonb)
+    VALUES (${APP}, 'staff', ${input.actor}, ${input.actor}, ${ENTRY}, 'ok',
+      jsonb_build_object('version', 1, 'direction', ${input.direction},
+        'state', ${input.state}, 'label', ${input.label}, 'note', ${input.note},
+        'amountCents', ${input.amountCents}, 'occurredOn', ${input.occurredOn}))
   `;
 }
 
@@ -140,10 +139,10 @@ export async function voidManualBudgetEntry(id: number, actor: string, reason: s
     ) AS found
   `;
   if (already[0]?.found) return false;
-  const meta = JSON.stringify({ entryId: id, reason });
   await query`
     INSERT INTO audit_log (app, actor_type, actor_id, slack_id, action, target, result, meta)
-    VALUES (${APP}, 'staff', ${actor}, ${actor}, ${VOID}, ${"budget:" + id}, 'ok', ${meta}::jsonb)
+    VALUES (${APP}, 'staff', ${actor}, ${actor}, ${VOID}, ${"budget:" + id}, 'ok',
+      jsonb_build_object('entryId', ${id}, 'reason', ${reason}))
   `;
   return true;
 }
