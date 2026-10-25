@@ -66,6 +66,9 @@ export const dynamic = "force-dynamic";
 const TAB_KEYS = ["pending", "ordered", "credited", "shipped", "done", "cancelled", "flagged", "all", "leaderboard", "fulfillers"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
 
+// Keep the everyday fulfillment stages visible; uncommon stages live in Filters.
+const PRIMARY_QUEUE_TABS: readonly TabKey[] = ["pending", "ordered", "shipped", "done", "all"];
+
 // Lifetime shop P&L, fulfilled orders only. Both sides are scoped to the same
 // cohort (orders with an actual_cost_usd on file, i.e. credited or later), so
 // it compares fulfilled against fulfilled. New/Ordered orders aren't counted.
@@ -379,13 +382,24 @@ export default async function FulfillmentPage({
               </form>
             </div>
             {!mineOnly && (
-              <nav className="fw-chips" aria-label="Filter by status">
-                {tabs.map((t) => (
+              <nav className="fw-chips fw-stage-tabs" aria-label="Order stage">
+                {tabs.filter((t) => PRIMARY_QUEUE_TABS.includes(t.key)).map((t) => (
                   <Link
                     key={t.key}
                     href={hrefFor({ status: t.key, order: undefined })}
                     className="fw-chip"
-                    aria-current={t.key === active ? "true" : undefined}
+                    aria-current={t.key === active ? "page" : undefined}
+                  >
+                    {t.label}
+                    {t.count !== undefined && <CountBadge>{t.count}</CountBadge>}
+                  </Link>
+                ))}
+                {!PRIMARY_QUEUE_TABS.includes(active) && tabs.filter((t) => t.key === active).map((t) => (
+                  <Link
+                    key={t.key}
+                    href={hrefFor({ status: t.key, order: undefined })}
+                    className="fw-chip"
+                    aria-current="page"
                   >
                     {t.label}
                     {t.count !== undefined && <CountBadge>{t.count}</CountBadge>}
@@ -394,52 +408,115 @@ export default async function FulfillmentPage({
               </nav>
             )}
             {showingQueue && (
-              <nav className="fw-chips" aria-label="Filter by funding">
-                <Link href={hrefFor({ elig: null, order: undefined })} className="fw-chip" aria-current={eligFilter ? undefined : "true"}>
-                  Any funding
-                </Link>
-                {ELIGIBILITY_FILTERS.map((f) => (
-                  <Link
-                    key={f}
-                    href={hrefFor({ elig: f, order: undefined })}
-                    className="fw-chip"
-                    aria-current={f === eligFilter ? "true" : undefined}
-                  >
-                    {ELIGIBILITY_LABEL[f]}
-                  </Link>
-                ))}
-              </nav>
-            )}
-            {showingQueue && (
-              <nav className="fw-chips" aria-label="Filter by verification">
-                <Link href={hrefFor({ verify: null, order: undefined })} className="fw-chip" aria-current={verifyFilter ? undefined : "true"}>
-                  Any verification
-                </Link>
-                {VERIFICATION_FILTERS.map((f) => (
-                  <Link
-                    key={f}
-                    href={hrefFor({ verify: f, order: undefined })}
-                    className="fw-chip"
-                    aria-current={f === verifyFilter ? "true" : undefined}
-                  >
-                    {VERIFICATION_LABEL[f]}
-                  </Link>
-                ))}
-              </nav>
-            )}
-            {showingQueue && (
-              <nav className="fw-chips" aria-label="Sort">
-                {SORT_KEYS.map((k) => (
-                  <Link
-                    key={k}
-                    href={hrefFor({ sort: k, order: undefined })}
-                    className="fw-chip"
-                    aria-current={k === sortKey ? "true" : undefined}
-                  >
-                    {SORT_LABEL[k]}
-                  </Link>
-                ))}
-              </nav>
+              <div className="fw-filters-shell">
+                <details className="fw-filters" open={Boolean(eligFilter || verifyFilter || sortKey !== "newest")}>
+                  <summary className="fw-filter-toggle">
+                    <span>Filters &amp; sort</span>
+                    {(Number(Boolean(eligFilter)) + Number(Boolean(verifyFilter)) + Number(sortKey !== "newest")) > 0 && (
+                      <span className="fw-filter-count">
+                        {Number(Boolean(eligFilter)) + Number(Boolean(verifyFilter)) + Number(sortKey !== "newest")} active
+                      </span>
+                    )}
+                  </summary>
+                  <div className="fw-filter-body">
+                    {!mineOnly && (
+                      <div className="fw-filter-group">
+                        <div className="fw-filter-group-title">
+                          <strong>Other stages</strong>
+                          <span>Less commonly used order queues</span>
+                        </div>
+                        <nav className="fw-chips" aria-label="Other order stages">
+                          {tabs.filter((t) => !PRIMARY_QUEUE_TABS.includes(t.key)).map((t) => (
+                            <Link
+                              key={t.key}
+                              href={hrefFor({ status: t.key, order: undefined })}
+                              className="fw-chip"
+                              aria-current={t.key === active ? "page" : undefined}
+                            >
+                              {t.label}
+                              {t.count !== undefined && <CountBadge>{t.count}</CountBadge>}
+                            </Link>
+                          ))}
+                        </nav>
+                      </div>
+                    )}
+                    <div className="fw-filter-group">
+                      <div className="fw-filter-group-title">
+                        <strong>Funding</strong>
+                        <span>Does the player have enough verified budget?</span>
+                      </div>
+                      <nav className="fw-chips" aria-label="Filter by funding">
+                        <Link href={hrefFor({ elig: null, order: undefined })} className="fw-chip" aria-current={eligFilter ? undefined : "page"}>
+                          All
+                        </Link>
+                        {ELIGIBILITY_FILTERS.map((f) => (
+                          <Link
+                            key={f}
+                            href={hrefFor({ elig: f, order: undefined })}
+                            className="fw-chip"
+                            aria-current={f === eligFilter ? "page" : undefined}
+                          >
+                            {ELIGIBILITY_LABEL[f]}
+                          </Link>
+                        ))}
+                      </nav>
+                    </div>
+                    <div className="fw-filter-group">
+                      <div className="fw-filter-group-title">
+                        <strong>Ships verification</strong>
+                        <span>Is the player's project approval confirmed?</span>
+                      </div>
+                      <nav className="fw-chips" aria-label="Filter by verification">
+                        <Link href={hrefFor({ verify: null, order: undefined })} className="fw-chip" aria-current={verifyFilter ? undefined : "page"}>
+                          All
+                        </Link>
+                        {VERIFICATION_FILTERS.map((f) => (
+                          <Link
+                            key={f}
+                            href={hrefFor({ verify: f, order: undefined })}
+                            className="fw-chip"
+                            aria-current={f === verifyFilter ? "page" : undefined}
+                          >
+                            {VERIFICATION_LABEL[f]}
+                          </Link>
+                        ))}
+                      </nav>
+                    </div>
+                    <div className="fw-filter-group">
+                      <div className="fw-filter-group-title">
+                        <strong>Sort requests</strong>
+                        <span>Choose which requests appear first</span>
+                      </div>
+                      <nav className="fw-chips" aria-label="Sort">
+                        {SORT_KEYS.map((k) => (
+                          <Link
+                            key={k}
+                            href={hrefFor({ sort: k, order: undefined })}
+                            className="fw-chip"
+                            aria-current={k === sortKey ? "page" : undefined}
+                          >
+                            {SORT_LABEL[k]}
+                          </Link>
+                        ))}
+                      </nav>
+                    </div>
+                    {(eligFilter || verifyFilter || sortKey !== "newest") && (
+                      <Link className="fw-filter-reset" href={hrefFor({ elig: null, verify: null, sort: "newest", order: undefined })}>
+                        Clear extra filters
+                      </Link>
+                    )}
+                  </div>
+                </details>
+                {(eligFilter || verifyFilter || sortKey !== "newest") && (
+                  <div className="fw-filter-active" aria-label="Applied filters">
+                    <span className="fw-filter-active-label">Showing:</span>
+                    {eligFilter && <span>Funding: {ELIGIBILITY_LABEL[eligFilter]}</span>}
+                    {verifyFilter && <span>Ships: {VERIFICATION_LABEL[verifyFilter]}</span>}
+                    {sortKey !== "newest" && <span>Sort: {SORT_LABEL[sortKey]}</span>}
+                    <Link href={hrefFor({ elig: null, verify: null, sort: "newest", order: undefined })}>Clear</Link>
+                  </div>
+                )}
+              </div>
             )}
             {orders.length === 0 ? (
               <EmptyState title={emptyTitle} icon="package" />
