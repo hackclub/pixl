@@ -21,10 +21,10 @@ async function requireLedger(): Promise<void> {
   if (await getLiveMode()) back({ error: "Turn Live mode off to edit the private budget ledger." });
 }
 
-function validDate(raw: string): boolean {
+function validDate(raw: string, allowFuture: boolean): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return false;
   const d = new Date(raw + "T00:00:00Z");
-  return Number.isFinite(d.getTime()) && d.toISOString().startsWith(raw) && d <= new Date();
+  return Number.isFinite(d.getTime()) && d.toISOString().startsWith(raw) && (allowFuture || d <= new Date());
 }
 
 export const addBudgetEntry = guardedAction("budget.add", "owner", async (access, formData: FormData): Promise<void> => {
@@ -44,7 +44,7 @@ export const addBudgetEntry = guardedAction("budget.add", "owner", async (access
   if (amountCents === null) back({ error: "Enter a positive USD amount with at most two decimals." });
   if (title.length < 3 || title.length > 140) back({ error: "Description title must be 3–140 characters." });
   if (description.length > 2000) back({ error: "Notes must be 2,000 characters or fewer." });
-  if (!validDate(occurredOn)) back({ error: "Enter a real date that isn't in the future." });
+  if (!validDate(occurredOn, state === "planned")) back({ error: "Enter a valid date. Future dates are only allowed for planned transactions." });
   if (evidenceUrl.length > 500) back({ error: "Evidence link is too long." });
   if (evidenceUrl) {
     try {
