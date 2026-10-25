@@ -2161,9 +2161,75 @@ html[data-density="compact"] .hc-main {
   color: var(--secondary);
 }
 .fw-chip:hover { background: var(--surface-hover); }
-.fw-chip[aria-current="true"] { border-color: var(--primary); color: var(--text); background: color-mix(in srgb, var(--primary) 18%, transparent); }
+.fw-chip[aria-current="true"],
+.fw-chip[aria-current="page"] { border-color: var(--primary); color: var(--text); background: color-mix(in srgb, var(--primary) 18%, transparent); }
 .fw-chip:focus-visible,
 .fw-item:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+
+/* Keep the everyday order stages compact; secondary controls are opt-in. */
+.fw-stage-tabs { padding-bottom: 6px; }
+.fw-filters-shell { padding: 0 16px 12px; }
+.fw-filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 5px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--secondary);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+}
+.fw-filter-toggle::-webkit-details-marker { display: none; }
+.fw-filter-toggle::after {
+  content: "⌄";
+  font-size: 17px;
+  line-height: 1;
+  transition: transform 150ms ease;
+}
+.fw-filters[open] .fw-filter-toggle::after { transform: rotate(180deg); }
+.fw-filter-toggle:hover { background: var(--surface-hover); }
+.fw-filter-toggle:focus-visible,
+.fw-filter-reset:focus-visible,
+.fw-filter-active a:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.fw-filter-count {
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--surface-hover);
+  font-size: 11px;
+  color: var(--text);
+}
+.fw-filter-body {
+  display: grid;
+  gap: 16px;
+  margin-top: 10px;
+  padding: 14px;
+  background: var(--sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.fw-filter-group { display: grid; gap: 8px; }
+.fw-filter-group-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; font-size: 13px; }
+.fw-filter-group-title strong { color: var(--text); }
+.fw-filter-group-title span { color: var(--muted); font-size: 12px; }
+.fw-filter-body .fw-chips { padding: 0; }
+.fw-filter-body .fw-chip { background: var(--surface); }
+.fw-filter-body .fw-chip[aria-current="page"] { background: color-mix(in srgb, var(--primary) 18%, transparent); }
+.fw-filter-reset { width: fit-content; color: var(--secondary); font-size: 12px; text-decoration: underline; }
+.fw-filter-active {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding-top: 9px;
+  font-size: 12px;
+  color: var(--secondary);
+}
+.fw-filter-active-label { color: var(--muted); }
+.fw-filter-active a { color: var(--text); text-decoration: underline; }
 
 .fw-row {
   display: grid;
