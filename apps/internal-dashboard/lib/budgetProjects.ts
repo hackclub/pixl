@@ -206,7 +206,7 @@ export async function getProjectBudgetData(query: typeof sql = sql): Promise<Pro
 
   return {
     pendingProjects, reviewProjectCount: pendingProjects.length,
-    pendingHours: pendingProjects.reduce((s, p) => s + p.additionalHours, 0),
+    pendingHours: pendingProjects.reduce((s, p) => s + (p.hasProposedBan ? 0 : p.additionalHours), 0),
     sponsorValueCents: pendingProjects.reduce((s, p) => s + p.sponsorValueCents, 0),
     estimatedRewardCents: pendingProjects.reduce((s, p) => s + p.estimatedPayoutCents, 0),
     trialContingentCount: pendingProjects.filter((p) => p.heldForTrial).length,
