@@ -10,6 +10,9 @@ import {
   shipsUrlFromEnv,
   shipsSnapshotReaderEnabled,
   ttlFromEnv,
+  SHIPS_LIVE_TIMEOUT_MS,
+  SHIPS_SNAPSHOT_TIMEOUT_MS,
+  SHIPS_MAX_RESPONSE_BYTES,
 } from "./ships";
 
 const rec = (n: number) => `rec${String(n).padStart(14, "0")}`;
@@ -112,6 +115,12 @@ describe("snapshot building", () => {
 });
 
 describe("provider fetch", () => {
+  test("production Ships fetch budgets exceed the old 25s deadline", () => {
+    expect(SHIPS_LIVE_TIMEOUT_MS).toBeGreaterThan(25_000);
+    expect(SHIPS_SNAPSHOT_TIMEOUT_MS).toBeGreaterThan(SHIPS_LIVE_TIMEOUT_MS);
+    expect(SHIPS_MAX_RESPONSE_BYTES).toBeGreaterThan(64 * 1024 * 1024);
+  });
+
   test("issues one GET with no credentials and no body", async () => {
     const seen: { url: string; init: RequestInit }[] = [];
     const p = createShipsProvider({
