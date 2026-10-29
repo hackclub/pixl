@@ -1,9 +1,9 @@
 "use client";
 
 import type { Commit } from "@/lib/commits";
-import type { HackatimeReport } from "@/lib/hackatime";
+import type { HackatimePersonReport } from "@/lib/hackatime";
 import type { FraudyAiCheck } from "@/lib/fraudy";
-import { fraudyHours } from "@/lib/fraudy";
+import { fraudyCheckKey, fraudyHours } from "@/lib/fraudy";
 import { Badge, Callout, EmptyState, Mono, Muted, Stat, StatGrid } from "@/app/_ui/ui";
 
 // Cross-references what the maker declared, Fraudy's own human/AI split of
@@ -12,22 +12,29 @@ import { Badge, Callout, EmptyState, Mono, Muted, Stat, StatGrid } from "@/app/_
 // other.
 export function AiTimePanel({
   commits,
-  hackatime,
+  hackatimeReports,
+  contributorNames,
   usedAi,
   aiNotes,
   fraudyChecks,
 }: {
   commits: Commit[];
-  hackatime: HackatimeReport | null;
+  hackatimeReports: HackatimePersonReport[];
+  /** user_id -> name, only set on a multi-person ship so rows get labelled. */
+  contributorNames: Record<string, string> | null;
   usedAi: boolean;
   aiNotes: string | null;
-  /** Hackatime project name -> Fraudy's check-ai result, null when Fraudy had
-   * no numbers for that project. */
+  /** fraudyCheckKey(hackatime user id, project) -> Fraudy's check-ai result,
+   * null when Fraudy had no numbers for that project. */
   fraudyChecks: Record<string, FraudyAiCheck | null>;
 }) {
   const aiCommits = commits.filter((c) => c.ai);
   const mismatch = aiCommits.length > 0 && !usedAi;
-  const linked = (hackatime?.projects ?? []).filter((p) => p.linked);
+  const linked = hackatimeReports.flatMap(({ userId, report }) =>
+    report.projects
+      .filter((p) => p.linked)
+      .map((p) => ({ ...p, userId, check: fraudyChecks[fraudyCheckKey(report.hackatimeUserId, p.name)] })),
+  );
 
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -57,10 +64,17 @@ export function AiTimePanel({
         ) : (
           <ul className="flex flex-col gap-2">
             {linked.map((hp) => {
-              const check = fraudyChecks[hp.name];
+              const check = hp.check;
+              const who = contributorNames?.[hp.userId];
               return (
-                <li key={hp.name} className="flex flex-col gap-2 border-b border-[var(--border)] pb-2 last:border-b-0">
-                  <span className="text-sm font-bold">{hp.name}</span>
+                <li
+                  key={`${hp.userId}:${hp.name}`}
+                  className="flex flex-col gap-2 border-b border-[var(--border)] pb-2 last:border-b-0"
+                >
+                  <span className="text-sm font-bold">
+                    {hp.name}
+                    {who && <Muted className="ml-2 text-xs font-normal">{who}</Muted>}
+                  </span>
                   {!check ? (
                     <Badge outline>Fraudy has no data for {hp.name}</Badge>
                   ) : (

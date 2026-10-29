@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition, type FormEvent, type ReactNode } fr
 import { AiTimePanel } from "@/app/_components/AiTimePanel";
 import { ReadmePanel } from "@/app/_components/ReadmePanel";
 import type { CommitResult } from "@/lib/commits";
-import type { HackatimeReport } from "@/lib/hackatime";
+import type { HackatimePersonReport } from "@/lib/hackatime";
 import type { FraudyAiCheck } from "@/lib/fraudy";
 import type { JournalRow, ReviewAuditRow } from "@/lib/db";
 import type { YswsShip } from "@/lib/ysws";
@@ -167,7 +167,7 @@ export function ReviewDetailTabs({
   reviewAudits,
   yswsShips,
   yswsImport,
-  hackatime,
+  hackatimeReports,
   repoUrl,
   projectKind,
   usedAi,
@@ -184,17 +184,20 @@ export function ReviewDetailTabs({
   reviewAudits: ReviewAuditRow[];
   yswsShips: YswsShip[];
   yswsImport: YswsImport | null;
-  hackatime: HackatimeReport | null;
+  /** One report per contributor with linked Hackatime projects. */
+  hackatimeReports: HackatimePersonReport[];
   repoUrl: string | null;
   projectKind: string;
   usedAi: boolean;
   aiNotes: string | null;
-  /** Hackatime project name -> Fraudy's check-ai result. */
+  /** fraudyCheckKey(hackatime user id, project) -> Fraudy's check-ai result. */
   fraudyChecks: Record<string, FraudyAiCheck | null>;
   /** Owner or second-pass reviewer only - hidden from first-pass-only reviewers. */
   canViewAiTime: boolean;
 }) {
   const [tab, setTab] = useState<TabKey>("commits");
+  const okReports = hackatimeReports.filter((r) => r.report.ok);
+  const linkedProjects = okReports.flatMap((r) => r.report.projects.filter((p) => p.linked));
   const [commitsState, setCommitsState] = useState(commits);
 
   useEffect(() => {
@@ -214,12 +217,12 @@ export function ReviewDetailTabs({
   // The page header links to #hackatime.
   useEffect(() => {
     const open = () => {
-      if (location.hash === "#hackatime" && hackatime) setTab("hackatime");
+      if (location.hash === "#hackatime" && okReports.length > 0) setTab("hackatime");
     };
     open();
     window.addEventListener("hashchange", open);
     return () => window.removeEventListener("hashchange", open);
-  }, [hackatime]);
+  }, [okReports.length]);
 
   const yswsMatches = yswsShips.filter((s) => s.urlMatch);
   const multipleContributors = Object.keys(contributorNames).length > 1;
@@ -232,8 +235,8 @@ export function ReviewDetailTabs({
     },
     ...(repoUrl ? [{ key: "readme" as const, label: "README" }] : []),
     { key: "journals", label: "Journals", count: journals.length },
-    ...(hackatime?.ok
-      ? [{ key: "hackatime" as const, label: "Hackatime", count: hackatime.projects.filter((p) => p.linked).length }]
+    ...(okReports.length > 0
+      ? [{ key: "hackatime" as const, label: "Hackatime", count: linkedProjects.length }]
       : []),
     { key: "reviews", label: "Past reviews", count: reviewAudits.length },
     { key: "ysws", label: "Other YSWS", count: yswsMatches.length + (yswsImport ? 1 : 0) },
@@ -245,7 +248,7 @@ export function ReviewDetailTabs({
   // it against each other ship's approval date (the archive has no start date,
   // so overlap can't be proven outright).
   const trackedRange = (() => {
-    const linked = (hackatime?.projects ?? []).filter((p) => p.linked);
+    const linked = linkedProjects;
     const firsts = linked.map((p) => p.firstActivity).filter((n): n is number => n != null);
     const lasts = linked.map((p) => p.lastActivity).filter((n): n is number => n != null);
     if (firsts.length === 0 || lasts.length === 0) return null;
@@ -297,9 +300,16 @@ export function ReviewDetailTabs({
         <ReadmePanel projectId={projectId} active={tab === "readme"} />
       </div>
 
-      {hackatime && (
+      {hackatimeReports.length > 0 && (
         <div role="tabpanel" hidden={tab !== "hackatime"}>
-          <HackatimePanel report={hackatime} />
+          {hackatimeReports.map(({ userId, report }) => (
+            <div key={userId}>
+              {multipleContributors && (
+                <p className="hc-eyebrow px-4 pt-4">{contributorNames[userId] ?? "Contributor"}</p>
+              )}
+              <HackatimePanel report={report} />
+            </div>
+          ))}
         </div>
       )}
 
@@ -488,7 +498,8 @@ export function ReviewDetailTabs({
         <div role="tabpanel" hidden={tab !== "ai_time"}>
           <AiTimePanel
             commits={commitsState.commits}
-            hackatime={hackatime}
+            hackatimeReports={hackatimeReports}
+            contributorNames={multipleContributors ? contributorNames : null}
             usedAi={usedAi}
             aiNotes={aiNotes}
             fraudyChecks={fraudyChecks}

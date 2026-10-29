@@ -187,6 +187,13 @@ export interface HackatimeReport {
   projects: HackatimeProjectReport[];
 }
 
+/** One contributor's Hackatime report. Collaborators track on their own
+ * Hackatime account, so a multi-person ship has one of these per person. */
+export interface HackatimePersonReport {
+  userId: string;
+  report: HackatimeReport;
+}
+
 function fmtSeconds(s: number): string {
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
