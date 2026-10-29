@@ -21,7 +21,13 @@ import {
 import { parseAuditNote } from "@/lib/auditNote";
 import { fetchCommits, attachCommitStats } from "@/lib/commits";
 import { fetchBomRows } from "@/lib/bom";
-import { fetchUserSpans, attachTrackedTime, fetchTrustFactor, fetchHackatimeReport } from "@/lib/hackatime";
+import {
+  fetchUserSpans,
+  attachTrackedTime,
+  fetchTrustFactor,
+  fetchHackatimeReport,
+  type HackatimePersonReport,
+} from "@/lib/hackatime";
 import { yswsShipsFor } from "@/lib/ysws";
 import { renderMarkdown } from "@/lib/markdown";
 import { computeClaimedHours, round1 } from "@/lib/hours";
@@ -60,7 +66,7 @@ import { ReviewHeartbeat } from "@/app/_components/ReviewHeartbeat";
 import { ProjectNotes } from "@/app/_components/ProjectNotes";
 import { LevelBadge, TypeBadge, ShipBadges, StatusBadge, BeaconBadge, FundingBadge } from "@/app/_components/ProjectBadges";
 import { FraudyAiSummary } from "@/app/_components/FraudyAiSummary";
-import { fraudyCheckAi, type FraudyAiCheck } from "@/lib/fraudy";
+import { fraudyCheckAi, fraudyCheckKey, type FraudyAiCheck } from "@/lib/fraudy";
 import { CardSkeleton } from "@/app/_components/Loading";
 import { slackHandle } from "@/lib/slack";
 import { staffName } from "@/lib/staffName";
@@ -284,42 +290,77 @@ export default async function ReviewDetail({
   // each one streams into its own <Suspense> boundary below, so GitHub,
   // Hackatime, the YSWS archive and Slack can't hold up the reviewer's view.
   const hackatimeProjects = p.hackatime_projects ?? [];
+  // Everyone who tracked time on this ship: the owner plus each accepted
+  // collaborator, each with their own Slack id and linked Hackatime projects.
+  // Collaborators log against their own Hackatime account, so every lookup
+  // below runs once per person, never just for the owner.
+  const hackatimeSources = [
+    { userId: p.user_id, slackId: p.users?.slack_id, projects: hackatimeProjects },
+    ...allCollaborators
+      .filter((c) => c.status === "accepted")
+      .map((c) => ({ userId: c.user_id, slackId: c.users?.slack_id, projects: c.hackatime_projects ?? [] })),
+  ].filter((s) => s.projects.length > 0);
   // Promise.resolve turns the query builder's thenable into a real promise,
-  // so the token query runs once even though two lookups await it.
-  const tokenPromise: Promise<string | null> = hackatimeProjects.length
+  // so the token query runs once even though several lookups await it.
+  const tokensPromise: Promise<Map<string, string | null>> = hackatimeSources.length
     ? Promise.resolve(
         db
           .from("users")
-          .select("hackatime_token")
-          .eq("id", p.user_id)
-          .single()
-          .then((r) => (r.data as { hackatime_token?: string } | null)?.hackatime_token ?? null),
+          .select("id, hackatime_token")
+          .in(
+            "id",
+            hackatimeSources.map((s) => s.userId),
+          )
+          .then((r) => {
+            const rows = (r.data ?? []) as { id: string; hackatime_token?: string | null }[];
+            return new Map(rows.map((u) => [u.id, u.hackatime_token ?? null] as const));
+          }),
       )
-    : Promise.resolve(null);
+    : Promise.resolve(new Map<string, string | null>());
   // Commit stats and tracked time both mutate the same result, so they run as
   // one chain alongside everything else.
   const commitsPromise = (async () => {
     const commits = await fetchCommits(p.repo_url);
     await attachCommitStats(commits);
-    if (commits.commits.length > 0 && hackatimeProjects.length > 0) {
-      const spans = await fetchUserSpans(p.users?.slack_id, await tokenPromise, hackatimeProjects);
-      if (spans) attachTrackedTime(commits.commits, spans);
+    if (commits.commits.length > 0 && hackatimeSources.length > 0) {
+      const tokens = await tokensPromise;
+      const spanSets = await Promise.all(
+        hackatimeSources.map((s) => fetchUserSpans(s.slackId, tokens.get(s.userId) ?? null, s.projects)),
+      );
+      const spans = spanSets.flatMap((set) => set ?? []).sort((a, b) => a.start - b.start);
+      if (spans.length > 0) attachTrackedTime(commits.commits, spans);
     }
     return commits;
   })();
-  const hackatimeReportPromise = hackatimeProjects.length
-    ? tokenPromise.then((tok) => fetchHackatimeReport(p.users?.slack_id, tok, hackatimeProjects))
-    : Promise.resolve(null);
-  // Fraudy's own human/AI split per linked Hackatime project, for the AI time
-  // tab. Skipped for viewers who can't see that tab anyway, since every call
-  // is logged under the Fraudy key's owner.
+  const hackatimeReportsPromise: Promise<HackatimePersonReport[]> = tokensPromise.then((tokens) =>
+    Promise.all(
+      hackatimeSources.map(async (s) => ({
+        userId: s.userId,
+        report: await fetchHackatimeReport(s.slackId, tokens.get(s.userId) ?? null, s.projects),
+      })),
+    ),
+  );
+  // Fraudy's own human/AI split per person per linked Hackatime project, for
+  // the AI time tab. Skipped for viewers who can't see that tab anyway, since
+  // every call is logged under the Fraudy key's owner. Keyed by
+  // fraudyCheckKey so two people's same-named projects can't collide.
   const fraudyChecksPromise: Promise<Record<string, FraudyAiCheck | null>> =
     canViewAiTime
-      ? hackatimeReportPromise.then(async (report) => {
-          if (!report?.ok || !report.hackatimeUserId) return {};
-          const linked = report.projects.filter((hp) => hp.linked);
+      ? hackatimeReportsPromise.then(async (people) => {
           const entries = await Promise.all(
-            linked.map(async (hp) => [hp.name, await fraudyCheckAi(report.hackatimeUserId, hp.name)] as const),
+            people.flatMap(({ report }) =>
+              !report.ok || !report.hackatimeUserId
+                ? []
+                : report.projects
+                    .filter((hp) => hp.linked)
+                    .map(
+                      async (hp) =>
+                        [
+                          fraudyCheckKey(report.hackatimeUserId, hp.name),
+                          await fraudyCheckAi(report.hackatimeUserId, hp.name),
+                        ] as const,
+                    ),
+            ),
           );
           return Object.fromEntries(entries);
         })
@@ -549,33 +590,39 @@ export default async function ReviewDetail({
           user when none is linked. */}
       {isFinalStage && (
         <Suspense fallback={null}>
-          <Await promise={hackatimeReportPromise}>
-            {(report) => {
-              if (!report?.hackatimeUserId) return null;
-              const fraudyUrl = (projectName?: string) => {
-                const url = new URL(`https://fraudy.hackclub.com/users/${encodeURIComponent(String(report.hackatimeUserId))}`);
-                if (projectName) url.searchParams.set("project", projectName);
-                return url.toString();
-              };
-              const linked = report.projects.filter((hp) => hp.linked);
-              if (linked.length === 0) {
-                return (
-                  <ButtonLink href={fraudyUrl()} external icon="view">
-                    froud frad fraudy! is it ai?
-                  </ButtonLink>
-                );
-              }
-              return linked.map((hp) => (
-                <Fragment key={hp.name}>
-                  <ButtonLink href={fraudyUrl(hp.name)} external icon="view">
-                    froud frad fraudy! is it ai? {hp.name}
-                  </ButtonLink>
-                  <Suspense fallback={null}>
-                    <FraudyAiSummary hackatimeId={report.hackatimeUserId} project={hp.name} />
-                  </Suspense>
-                </Fragment>
-              ));
-            }}
+          <Await promise={hackatimeReportsPromise}>
+            {(people) =>
+              people.map(({ userId, report }) => {
+                if (!report.hackatimeUserId) return null;
+                // The owner's buttons stay unlabelled; a collaborator's are
+                // tagged with their name so it's clear whose time it is.
+                const who = collaboratorHours.find((c) => c.userId === userId)?.name;
+                const fraudyUrl = (projectName?: string) => {
+                  const url = new URL(`https://fraudy.hackclub.com/users/${encodeURIComponent(String(report.hackatimeUserId))}`);
+                  if (projectName) url.searchParams.set("project", projectName);
+                  return url.toString();
+                };
+                const linked = report.projects.filter((hp) => hp.linked);
+                if (linked.length === 0) {
+                  return (
+                    <ButtonLink key={userId} href={fraudyUrl()} external icon="view">
+                      froud frad fraudy! is it ai?{who ? ` (${who})` : ""}
+                    </ButtonLink>
+                  );
+                }
+                return linked.map((hp) => (
+                  <Fragment key={`${userId}:${hp.name}`}>
+                    <ButtonLink href={fraudyUrl(hp.name)} external icon="view">
+                      froud frad fraudy! is it ai? {hp.name}
+                      {who ? ` (${who})` : ""}
+                    </ButtonLink>
+                    <Suspense fallback={null}>
+                      <FraudyAiSummary hackatimeId={report.hackatimeUserId} project={hp.name} />
+                    </Suspense>
+                  </Fragment>
+                ));
+              })
+            }
           </Await>
         </Suspense>
       )}
@@ -611,11 +658,11 @@ export default async function ReviewDetail({
             </div>
             <p className="hc-caption mt-1 text-sm">
               Submitted {ago(p.shipped_at)} · {fmtHM(hours)} logged
-              {hackatimeProjects.length > 0 && (
+              {hackatimeSources.length > 0 && (
                 <>
                   {" · "}
                   <a href="#hackatime" className="hc-link">
-                    Hackatime: {hackatimeProjects.join(", ")}
+                    Hackatime: {[...new Set(hackatimeSources.flatMap((s) => s.projects))].join(", ")}
                   </a>
                 </>
               )}
@@ -1436,12 +1483,12 @@ export default async function ReviewDetail({
               promise={Promise.all([
                 commitsPromise,
                 yswsPromise,
-                hackatimeReportPromise,
+                hackatimeReportsPromise,
                 ownerHandlePromise,
                 fraudyChecksPromise,
               ])}
             >
-              {([commits, yswsShips, hackatimeReport, ownerHandle, fraudyChecks]) => (
+              {([commits, yswsShips, hackatimeReports, ownerHandle, fraudyChecks]) => (
                 <ReviewDetailTabs
                   projectId={p.id}
                   commits={commits}
@@ -1460,7 +1507,7 @@ export default async function ReviewDetail({
                         }
                       : null
                   }
-                  hackatime={hackatimeReport}
+                  hackatimeReports={hackatimeReports}
                   repoUrl={p.repo_url ?? null}
                   projectKind={p.kind}
                   usedAi={!!p.used_ai}
