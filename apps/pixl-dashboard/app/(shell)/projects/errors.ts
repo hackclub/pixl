@@ -51,7 +51,7 @@ const ERRORS: Record<string, string> = {
   bom_required: "Upload a Bill of Materials (.csv) before shipping a funded project.",
   cart_screenshot_required: "Upload at least one cart screenshot (with shipping) before shipping a funded project.",
   funding_amount_required: "Enter how much funding you need before shipping.",
-  design_demo_invalid: "A CAD Models demo needs a kicanvas.org or printables.com link (or a video) showing the design.",
+  design_demo_invalid: "A CAD Models demo needs a kicanvas.org, printables.com or Onshape link (or a video) showing the design.",
   build_demo_video_required:
     "A hardware demo needs to be a video (YouTube, Vimeo, Loom, Streamable, or Google Drive) showing it working.",
   already_imported: "You've already imported that one.",

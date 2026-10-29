@@ -93,4 +93,4 @@ function host(url: string): string | null {
   }
 }
 export const isVideoUrl = (url: string) => VIDEO_HOSTS.includes(host(url) ?? "");
-export const isDesignViewerUrl = (url: string) => ["kicanvas.org", "printables.com"].includes(host(url) ?? "");
+export const isDesignViewerUrl = (url: string) => ["kicanvas.org", "printables.com", "cad.onshape.com", "onshape.com"].includes(host(url) ?? "");

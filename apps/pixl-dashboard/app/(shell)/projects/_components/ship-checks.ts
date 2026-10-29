@@ -53,7 +53,7 @@ export function shipBlockers(
   if (isHw && form.demoUrl.trim()) {
     const demo = form.demoUrl.trim();
     if (form.projectType === "cad") {
-      if (!isDesignViewerUrl(demo) && !isVideoUrl(demo)) b.push("add a kicanvas.org or printables.com design link (or a video) as your demo");
+      if (!isDesignViewerUrl(demo) && !isVideoUrl(demo)) b.push("add a kicanvas.org, printables.com or Onshape design link (or a video) as your demo");
     } else if (form.finishedBuild && !isVideoUrl(demo)) {
       b.push("add a video demo showing the build working");
     }
