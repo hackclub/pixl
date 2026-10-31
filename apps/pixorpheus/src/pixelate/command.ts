@@ -1,4 +1,4 @@
-import { pixelateAvatar } from "./image.js";
+import { pixelateAvatarUrl } from "./image.js";
 import { app } from "../slack/app.js";
 import { PIXL_CHANNELS } from "../constants.js";
 import { botStats } from "../stats.js";
@@ -73,9 +73,7 @@ app.command("/pixl", async ({ command, ack, client }) => {
       return;
     }
 
-    const response = await fetch(avatarUrl, { signal: AbortSignal.timeout(10_000) });
-    if (!response.ok) throw new Error("Could not download profile picture");
-    const buffer = await pixelateAvatar(Buffer.from(await response.arrayBuffer()), pixelSize);
+    const buffer = await pixelateAvatarUrl(avatarUrl, pixelSize);
 
     const uploadResult = await client.files.uploadV2({
       channel_id: command.channel_id,
