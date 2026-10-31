@@ -319,19 +319,20 @@ export default async function ReviewDetail({
           }),
       )
     : Promise.resolve(new Map<string, string | null>());
-  // Commit stats and tracked time both mutate the same result, so they run as
-  // one chain alongside everything else.
+  // Commit stats and tracked time fill independent fields. Start both once
+  // the commit list arrives rather than waiting for one before the other.
   const commitsPromise = (async () => {
     const commits = await fetchCommits(p.repo_url);
-    await attachCommitStats(commits);
-    if (commits.commits.length > 0 && hackatimeSources.length > 0) {
+    const spansPromise = (async () => {
+      if (commits.commits.length === 0 || hackatimeSources.length === 0) return;
       const tokens = await tokensPromise;
       const spanSets = await Promise.all(
         hackatimeSources.map((s) => fetchUserSpans(s.slackId, tokens.get(s.userId) ?? null, s.projects)),
       );
       const spans = spanSets.flatMap((set) => set ?? []).sort((a, b) => a.start - b.start);
       if (spans.length > 0) attachTrackedTime(commits.commits, spans);
-    }
+    })();
+    await Promise.all([attachCommitStats(commits), spansPromise]);
     return commits;
   })();
   const hackatimeReportsPromise: Promise<HackatimePersonReport[]> = tokensPromise.then((tokens) =>
