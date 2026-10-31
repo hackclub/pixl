@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test";
 import { slackHandle, slackHandles } from "./slack";
 
 const realFetch = globalThis.fetch;
+const realToken = process.env.SLACK_BOT_TOKEN;
 let calls: string[] = [];
 let respond: (user: string) => Promise<Response>;
 
@@ -21,6 +22,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   globalThis.fetch = realFetch;
+  if (realToken === undefined) delete process.env.SLACK_BOT_TOKEN;
+  else process.env.SLACK_BOT_TOKEN = realToken;
 });
 
 test("concurrent lookups for one id share a single Slack call", async () => {

@@ -1,21 +1,24 @@
-import { beforeAll, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, expect, test } from "bun:test";
+import { db, sql } from "./pgCompat";
 
 const queries: string[] = [];
+const client = sql as unknown as { unsafe: (text: string) => Promise<unknown> };
+let original: typeof client.unsafe;
+let hadUrl: string | undefined;
 
-mock.module("postgres", () => {
-  const client = Object.assign(() => [], {
-    unsafe: async (text: string) => {
-      queries.push(text);
-      return text.startsWith("select count(*)") ? [{ n: 7 }] : [{ id: 1 }, { id: 2 }];
-    },
-  });
-  return { default: () => client };
+beforeAll(() => {
+  hadUrl = process.env.DATABASE_URL;
+  process.env.DATABASE_URL ??= "postgres://x:y@127.0.0.1:1/z";
+  original = client.unsafe;
+  client.unsafe = async (text: string) => {
+    queries.push(text);
+    return text.startsWith("select count(*)") ? [{ n: 7 }] : [{ id: 1 }, { id: 2 }];
+  };
 });
 
-let db: typeof import("./pgCompat").db;
-beforeAll(async () => {
-  process.env.DATABASE_URL = "postgres://x:y@localhost:1/z";
-  ({ db } = await import("./pgCompat"));
+afterAll(() => {
+  client.unsafe = original;
+  if (hadUrl === undefined) delete process.env.DATABASE_URL;
 });
 
 test("a head count runs only the count query, never fetching rows", async () => {
