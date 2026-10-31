@@ -239,7 +239,7 @@ router.post(
       }
       windowStart = new Date(level.unlocked_at);
     }
-    if (!open || open.id !== levelId) {
+    if (!open || Number(open.id) !== levelId) {
       auditRequest(req, { action: "vault.close", target: `vault_level:${levelId}`, result: "denied", meta: { reason: "not_current_chapter" } });
       return res.status(409).json({ ok: false, error: "Only the current open chapter can be closed." });
     }

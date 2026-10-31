@@ -467,7 +467,7 @@ export function parseProjectBody(
       used_ai: usedAi,
       ai_notes: usedAi ? aiNotes : "",
       hackatime_projects: Array.isArray(body?.hackatimeProjects)
-        ? body.hackatimeProjects.map((p: unknown) => String(p)).slice(0, 50)
+        ? [...new Set<string>(body.hackatimeProjects.map((p: unknown) => String(p)))].slice(0, 50)
         : [],
       level: Math.min(4, Math.max(1, Math.round(Number(body?.level)) || 1)),
       // Software vs hardware track, chosen at creation. Hardware ships don't

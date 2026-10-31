@@ -92,6 +92,10 @@ function secondsSince(spans: HackatimeSpan[], sinceUnix: number): number {
   return secondsBetween(spans, sinceUnix);
 }
 
+export function uniqueProjectNames(names: string[]): string[] {
+  return [...new Set(names)];
+}
+
 export async function fetchTrackedSecondsBetween(
   slackId: string | null,
   token: string | null,
@@ -101,7 +105,7 @@ export async function fetchTrackedSecondsBetween(
   const zeros = windows.map(() => 0);
   if (!slackId || projectNames.length === 0) return { ok: true, seconds: zeros };
   const fetched = await Promise.all(
-    projectNames.map((name) => fetchProjectSpansChecked(slackId, token, name)),
+    uniqueProjectNames(projectNames).map((name) => fetchProjectSpansChecked(slackId, token, name)),
   );
   return {
     ok: fetched.every((f) => f.ok),
@@ -123,7 +127,7 @@ export async function fetchTrackedSecondsSince(
 ): Promise<number> {
   if (!slackId || projectNames.length === 0) return 0;
   const totals = await Promise.all(
-    projectNames.map(async (name) =>
+    uniqueProjectNames(projectNames).map(async (name) =>
       secondsSince(await fetchProjectSpans(slackId, token, name), sinceUnix),
     ),
   );

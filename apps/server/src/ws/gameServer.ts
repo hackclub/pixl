@@ -866,6 +866,7 @@ export function attachWebSocketServer(httpServer: Server) {
       } catch {
         return;
       }
+      if (typeof msg !== "object" || msg === null) return;
 
       if (msg.type === "move") {
         const posX = Number(msg.posX);

@@ -284,7 +284,7 @@ router.put("/api/collaborators/:id/hackatime", validate({ query: v.noQuery, para
   if (!Number.isFinite(id)) return res.status(400).json({ ok: false });
 
   const hackatimeProjects = Array.isArray(req.body?.hackatimeProjects)
-    ? req.body.hackatimeProjects.map((p: unknown) => String(p)).slice(0, 50)
+    ? [...new Set<string>(req.body.hackatimeProjects.map((p: unknown) => String(p)))].slice(0, 50)
     : [];
 
   const { data, error } = await db
