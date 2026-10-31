@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { fetchTrackedSecondsBetween, fetchTrackedSecondsSince, uniqueProjectNames } from "./api";
+import { fetchTrackedSecondsBetween, fetchTrackedSecondsSince, normalizeHackatimeProjects, uniqueProjectNames } from "./api";
 
 const realFetch = globalThis.fetch;
 afterEach(() => {
@@ -31,4 +31,13 @@ test("repeated project names are counted once for windowed tracked seconds", asy
   const out = await fetchTrackedSecondsBetween("U1", null, ["proj", "proj"], [{ startUnix: 0, endUnix: 3_000_000_000 }]);
   expect(out.seconds[0]).toBe(600);
   expect(calls.length).toBe(1);
+});
+
+test("normalizeHackatimeProjects stringifies, dedupes in order and caps at 50", () => {
+  expect(normalizeHackatimeProjects(["a", 1, "a", "b", 1])).toEqual(["a", "1", "b"]);
+  expect(normalizeHackatimeProjects(Array.from({ length: 80 }, (_, i) => `p${i}`))).toHaveLength(50);
+});
+
+test("normalizeHackatimeProjects returns an empty list for anything that is not an array", () => {
+  for (const bad of [undefined, null, "a", { 0: "a" }, 5]) expect(normalizeHackatimeProjects(bad)).toEqual([]);
 });

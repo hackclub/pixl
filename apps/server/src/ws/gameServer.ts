@@ -33,6 +33,7 @@ import {
   VILLAGE_THEMES,
   themePrice,
 } from "./lobbies.js";
+import { sanitizeClientFrame } from "./frame.js";
 
 interface ConnectedPlayer {
   ws: WebSocket;
@@ -832,6 +833,14 @@ export function attachWebSocketServer(httpServer: Server) {
     };
 
     ws.on("message", (raw, isBinary) => {
+      try {
+        handleMessage(raw, isBinary);
+      } catch (err) {
+        console.error("[ws] message handler failed", player?.userId ?? "unauthenticated", err);
+      }
+    });
+
+    const handleMessage = (raw: RawData, isBinary: boolean): void => {
       if (!authHandled) {
         authHandled = true;
         clearTimeout(authTimer);
@@ -862,11 +871,11 @@ export function attachWebSocketServer(httpServer: Server) {
 
       let msg: any;
       try {
-        msg = JSON.parse(raw.toString());
+        msg = sanitizeClientFrame(JSON.parse(raw.toString()));
       } catch {
         return;
       }
-      if (typeof msg !== "object" || msg === null) return;
+      if (!msg) return;
 
       if (msg.type === "move") {
         const posX = Number(msg.posX);
@@ -1514,7 +1523,7 @@ export function attachWebSocketServer(httpServer: Server) {
         if (consumeRateLimit(NPC_SAVE_LIMIT, player.userId) !== null) return;
         persistNpcs(player.userId, scene, list).catch(console.error);
       }
-    });
+    };
 
     ws.on("close", () => {
       if (!player) return;

@@ -5,6 +5,7 @@ import { auditRequest } from "../audit.js";
 import { validate, v } from "../http/validate.js";
 import { communityEnergy, pendingCommunityEnergy, topChapterContributors } from "../xp.js";
 import { addNotification } from "./notifications.js";
+import { chapterWindowStart } from "./vaultWindow.js";
 
 const router = Router();
 
@@ -22,6 +23,7 @@ interface VaultLevelRow {
   rewards: unknown;
   position: number;
   unlocked_at: string | null;
+  active: boolean;
   top1_re: number;
   top2_re: number;
   top3_re: number;
@@ -113,26 +115,24 @@ router.get("/api/vault", async (req, res) => {
     pendingCommunityEnergy(),
     db
       .from("vault_levels")
-      .select("id, level, energy_required, title, blurb, rewards, position, unlocked_at, top1_re, top2_re, top3_re")
-      .eq("active", true)
+      .select("id, level, energy_required, title, blurb, rewards, position, unlocked_at, active, top1_re, top2_re, top3_re")
       .order("position", { ascending: true })
       .order("level", { ascending: true }),
   ]);
 
-  const rawLevels = (rows ?? []) as VaultLevelRow[];
+  const allLevels = (rows ?? []) as VaultLevelRow[];
+  const rawLevels = allLevels.filter((l) => l.active);
 
   // A level is "unlocked" once community energy has crossed its threshold.
   // The first time that's true for a level that hasn't recorded its winners
   // yet, settle the chapter award before responding, same lazy-on-read
   // pattern referral codes use for assignment.
-  let windowStart: Date | null = null;
   for (const level of rawLevels) {
     const unlocked = energy >= Number(level.energy_required);
     if (unlocked && !level.unlocked_at) {
-      await settleChapterAward(level, windowStart);
+      await settleChapterAward(level, chapterWindowStart(allLevels, level));
       level.unlocked_at = new Date().toISOString();
     }
-    windowStart = level.unlocked_at ? new Date(level.unlocked_at) : windowStart;
   }
 
   const winnerIds = rawLevels.filter((l) => l.unlocked_at).map((l) => l.id);
@@ -153,17 +153,9 @@ router.get("/api/vault", async (req, res) => {
   // window opened when the previous level unlocked (or the beginning, for
   // the very first chapter). Show a live leaderboard for it so players can
   // see the race before it closes.
-  let openWindowStart: Date | null = null;
-  let openLevelId: number | null = null;
-  for (const level of rawLevels) {
-    if (!level.unlocked_at) {
-      openLevelId = level.id;
-      break;
-    }
-    openWindowStart = new Date(level.unlocked_at);
-  }
-  const liveTop = openLevelId
-    ? await topChapterContributors(openWindowStart, CHAPTER_LEADERBOARD_SIZE)
+  const openLevel = rawLevels.find((l) => !l.unlocked_at) ?? null;
+  const liveTop = openLevel
+    ? await topChapterContributors(chapterWindowStart(allLevels, openLevel), CHAPTER_LEADERBOARD_SIZE)
     : [];
 
   const allUserIds = [
@@ -224,27 +216,19 @@ router.post(
     const levelId = Number(req.body.levelId);
     const { data: rows, error } = await db
       .from("vault_levels")
-      .select("id, level, energy_required, title, blurb, rewards, position, unlocked_at, top1_re, top2_re, top3_re")
-      .eq("active", true)
+      .select("id, level, energy_required, title, blurb, rewards, position, unlocked_at, active, top1_re, top2_re, top3_re")
       .order("position", { ascending: true })
       .order("level", { ascending: true });
     if (error) return res.status(500).json({ ok: false, error: "couldn't load vault levels" });
 
-    let windowStart: Date | null = null;
-    let open: VaultLevelRow | null = null;
-    for (const level of (rows ?? []) as VaultLevelRow[]) {
-      if (!level.unlocked_at) {
-        open = level;
-        break;
-      }
-      windowStart = new Date(level.unlocked_at);
-    }
+    const allLevels = (rows ?? []) as VaultLevelRow[];
+    const open = allLevels.find((l) => l.active && !l.unlocked_at) ?? null;
     if (!open || Number(open.id) !== levelId) {
       auditRequest(req, { action: "vault.close", target: `vault_level:${levelId}`, result: "denied", meta: { reason: "not_current_chapter" } });
       return res.status(409).json({ ok: false, error: "Only the current open chapter can be closed." });
     }
 
-    const closed = await settleChapterAward(open, windowStart);
+    const closed = await settleChapterAward(open, chapterWindowStart(allLevels, open));
     if (!closed) return res.status(409).json({ ok: false, error: "That chapter was already closed." });
 
     const { data: awards } = await db

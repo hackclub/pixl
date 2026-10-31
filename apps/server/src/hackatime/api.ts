@@ -96,6 +96,13 @@ export function uniqueProjectNames(names: string[]): string[] {
   return [...new Set(names)];
 }
 
+const MAX_LINKED_PROJECTS = 50;
+
+export function normalizeHackatimeProjects(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return uniqueProjectNames(raw.map((p: unknown) => String(p))).slice(0, MAX_LINKED_PROJECTS);
+}
+
 export async function fetchTrackedSecondsBetween(
   slackId: string | null,
   token: string | null,

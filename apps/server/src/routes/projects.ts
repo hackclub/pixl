@@ -4,7 +4,7 @@ import { runPrecheck, shouldPrecheck } from "../precheck/run.js";
 import { addNotification } from "./notifications.js";
 import { findAllInYswsArchive } from "../ysws/archive.js";
 import { buildDoubleDip, type TeamMember } from "../ysws/doubleDip.js";
-import { fetchHackatimeStats, fetchTrackedSecondsBetween, fetchTrackedSecondsSince, HACKATIME_CUTOFF } from "../hackatime/api.js";
+import { fetchHackatimeStats, fetchTrackedSecondsBetween, normalizeHackatimeProjects, fetchTrackedSecondsSince, HACKATIME_CUTOFF } from "../hackatime/api.js";
 import { dmReviewerOfResubmit, postShipToSlack, type ShipContext } from "../shipNotify.js";
 import { enrollSlackPlayerInReviewChannel } from "../pixlSlack.js";
 import {
@@ -466,9 +466,7 @@ export function parseProjectBody(
       project_type: projectType,
       used_ai: usedAi,
       ai_notes: usedAi ? aiNotes : "",
-      hackatime_projects: Array.isArray(body?.hackatimeProjects)
-        ? [...new Set<string>(body.hackatimeProjects.map((p: unknown) => String(p)))].slice(0, 50)
-        : [],
+      hackatime_projects: normalizeHackatimeProjects(body?.hackatimeProjects),
       level: Math.min(4, Math.max(1, Math.round(Number(body?.level)) || 1)),
       // Software vs hardware track, chosen at creation. Hardware ships don't
       // require Hackatime and go to their own review queue.

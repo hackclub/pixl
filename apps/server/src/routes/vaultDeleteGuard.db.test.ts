@@ -54,6 +54,18 @@ if (!adminUrl) {
     }
   }
 
+  async function waitUntilBlocked(fragment: string): Promise<void> {
+    const deadline = Date.now() + 5000;
+    for (;;) {
+      const rows = await db`
+        select 1 from pg_stat_activity
+        where datname = current_database() and wait_event_type = 'Lock' and query ilike ${`%${fragment}%`}`;
+      if (rows.length > 0) return;
+      if (Date.now() > deadline) throw new Error(`nothing blocked on a lock for: ${fragment}`);
+      await new Promise((r) => setTimeout(r, 25));
+    }
+  }
+
   beforeAll(async () => {
     await admin.unsafe(`create database ${dbName}`);
     const migrator = postgres(testUrl.toString(), { max: 1, onnotice: () => {} });
@@ -124,7 +136,7 @@ if (!adminUrl) {
       });
       await claimedP;
       const racing = tryDelete(db, id);
-      await new Promise((r) => setTimeout(r, 200));
+      await waitUntilBlocked("delete from vault_levels");
       release();
       await settle;
       expect(await racing).toBe("23001");
@@ -143,11 +155,12 @@ if (!adminUrl) {
         await hold;
       });
       await lockedP;
-      const claim = db`update vault_levels set unlocked_at = now() where id = ${id} and unlocked_at is null returning id`;
-      await new Promise((r) => setTimeout(r, 200));
+      const claim = db`update vault_levels set unlocked_at = now() where id = ${id} and unlocked_at is null returning id`.execute();
+      await waitUntilBlocked("update vault_levels set unlocked_at");
       release();
       await deleting;
       expect((await claim).length).toBe(0);
+      expect(await exists(id)).toBe(false);
     });
   });
 }
