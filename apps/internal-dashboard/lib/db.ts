@@ -2,6 +2,7 @@ import { projectNumber } from "./projectNumber";
 import { pickStyleExamples, type StyleCandidate, type StyleExample } from "./styleExamples";
 import { queueWaitStartMs, type QueueWaitInput } from "./queueWait";
 import { DEFAULT_STAFF_SETTINGS, parseStaffSettings, type StaffSettings } from "./staffSettings";
+import { cache } from "react";
 import { randomBytes } from "node:crypto";
 import { decryptPII } from "./crypto";
 import { reForProject } from "@/app/_generated/config";
@@ -286,6 +287,29 @@ export async function getAdmin(slackId: string): Promise<AdminRow | null> {
   return (data as AdminRow) ?? null;
 }
 
+// One-query role lookup
+export async function getAccessFacts(
+  slackId: string,
+): Promise<{ permissions: string[] | null; isHelper: boolean; isFulfiller: boolean }> {
+  try {
+    const rows = await sql`
+      select
+        (select permissions from admins where slack_id = ${slackId}) as permissions,
+        exists(select 1 from helpers where slack_user_id = ${slackId}) as is_helper,
+        exists(select 1 from fulfillers where slack_user_id = ${slackId}) as is_fulfiller
+    `;
+    const r = rows[0];
+    return {
+      permissions: (r?.permissions as string[] | null) ?? null,
+      isHelper: !!r?.is_helper,
+      isFulfiller: !!r?.is_fulfiller,
+    };
+  } catch (e) {
+    console.error("getAccessFacts", (e as Error).message);
+    return { permissions: null, isHelper: false, isFulfiller: false };
+  }
+}
+
 // Which guidelines version this reviewer has acknowledged (null = never).
 export async function getGuidelinesAck(slackId: string): Promise<number | null> {
   const { data, error } = await db
@@ -303,14 +327,14 @@ export async function getGuidelinesAck(slackId: string): Promise<number | null> 
 // Dashboard preferences for one staff member (theme, accent, confetti...).
 // Falls back to the defaults on any error, so a missing row or table can never
 // take the dashboard down.
-export async function getStaffSettings(slackId: string): Promise<StaffSettings> {
+export const getStaffSettings = cache(async (slackId: string): Promise<StaffSettings> => {
   const { data, error } = await db.from("staff_settings").select("settings").eq("slack_id", slackId).maybeSingle();
   if (error) {
     console.error("getStaffSettings", error.message);
     return DEFAULT_STAFF_SETTINGS;
   }
   return parseStaffSettings((data as { settings: unknown } | null)?.settings);
-}
+});
 
 export async function saveStaffSettingsRow(slackId: string, settings: StaffSettings): Promise<boolean> {
   const { error } = await db
@@ -607,9 +631,38 @@ export async function ensureJournalShareToken(projectId: number): Promise<string
 // first-pass reviewer must not receive a builder's legal name (see
 // canSeeBuilderPII in lib/reviewAccess.ts), and the queue shows the Slack
 // handle / display name to everyone anyway.
-const QUEUE_SELECT = "*, users(id, display_name, slack_id)";
+const QUEUE_FIELDS = [
+  "id",
+  "user_id",
+  "name",
+  "image_url",
+  "level",
+  "project_type",
+  "kind",
+  "status",
+  "needs_funding",
+  "funding_usd",
+  "is_peak",
+  "is_update",
+  "hold_at",
+  "hold_reason",
+  "first_pass_by",
+  "first_pass_at",
+  "first_shipped_at",
+  "shipped_at",
+  "reviewing_by",
+  "reviewing_at",
+  "hackatime_projects",
+  "hackatime_seconds",
+  "ai_review_status",
+  "ai_review_started_at",
+  "assigned_reviewer_slack_id",
+  "assigned_at",
+  "assignment_reminded_at",
+] as const;
+const QUEUE_SELECT = `${QUEUE_FIELDS.join(", ")}, users(id, display_name, slack_id)`;
 
-export interface ShippedProject extends Omit<ProjectWithUser, "users"> {
+export interface ShippedProject extends Pick<ProjectRow, (typeof QUEUE_FIELDS)[number]> {
   users?: Pick<UserRow, "id" | "display_name" | "slack_id"> | null;
   hours: number;
   hackatimeHours: number;
@@ -634,19 +687,16 @@ export interface IdeaWithUser {
 
 async function hydrateHours(projects: ShippedProject[]): Promise<ShippedProject[]> {
   if (projects.length === 0) return projects;
-  const { data: journals } = await db
-    .from("project_journals")
-    .select("project_id, hours")
-    .in("project_id", projects.map((p) => p.id));
+  const rows = await sql`
+    select project_id, sum(hours)::float8 as h, count(*)::int as n
+    from project_journals
+    where project_id = any(${projects.map((p) => Number(p.id))}::bigint[])
+    group by project_id
+  `;
   const totals = new Map<number, { h: number; n: number }>();
-  for (const j of journals ?? []) {
-    const cur = totals.get(j.project_id as number) ?? { h: 0, n: 0 };
-    cur.h += Number(j.hours) || 0;
-    cur.n += 1;
-    totals.set(j.project_id as number, cur);
-  }
+  for (const r of rows) totals.set(Number(r.project_id), { h: Number(r.h) || 0, n: Number(r.n) || 0 });
   for (const p of projects) {
-    const cur = totals.get(p.id) ?? { h: 0, n: 0 };
+    const cur = totals.get(Number(p.id)) ?? { h: 0, n: 0 };
     p.journalHours = Math.round(cur.h * 10) / 10;
     p.hackatimeHours = Math.round(((p.hackatime_seconds ?? 0) / 3600) * 10) / 10;
     p.hours = p.hackatimeHours > 0 ? p.hackatimeHours : p.journalHours;
@@ -738,27 +788,37 @@ export async function listShippedProjects(
   return hydrateHours(visible);
 }
 
+// One fetch per request
+const shippedQueueForRequest = cache(
+  (viewer: string | undefined, kind: "software" | "hardware" | undefined) =>
+    listShippedProjects(viewer, kind, { includeClaimed: true }),
+);
+export function listShippedQueueCached(
+  viewer?: string,
+  kind?: "software" | "hardware",
+): Promise<ShippedProject[]> {
+  return shippedQueueForRequest(viewer, kind);
+}
+
 // Claim a submission for a reviewer. Returns { ok:false, by } if someone else
 // holds an active claim.
 export async function claimReview(
   projectId: number,
   viewer: string,
 ): Promise<{ ok: boolean; by?: string }> {
-  const { data } = await db
-    .from("projects")
-    .select("reviewing_by, reviewing_at")
-    .eq("id", projectId)
-    .single();
-  const by = (data?.reviewing_by as string) || "";
-  const at = (data?.reviewing_at as string | null) ?? null;
-  const active =
-    by && by !== viewer && at && Date.now() - new Date(at).getTime() < REVIEW_LOCK_MS;
-  if (active) return { ok: false, by };
-  await db
-    .from("projects")
-    .update({ reviewing_by: viewer, reviewing_at: new Date().toISOString() })
-    .eq("id", projectId);
-  return { ok: true };
+  const now = new Date();
+  const staleBefore = new Date(now.getTime() - REVIEW_LOCK_MS);
+  const taken = await sql`
+    update projects
+    set reviewing_by = ${viewer}, reviewing_at = ${now}
+    where id = ${projectId}
+      and (reviewing_by = '' or reviewing_by = ${viewer} or reviewing_at is null or reviewing_at <= ${staleBefore})
+    returning id
+  `;
+  if (taken.length > 0) return { ok: true };
+  const held = await sql`select reviewing_by from projects where id = ${projectId}`;
+  if (held.length === 0) return { ok: true };
+  return { ok: false, by: (held[0].reviewing_by as string) || undefined };
 }
 
 // Whether a reviewer may open and act on a first-pass project. The queue page
@@ -786,9 +846,8 @@ export async function firstPassAccess(
       message:
         "This project is reserved for the reviewer who requested its changes. It goes back to the shared queue if they don't review it within 3 days of the re-ship.",
     };
-  const queue = await listShippedProjects(viewer, data.kind === "hardware" ? "hardware" : "software", {
-    includeClaimed: true,
-  });
+  const kind = data.kind === "hardware" ? "hardware" : "software";
+  const queue = (await listShippedQueueCached(viewer, undefined)).filter((p) => (p.kind === "hardware" ? "hardware" : "software") === kind);
   if (!queue.some((p) => Number(p.id) === projectId)) return { ok: true };
   if (openableQueueIds(queue, viewer, false, now).has(projectId)) return { ok: true };
   return {
@@ -1020,27 +1079,46 @@ export async function listReviewedProjects(): Promise<ShippedProject[]> {
 export async function countPendingReviews(
   opts?: { viewer?: string },
 ): Promise<number> {
-  const pending = () =>
-    db
-      .from("projects")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "shipped")
-      .is("archived_at", null)
-      .is("rejected_at", null)
-      .is("banned_at", null);
-  // Same rule as listShippedProjects: a running AI pre-check isn't queued yet.
-  const [{ count, error }, { count: running }] = await Promise.all([
-    pending(),
-    pending()
-      .eq("ai_review_status", "pending")
-      .gt("ai_review_started_at", new Date(Date.now() - PRECHECK_HIDE_MS).toISOString()),
-  ]);
-  if (error) {
-    console.error("countPendingReviews", error.message);
+  void opts;
+  const hideAfter = new Date(Date.now() - PRECHECK_HIDE_MS);
+  try {
+    const rows = await sql`
+      select count(*)::int as n
+      from projects
+      where status = 'shipped'
+        and archived_at is null and rejected_at is null and banned_at is null
+        and not (ai_review_status = 'pending' and coalesce(ai_review_started_at > ${hideAfter}, false))
+    `;
+    return Number(rows[0]?.n) || 0;
+  } catch (e) {
+    console.error("countPendingReviews", (e as Error).message);
     return 0;
   }
-  return Math.max(0, (count ?? 0) - (running ?? 0));
 }
+
+// All tab badges, one query
+export const countReviewTabs = cache(async (): Promise<{ pending: number; spotCheck: number; proposedBans: number }> => {
+  const hideAfter = new Date(Date.now() - PRECHECK_HIDE_MS);
+  try {
+    const rows = await sql`
+      select
+        count(*) filter (
+          where status = 'shipped'
+            and not (ai_review_status = 'pending' and coalesce(ai_review_started_at > ${hideAfter}, false))
+        )::int as pending,
+        count(*) filter (where status = 'second_review' and second_pass_verdict = 'not_fraud')::int as spot_check,
+        count(*) filter (where status = 'second_review' and first_pass_verdict = 'banned')::int as proposed_bans
+      from projects
+      where status in ('shipped', 'second_review')
+        and archived_at is null and rejected_at is null and banned_at is null
+    `;
+    const r = rows[0];
+    return { pending: Number(r?.pending) || 0, spotCheck: Number(r?.spot_check) || 0, proposedBans: Number(r?.proposed_bans) || 0 };
+  } catch (e) {
+    console.error("countReviewTabs", (e as Error).message);
+    return { pending: 0, spotCheck: 0, proposedBans: 0 };
+  }
+});
 
 // Second-pass queue count for the "Second pass" tab badge (super-admins
 // only), a cheap head count, same shape as countPendingReviews above.

@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 import { getSession } from "./session";
-import { getAdmin, isHelperId, isFulfillerId } from "./db";
+import { getAccessFacts } from "./db";
 import { audit } from "./audit";
 import { errorCode, fieldNamesFromArgs, isNavigationSignal, targetFromArgs } from "./auditTarget";
 import { csrfRejection, type CsrfOptions } from "./requestGuards";
@@ -35,17 +35,13 @@ export function secondPassSlackIds(): string[] {
 
 // Role lookup for a session (login gate, and getAccess below).
 export async function accessFor(session: { slackId: string; name: string; exp: number }): Promise<AdminAccess | null> {
-  const [row, helper, fulfiller] = await Promise.all([
-    getAdmin(session.slackId),
-    isHelperId(session.slackId),
-    isFulfillerId(session.slackId),
-  ]);
+  const facts = await getAccessFacts(session.slackId);
   return resolveAccess(session, {
     ownerIds: ownerSlackIds(),
     secondPassIds: secondPassSlackIds(),
-    adminPermissions: row?.permissions ?? null,
-    isHelper: helper,
-    isFulfiller: fulfiller,
+    adminPermissions: facts.permissions,
+    isHelper: facts.isHelper,
+    isFulfiller: facts.isFulfiller,
   });
 }
 

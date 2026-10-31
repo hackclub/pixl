@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requirePage, requireGuidelinesAck } from "@/lib/guard";
 import { canSeeBuilderPII } from "@/lib/reviewAccess";
 import { listShippedProjects, listReviewAudits } from "@/lib/db";
-import { slackHandles } from "@/lib/slack";
+import { slackHandles, warmSlackHandles } from "@/lib/slack";
 import { listBlackoutQueueProjectIds } from "@/lib/operations";
 import { ReviewTable } from "@/app/_components/ReviewTable";
 import {
@@ -29,6 +29,8 @@ import {
 export const dynamic = "force-dynamic";
 
 const PER = 15;
+// Cold lookup cap
+const HANDLE_WAIT_MS = 600;
 
 export default async function ReviewListPage({
   searchParams,
@@ -41,7 +43,8 @@ export default async function ReviewListPage({
   }>;
 }) {
   const access = await requirePage("reviewer");
-  await requireGuidelinesAck(access);
+  const guidelinesAck = requireGuidelinesAck(access);
+  guidelinesAck.catch(() => {});
   const viewer = access.session.slackId;
   const { page, kind: rawKind, blackout, error } = await searchParams;
   const onlyBlackout = blackout === "1";
@@ -54,7 +57,8 @@ export default async function ReviewListPage({
 
   // First-pass work only. Projects waiting on Robert live on the Fraud
   // reviews tab and spot checks on the Spot check tab.
-  const [myRecent, rowsAll, blackoutIds] = await Promise.all([
+  const [, myRecent, rowsAll, blackoutIds] = await Promise.all([
+    guidelinesAck,
     listReviewAudits(5, viewer, { realNames: canSeeBuilderPII(access) }),
     listShippedProjects(viewer, kind, { includeClaimed: true }),
     listBlackoutQueueProjectIds(),
@@ -76,9 +80,10 @@ export default async function ReviewListPage({
   const slice = rows.slice((cur - 1) * PER, cur * PER);
   // One handle lookup for every visible row: makers plus the reviewers
   // holding a claim, so the "is reviewing" tag can name them.
-  const handles = await slackHandles(
-    slice.flatMap((p) => [p.users?.slack_id, p.claimedBy, assigneeOf(p) || null]),
-  );
+  const handleIds = (list: typeof slice) =>
+    list.flatMap((p) => [p.users?.slack_id, p.claimedBy, assigneeOf(p) || null]);
+  const handles = await slackHandles(handleIds(slice), { maxWaitMs: HANDLE_WAIT_MS });
+  warmSlackHandles(handleIds(rows.slice(cur * PER, (cur + 1) * PER)));
   // Rows this viewer can't open: reserved for another reviewer, or past the
   // first page. Owners get none.
   const locks: Record<number, QueueLock> = {};

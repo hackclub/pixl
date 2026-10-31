@@ -108,7 +108,11 @@ describe("M1/M2 reviewer actions", () => {
 describe("builder legal names (first-pass reviewers)", () => {
   test("queue rows never carry real_name to the client ReviewTable", () => {
     expect(src("app/_components/ReviewTable.tsx")).not.toMatch(/\.real_name/);
-    expect(src("lib/db.ts")).toContain('const QUEUE_SELECT = "*, users(id, display_name, slack_id)"');
+    const db = src("lib/db.ts");
+    expect(db).toContain("const QUEUE_SELECT = `${QUEUE_FIELDS.join(\", \")}, users(id, display_name, slack_id)`");
+    const fields = db.slice(db.indexOf("const QUEUE_FIELDS"), db.indexOf("const QUEUE_SELECT"));
+    expect(fields).not.toContain("real_name");
+    expect(fields).not.toContain("*");
     for (const fn of [
       "listShippedProjects",
       "listSecondReviewProjects",

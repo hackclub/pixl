@@ -8,7 +8,7 @@ import { decryptPII } from "@/lib/crypto";
 import { builderDetailsView, builderNameFor, canSeeBuilderPII } from "@/lib/reviewAccess";
 import {
   getProject,
-  listShippedProjects,
+  listShippedQueueCached,
   listSecondReviewProjects,
   claimReview,
   firstPassAccess,
@@ -180,7 +180,8 @@ export default async function ReviewDetail({
   searchParams: Promise<{ error?: string }>;
 }) {
   const access = await requirePage("reviewer");
-  await requireGuidelinesAck(access);
+  const guidelinesAck = requireGuidelinesAck(access);
+  guidelinesAck.catch(() => {});
   const viewer = access.session.slackId;
   const canSecondPass = access.canSecondPass;
   // Only admins (ban perm) may permanently ban a project from the review page.
@@ -191,9 +192,10 @@ export default async function ReviewDetail({
   const { error } = await searchParams;
   const projectId = Number(id);
   if (!Number.isFinite(projectId)) notFound();
-  const staffSettings = await getStaffSettings(access.session.slackId);
 
-  const [data, allCollaborators, blackoutEntry, notes] = await Promise.all([
+  const [, staffSettings, data, allCollaborators, blackoutEntry, notes] = await Promise.all([
+    guidelinesAck,
+    getStaffSettings(access.session.slackId),
     getProject(projectId),
     listCollaboratorsForProject(projectId),
     getBlackoutEntry(projectId),
@@ -376,7 +378,7 @@ export default async function ReviewDetail({
   // verdict) deliberately keeps excluding them, since it picks work for you.
   const queuePromise = isFinalStage
     ? listSecondReviewProjects(viewer, undefined, { includeClaimed: true })
-    : listShippedProjects(viewer, undefined, { includeClaimed: true });
+    : listShippedQueueCached(viewer, undefined);
 
   // approved_hours is a reviewer's per-entry deflation set from the Journals
   // tab (see setJournalHours in app/actions.ts). null means "use the player's

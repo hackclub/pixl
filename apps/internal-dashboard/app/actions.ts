@@ -4,6 +4,7 @@ import { claimOrderWithFunding, refreshCommitmentAmount } from "@/lib/eligibilit
 import { manualShipsRefresh, shipsProvider } from "@/lib/eligibility/ships";
 import { FUNDING_ORDER_PREFIX } from "@/lib/eligibility/policy";
 import { revalidatePath } from "next/cache";
+import { afterResponse } from "@/lib/afterResponse";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { unshipResetFields, UNSHIPPABLE_STATUSES } from "@/lib/unship";
@@ -1298,7 +1299,7 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
       await notifyInApp(project.user_id, "First pass complete!", ownerBody);
       for (const collaboratorId of collaboratorIds)
         await notifyInApp(collaboratorId, "First pass complete!", collabBody);
-      await announceReview({
+      await afterResponse(() => announceReview({
         kind: "first_pass",
         projectId,
         projectName: project.name,
@@ -1311,10 +1312,10 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
           { userId: project.user_id, title: "First pass complete!", body: ownerBody },
           ...collaboratorIds.map((userId) => ({ userId, title: "First pass complete!", body: collabBody })),
         ],
-      });
+      }), "announceReview first_pass");
     }
     await logModAction(project.user_id, "project_first_pass", `${project.name}: proposed ${proposedKey.replace("_", " ")} , ${note}`, by);
-    if (proposedKey === "approved" && !skipRobertForHardware) await submitToRobert(projectId);
+    if (proposedKey === "approved" && !skipRobertForHardware) await afterResponse(() => submitToRobert(projectId), "submitToRobert");
     await flagReviewReward(rewardPx);
     const nextPath = await nextReviewPath(access, by, stage, projectId);
     revalidatePath("/review");
@@ -1428,7 +1429,7 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
     await notifyInApp(project.user_id, "Changes requested", changesOwnerBody);
     for (const collaboratorId of changesCollaboratorIds)
       await notifyInApp(collaboratorId, "Changes requested", changesCollabBody);
-    await announceReview({
+    await afterResponse(() => announceReview({
       kind: "changes",
       projectId,
       projectName: project.name,
@@ -1441,7 +1442,7 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
         { userId: project.user_id, title: "Changes requested", body: changesOwnerBody },
         ...changesCollaboratorIds.map((userId) => ({ userId, title: "Changes requested", body: changesCollabBody })),
       ],
-    });
+    }), "announceReview changes");
     await logModAction(project.user_id, "project_needs_changes", `${project.name}: ${note}`, by);
     await flagReviewReward(rewardPx);
     const nextPath = await nextReviewPath(access, by, stage, projectId);

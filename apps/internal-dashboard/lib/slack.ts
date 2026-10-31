@@ -77,39 +77,81 @@ export async function slackAvatars(): Promise<Map<string, string>> {
 // cached per-id. This replaces crawling the whole workspace with users.list,
 // which paginated up to 20 rate-limited calls and stalled the review page.
 const idHandleCache = new Map<string, { at: number; handle: string | null }>();
+const handleInflight = new Map<string, Promise<string | null>>();
+// Stale-while-revalidate
+const HANDLE_STALE_MAX = 24 * 60 * 60_000;
+const HANDLE_FAIL_TTL = 30_000;
+
+function fetchHandle(id: string): Promise<string | null> {
+  const running = handleInflight.get(id);
+  if (running) return running;
+  const job = (async () => {
+    let handle: string | null = null;
+    let failed = false;
+    if (process.env.SLACK_BOT_TOKEN) {
+      try {
+        const res = (await slackCall("users.info", { user: id })) as {
+          user?: { name?: string; profile?: { display_name?: string } };
+        };
+        const h = res.user?.profile?.display_name || res.user?.name;
+        handle = h ? `@${h}` : null;
+      } catch (e) {
+        failed = true;
+        console.error("slack users.info failed", (e as Error).message);
+      }
+    }
+    const prior = idHandleCache.get(id);
+    if (failed && prior?.handle) return prior.handle;
+    idHandleCache.set(id, { at: failed ? Date.now() - HANDLE_TTL + HANDLE_FAIL_TTL : Date.now(), handle });
+    return handle;
+  })().finally(() => handleInflight.delete(id));
+  handleInflight.set(id, job);
+  return job;
+}
 
 export async function slackHandle(id: string | null | undefined): Promise<string | null> {
   if (!id) return null;
   const hit = idHandleCache.get(id);
-  if (hit && Date.now() - hit.at < HANDLE_TTL) return hit.handle;
-  let handle: string | null = null;
-  if (process.env.SLACK_BOT_TOKEN) {
-    try {
-      const res = (await slackCall("users.info", { user: id })) as {
-        user?: { name?: string; profile?: { display_name?: string } };
-      };
-      const h = res.user?.profile?.display_name || res.user?.name;
-      handle = h ? `@${h}` : null;
-    } catch (e) {
-      console.error("slack users.info failed", (e as Error).message);
-    }
+  const age = hit ? Date.now() - hit.at : Infinity;
+  if (hit && age < HANDLE_TTL) return hit.handle;
+  if (hit && age < HANDLE_STALE_MAX) {
+    void fetchHandle(id);
+    return hit.handle;
   }
-  idHandleCache.set(id, { at: Date.now(), handle });
-  return handle;
+  return fetchHandle(id);
 }
 
+// maxWaitMs caps cold waits
 export async function slackHandles(
   ids: (string | null | undefined)[],
+  opts: { maxWaitMs?: number } = {},
 ): Promise<Map<string, string>> {
   const uniq = [...new Set(ids.filter((x): x is string => !!x))];
   const out = new Map<string, string>();
-  await Promise.all(
+  const all = Promise.all(
     uniq.map(async (id) => {
       const h = await slackHandle(id);
       if (h) out.set(id, h);
     }),
   );
-  return out;
+  if (opts.maxWaitMs === undefined) {
+    await all;
+    return out;
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([
+    all,
+    new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, opts.maxWaitMs);
+    }),
+  ]);
+  clearTimeout(timer);
+  return new Map(out);
+}
+
+// Cache warm-up
+export function warmSlackHandles(ids: (string | null | undefined)[]): void {
+  void slackHandles(ids).catch(() => {});
 }
 
 // Per-id avatar lookup (one users.info call per id, cached) - for small lists

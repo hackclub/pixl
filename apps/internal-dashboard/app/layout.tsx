@@ -1,4 +1,5 @@
 /* eslint-disable @next/next/no-img-element */
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
@@ -7,10 +8,12 @@ import "./_ui/themes.css";
 import "./_ui/fonts.css";
 import { fontVariables } from "./fonts";
 import { getAccess } from "@/lib/guard";
-import { countPendingReviews, countOpenReports, countPendingOrders, getStaffSettings } from "@/lib/db";
-import { ticketStats } from "@/lib/tickets";
+import { getSession } from "@/lib/session";
+import { countReviewTabs, countOpenReports, countPendingOrders, getStaffSettings } from "@/lib/db";
+import { countOpenTickets } from "@/lib/tickets";
 import { ReviewCelebration } from "@/app/_components/ReviewCelebration";
 import TopNav from "@/app/_ui/TopNav";
+import type { NavModel } from "@/app/_ui/nav";
 import CommandPalette from "@/app/_ui/CommandPalette";
 import Tooltips from "@/app/_ui/Tooltips";
 import { buildNav } from "@/app/_ui/nav";
@@ -43,15 +46,29 @@ async function navCounts(access: NonNullable<Awaited<ReturnType<typeof getAccess
     }
   };
   const [review, reports, tickets, orders] = await Promise.all([
-    owner || access.isReviewer ? safe(() => countPendingReviews({ viewer: access.session.slackId })) : 0,
+    owner || access.isReviewer ? safe(async () => (await countReviewTabs()).pending) : 0,
     owner ? safe(countOpenReports) : 0,
-    access.isHelper ? safe(async () => (await ticketStats()).open) : 0,
+    access.isHelper ? safe(countOpenTickets) : 0,
     access.isFulfiller ? safe(countPendingOrders) : 0,
   ]);
   return { "/review": review, "/reports": reports, "/tickets": tickets, "/fulfillment": orders };
 }
 
+// Streams badges
+async function TopNavWithCounts({
+  nav,
+  access,
+}: {
+  nav: NavModel;
+  access: NonNullable<Awaited<ReturnType<typeof getAccess>>>;
+}) {
+  return <TopNav nav={nav} counts={await navCounts(access)} />;
+}
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Parallel with access
+  const slackId = (await getSession())?.slackId;
+  const settingsPromise = slackId ? getStaffSettings(slackId) : null;
   const access = await getAccess();
 
   if (!access) {
@@ -66,7 +83,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   const session = access.session;
   const nav = buildNav(access);
-  const [counts, settings] = await Promise.all([navCounts(access), getStaffSettings(session.slackId)]);
+  const settings = await (settingsPromise ?? getStaffSettings(session.slackId));
   const firstName = session.name.split(" ")[0] || "Staff";
 
   return (
@@ -89,7 +106,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <img src="/logo.png" alt="Pixl" width={28} height={28} />
                 <span className="hc-heading">Pixl</span>
               </Link>
-              <TopNav nav={nav} counts={counts} />
+              <Suspense fallback={<TopNav nav={nav} counts={{}} />}>
+                <TopNavWithCounts nav={nav} access={access} />
+              </Suspense>
               <div className="flex min-w-48 flex-1 justify-center">
                 <CommandPalette nav={nav} />
               </div>
