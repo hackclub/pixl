@@ -92,6 +92,7 @@ import {
   queueAllows,
   slackIdFromActorName,
 } from "@/lib/reviewAccess";
+import { vaultDeleteFailure } from "@/lib/vaultDelete";
 import { safeRedirectPath, isSafeUrl } from "@/lib/safeUrl";
 import {
   guardedAction,
@@ -6359,11 +6360,12 @@ export const closeVaultLevel = guardedAction("closeVaultLevel", "owner", async (
 export const deleteVaultLevel = guardedAction("deleteVaultLevel", "owner", async (access, formData: FormData): Promise<void> => {
   const id = Number(formData.get("id") ?? 0);
   if (!id) return;
-  const { data: awards } = await db.from("vault_chapter_awards").select("id").eq("vault_level_id", id).limit(1);
-  if (awards && awards.length > 0)
-    redirect(`/community-goals?error=${encodeURIComponent("This goal already paid out RE, deleting it would erase that RE. Hide it instead.")}`);
   const { error } = await db.from("vault_levels").delete().eq("id", id);
-  if (error) console.error("deleteVaultLevel", error.message);
+  const failure = vaultDeleteFailure(error);
+  if (failure) {
+    console.error("deleteVaultLevel", error?.message);
+    redirect(`/community-goals?error=${encodeURIComponent(failure)}`);
+  }
   revalidatePath("/community-goals");
 });
 
