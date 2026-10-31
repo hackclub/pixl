@@ -1,4 +1,4 @@
-import { Jimp, ResizeStrategy } from "jimp";
+import { pixelateAvatarUrl } from "./image.js";
 import { app } from "../slack/app.js";
 import { PIXL_CHANNELS } from "../constants.js";
 import { botStats } from "../stats.js";
@@ -73,15 +73,7 @@ app.command("/pixl", async ({ command, ack, client }) => {
       return;
     }
 
-    const image = await Jimp.read(avatarUrl);
-    const w = image.width;
-    const h = image.height;
-
-    image
-      .resize({ w: Math.max(1, Math.floor(w / pixelSize)), h: Math.max(1, Math.floor(h / pixelSize)), mode: ResizeStrategy.NEAREST_NEIGHBOR })
-      .resize({ w, h, mode: ResizeStrategy.NEAREST_NEIGHBOR });
-
-    const buffer = await image.getBuffer("image/png");
+    const buffer = await pixelateAvatarUrl(avatarUrl, pixelSize);
 
     const uploadResult = await client.files.uploadV2({
       channel_id: command.channel_id,

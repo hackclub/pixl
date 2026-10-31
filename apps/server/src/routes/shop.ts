@@ -8,6 +8,7 @@ import { callPixo } from "../pixoCall.js";
 import { pixorpheusUrl } from "../pixoUrl.js";
 import { decryptPII, encryptPII } from "../crypto.js";
 import { beaconUnlocks } from "../beacons.js";
+import { audit } from "../audit.js";
 import { z } from "zod";
 import { validate, v, optStr, optNum, params } from "../http/validate.js";
 
@@ -908,6 +909,19 @@ router.post("/api/shop/buy/:id", validate({ query: v.noQuery, params: params({ i
   // Best effort and deliberately not awaited: Pixo being offline must never
   // delay or fail a player's successful purchase.
   const orderId = Number(result.order_id);
+  // "Nothing" ships nothing: it costs us $0, so it is marked done on the spot
+  // and never reaches a fulfiller. The alert below still goes out.
+  const isNothing = String(result.item_name ?? "").trim().toLowerCase() === "nothing";
+  if (isNothing && Number.isSafeInteger(orderId) && orderId > 0) {
+    const now = new Date().toISOString();
+    const { error: autoErr } = await db
+      .from("shop_orders")
+      .update({ status: "done", fulfilled_at: now, fulfilled_by: "auto", done_at: now, actual_cost_usd: 0 })
+      .eq("id", orderId)
+      .eq("status", "pending");
+    if (autoErr) console.error("[shop] auto-fulfil failed:", autoErr.message);
+    else audit({ actorType: "service", actorId: "shop-auto-fulfil", action: "shop.auto_fulfil", target: String(orderId), result: "ok" });
+  }
   if (Number.isSafeInteger(orderId) && orderId > 0) {
     void callPixo(
       "shop-order-alert",
@@ -927,7 +941,9 @@ router.post("/api/shop/buy/:id", validate({ query: v.noQuery, params: params({ i
   void addNotification(
     session.userId,
     "Order placed! 🛍️",
-    `You bought ${qtyPrefix}"${result.item_name}"${option ? ` (${option})` : ""}. The team will reach out about getting it to you.`,
+    isNothing
+      ? `You bought ${qtyPrefix}"${result.item_name}". Nothing to ship, it's all yours.`
+      : `You bought ${qtyPrefix}"${result.item_name}"${option ? ` (${option})` : ""}. The team will reach out about getting it to you.`,
   );
   res.json({ ok: true, balance: result.balance });
 });
