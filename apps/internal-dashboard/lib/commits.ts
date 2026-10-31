@@ -118,6 +118,12 @@ const COMMITS_CACHE_TTL_MS = 5 * 60 * 1000;
 // that hasn't changed, which burns through an unauthenticated limit *faster*.
 const commitsCache = new Map<string, { result: CommitResult; at: number }>();
 
+// Cache only raw repository evidence. Review pages add project-specific
+// Hackatime timings and line stats, so every caller needs its own commit objects.
+function copyCommitResult(result: CommitResult): CommitResult {
+  return { ...result, commits: result.commits.map((commit) => ({ ...commit })) };
+}
+
 const BASE_HEADERS = { "User-Agent": "pixl-dashboard" };
 
 // A 403 means either "you're out of quota" or "policy says no", and they're
@@ -359,7 +365,7 @@ export async function fetchCommits(
 
   const cacheKey = `${ref.provider ?? "probe"}:${ref.host}/${ref.path}#${limit}@${page}`;
   const cached = commitsCache.get(cacheKey);
-  if (cached && Date.now() - cached.at < COMMITS_CACHE_TTL_MS) return cached.result;
+  if (cached && Date.now() - cached.at < COMMITS_CACHE_TTL_MS) return copyCommitResult(cached.result);
 
   let result: CommitResult;
   try {
@@ -380,7 +386,7 @@ export async function fetchCommits(
     return fail(ref, "fetch_failed");
   }
   if (!result.error) commitsCache.set(cacheKey, { result, at: Date.now() });
-  return result;
+  return copyCommitResult(result);
 }
 
 // Per-commit line stats, so huge code dumps with barely any coded time behind
