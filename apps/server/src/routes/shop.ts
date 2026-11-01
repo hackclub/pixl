@@ -620,21 +620,24 @@ router.post("/api/shop/claim/:id", validate({ query: v.noQuery, params: params({
   if (xp < unlockXp)
     return res.status(400).json({ ok: false, error: "not_eligible", xp, need: unlockXp });
 
-  const { error } = await db
+  const { data: created, error } = await db
     .from("shop_claims")
     .upsert(
       { user_id: session.userId, item_id: id },
       { onConflict: "user_id,item_id", ignoreDuplicates: true },
-    );
+    )
+    .select("item_id");
   if (error) {
     console.error("[shop] claim failed", error);
     return res.status(500).json({ ok: false });
   }
-  void addNotification(
-    session.userId,
-    "Trophy claimed! 🏆",
-    `You claimed "${item.name}". The team will reach out about getting it to you.`,
-  );
+  // ON CONFLICT DO NOTHING returns no rows for an existing claim.
+  if ((created ?? []).length > 0)
+    void addNotification(
+      session.userId,
+      "Trophy claimed! 🏆",
+      `You claimed "${item.name}". The team will reach out about getting it to you.`,
+    );
   res.json({ ok: true, claimed: true });
 });
 
