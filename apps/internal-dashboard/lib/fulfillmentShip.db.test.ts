@@ -81,7 +81,7 @@ suite("atomic fulfillment shipment", () => {
   test("a missing fulfiller account cannot consume the shipment transition", async () => {
     await db`insert into shop_orders (id, user_id, item_name, status, claimed_by_slack)
       values (4, ${buyer}, 'Kit', 'credited', 'UMISSING')`;
-    expect(settleShipment(4, "TRACK", "UMISSING", "Staff", 2, db)).rejects.toThrow("player account");
+    await expect(settleShipment(4, "TRACK", "UMISSING", "Staff", 2, db)).rejects.toThrow("player account");
     const rows = await db`select status from shop_orders where id = 4`;
     expect(rows[0]!.status).toBe("credited");
   });
