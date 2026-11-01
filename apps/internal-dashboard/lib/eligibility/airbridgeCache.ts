@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "../pgCompat";
 import { fetchSubmissionStates, type SubmissionLookup } from "../airtable";
-import { getApprovals, getOtterSlack, githubRepo, type Approval, type OtterSlackResult } from "./airbridgeApi";
+import { getApprovalsIsolated, getOtterSlack, githubRepo, type Approval, type OtterSlackResult } from "./airbridgeApi";
 import type { ShipsEntry, ShipsProvider, ShipsSnapshot, ShipsView } from "./ships";
 
 const MAX_AGE_MS = 30 * 60_000;
@@ -237,13 +237,11 @@ export async function refreshAirbridgeCache(limit = 30): Promise<SyncResult> {
     const lookupErrors = new Map<string, string>();
     for (let i = 0; i < unifiedIds.length; i += 25) {
       const batch = unifiedIds.slice(i, i + 25);
-      try {
-        const found = await getApprovals(batch);
-        for (const [key, value] of found) lookups.set(key, value);
-      } catch (e) {
-        // A failing batch does not erase approvals verified by other batches.
-        for (const id of batch) lookupErrors.set(id, (e as Error).message);
-      }
+      // Isolate malformed records without discarding healthy approvals.
+      // HTTP/network errors remain fail-closed without recursive fanout.
+      const found = await getApprovalsIsolated(batch);
+      for (const [key, value] of found.approvals) lookups.set(key, value);
+      for (const [key, error] of found.errors) lookupErrors.set(key, error);
     }
     // Preserve previously verified Slack identity across an Otter outage.
     // Recheck external enrichment only once every 12h per record, reducing

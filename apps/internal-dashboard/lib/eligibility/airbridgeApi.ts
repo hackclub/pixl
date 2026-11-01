@@ -15,9 +15,14 @@ export function githubRepo(value: string | null): string | null {
   try {
     const u = new URL(value ?? "");
     const path = u.pathname.replace(/\.git$/i, "").split("/").filter(Boolean);
-    return u.protocol === "https:" && u.hostname.toLowerCase() === "github.com" &&
-      path.length >= 2 && path.slice(0, 2).every(v => /^[a-z0-9_.-]+$/i.test(v))
-      ? "github.com/" + path[0]!.toLowerCase() + "/" + path[1]!.toLowerCase() : null;
+    const host = u.hostname.toLowerCase();
+    // The official Pixl approvals include GitLab and Codeberg repositories.
+    // Keep the host allowlist narrow; exact staging-repo matching still applies.
+    const allowed = host === "github.com" || host === "gitlab.com" || host === "codeberg.org";
+    const validDepth = host === "github.com" ? path.length >= 2 : path.length === 2;
+    return u.protocol === "https:" && !u.username && !u.password && allowed &&
+      validDepth && path.slice(0, 2).every(v => /^[a-z0-9_.-]+$/i.test(v))
+      ? host + "/" + path[0]!.toLowerCase() + "/" + path[1]!.toLowerCase() : null;
   } catch { return null; }
 }
 export function parseApproval(value: unknown, id: string): Approval {
@@ -71,6 +76,14 @@ export function airbridgeLookupUrl(ids: string[]): string {
 }
 // Parse one exact-ID query. The public endpoint returns a bare array, so a
 // short response alone cannot prove whether an omitted ID was really removed.
+/** Domain validation errors can be isolated without retrying network outages. */
+export class InvalidApprovalError extends Error {
+  constructor(public readonly recordId: string, message: string) {
+    super(message);
+    this.name = "InvalidApprovalError";
+  }
+}
+
 async function fetchApprovalBatch(ids: string[], fetchImpl: typeof fetch):
   Promise<Map<string, Approval | null>> {
   const res = await fetchImpl(airbridgeLookupUrl(ids), {
@@ -88,7 +101,8 @@ async function fetchApprovalBatch(ids: string[], fetchImpl: typeof fetch):
     if (typeof id !== "string" || !found.has(id) || seen.has(id))
       throw Error("Airbridge returned unexpected or duplicate IDs");
     seen.add(id);
-    found.set(id, parseApproval(value, id));
+    try { found.set(id, parseApproval(value, id)); }
+    catch (e) { throw new InvalidApprovalError(id, (e as Error).message); }
   }
   return found;
 }
@@ -113,6 +127,30 @@ export async function getApprovals(ids: string[], fetchImpl: typeof fetch = fetc
     for (const [id, approval] of confirmations) found.set(id, approval);
   }
   return found;
+}
+
+/** Split only malformed-record errors. Network/HTTP failures stay bounded. */
+export async function getApprovalsIsolated(
+  ids: string[], fetchImpl: typeof fetch = fetch,
+): Promise<{ approvals: Map<string, Approval | null>; errors: Map<string, string> }> {
+  const approvals = new Map<string, Approval | null>();
+  const errors = new Map<string, string>();
+  async function visit(batch: string[]): Promise<void> {
+    try {
+      const found = await getApprovals(batch, fetchImpl);
+      for (const [id, approval] of found) approvals.set(id, approval);
+    } catch (e) {
+      if (e instanceof InvalidApprovalError && batch.length > 1) {
+        const mid = Math.floor(batch.length / 2);
+        await visit(batch.slice(0, mid));
+        await visit(batch.slice(mid));
+      } else {
+        for (const id of batch) errors.set(id, (e as Error).message);
+      }
+    }
+  }
+  if (ids.length) await visit(ids);
+  return { approvals, errors };
 }
 
 export type OtterSlackResult =
