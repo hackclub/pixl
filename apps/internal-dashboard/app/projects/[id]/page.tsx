@@ -81,6 +81,7 @@ const HISTORY_ACTION: Record<string, { label: string; tone: Tone }> = {
   review_reverted: { label: "Reverted", tone: "info" },
   project_first_pass: { label: "First pass", tone: "neutral" },
   project_hours_deflated: { label: "Hours deflated", tone: "warning" },
+  project_hours_raised: { label: "Hours raised", tone: "success" },
 };
 
 const DIVIDER = "mt-4 border-t border-[var(--border)] pt-4";
@@ -759,13 +760,13 @@ export default async function ProjectPage({
 
               {canDeflate && (
                 <div className={DIVIDER}>
-                  <h3 className="hc-heading text-sm">Deflate approved hours</h3>
+                  <h3 className="hc-heading text-sm">Correct approved hours</h3>
                   <p className="hc-caption mb-2 mt-1 text-xs">
-                    Lowers credited hours after approval, e.g. when Hack Club HQ flagged an over-claim in
-                    Airtable. Fill in the new hours only for the people who should lose hours, a blank box leaves
-                    that person alone. Claws back their pixels down to what the new hours are worth, DMs them
-                    your reason, and cancels any pending order that can no longer be covered. Only ever lowers
-                    hours.
+                    Changes credited hours after approval, up or down, e.g. when Hack Club HQ flagged an
+                    over-claim in Airtable or a spot check found more work. Fill in the new hours only for the
+                    people who should change, a blank box leaves that person alone. Lowering claws their pixels
+                    back down to what the new hours are worth and cancels any pending order that can no longer be
+                    covered. Raising credits the difference. Either way it DMs them your reason.
                   </p>
                   <form action={deflateProjectHours} className="flex flex-col gap-2">
                     <input type="hidden" name="projectId" value={project.id} />
@@ -799,10 +800,10 @@ export default async function ProjectPage({
                       <ActionButton
                         variant="danger"
                         size="sm"
-                        pendingLabel="Deflating..."
-                        confirm="Deflate this project's hours? This immediately claws back pixels (and may cancel pending orders) for the people you filled in, and DMs them why."
+                        pendingLabel="Saving..."
+                        confirm="Change this project's hours? This immediately adjusts pixels (lowering claws back and may cancel pending orders, raising credits the difference) for the people you filled in, and DMs them why."
                       >
-                        Deflate hours
+                        Change hours
                       </ActionButton>
                     </div>
                   </form>

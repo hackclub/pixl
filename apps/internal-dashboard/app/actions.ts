@@ -3020,8 +3020,10 @@ async function repriceForHours(
 // as if newHours had been the true figure from the start; creditProjectPixels
 // then does the actual clawback, which already auto-cancels pending orders
 // (newest first, refunding any leftover) if the corrected balance can't cover
-// them - see 0164_clawback_pending_orders.sql. Deflate only, never inflate -
-// raising hours back up isn't this button's job (that's a fresh appeal/review).
+// them - see 0164_clawback_pending_orders.sql. Works in both directions: a
+// higher figure credits the difference (creditProjectPixels sets the total and
+// pays the delta), and the pending-order note is left out since nothing was
+// clawed back.
 // Owners/super-admins only: this DMs the player(s) and can cancel their
 // orders, a bigger blast radius than the "pixels" permission's manual
 // grant/deduct tool.
@@ -3033,7 +3035,7 @@ export const deflateProjectHours = guardedAction("deflateProjectHours", "owner",
 
   const reason = String(formData.get("reason") ?? "").trim().slice(0, 1000);
   if (!reason)
-    redirect(`${back}?error=${encodeURIComponent("A reason is required to deflate hours.")}`);
+    redirect(`${back}?error=${encodeURIComponent("A reason is required to change hours.")}`);
 
   const { data: project } = await db
     .from("projects")
@@ -3043,7 +3045,7 @@ export const deflateProjectHours = guardedAction("deflateProjectHours", "owner",
   if (!project) redirect(`${back}?error=${encodeURIComponent("Project not found.")}`);
   if (project.status !== "approved" || project.banned_at || project.rejected_at)
     redirect(
-      `${back}?error=${encodeURIComponent("Only an approved, non-banned, non-rejected project can have its hours deflated.")}`,
+      `${back}?error=${encodeURIComponent("Only an approved, non-banned, non-rejected project can have its hours changed.")}`,
     );
 
   const oldHours =
@@ -3070,12 +3072,12 @@ export const deflateProjectHours = guardedAction("deflateProjectHours", "owner",
     { id: number; user_id: string; approved_hours: number | null }[];
 
   const collabTargets: { id: number; user_id: string; cOldHours: number; cNewHours: number }[] = [];
-  let badInput = ownerNewHours === "bad" || (typeof ownerNewHours === "number" && ownerNewHours >= oldHours);
+  let badInput = ownerNewHours === "bad" || (typeof ownerNewHours === "number" && ownerNewHours === oldHours);
   for (const c of collaborators) {
     const n = parseHours(`hours_${c.id}`);
     if (n == null) continue;
     const cOldHours = Number(c.approved_hours) || 0;
-    if (n === "bad" || cOldHours <= 0 || n >= cOldHours) {
+    if (n === "bad" || cOldHours <= 0 || n === cOldHours) {
       badInput = true;
       continue;
     }
@@ -3084,7 +3086,7 @@ export const deflateProjectHours = guardedAction("deflateProjectHours", "owner",
   const deflateOwner = typeof ownerNewHours === "number";
   if (badInput || (!deflateOwner && collabTargets.length === 0))
     redirect(
-      `${back}?error=${encodeURIComponent("Fill in the new hours for at least one person, each a number from 0 up to (but not including) their current hours.")}`,
+      `${back}?error=${encodeURIComponent("Fill in the new hours for at least one person, each a number of 0 or more that differs from their current hours.")}`,
     );
 
   const tier = Number(project.level) || 1;
@@ -3109,14 +3111,15 @@ export const deflateProjectHours = guardedAction("deflateProjectHours", "owner",
     await creditProjectPixels(c.user_id, projectId, cNewPx, c.cNewHours, by);
     await db.from("project_collaborators").update({ approved_hours: c.cNewHours }).eq("id", c.id);
 
+    const cRaised = c.cNewHours > c.cOldHours;
     const cBody =
       `"${project.name}"'s credited hours were corrected from ${c.cOldHours}h to ${c.cNewHours}h , your pixels for it were adjusted to match.\n\n` +
-      `Reason: ${reason}\n\n${orderNote}\n\nIf you think this is a mistake, contact the Pixl team.`;
+      `Reason: ${reason}\n\n${cRaised ? "" : `${orderNote}\n\n`}If you think this is a mistake, contact the Pixl team.`;
     await db.from("notifications").insert({ user_id: c.user_id, title: "Project hours corrected", body: cBody });
     await dmOrEmail(c.user_id, "Project hours corrected", cBody);
     await logModAction(
       c.user_id,
-      "project_hours_deflated",
+      cRaised ? "project_hours_raised" : "project_hours_deflated",
       `${project.name}: collaborator ${c.cOldHours}h → ${c.cNewHours}h , ${reason}`,
       by,
     );
@@ -3137,7 +3140,7 @@ export const deflateProjectHours = guardedAction("deflateProjectHours", "owner",
     project_id: projectId,
     user_id: project.user_id,
     reviewer: by,
-    verdict: "hours_deflated",
+    verdict: deflateOwner && ownerNewHours > oldHours ? "hours_raised" : "hours_deflated",
     note: deflateOwner ? reason : `${reason} (collaborator hours only)`,
     audit_note: "",
     claimed_hours: oldHours,
@@ -3146,9 +3149,10 @@ export const deflateProjectHours = guardedAction("deflateProjectHours", "owner",
   if (auditError) console.error("deflateProjectHours audit insert failed", auditError.message);
 
   if (deflateOwner) {
+    const ownerRaised = ownerNewHours > oldHours;
     const ownerBody =
       `"${project.name}"'s approved hours were corrected from ${oldHours}h to ${ownerNewHours}h , your pixels for it were adjusted to match.\n\n` +
-      `Reason: ${reason}\n\n${orderNote}\n\nIf you think this is a mistake, contact the Pixl team.`;
+      `Reason: ${reason}\n\n${ownerRaised ? "" : `${orderNote}\n\n`}If you think this is a mistake, contact the Pixl team.`;
     const { error: notifyError } = await db
       .from("notifications")
       .insert({ user_id: project.user_id, title: "Project hours corrected", body: ownerBody });
@@ -3156,7 +3160,7 @@ export const deflateProjectHours = guardedAction("deflateProjectHours", "owner",
     await dmOrEmail(project.user_id, "Project hours corrected", ownerBody);
     await logModAction(
       project.user_id,
-      "project_hours_deflated",
+      ownerRaised ? "project_hours_raised" : "project_hours_deflated",
       `${project.name}: ${oldHours}h → ${ownerNewHours}h , ${reason}`,
       by,
     );
