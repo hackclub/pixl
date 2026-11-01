@@ -42,7 +42,7 @@ describe("Halceon submission parser", () => {
     const view = { snapshot: snap, fetchedAt: now, ageMs: 0, fresh: true, error: null, lastAttemptAt: null, nextRetryAt: null };
     const mapping = { kind: "mapped" as const, stagingId: "recStaging", unifiedId: "recAAAAAAAAAAAAAA" };
     expect(matchShips(view, { mapping, repoKey: "github.com/demo/alpha", playerSlackId: "U0123456789" }, now).state).toBe("ambiguous");
-    expect(matchShips(view, { mapping, repoKey: "github.com/bob/beta", playerSlackId: "U0123456789" }, now).state).toBe("ambiguous");
+    expect(matchShips(view, { mapping, repoKey: "github.com/bob/beta", playerSlackId: "U0123456789" }, now).state).toBe("identity_mismatch");
     const ok = matchShips(view, { mapping, repoKey: "github.com/bob/beta", playerSlackId: "U0987654321" }, now);
     expect(ok.state).toBe("approved");
     expect(ok.matchedBy).toBe("repo_slack");

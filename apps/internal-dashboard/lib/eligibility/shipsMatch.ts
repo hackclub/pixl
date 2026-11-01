@@ -92,13 +92,15 @@ export function matchShips(view: ShipsView, target: MatchTarget, nowMs: number =
     // updates to the same repo remain ambiguous and require human review.
     if (!target.repoKey || !target.playerSlackId)
       return blank("ambiguous", "Halceon cannot identify both the repository and Slack account.");
-    const matching = (snap.byRepo.get(target.repoKey) ?? [])
-      .filter((e) => sameSlack(e, target.playerSlackId) === true);
-    if (matching.length !== 1)
-      return blank(matching.length > 1 ? "ambiguous" : "not_found",
-        matching.length > 1
-          ? "Multiple Halceon approvals share the repository and Slack account; the exact Unified record cannot be identified."
-          : "No matching Halceon approval with this repository and Slack account.");
+    const candidates = snap.byRepo.get(target.repoKey) ?? [];
+    const matching = candidates.filter((e) => sameSlack(e, target.playerSlackId) === true);
+    if (matching.length > 1)
+      return blank("ambiguous", "Multiple Halceon approvals share this repository and Slack account; an exact Unified record cannot be identified.");
+    if (!matching.length)
+      return blank(candidates.length ? "identity_mismatch" : "not_found",
+        candidates.length
+          ? "Halceon lists this repository but the shipper's Slack identity could not be verified."
+          : "Halceon has no approval for this repository.");
     const evidence = evidenceOf(matching[0]!, "repo_slack", nowMs, view);
     return {
       ...evidence,
