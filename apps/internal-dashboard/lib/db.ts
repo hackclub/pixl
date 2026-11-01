@@ -1899,7 +1899,10 @@ export async function publicStats(days = 30): Promise<PublicStats> {
   const totalHours =
     Math.round(
       hoursRows.reduce((s, p) => {
-        const h = earnedProjectHours(p);
+        const h =
+          p.approved_hours != null
+            ? Number(p.approved_hours)
+            : (Number(p.hackatime_seconds) || 0) / 3600;
         return s + (Number.isFinite(h) ? h : 0);
       }, 0) * 10,
     ) / 10;
@@ -3744,14 +3747,8 @@ export async function lifetimeRe(userId: string, excludeProjectId?: number): Pro
   return (
     Math.round(
       (data ?? []).reduce((s, p) => {
-        const h =
-          p.approved_hours != null
-            ? Number(p.approved_hours)
-            : (Number(p.hackatime_seconds) || 0) / 3600;
-        return (
-          s +
-          (h === null ? 0 : reForProject(h, Number(p.level) || 1, p.sidequest_id != null))
-        );
+        const h = earnedProjectHours(p);
+        return s + (h === null ? 0 : reForProject(h, Number(p.level) || 1, p.sidequest_id != null));
       }, 0) * 10,
     ) / 10
   );
