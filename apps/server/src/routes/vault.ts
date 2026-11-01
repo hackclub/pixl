@@ -38,52 +38,32 @@ const CHAPTER_LEADERBOARD_SIZE = 10;
 // Returns false if the level was already closed by someone else.
 async function settleChapterAward(level: VaultLevelRow, windowStart: Date | null): Promise<boolean> {
   const totalReward = level.top1_re + level.top2_re + level.top3_re;
-  if (totalReward <= 0) {
-    // Nothing to award, but still mark the chapter closed so its window ends.
-    const { data: closed } = await db
-      .from("vault_levels")
-      .update({ unlocked_at: new Date().toISOString() })
-      .eq("id", level.id)
-      .is("unlocked_at", null)
-      .select("id")
-      .maybeSingle();
-    return Boolean(closed);
-  }
-
-  const top = await topChapterContributors(windowStart, 3);
+  const top = totalReward > 0 ? await topChapterContributors(windowStart, 3) : [];
   const rewardByRank = [level.top1_re, level.top2_re, level.top3_re];
+  const awards = top.flatMap(({ userId }, i) => {
+    const reAwarded = rewardByRank[i];
+    return reAwarded > 0 ? [{ user_id: userId, award_rank: i + 1, re_awarded: reAwarded }] : [];
+  });
 
-  // Claim the level first (only if still unclaimed) so two concurrent
-  // requests can't both compute a leaderboard and try to award it twice.
-  const { data: claimed } = await db
-    .from("vault_levels")
-    .update({ unlocked_at: new Date().toISOString() })
-    .eq("id", level.id)
-    .is("unlocked_at", null)
-    .select("id")
-    .maybeSingle();
+  // Migration 0235 performs the claim and *all* reward inserts in one
+  // PostgreSQL transaction. A failed insert must roll back unlocked_at too,
+  // otherwise future requests skip the chapter forever and winners lose RE.
+  const { data: claimed, error } = await db.rpc("settle_vault_chapter_atomic", {
+    p_level_id: level.id,
+    p_awards_text: JSON.stringify(awards),
+  });
+  if (error) {
+    console.error("[vault] atomic settlement failed", error);
+    return false;
+  }
   if (!claimed) return false;
 
-  for (let i = 0; i < top.length; i++) {
-    const { userId } = top[i];
-    const reAwarded = rewardByRank[i];
-    if (!reAwarded) continue;
-    const { error } = await db.from("vault_chapter_awards").insert({
-      vault_level_id: level.id,
-      user_id: userId,
-      award_rank: i + 1,
-      re_awarded: reAwarded,
-    });
-    if (error) {
-      console.error("[vault] chapter award insert failed", error);
-      continue;
-    }
+  for (const award of awards)
     await addNotification(
-      userId,
+      award.user_id,
       "Vault chapter reward",
-      `You shipped the most Restoration Energy toward "${level.title}" this chapter (#${i + 1}). +${reAwarded} bonus RE.`,
+      `You shipped the most Restoration Energy toward "${level.title}" this chapter (#${award.award_rank}). +${award.re_awarded} bonus RE.`,
     );
-  }
   return true;
 }
 
