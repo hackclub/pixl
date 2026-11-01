@@ -2,6 +2,7 @@ import { Router } from "express";
 import { issueSessionToken } from "../auth/session.js";
 import { containsBlocked, logViolation } from "../moderation.js";
 import { db } from "../db/client.js";
+import { sql } from "../db/pgCompat.js";
 import {
   approvedHoursFor,
   lifetimeRe,
@@ -283,24 +284,17 @@ router.post("/api/profile/onboarding", validate({ query: v.noQuery, body: z.obje
   if (!Number.isFinite(raw)) return res.status(400).json({ ok: false, error: "bad_step" });
   const want = Math.max(0, Math.min(ONBOARDING_DONE, Math.round(raw)));
 
-  // Forward-only: a stale client (older tab, a replay) must never rewind a
-  // player who's already further along.
-  const { data: cur } = await db
-    .from("users")
-    .select("onboarding_step")
-    .eq("id", session.userId)
-    .maybeSingle();
-  const step = Math.max(Math.max(0, Number(cur?.onboarding_step) || 0), want);
-
-  const { error } = await db
-    .from("users")
-    .update({ onboarding_step: step })
-    .eq("id", session.userId);
-  if (error) {
-    console.error("[profile] onboarding update failed", error.message);
-    return res.status(500).json({ ok: false });
+  try {
+    const rows = await sql<{ onboarding_step: number }[]>`
+      update users set onboarding_step = greatest(coalesce(onboarding_step, 0), ${want})
+      where id = ${session.userId} returning onboarding_step`;
+    if (!rows.length) return res.status(404).json({ ok: false });
+    const step = Number(rows[0]!.onboarding_step);
+    res.json({ ok: true, step, done: step >= ONBOARDING_DONE });
+  } catch (e) {
+    console.error("[profile] onboarding update failed", e);
+    res.status(500).json({ ok: false });
   }
-  res.json({ ok: true, step, done: step >= ONBOARDING_DONE });
 });
 
 router.post("/api/profile/card-pixelate", validate({ query: v.noQuery, body: z.object({ pixelate: optBool }) }), async (req, res) => {

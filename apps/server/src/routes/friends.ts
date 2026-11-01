@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/client.js";
 import { orValue } from "../db/pgCompat.js";
+import { withLock } from "../db/advisoryLock.js";
 import { addNotification } from "./notifications.js";
 import { presenceFor } from "../ws/gameServer.js";
 import { isUserId, rowBetween, type FriendRow } from "../social.js";
@@ -82,48 +83,41 @@ router.post("/api/friends/request", validate({ query: v.noQuery, body: z.object(
   if (!target)
     return res.status(404).json({ ok: false, reason: "No such player." });
 
-  const existing = await rowBetween(session.userId, targetId);
-  if (existing) {
-    // A pending request from the other side counts as mutual interest:
-    // accept it instead of stacking a duplicate row.
-    if (
-      existing.status === "pending" &&
-      existing.requester_id === targetId
-    ) {
-      const { error } = await db
-        .from("friends")
-        .update({ status: "accepted" })
-        .eq("requester_id", targetId)
-        .eq("addressee_id", session.userId);
-      if (error) return res.status(500).json({ ok: false });
-      void addNotification(
-        targetId,
-        "Friend request accepted",
-        `${session.displayName} accepted your friend request.`,
-      );
-      return res.json({ ok: true, status: "friends" });
-    }
-    return res.json({
-      ok: true,
-      status: existing.status === "accepted" ? "friends" : "outgoing",
-    });
-  }
+  try {
+    const ids = [session.userId.toLowerCase(), targetId.toLowerCase()].sort();
+    const result = await withLock(`friend_pair:${ids.join(":")}`, async () => {
+      const existing = await rowBetween(session.userId, targetId);
+      if (existing) {
+        if (existing.status === "pending" && existing.requester_id === targetId) {
+          const { data, error } = await db.from("friends")
+            .update({ status: "accepted" })
+            .eq("requester_id", targetId)
+            .eq("addressee_id", session.userId)
+            .eq("status", "pending")
+            .select("requester_id");
+          if (error) throw new Error(error.message);
+          return { status: "friends", notify: data?.length ? "accepted" : null };
+        }
+        return { status: existing.status === "accepted" ? "friends" : "outgoing", notify: null };
+      }
 
-  const { error } = await db.from("friends").insert({
-    requester_id: session.userId,
-    addressee_id: targetId,
-    status: "pending",
-  });
-  if (error) {
-    console.error("[friends] request insert failed", error);
-    return res.status(500).json({ ok: false });
+      const { error } = await db.from("friends").insert({
+        requester_id: session.userId,
+        addressee_id: targetId,
+        status: "pending",
+      });
+      if (error) throw new Error(error.message);
+      return { status: "outgoing", notify: "request" };
+    });
+    if (result.notify === "accepted")
+      void addNotification(targetId, "Friend request accepted", `${session.displayName} accepted your friend request.`);
+    else if (result.notify === "request")
+      void addNotification(targetId, "Friend request", `${session.displayName} wants to be your friend. Open your friends list (F) to accept.`);
+    res.json({ ok: true, status: result.status });
+  } catch (e) {
+    console.error("[friends] request failed", e);
+    res.status(500).json({ ok: false });
   }
-  void addNotification(
-    targetId,
-    "Friend request",
-    `${session.displayName} wants to be your friend. Open your friends list (F) to accept.`,
-  );
-  res.json({ ok: true, status: "outgoing" });
 });
 
 router.post("/api/friends/accept", validate({ query: v.noQuery, body: z.object({ userId: optStr(64) }) }), async (req, res) => {

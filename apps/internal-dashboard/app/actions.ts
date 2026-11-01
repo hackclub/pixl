@@ -5522,7 +5522,7 @@ export const flagOrderOverBudget = guardedAction("flagOrderOverBudget", "fulfill
   if (!canFlagOrder({ claimed_by_slack: current.claimed_by_slack as string | null }, access)) {
     throw new Error("Only the fulfiller who claimed this order can flag it.");
   }
-  const { error } = await db
+  let update = db
     .from("shop_orders")
     .update({
       flagged_at: new Date().toISOString(),
@@ -5531,7 +5531,10 @@ export const flagOrderOverBudget = guardedAction("flagOrderOverBudget", "fulfill
     })
     .eq("id", id)
     .in("status", ["pending", "ordered", "credited"]);
+  if (!access.isOwner) update = update.eq("claimed_by_slack", access.session.slackId);
+  const { data: changed, error } = await update.select("id").maybeSingle();
   if (error) throw new Error(error.message);
+  if (!changed) { revalidatePath("/fulfillment"); return; }
   await logOrderAction(id, "order_flagged", `over budget: ${note}`, actorName(access));
   revalidatePath("/fulfillment");
 });

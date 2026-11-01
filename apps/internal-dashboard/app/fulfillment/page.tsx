@@ -170,11 +170,15 @@ async function FulfillerManager() {
 export default async function FulfillmentPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; mine?: string; q?: string; order?: string; elig?: string; verify?: string; sort?: string }>;
+  searchParams: Promise<{ status?: string; mine?: string; q?: string; order?: string; elig?: string; verify?: string; sort?: string; page?: string }>;
 }) {
   const access = await requirePage("fulfiller");
   const me = access.session.slackId;
-  const { status, mine, q, order: orderParam, elig, verify, sort } = await searchParams;
+  const { status, mine, q, order: orderParam, elig, verify, sort, page } = await searchParams;
+  const pageNumber = Number(page ?? 1);
+  const pageIndex = Number.isSafeInteger(pageNumber) && pageNumber > 0
+    ? Math.min(pageNumber - 1, 10000) : 0;
+  const pageSize = 200;
   const eligFilter = parseEligibilityFilter(elig);
   const verifyFilter = parseVerificationFilter(verify);
   const sortKey = parseSort(sort);
@@ -191,21 +195,19 @@ export default async function FulfillmentPage({
   // every order this fulfiller has claimed that isn't done yet. Filtering the
   // default New tab instead would always be empty, since nobody has claimed a
   // pending order yet.
-  let loaded: ShopOrderRow[];
-  if (!showingQueue) {
-    loaded = [];
-  } else if (mineOnly) {
-    const [orderedRows, creditedRows, shippedRows] = await Promise.all([
-      listShopOrders("ordered", 500),
-      listShopOrders("credited", 500),
-      listShopOrders("shipped", 500),
-    ]);
-    loaded = [...orderedRows, ...creditedRows, ...shippedRows]
-      .filter((o) => o.claimed_by_slack === me)
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  } else {
-    loaded = await listShopOrders(active === "all" ? undefined : active, 500);
-  }
+  const loaded = !showingQueue ? [] : await listShopOrders(
+    mineOnly ? undefined : active === "all" ? undefined : active,
+    pageSize + 1,
+    {
+      ...(mineOnly ? { claimedBySlack: me, stages: ["ordered", "credited", "shipped"] } : {}),
+      search: query,
+      offset: pageIndex * pageSize,
+      viewerSlack: me,
+      allowPrivateNames: access.isOwner,
+    },
+  );
+  const hasNext = loaded.length > pageSize;
+  if (hasNext) loaded.pop();
 
   const nameFor = (o: ShopOrderRow) => (canSeeBuyerDetails(o, access) ? o.player_name : o.player_display_name);
   let eligibility = new Map<number, EligibilityResult>();
@@ -217,13 +219,7 @@ export default async function FulfillmentPage({
       console.error("fulfillment eligibility", (e as Error).message);
     }
   }
-  const needle = query.toLowerCase();
-  const searchable = (o: ShopOrderRow): string[] => {
-    const r = eligibility.get(Number(o.id));
-    const project = (r?.projects ?? []).flatMap((p) => [p.name, p.repoKey ?? "", p.ships?.githubUsername ?? ""]);
-    return [o.item_name, o.option, nameFor(o), o.player_slack ?? "", ...project];
-  };
-  const searched = needle ? loaded.filter((o) => searchable(o).some((v) => v.toLowerCase().includes(needle))) : loaded;
+  const searched = loaded;
   const filtered = searched
     .filter((o) => !eligFilter || (eligibility.get(Number(o.id))?.status ?? "unverified") === eligFilter)
     .filter((o) => !verifyFilter || eligibility.get(Number(o.id))?.verification === verifyFilter);
@@ -281,6 +277,7 @@ export default async function FulfillmentPage({
     elig?: EligibilityStatus | null;
     verify?: VerificationLabel | null;
     sort?: SortKey;
+    page?: number;
   }) => {
     const params = new URLSearchParams();
     const st = next.status ?? active;
@@ -295,6 +292,8 @@ export default async function FulfillmentPage({
     const sv = next.sort ?? sortKey;
     if (sv !== "newest") params.set("sort", sv);
     if (next.order !== undefined) params.set("order", String(next.order));
+    const pn = next.page ?? (next.order !== undefined ? pageIndex + 1 : 1);
+    if (pn > 1) params.set("page", String(pn));
     const qs = params.toString();
     return qs ? `/fulfillment?${qs}` : "/fulfillment";
   };
@@ -532,6 +531,15 @@ export default async function FulfillmentPage({
                 now={Date.now()}
                 eligibility={eligibility}
               />
+            )}
+            {(hasNext || pageIndex > 0) && (
+              <div className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+                <span className="hc-muted">Page {pageIndex + 1}</span>
+                <div className="flex gap-2">
+                  {pageIndex > 0 && <Link href={hrefFor({ page: pageIndex })} className={buttonClass("outline")}>Previous</Link>}
+                  {hasNext && <Link href={hrefFor({ page: pageIndex + 2 })} className={buttonClass("outline")}>Next</Link>}
+                </div>
+              </div>
             )}
           </section>
           <section className="fw-pane" aria-label="Selected request">
