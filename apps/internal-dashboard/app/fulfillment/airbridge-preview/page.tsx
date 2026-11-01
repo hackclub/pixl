@@ -26,9 +26,9 @@ function ago(value: number | string, now: number): string {
 }
 
 export default async function AirbridgePreview() {
-  // Diagnostic access is owner-only. No actions or mutation endpoints are
+  // Diagnostic access is restricted to authorized fulfillment staff. No actions or mutation endpoints are
   // exposed by this page; any sync writes occur only in the cron worker.
-  await requirePage("owner");
+  await requirePage("fulfiller");
   const view = await readAirbridgeCache();
   const now = Date.now();
   const rows = await sql<Row[]>`
@@ -66,7 +66,7 @@ export default async function AirbridgePreview() {
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
             {[
               ["Active staging records", health.total],
-              ["Currently verified", health.current],
+              ["Records with fresh sync", health.current],
               ["Not yet synchronized", health.unsynced],
               ["Stale records", health.stale],
               ["Upstream errors", health.errors],

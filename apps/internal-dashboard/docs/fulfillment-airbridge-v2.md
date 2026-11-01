@@ -17,7 +17,7 @@ Replace the unreliable bulk Ships API with targeted Airbridge reads of individua
 - No currency or shop-order writes. Existing payout, commitment, and grant checks remain in force.
 
 ## Local verification
-- Staff-owner-only **read-only** diagnostic page `/fulfillment/airbridge-preview` shows the real cache and per-record status without affecting the live funding verifier or any claim, payout or order action. Use this to test warm-up while the legacy verifier remains active.
+- Fulfillment-staff-only **read-only** diagnostic page `/fulfillment/airbridge-preview` shows the real cache and per-record status without affecting the live funding verifier or any claim, payout or order action. Use this to test warm-up while the legacy verifier remains active.
 - `/fulfillment` uses `shipsProvider().get()` which performs only local Postgres reads. Sync health is computed across the **full active approved owner/collaborator staging cohort** (including not-yet-cached records), and reports current, unsynced, stale, failed and identity-review counts. The newest approval's timestamp is only shown as *latest update*, never as whole-cohort freshness.
 - `loadPlayerEvidence` fetches staging->Unified mappings from Postgres when Airbridge is enabled, not the staging API.
 - On claim, eligibility is re-evaluated against the local cache and existing fulfillment ledger. **The existing claim enforcement policy has not been changed by this PR.**
