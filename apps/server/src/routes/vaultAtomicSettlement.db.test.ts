@@ -25,7 +25,7 @@ if (!url) {
     return Number(row.id);
   }
   async function settle(levelId: number, awards: unknown): Promise<boolean> {
-    const [row] = await db<{ settled: boolean }[]>`select settle_vault_chapter_atomic(${levelId}, ${JSON.stringify(awards)}::jsonb) as settled`;
+    const [row] = await db<{ settled: boolean }[]>`select settle_vault_chapter_atomic(${levelId}, ${JSON.stringify(awards)}) as settled`;
     return row.settled;
   }
   async function countAwards(id: number): Promise<number> {

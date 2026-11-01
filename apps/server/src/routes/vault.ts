@@ -50,7 +50,7 @@ async function settleChapterAward(level: VaultLevelRow, windowStart: Date | null
   // otherwise future requests skip the chapter forever and winners lose RE.
   const { data: claimed, error } = await db.rpc("settle_vault_chapter_atomic", {
     p_level_id: level.id,
-    p_awards: awards,
+    p_awards_text: JSON.stringify(awards),
   });
   if (error) {
     console.error("[vault] atomic settlement failed", error);
