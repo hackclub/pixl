@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseProjectBody, toPlayerProject } from "./projects.js";
+import { mayEditProjectAtStatus, parseProjectBody, toPlayerProject } from "./projects.js";
 
 // Every internal/admin column found on `projects` across drizzle/*.sql as of
 // this test - reviewer/admin identities, fraud/system notes, review draft
@@ -217,5 +217,17 @@ describe("toPlayerProject join_code", () => {
   test("a collaborator, or a caller that names no viewer, never does", () => {
     expect(toPlayerProject(row, "collaborator").join_code).toBeNull();
     expect(toPlayerProject(row).join_code).toBeNull();
+  });
+});
+
+
+describe("project evidence lock during review", () => {
+  test("a maker may prepare a draft, answer changes, or prepare a newly approved update", () => {
+    for (const status of ["draft", "needs_changes", "approved"])
+      expect(mayEditProjectAtStatus(status)).toBe(true);
+  });
+  test("submission evidence is immutable in every live review stage", () => {
+    for (const status of ["shipped", "fraud_review", "second_review", "rejected", "", null, undefined])
+      expect(mayEditProjectAtStatus(status)).toBe(false);
   });
 });

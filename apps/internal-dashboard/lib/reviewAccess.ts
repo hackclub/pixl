@@ -180,3 +180,16 @@ export function builderDetailsView(
     address: isFinalStage ? raw.address || "-" : null,
   };
 }
+
+
+// Same visibility policy as the reviewer detail page: evidence endpoints and
+// search must not disclose out-of-queue projects or restricted review stages.
+export function canReadReviewEvidence(
+  viewer: { reviewQueues: ReviewQueueScope; canFraudReview: boolean },
+  project: { kind: string | null | undefined; status: string | null | undefined },
+): boolean {
+  if (!queueAllows(viewer.reviewQueues, project.kind)) return false;
+  if ((project.status === "fraud_review" || project.status === "second_review") && !viewer.canFraudReview)
+    return false;
+  return true;
+}

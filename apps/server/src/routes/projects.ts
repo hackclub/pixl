@@ -527,6 +527,13 @@ router.post("/api/projects", validate({ query: v.noQuery, body: projectBody }), 
   res.json({ ok: true, project: toPlayerProject(data, session.userId) });
 });
 
+// Drafts, requested changes and approved projects being prepared for their next
+// update may be edited. A project already under review has frozen evidence:
+// edits there would bypass the ship-time checks and invalidate the review.
+export function mayEditProjectAtStatus(status: string | null | undefined): boolean {
+  return status === "draft" || status === "needs_changes" || status === "approved";
+}
+
 // Update one of the user's own projects.
 router.put("/api/projects/:id", validate({ query: v.noQuery, params: params({ id: v.id }), body: projectBody }), async (req, res) => {
   const session = req.session;
@@ -545,10 +552,13 @@ router.put("/api/projects/:id", validate({ query: v.noQuery, params: params({ id
   // their RE). Keep the existing level on approved projects; the reviewer owns it.
   const { data: cur } = await db
     .from("projects")
-    .select("status, level, sidequest_id, bom_url")
+    .select("status, level, sidequest_id, bom_url, banned_at")
     .eq("id", id)
     .eq("user_id", session.userId)
     .maybeSingle();
+  if (!cur) return res.status(404).json({ ok: false, error: "not_found" });
+  if (!mayEditProjectAtStatus(cur.status as string) || cur.banned_at)
+    return res.status(409).json({ ok: false, error: "project_locked_in_review" });
   const fields: Record<string, unknown> = { ...parsed.fields };
   fields.bom_url = (cur as { bom_url?: string } | null)?.bom_url ?? "";
 
@@ -570,8 +580,12 @@ router.put("/api/projects/:id", validate({ query: v.noQuery, params: params({ id
     .update(fields)
     .eq("id", id)
     .eq("user_id", session.userId)
+    // Recheck at write time: a concurrent ship/review may have locked it.
+    .in("status", ["draft", "needs_changes", "approved"])
+    .is("banned_at", null)
     .select()
-    .single();
+    .maybeSingle();
+  if (!data && !error) return res.status(409).json({ ok: false, error: "project_locked_in_review" });
   if (error) {
     console.error("[projects] update failed", error);
     return res.status(500).json({ ok: false });
@@ -947,12 +961,17 @@ router.post("/api/projects/:id/ship", validate({ query: v.noQuery, params: param
     })
     .eq("id", id)
     .eq("user_id", session.userId)
+    // Atomically validate the previously checked review state, so two ship
+    // requests or a racing reviewer cannot overwrite a newer transition.
+    .eq("status", project.status)
+    .is("banned_at", null)
     .select()
-    .single();
+    .maybeSingle();
   if (updateError) {
     console.error("[projects] ship failed", updateError);
     return res.status(500).json({ ok: false });
   }
+  if (!data) return res.status(409).json({ ok: false, error: "project_state_changed" });
   // Collaborators get their own Airtable row per approval, same rule as the
   // owner's airtable_record_id above: an update ship starts fresh rows.
   if (isUpdate) {

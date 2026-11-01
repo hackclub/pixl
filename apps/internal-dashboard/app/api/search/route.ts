@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { guardedRoute, can } from "@/lib/guard";
-import { globalSearch } from "@/lib/db";
+import { firstPassAccess, globalSearch } from "@/lib/db";
+import { canReadReviewEvidence } from "@/lib/reviewAccess";
 import { slackHandles } from "@/lib/slack";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,14 @@ export const GET = guardedRoute("api.search", "staff", async (access, req) => {
     projects: canProjects,
   });
 
+  // Search must not reveal projects the review page would hide, including
+  // other queues, fraud/second pass and the restricted first-pass queue.
+  const visibility = await Promise.all(projects.map(async (p) => {
+    if (!canReadReviewEvidence(access, p)) return false;
+    if (p.status !== "shipped" || access.canOpenFullQueue) return true;
+    return (await firstPassAccess(p.id, access.session.slackId, false)).ok;
+  }));
+  const allowedProjects = projects.filter((_p, i) => visibility[i]);
   const handles = await slackHandles(players.map((p) => p.slack_id));
 
   return NextResponse.json({
@@ -27,7 +36,7 @@ export const GET = guardedRoute("api.search", "staff", async (access, req) => {
       sub: p.display_name,
     })),
     // Project names repeat a lot ("My Portfolio"), so say whose each one is.
-    projects: projects.map((p) => {
+    projects: allowedProjects.map((p) => {
       const maker = p.users?.display_name;
       return {
         id: p.id,
