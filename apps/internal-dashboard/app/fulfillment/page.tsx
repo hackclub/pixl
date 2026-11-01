@@ -239,7 +239,10 @@ export default async function FulfillmentPage({
   const selected = orders.find((o) => Number(o.id) === requestedId) ?? orders[0] ?? null;
   const explicitSelection = selected !== null && Number(selected.id) === requestedId;
 
-  if (selected) {
+  // The Airbridge source is already a local read model: avoid rerunning all
+  // project and funding queries for the selected row in the same request.
+  // Actual order claims recheck eligibility independently.
+  if (selected && process.env.FULFILLMENT_SHIPS_SOURCE !== "airbridge") {
     try {
       const fresh = await evaluateOrders([selected], { liveAirtable: true, ships: shipsView ?? undefined });
       for (const [id, r] of fresh) eligibility.set(id, r);

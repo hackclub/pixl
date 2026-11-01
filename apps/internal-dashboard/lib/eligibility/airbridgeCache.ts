@@ -7,7 +7,6 @@ import { getApprovals, getOtterSlack, githubRepo, type Approval } from "./airbri
 import type { ShipsEntry, ShipsProvider, ShipsSnapshot, ShipsView } from "./ships";
 
 const MAX_AGE_MS = 30 * 60_000;
-const AIRBRIDGE_CACHE_SOURCE = "airbridge";
 interface CacheRow {
   staging_id: string; mapping_state: string; unified_id: string | null;
   unified_state: string; code_url: string | null; approved_hours: number | string | null;
