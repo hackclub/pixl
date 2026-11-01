@@ -21,6 +21,7 @@ import { trialItemCreditTarget } from "../trialPayout.js";
 import { z } from "zod";
 import { validate, v, optStr, optBool, optNum, params } from "../http/validate.js";
 import { countJournalImages, journalImagesNeeded, journalTextLength } from "./journalRules.js";
+import { withWritableJournalProject } from "./journalLock.js";
 
 const router = Router();
 
@@ -1071,12 +1072,14 @@ router.post("/api/projects/:id/unship", validate({ query: v.noQuery, params: par
     })
     .eq("id", id)
     .eq("user_id", session.userId)
+    .eq("status", "shipped")
     .select()
-    .single();
+    .maybeSingle();
   if (error) {
     console.error("[projects] unship failed", error);
     return res.status(500).json({ ok: false });
   }
+  if (!data) return res.status(409).json({ ok: false, error: "project_state_changed" });
   res.json({ ok: true, project: toPlayerProject(data, session.userId) });
 });
 
@@ -1439,15 +1442,6 @@ router.get("/api/projects/:id/timeline", async (req, res) => {
 // Journals are what a reviewer reads to judge the hours, so they freeze the
 // moment a project is in review (same set as IN_REVIEW in operations/domain.ts)
 // and open back up on needs_changes/approved/draft.
-async function journalLockedForReview(projectId: number): Promise<boolean> {
-  const { data } = await db
-    .from("projects")
-    .select("status")
-    .eq("id", projectId)
-    .maybeSingle();
-  return ["shipped", "second_review", "fraud_review"].includes(String(data?.status ?? ""));
-}
-
 // Add a journal entry (markdown content + optional hours) to an own project.
 router.post("/api/projects/:id/journal", validate({ query: v.noQuery, params: params({ id: v.id }), body: journalBody }), async (req, res) => {
   const session = req.session;
@@ -1457,8 +1451,6 @@ router.post("/api/projects/:id/journal", validate({ query: v.noQuery, params: pa
   if (!Number.isFinite(id)) return res.status(400).json({ ok: false });
   if (!(await canAccessProject(session.userId, id)))
     return res.status(404).json({ ok: false });
-  if (await journalLockedForReview(id))
-    return res.status(409).json({ ok: false, error: "project_in_review" });
 
   const content = String(req.body?.content ?? "").trim().slice(0, 5000);
   if (!content)
@@ -1486,16 +1478,19 @@ router.post("/api/projects/:id/journal", validate({ query: v.noQuery, params: pa
       .status(400)
       .json({ ok: false, error: "journal_images_required", need: imagesNeed, have: imagesHave, hours });
 
-  const { data, error } = await db
-    .from("project_journals")
-    .insert({ project_id: id, user_id: session.userId, content, hours, title })
-    .select()
-    .single();
-  if (error) {
-    console.error("[projects] journal create failed", error);
-    return res.status(500).json({ ok: false });
+  try {
+    const result = await withWritableJournalProject(id, async (tx) => {
+      const rows = await tx`insert into project_journals (project_id, user_id, content, hours, title)
+        values (${id}, ${session.userId}, ${content}, ${hours}, ${title}) returning *`;
+      return rows[0];
+    });
+    if (!result.ok) return res.status(result.reason === "not_found" ? 404 : 409)
+      .json({ ok: false, error: result.reason });
+    res.json({ ok: true, entry: result.value });
+  } catch (e) {
+    console.error("[projects] journal create failed", e);
+    res.status(500).json({ ok: false });
   }
-  res.json({ ok: true, entry: data });
 });
 
 // Edit one of the user's own journal entries (owner-only, same as delete).
@@ -1507,8 +1502,6 @@ router.patch("/api/projects/:id/journal/:entryId", validate({ query: v.noQuery, 
   const entryId = Number(req.params.entryId);
   if (!Number.isFinite(id) || !Number.isFinite(entryId))
     return res.status(400).json({ ok: false });
-  if (await journalLockedForReview(id))
-    return res.status(409).json({ ok: false, error: "project_in_review" });
 
   const content = String(req.body?.content ?? "").trim().slice(0, 5000);
   if (!content)
@@ -1534,20 +1527,22 @@ router.patch("/api/projects/:id/journal/:entryId", validate({ query: v.noQuery, 
       .status(400)
       .json({ ok: false, error: "journal_images_required", need: imagesNeed, have: imagesHave, hours });
 
-  const { data, error } = await db
-    .from("project_journals")
-    .update({ content, hours, title, edited_at: new Date().toISOString() })
-    .eq("id", entryId)
-    .eq("project_id", id)
-    .eq("user_id", session.userId)
-    .select()
-    .maybeSingle();
-  if (error) {
-    console.error("[projects] journal edit failed", error);
-    return res.status(500).json({ ok: false });
+  try {
+    const result = await withWritableJournalProject(id, async (tx) => {
+      const rows = await tx`update project_journals
+        set content = ${content}, hours = ${hours}, title = ${title}, edited_at = now()
+        where id = ${entryId} and project_id = ${id} and user_id = ${session.userId}
+        returning *`;
+      return rows[0] ?? null;
+    });
+    if (!result.ok) return res.status(result.reason === "not_found" ? 404 : 409)
+      .json({ ok: false, error: result.reason });
+    if (!result.value) return res.status(404).json({ ok: false });
+    res.json({ ok: true, entry: result.value });
+  } catch (e) {
+    console.error("[projects] journal edit failed", e);
+    res.status(500).json({ ok: false });
   }
-  if (!data) return res.status(404).json({ ok: false });
-  res.json({ ok: true, entry: data });
 });
 
 // Delete one of the user's own journal entries.
@@ -1559,20 +1554,20 @@ router.delete("/api/projects/:id/journal/:entryId", validate({ query: v.noQuery,
   const entryId = Number(req.params.entryId);
   if (!Number.isFinite(id) || !Number.isFinite(entryId))
     return res.status(400).json({ ok: false });
-  if (await journalLockedForReview(id))
-    return res.status(409).json({ ok: false, error: "project_in_review" });
 
-  const { error } = await db
-    .from("project_journals")
-    .delete()
-    .eq("id", entryId)
-    .eq("project_id", id)
-    .eq("user_id", session.userId);
-  if (error) {
-    console.error("[projects] journal delete failed", error);
-    return res.status(500).json({ ok: false });
+  try {
+    const result = await withWritableJournalProject(id, async (tx) => {
+      await tx`delete from project_journals
+        where id = ${entryId} and project_id = ${id} and user_id = ${session.userId}`;
+      return true;
+    });
+    if (!result.ok) return res.status(result.reason === "not_found" ? 404 : 409)
+      .json({ ok: false, error: result.reason });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("[projects] journal delete failed", e);
+    res.status(500).json({ ok: false });
   }
-  res.json({ ok: true });
 });
 
 // Delete one of the user's own projects.
