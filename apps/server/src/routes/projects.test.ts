@@ -81,6 +81,15 @@ function fullRow(overrides: Record<string, unknown> = {}): Record<string, unknow
   return row;
 }
 
+describe("review evidence edit policy", () => {
+  test("BOM and project evidence stay locked throughout review", () => {
+    for (const status of ["shipped", "fraud_review", "second_review", "rejected"])
+      expect(mayEditProjectAtStatus(status)).toBe(false);
+    for (const status of ["draft", "needs_changes", "approved"])
+      expect(mayEditProjectAtStatus(status)).toBe(true);
+  });
+});
+
 describe("toPlayerProject", () => {
   test("strips every known internal/admin column", () => {
     const safe = toPlayerProject(fullRow());
