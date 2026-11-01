@@ -71,6 +71,21 @@ if (!adminUrl) {
     return { u1, u2, u3, chapterA, chapterB, chapterC };
   }
 
+  async function closeChapter(levelId: number) {
+    return fetch(`${base}/api/admin/vault/close`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ levelId }),
+    });
+  }
+
+  type Seeded = Awaited<ReturnType<typeof seedThreeChapters>>;
+  const reorders: Record<string, (s: Seeded) => Promise<unknown>> = {
+    "ahead of the hidden chapter": (s) => db`update vault_levels set position = 4, level = 4 where id = ${s.chapterB}`,
+    "ahead of every settled chapter": (s) => db`update vault_levels set position = 0, level = 0 where id = ${s.chapterC}`,
+    "to the same position as the hidden chapter, sorting first": (s) => db`update vault_levels set position = 2, level = -1 where id = ${s.chapterC}`,
+  };
+
   async function getVault() {
     const res = await fetch(`${base}/api/vault`);
     return (await res.json()) as {
@@ -140,11 +155,7 @@ if (!adminUrl) {
 
     test("manual closure: previously rewarded contributions are not paid again", async () => {
       const { u2, u3, chapterC } = await seedThreeChapters(true);
-      const res = await fetch(`${base}/api/admin/vault/close`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ levelId: chapterC }),
-      });
+      const res = await closeChapter(chapterC);
       expect(res.status).toBe(200);
       const paid = await awardsFor(chapterC);
       expect(paid).toEqual([u3]);
@@ -160,14 +171,34 @@ if (!adminUrl) {
       expect(paid).not.toContain(u2);
     });
 
+    for (const [label, move] of Object.entries(reorders)) {
+      describe(`after an owner moves the open chapter ${label}`, () => {
+        test("live leaderboard still excludes already rewarded work", async () => {
+          const seeded = await seedThreeChapters(true);
+          await move(seeded);
+          expect((await getVault()).chapterLeaderboard.map((r) => r.userId)).toEqual([seeded.u3]);
+        });
+
+        test("manual closure pays only the open window", async () => {
+          const seeded = await seedThreeChapters(true);
+          await move(seeded);
+          expect((await closeChapter(seeded.chapterC)).status).toBe(200);
+          expect(await awardsFor(seeded.chapterC)).toEqual([seeded.u3]);
+        });
+
+        test("automatic settlement pays only the open window", async () => {
+          const seeded = await seedThreeChapters(true);
+          await move(seeded);
+          await db`update vault_levels set energy_required = 1 where id = ${seeded.chapterC}`;
+          await getVault();
+          expect(await awardsFor(seeded.chapterC)).toEqual([seeded.u3]);
+        });
+      });
+    }
+
     test("a hidden chapter does not become the open chapter for closing", async () => {
       const { chapterB } = await seedThreeChapters(true);
-      const res = await fetch(`${base}/api/admin/vault/close`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ levelId: chapterB }),
-      });
-      expect(res.status).toBe(409);
+      expect((await closeChapter(chapterB)).status).toBe(409);
     });
   });
 }
