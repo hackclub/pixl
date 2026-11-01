@@ -105,10 +105,11 @@ if (!adminUrl) {
       expect(await exists(id)).toBe(true);
     });
 
-    test("a claimed goal with no RE configured can be deleted", async () => {
+    test("a settled zero-RE goal cannot be deleted because it anchors later reward windows", async () => {
       const id = await createLevel(0);
       await db`update vault_levels set unlocked_at = now() where id = ${id}`;
-      expect(await tryDelete(db, id)).toBeNull();
+      expect(await tryDelete(db, id)).toBe("23001");
+      expect(await exists(id)).toBe(true);
     });
 
     test("the foreign key itself refuses to cascade away awards", async () => {
