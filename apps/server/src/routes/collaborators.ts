@@ -285,23 +285,22 @@ router.put("/api/collaborators/:id/hackatime", validate({ query: v.noQuery, para
 
   const hackatimeProjects = normalizeHackatimeProjects(req.body?.hackatimeProjects);
 
-  const { data, error } = await db
+  const { data: collaborator } = await db
     .from("project_collaborators")
-    .update({ hackatime_projects: hackatimeProjects })
+    .select("project_id")
     .eq("id", id)
     .eq("user_id", session.userId)
     .eq("status", "accepted")
-    .select("id")
     .maybeSingle();
-  if (error) {
-    console.error("[collaborators] hackatime link failed", error);
-    return res.status(500).json({ ok: false });
-  }
-  if (!data) return res.status(404).json({ ok: false });
+  if (!collaborator) return res.status(404).json({ ok: false });
+  const { data: project } = await db.from("projects").select("status").eq("id", collaborator.project_id).maybeSingle();
+  if (!project) return res.status(404).json({ ok: false });
+  if (["shipped", "fraud_review", "second_review"].includes(String(project.status)))
+    return res.status(409).json({ ok: false, error: "project_in_review" });
 
-  // Recompute their tracked seconds right away instead of leaving it stale
-  // until the owner's next ship, otherwise linking a project here has no
-  // visible effect until then, which reads as "save does nothing."
+  // Calculate before the write so links and cached hours update together.
+  // Migration 0234 also locks the parent project and rejects a write racing
+  // a ship; a read-only preflight by itself would have a TOCTOU window.
   const { data: userRow } = await db
     .from("users")
     .select("hackatime_token, slack_id")
@@ -312,10 +311,21 @@ router.put("/api/collaborators/:id/hackatime", validate({ query: v.noQuery, para
     (userRow as { hackatime_token?: string } | null)?.hackatime_token ?? null,
     hackatimeProjects,
   );
-  await db
+  const { data, error } = await db
     .from("project_collaborators")
-    .update({ hackatime_seconds: hackatimeSeconds })
-    .eq("id", id);
+    .update({ hackatime_projects: hackatimeProjects, hackatime_seconds: hackatimeSeconds })
+    .eq("id", id)
+    .eq("user_id", session.userId)
+    .eq("status", "accepted")
+    .select("id")
+    .maybeSingle();
+  if (error?.code === "23514")
+    return res.status(409).json({ ok: false, error: "project_in_review" });
+  if (error) {
+    console.error("[collaborators] hackatime link failed", error);
+    return res.status(500).json({ ok: false });
+  }
+  if (!data) return res.status(404).json({ ok: false });
   res.json({ ok: true, hackatimeSeconds });
 });
 
