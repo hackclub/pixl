@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { airbridgeLookupUrl, getApprovals, getOtterSlack, parseApproval } from "./airbridgeApi";
+import { airbridgeLookupUrl, getApprovals, getApprovalsIsolated, getOtterSlack, parseApproval } from "./airbridgeApi";
 import { lookupFromCache, resolveOtterIdentity, viewFromCache } from "./airbridgeCache";
 import { matchShips } from "./shipsMatch";
 
@@ -77,6 +77,30 @@ describe("targeted official Unified approval", () => {
     const found = await getApprovals([ID, OTHER], truncated);
     expect(found.get(OTHER)?.id).toBe(OTHER);
     expect(queries).toHaveLength(2);
+  });
+  test("malformed approvals cannot poison healthy neighbors or cause outage fanout", async () => {
+    const malformed = { ...approval(OTHER), fields: { ...approval(OTHER).fields,
+      "Code URL": "https://unknown.test/user/repo" } };
+    const requests: string[] = [];
+    const mixed: typeof fetch = async url => {
+      const formula: string = JSON.parse(new URL(String(url)).searchParams.get("select")!).filterByFormula;
+      requests.push(formula);
+      return new Response(JSON.stringify([
+        ...(formula.includes(ID) ? [approval(ID)] : []),
+        ...(formula.includes(OTHER) ? [malformed] : []),
+      ]));
+    };
+    const result = await getApprovalsIsolated([ID, OTHER], mixed);
+    expect(result.approvals.get(ID)?.hours).toBe(9.8);
+    expect(result.errors.has(ID)).toBe(false);
+    expect(result.approvals.has(OTHER)).toBe(false);
+    expect(result.errors.get(OTHER)).toContain("repository");
+    expect(requests.length).toBe(3);
+    let outageCalls = 0;
+    const outage: typeof fetch = async () => { outageCalls++; return new Response("down", { status: 503 }); };
+    const down = await getApprovalsIsolated([ID, OTHER], outage);
+    expect(down.errors.size).toBe(2);
+    expect(outageCalls).toBe(1);
   });
   test("single-ID misses require a second confirmation", async () => {
     let calls = 0;
