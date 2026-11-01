@@ -186,3 +186,10 @@ html[data-font="phantom"] body *:not(code,pre,kbd,samp,code *,pre *){
   cursor: url(/img/cursor/cursor-pointer.png) 16 16, pointer;
 }
 
+
+/* 404 page: the missing-texture tile drops in once, in whole-pixel steps. */
+@keyframes not-found-drop {
+  from { opacity: 0; transform: translateY(-1.5rem); }
+  to { opacity: 1; transform: none; }
+}
+.not-found-tile { animation: not-found-drop .5s steps(5) both; }
