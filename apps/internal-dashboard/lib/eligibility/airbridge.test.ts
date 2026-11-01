@@ -16,7 +16,8 @@ const row = (over: Record<string, unknown> = {}) => ({
   staging_id: OTHER, mapping_state: "mapped", unified_id: ID,
   unified_state: "approved", code_url: "https://github.com/Example/Project",
   approved_hours: "9.80", approved_at_s: 1793448000, program: "Pixl",
-  otter_slack_id: "U0123456789", otter_checked_ms: NOW, mapping_checked_ms: NOW, verified_at_ms: NOW,
+  otter_slack_id: "U0123456789", otter_checked_ms: NOW, last_attempt_ms: NOW,
+  mapping_checked_ms: NOW, verified_at_ms: NOW,
   error: null, ...over,
 });
 
