@@ -57,3 +57,12 @@ DROP TRIGGER IF EXISTS fulfillment_unified_cache_audit_trigger ON fulfillment_un
 CREATE TRIGGER fulfillment_unified_cache_audit_trigger
 AFTER INSERT OR UPDATE ON fulfillment_unified_cache
 FOR EACH ROW EXECUTE FUNCTION fulfillment_unified_cache_audit();
+
+-- Lease prevents overlapping cron refreshes across dashboard replicas.
+CREATE TABLE IF NOT EXISTS fulfillment_unified_sync_lease (
+  id integer PRIMARY KEY CHECK (id = 1),
+  token uuid,
+  lease_until_ms bigint NOT NULL DEFAULT 0,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+INSERT INTO fulfillment_unified_sync_lease (id) VALUES (1) ON CONFLICT DO NOTHING;
