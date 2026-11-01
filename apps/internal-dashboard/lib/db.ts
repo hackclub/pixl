@@ -1898,10 +1898,7 @@ export async function publicStats(days = 30): Promise<PublicStats> {
   const totalHours =
     Math.round(
       hoursRows.reduce((s, p) => {
-        const h =
-          p.approved_hours != null
-            ? Number(p.approved_hours)
-            : (Number(p.hackatime_seconds) || 0) / 3600;
+        const h = earnedProjectHours(p);
         return s + (Number.isFinite(h) ? h : 0);
       }, 0) * 10,
     ) / 10;
@@ -2530,6 +2527,7 @@ export type { ShopRegion } from "./shopRegions";
 import type { ShopRegion } from "./shopRegions";
 export { SHOP_CATEGORIES, SHOP_CATEGORY_LABELS } from "./shopCategories";
 import type { ShopCategory } from "./shopCategories";
+import { earnedProjectHours, EARNED_PROJECT_STATUSES } from "./earnedProject";
 export type { ShopCategory } from "./shopCategories";
 
 export interface ShopItemRow {
@@ -3737,9 +3735,9 @@ export async function getShopSalesSeries(days = 30): Promise<ShopSalesPoint[]> {
 export async function lifetimeRe(userId: string, excludeProjectId?: number): Promise<number> {
   let q = db
     .from("projects")
-    .select("id, approved_hours, hackatime_seconds, level, sidequest_id")
+    .select("id, approved_hours, hackatime_seconds, level, sidequest_id, status, is_update, prior_approved_hours")
     .eq("user_id", userId)
-    .eq("status", "approved")
+    .in("status", EARNED_PROJECT_STATUSES)
     .is("banned_at", null);
   if (excludeProjectId) q = q.neq("id", excludeProjectId);
   const { data } = await q;
@@ -3752,9 +3750,7 @@ export async function lifetimeRe(userId: string, excludeProjectId?: number): Pro
             : (Number(p.hackatime_seconds) || 0) / 3600;
         return (
           s +
-          (Number.isFinite(h)
-            ? reForProject(h, Number(p.level) || 1, p.sidequest_id != null)
-            : 0)
+          (h === null ? 0 : reForProject(h, Number(p.level) || 1, p.sidequest_id != null))
         );
       }, 0) * 10,
     ) / 10
