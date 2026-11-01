@@ -65,7 +65,7 @@ function slackIdForRow(hrefsInRow: string[]): string | null {
 
 /** Accept only exact Pixl rows, with a real GitHub repo and parseable approval metadata. */
 export function parseHalceonPixlHtml(html: string, fetchedAt: number): ShipsSnapshot {
-  if (!/<table\b/i.test(html) || !/<th\b[^>]*>\s*Program\s*<\/th>/i.test(html))
+  if (!/<table\b/i.test(html) || !/<\/table\s*>/i.test(html) ||\n      !/<\/html\s*>/i.test(html) || !/<th\b[^>]*>\s*Program\s*<\/th>/i.test(html))
     throw new Error("Halceon returned no recognizable submissions table");
 
   const byId = new Map<string, ShipsEntry>();

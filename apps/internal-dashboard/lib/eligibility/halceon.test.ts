@@ -34,6 +34,8 @@ describe("Halceon submission parser", () => {
   test("rejects empty, truncated and malformed pages instead of treating them as no approvals", () => {
     expect(() => parseHalceonPixlHtml("<html>Error</html>", now)).toThrow();
     expect(() => parseHalceonPixlHtml(table(), now)).toThrow();
+    // A cutoff response that contains some valid <tr> rows must not be treated as complete.
+    expect(() => parseHalceonPixlHtml(table(row("demo/alpha", "U0123456789", "4", "2026-10-30")).slice(0, -15), now)).toThrow();
     expect(() => parseHalceonPixlHtml(table(row("demo/alpha", "U0123456789", "oops", "2026-11-01")), now)).toThrow();
   });
 
