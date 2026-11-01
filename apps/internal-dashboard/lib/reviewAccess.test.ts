@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   builderDetailsView,
+  canReadReviewEvidence,
   canSeeBuilderPII,
   builderNameFor,
   canSetHold,
@@ -189,5 +190,21 @@ describe("H3: builder PII on the review page", () => {
     const v = builderDetailsView({ isOwner: true, canSecondPass: true }, false, raw);
     expect(v.address).toBeNull();
     expect(v.ageLabel).toBe("16");
+  });
+});
+
+
+describe("review evidence and search scope", () => {
+  test("a hardware-only reviewer cannot read software repository evidence", () => {
+    expect(canReadReviewEvidence({ reviewQueues: "hardware", canFraudReview: false }, { kind: "software", status: "shipped" })).toBe(false);
+    expect(canReadReviewEvidence({ reviewQueues: "hardware", canFraudReview: false }, { kind: "hardware", status: "shipped" })).toBe(true);
+  });
+  test("ordinary reviewers cannot see fraud review or second pass", () => {
+    for (const status of ["fraud_review", "second_review"])
+      expect(canReadReviewEvidence({ reviewQueues: "both", canFraudReview: false }, { kind: "software", status })).toBe(false);
+  });
+  test("authorized final reviewers retain access to their assigned queue", () => {
+    for (const status of ["fraud_review", "second_review"])
+      expect(canReadReviewEvidence({ reviewQueues: "software", canFraudReview: true }, { kind: "software", status })).toBe(true);
   });
 });
