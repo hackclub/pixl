@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS fulfillment_unified_cache (
   approved_at_s bigint,
   program text,
   otter_slack_id text,
+  otter_checked_ms bigint NOT NULL DEFAULT 0,
   mapping_checked_ms bigint NOT NULL DEFAULT 0,
   verified_at_ms bigint NOT NULL DEFAULT 0,
   error text,

@@ -11,6 +11,7 @@ interface CacheRow {
   staging_id: string; mapping_state: string; unified_id: string | null;
   unified_state: string; code_url: string | null; approved_hours: number | string | null;
   approved_at_s: number | string | null; program: string | null; otter_slack_id: string | null;
+  otter_checked_ms: number | string;
   mapping_checked_ms: number | string; verified_at_ms: number | string;
   error: string | null;
 }
@@ -83,7 +84,7 @@ export async function readAirbridgeCache(): Promise<ShipsView> {
 }
 async function save(
   stagingId: string, mapping: SubmissionLookup, approval: Approval | null,
-  slack: string | null, now: number, error: string | null,
+  slack: string | null, now: number, error: string | null, otterCheckedAt: number,
 ): Promise<void> {
   if (mapping.kind === "error" || error) {
     // On a failed fetch, leave old evidence timestamp untouched: it must age out.
@@ -98,16 +99,17 @@ async function save(
   const verified = state === "mapped" ? (approval ? "approved" : "missing") : "pending";
   await sql`insert into fulfillment_unified_cache
     (staging_id, mapping_state, unified_id, unified_state, code_url, approved_hours,
-     approved_at_s, program, otter_slack_id, mapping_checked_ms, verified_at_ms, error)
+     approved_at_s, program, otter_slack_id, otter_checked_ms, mapping_checked_ms, verified_at_ms, error)
     values (${stagingId}, ${state}, ${unifiedId}, ${verified},
       ${approval?.repoUrl ?? null}, ${approval?.hours ?? null},
-      ${approval?.approvedAt ?? null}, ${approval ? "Pixl" : null}, ${slack},
+      ${approval?.approvedAt ?? null}, ${approval ? "Pixl" : null}, ${slack}, ${otterCheckedAt},
       ${now}, ${now}, null)
     on conflict (staging_id) do update set
       mapping_state = excluded.mapping_state, unified_id = excluded.unified_id,
       unified_state = excluded.unified_state, code_url = excluded.code_url,
       approved_hours = excluded.approved_hours, approved_at_s = excluded.approved_at_s,
       program = excluded.program, otter_slack_id = excluded.otter_slack_id,
+      otter_checked_ms = excluded.otter_checked_ms,
       mapping_checked_ms = excluded.mapping_checked_ms,
       verified_at_ms = excluded.verified_at_ms, error = null, updated_at = now()`;
 }
@@ -153,21 +155,38 @@ export async function refreshAirbridgeCache(limit = 30): Promise<SyncResult> {
         for (const [key, value] of found) lookups.set(key, value);
       }
     } catch (e) { apiError = (e as Error).message; }
-    // Otter is optional and isolated from authorization; avoid fan-out by using
-    // the 30 record batch, capped at 6 concurrent requests.
+    // Preserve previously verified Slack identity across an Otter outage.
+    // Recheck external enrichment only once every 12h per record, reducing
+    // background network fanout by orders of magnitude.
+    const prior = await sql<CacheRow[]>`select * from fulfillment_unified_cache
+      where staging_id in ${sql(ids)}`;
+    const oldById = new Map(prior.filter(row => !!row.unified_id).map(row => [row.unified_id!, row]));
     const slackIds = new Map<string, string | null>();
+    const lastOtterCheck = new Map<string, number>();
     const approvals = [...lookups.values()].filter((v): v is Approval => !!v);
-    for (let i = 0; i < approvals.length; i += 6) {
-      const block = approvals.slice(i, i + 6);
+    const toCheck = approvals.filter(a => {
+      const old = oldById.get(a.id);
+      if (old && githubRepo(old.code_url) === githubRepo(a.repoUrl)) {
+        slackIds.set(a.id, old.otter_slack_id);
+        lastOtterCheck.set(a.id, Number(old.otter_checked_ms));
+      }
+      return !old || !old.otter_checked_ms || now - Number(old.otter_checked_ms) > 12 * 60 * 60_000;
+    });
+    for (let i = 0; i < toCheck.length; i += 6) {
+      const block = toCheck.slice(i, i + 6);
       const values = await Promise.all(block.map(a => getOtterSlack(a)));
-      block.forEach((a, j) => slackIds.set(a.id, values[j] ?? null));
+      block.forEach((a, j) => {
+        slackIds.set(a.id, values[j] ?? slackIds.get(a.id) ?? null);
+        lastOtterCheck.set(a.id, now);
+      });
     }
     for (const id of ids) {
       const mapping = mappings.get(id) ?? { kind: "error" as const, error: "No staging result" };
       const unified = mapping.kind === "found" ? mapping.info.unifiedId : null;
       const approval = unified && !apiError ? lookups.get(unified) ?? null : null;
       const error = unified ? apiError : null;
-      await save(id, mapping, approval, approval ? slackIds.get(approval.id) ?? null : null, now, error);
+      await save(id, mapping, approval, approval ? slackIds.get(approval.id) ?? null : null,
+        now, error, approval ? lastOtterCheck.get(approval.id) ?? 0 : 0);
       checked++;
       if (error || mapping.kind === "error") errors++;
       if (approval) approved++;
