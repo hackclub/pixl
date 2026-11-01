@@ -1,4 +1,5 @@
 import { projectNumber } from "./projectNumber";
+import { earnedProjectHours, EARNED_PROJECT_STATUSES } from "./earnedProject";
 import { pickStyleExamples, type StyleCandidate, type StyleExample } from "./styleExamples";
 import { queueWaitStartMs, type QueueWaitInput } from "./queueWait";
 import { DEFAULT_STAFF_SETTINGS, parseStaffSettings, type StaffSettings } from "./staffSettings";
@@ -2527,7 +2528,6 @@ export type { ShopRegion } from "./shopRegions";
 import type { ShopRegion } from "./shopRegions";
 export { SHOP_CATEGORIES, SHOP_CATEGORY_LABELS } from "./shopCategories";
 import type { ShopCategory } from "./shopCategories";
-import { earnedProjectHours, EARNED_PROJECT_STATUSES } from "./earnedProject";
 export type { ShopCategory } from "./shopCategories";
 
 export interface ShopItemRow {
