@@ -19,7 +19,7 @@ Replace the unreliable bulk Ships API with targeted Airbridge reads of individua
 - On claim, eligibility is re-evaluated against the local cache and existing fulfillment ledger. **The existing claim enforcement policy has not been changed by this PR.**
 
 ## Scheduled reconciliation
-GET `/api/cron/fulfillment-airbridge`, authenticated by dashboard `CRON_SECRET`. It synchronizes up to 60 least-recently-verified staging records per invocation. Run every 5-10 minutes with an Orchard scheduled Job, passing the credential securely. The old Ships GitHub scheduled workflow remains disabled.
+GET `/api/cron/fulfillment-airbridge`, authenticated by dashboard `CRON_SECRET`. It synchronizes up to 60 least-recently-verified staging records per invocation. Run every **5 minutes** with an Orchard scheduled Job, passing the credential securely. The old Ships GitHub scheduled workflow remains disabled.
 
 ### Production cutover checklist (must complete before enabling the flag)
 1. Apply migration 0236 through the standard Pixl migration process; verify the cache tables and audit trigger exist.
@@ -32,3 +32,5 @@ GET `/api/cron/fulfillment-airbridge`, authenticated by dashboard `CRON_SECRET`.
 
 ## Limits
 Airbridge's public allowlisted fields do not include Slack identity; trusted staging mapping plus repo identifies the record, with optional Otter cross-check. Missing Otter identity does not automatically block an otherwise exact mapped record; team should confirm that trust model. The public Approved Projects table may temporarily omit a fine-affected row: absence triggers manual review rather than an automatic reversal. A YSWS-level HCB fine must be reconciled against the **program budget**, not automatically deducted from a player's hours.
+
+The Otter Slack enrichment is checked at most once every 12 hours per mapped record. Transient Otter failures preserve a previously verified matching Slack ID rather than erasing identity evidence.
