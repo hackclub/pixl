@@ -13,7 +13,7 @@ Replace the unreliable bulk Ships API with targeted Airbridge reads of individua
 - Each approval has a verified timestamp. Older than 30 minutes means unavailable, not approved. A successful "not found" removes verification only after independently checking the absent ID. Network failures do not silently refresh timestamps.
 - Refresh fairness uses last attempted time, independent from verification time, so persistent failures cannot starve healthy records. Bad Airbridge batches do not invalidate successful batches.
 - Conflicting staging→Unified mappings are rejected even if one of the mappings has no current approval.
-- Otter distinguishes a negative match from a network outage. If previously known Slack identity disappears, a sticky identity-review flag blocks approval until a fresh exact Otter match; no known identity can silently degrade into a permissive null. No match for a record that never had Otter identity remains optional under the existing exact staging-ID/repository trust model.
+- Otter distinguishes a negative match from a network outage. If previously known Slack identity disappears, a sticky identity-review flag blocks approval until a fresh exact Otter match; no known identity can silently degrade into a permissive null. The database UPSERT preserves this block across temporarily missing staging records and approvals. No match for a record that never had Otter identity remains optional under the existing exact staging-ID/repository trust model.
 - No currency or shop-order writes. Existing payout, commitment, and grant checks remain in force.
 
 ## Local verification

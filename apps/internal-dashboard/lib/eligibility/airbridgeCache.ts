@@ -184,7 +184,15 @@ async function save(
       unified_state = excluded.unified_state, code_url = excluded.code_url,
       approved_hours = excluded.approved_hours, approved_at_s = excluded.approved_at_s,
       program = excluded.program, otter_slack_id = excluded.otter_slack_id,
-      otter_identity_blocked = excluded.otter_identity_blocked,
+      -- Never clear an observed identity or its review block merely because
+      -- the staging mapping or approval temporarily disappears. Only a newly
+      -- validated Slack ID may release a sticky review block.
+      otter_identity_blocked = case
+        when excluded.otter_slack_id is not null then excluded.otter_identity_blocked
+        else fulfillment_unified_cache.otter_identity_blocked
+          or (fulfillment_unified_cache.otter_slack_id is not null)
+          or excluded.otter_identity_blocked
+      end,
       otter_checked_ms = excluded.otter_checked_ms,
       last_attempt_ms = excluded.last_attempt_ms,
       mapping_checked_ms = excluded.mapping_checked_ms,

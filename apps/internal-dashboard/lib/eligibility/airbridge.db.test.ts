@@ -60,6 +60,37 @@ suite("Airbridge cache migration", () => {
     expect(ordered.map(r => r.staging_id)).toEqual([next, failed]);
     expect(ordered.every(r => Number(r.verified_at_ms) === 0)).toBe(true);
   });
+  test("missing then reappearing approvals cannot silently clear known Slack identity", async () => {
+    const staging = "recJJJJJJJJJJJJJJ", unifiedId = "recKKKKKKKKKKKKKK";
+    await db`insert into fulfillment_unified_cache
+      (staging_id, mapping_state, unified_id, unified_state, code_url,
+       otter_slack_id, otter_checked_ms, mapping_checked_ms, verified_at_ms)
+      values (${staging}, 'mapped', ${unifiedId}, 'approved', 'https://github.com/a/b',
+        'U0123456789', 100, 100, 100)`;
+    // The real cache UPSERT must retain the sticky block even if a temporary
+    // not-found result removes both the approval and its previous ID.
+    await db`insert into fulfillment_unified_cache
+      (staging_id, mapping_state, unified_state, otter_slack_id, otter_identity_blocked)
+      values (${staging}, 'missing', 'pending', null, false)
+      on conflict (staging_id) do update set
+        mapping_state = excluded.mapping_state, unified_id = null,
+        unified_state = excluded.unified_state, otter_slack_id = excluded.otter_slack_id,
+        otter_identity_blocked = case
+          when excluded.otter_slack_id is not null then excluded.otter_identity_blocked
+          else fulfillment_unified_cache.otter_identity_blocked
+            or (fulfillment_unified_cache.otter_slack_id is not null)
+            or excluded.otter_identity_blocked
+        end`;
+    let actual = await db`select otter_identity_blocked, otter_slack_id from fulfillment_unified_cache
+      where staging_id = ${staging}`;
+    expect(actual[0]?.otter_identity_blocked).toBe(true);
+    expect(actual[0]?.otter_slack_id).toBeNull();
+    await db`update fulfillment_unified_cache set otter_slack_id = 'U0987654321',
+      otter_identity_blocked = false where staging_id = ${staging}`;
+    actual = await db`select otter_identity_blocked, otter_slack_id from fulfillment_unified_cache
+      where staging_id = ${staging}`;
+    expect(actual[0]?.otter_identity_blocked).toBe(false);
+  });
   test("refresh lease admits only one holder", async () => {
     const a = "11111111-1111-4111-8111-111111111111";
     const b = "22222222-2222-4222-8222-222222222222";
