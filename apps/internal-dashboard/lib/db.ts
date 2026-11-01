@@ -19,6 +19,7 @@ import { lockedForViewer, openableQueueIds, type AssignmentFields } from "./revi
 export { db } from "./pgCompat";
 import { db, sql } from "./pgCompat";
 import { PUBLIC_USER_COLUMNS, publicOwnerLabel } from "./publicLabels";
+import { searchShopOrders, type OrderSearchOptions } from "./shopOrderSearch";
 
 export interface UserRow {
   id: string;
@@ -2751,18 +2752,33 @@ export interface ShopOrderRow {
 
 // Shop orders players placed with pixels, newest first. Player name + Slack are
 // resolved in a follow-up query so the team can reach out about delivery.
-export async function listShopOrders(status?: string, limit = 500): Promise<ShopOrderRow[]> {
-  let q = db.from("shop_orders").select("*");
-  // "flagged" cuts across the stages rather than being one of them , an order
-  // is flagged while still sitting at whatever stage it was flagged in.
-  if (status === "flagged") q = q.not("flagged_at", "is", null);
-  else if (status) q = q.eq("status", status);
-  const { data, error } = await q.order("created_at", { ascending: false }).limit(limit);
-  if (error) {
-    console.error("listShopOrders", error.message);
-    return [];
+export async function listShopOrders(
+  status?: string,
+  limit = 500,
+  opts: OrderSearchOptions & { search?: string } = {},
+): Promise<ShopOrderRow[]> {
+  let rows: ShopOrderRow[];
+  if (opts.search?.trim()) {
+    try {
+      rows = [...await searchShopOrders(status, opts.search, limit, opts)] as ShopOrderRow[];
+    } catch (e) {
+      console.error("searchShopOrders", e);
+      return [];
+    }
+  } else {
+    let q = db.from("shop_orders").select("*");
+    if (status === "flagged") q = q.not("flagged_at", "is", null);
+    else if (status) q = q.eq("status", status);
+    if (opts.stages?.length) q = q.in("status", opts.stages);
+    if (opts.claimedBySlack) q = q.eq("claimed_by_slack", opts.claimedBySlack);
+    const from = Math.max(0, opts.offset ?? 0);
+    const { data, error } = await q.order("created_at", { ascending: false }).range(from, from + limit - 1);
+    if (error) {
+      console.error("listShopOrders", error.message);
+      return [];
+    }
+    rows = (data ?? []) as ShopOrderRow[];
   }
-  const rows = (data ?? []) as ShopOrderRow[];
   const ids = [...new Set(rows.map((r) => r.user_id))];
   const users = ids.length
     ? await db.from("users").select("id, display_name, real_name, slack_id").in("id", ids)
