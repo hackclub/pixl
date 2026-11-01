@@ -2772,7 +2772,7 @@ export async function listShopOrders(
     if (opts.stages?.length) q = q.in("status", opts.stages);
     if (opts.claimedBySlack) q = q.eq("claimed_by_slack", opts.claimedBySlack);
     const from = Math.max(0, opts.offset ?? 0);
-    const { data, error } = await q.order("created_at", { ascending: false }).range(from, from + limit - 1);
+    const { data, error } = await q.order("created_at", { ascending: false }).order("id", { ascending: false }).range(from, from + limit - 1);
     if (error) {
       console.error("listShopOrders", error.message);
       return [];
