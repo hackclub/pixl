@@ -19,6 +19,15 @@ const BACKOFF_BASE_MS = 30_000;
 const BACKOFF_MAX_MS = 15 * 60_000;
 const SHRINK_GUARD = 0.5;
 const MAX_INVALID_RATIO = 0.1;
+/**
+ * The all-history Ships archive currently exceeds 50 MB and sometimes needs
+ * more than 25s to download. Keep live reads bounded, while giving scheduled
+ * durable snapshots a longer deadline independent of page requests.
+ */
+export const SHIPS_LIVE_TIMEOUT_MS = 60_000;
+export const SHIPS_SNAPSHOT_TIMEOUT_MS = 90_000;
+export const SHIPS_MAX_RESPONSE_BYTES = 96 * 1024 * 1024;
+
 
 export interface ShipsEntry {
   /** Cache verification instant (milliseconds), required for Airbridge sources. */
@@ -293,8 +302,8 @@ export function ttlFromEnv(raw: string | undefined): number {
 export function createShipsProvider(opts: ShipsProviderOptions = {}) {
   const url = opts.url ?? SHIPS_URL;
   const ttlMs = clampTtl(opts.ttlMs ?? DEFAULT_TTL_MS);
-  const timeoutMs = opts.timeoutMs ?? 25_000;
-  const maxBytes = opts.maxBytes ?? 64 * 1024 * 1024;
+  const timeoutMs = opts.timeoutMs ?? SHIPS_LIVE_TIMEOUT_MS;
+  const maxBytes = opts.maxBytes ?? SHIPS_MAX_RESPONSE_BYTES;
   const doFetch = opts.fetchImpl ?? fetch;
   const now = opts.now ?? Date.now;
 
@@ -396,8 +405,8 @@ export function createShipsProvider(opts: ShipsProviderOptions = {}) {
 export function createPersistentShipsProvider(opts: PersistentShipsProviderOptions = {}) {
   const url = opts.url ?? SHIPS_URL;
   const ttlMs = clampTtl(opts.ttlMs ?? DEFAULT_TTL_MS);
-  const timeoutMs = opts.timeoutMs ?? 25_000;
-  const maxBytes = opts.maxBytes ?? 64 * 1024 * 1024;
+  const timeoutMs = opts.timeoutMs ?? SHIPS_SNAPSHOT_TIMEOUT_MS;
+  const maxBytes = opts.maxBytes ?? SHIPS_MAX_RESPONSE_BYTES;
   const doFetch = opts.fetchImpl ?? fetch;
   const now = opts.now ?? Date.now;
   const store = opts.store ?? createShipsSnapshotStore();
