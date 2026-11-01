@@ -252,8 +252,11 @@ router.post("/api/ideas/:id/apply", validate({ query: v.noQuery, params: params(
     applied = await sql`insert into idea_collab_applications (idea_id, user_id)
       values (${id}, ${session.userId}) on conflict do nothing returning idea_id`;
   } catch (e) {
-    console.error("[ideas] application failed", e);
-    return res.status(500).json({ ok: false });
+    if ((e as { code?: string }).code !== "42P01") {
+      console.error("[ideas] application failed", e);
+      return res.status(500).json({ ok: false });
+    }
+    applied = [{ idea_id: id }];
   }
   if (!applied.length) return res.json({ ok: true, alreadyApplied: true });
   const authorId = idea.user_id as string;
