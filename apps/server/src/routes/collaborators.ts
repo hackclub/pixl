@@ -2,7 +2,7 @@ import { randomInt } from "crypto";
 import { Router } from "express";
 import { db } from "../db/client.js";
 import { addNotification } from "./notifications.js";
-import { fetchTrackedSecondsSince } from "../hackatime/api.js";
+import { fetchTrackedSecondsSince, normalizeHackatimeProjects } from "../hackatime/api.js";
 import { z } from "zod";
 import { validate, v, optStr, params } from "../http/validate.js";
 import { auditRequest } from "../audit.js";
@@ -283,9 +283,7 @@ router.put("/api/collaborators/:id/hackatime", validate({ query: v.noQuery, para
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ ok: false });
 
-  const hackatimeProjects = Array.isArray(req.body?.hackatimeProjects)
-    ? req.body.hackatimeProjects.map((p: unknown) => String(p)).slice(0, 50)
-    : [];
+  const hackatimeProjects = normalizeHackatimeProjects(req.body?.hackatimeProjects);
 
   const { data, error } = await db
     .from("project_collaborators")

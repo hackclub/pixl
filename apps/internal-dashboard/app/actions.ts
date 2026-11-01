@@ -92,6 +92,7 @@ import {
   queueAllows,
   slackIdFromActorName,
 } from "@/lib/reviewAccess";
+import { vaultDeleteFailure } from "@/lib/vaultDelete";
 import { safeRedirectPath, isSafeUrl } from "@/lib/safeUrl";
 import {
   guardedAction,
@@ -6360,7 +6361,11 @@ export const deleteVaultLevel = guardedAction("deleteVaultLevel", "owner", async
   const id = Number(formData.get("id") ?? 0);
   if (!id) return;
   const { error } = await db.from("vault_levels").delete().eq("id", id);
-  if (error) console.error("deleteVaultLevel", error.message);
+  const failure = vaultDeleteFailure(error);
+  if (failure) {
+    console.error("deleteVaultLevel", error?.message);
+    redirect(`/community-goals?error=${encodeURIComponent(failure)}`);
+  }
   revalidatePath("/community-goals");
 });
 
