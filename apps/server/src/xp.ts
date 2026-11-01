@@ -207,9 +207,14 @@ export async function communityEnergy(): Promise<number> {
 export async function pendingCommunityEnergy(): Promise<number> {
   const { data } = await db
     .from("projects")
-    .select("approved_hours, hackatime_seconds, level, sidequest_id")
+    .select("approved_hours, hackatime_seconds, level, sidequest_id, status, is_update, prior_approved_hours")
     .in("status", ["second_review", "fraud_review"])
     .is("banned_at", null);
-  const projectRe = (data ?? []).reduce((s, p) => s + reOf(p as ProjectRow), 0);
+  // An update's previously approved RE is already banked in communityEnergy.
+  // Only its new, not-yet-confirmed portion belongs in the pending figure.
+  const projectRe = (data ?? []).reduce((s, p) => {
+    const row = p as ProjectRow;
+    return s + Math.max(reOf(row) - bankedReOf(row), 0);
+  }, 0);
   return Math.round(projectRe);
 }
