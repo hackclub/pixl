@@ -1,6 +1,7 @@
 "use server";
 
 import { claimOrderWithFunding, refreshCommitmentAmount } from "@/lib/eligibility/commit";
+import { settleShipment } from "@/lib/fulfillmentShip";
 import { manualShipsRefresh, shipsProvider } from "@/lib/eligibility/ships";
 import { FUNDING_ORDER_PREFIX } from "@/lib/eligibility/policy";
 import { revalidatePath } from "next/cache";
@@ -38,7 +39,6 @@ import {
   lifetimeRe,
   creditReviewerPixels,
   debitReviewerPixels,
-  creditFulfillerPixels,
   type CreditReviewerResult,
   activeDashEvents,
   communityGoalShipCount,
@@ -5481,13 +5481,20 @@ export const claimOrder = guardedAction("claimOrder", "fulfiller", async (access
       .eq("status", "pending");
     if (error) throw new Error(error.message);
   }
-  // In-app only: the player is DMed once, when the order ships (shipOrder).
-  const placedBody = `Your "${order.item_name}" order has been placed and is being fulfilled. We'll let you know when it ships.`;
-  await db.from("notifications").insert({
-    user_id: order.user_id,
-    title: "Order placed! 📦",
-    body: placedBody,
-  });
+  // An idempotent retry may return already_claimed: only the first claim
+  // should create a notification and audit event.
+  if (outcome.kind !== "claimed" || outcome.code === "claimed") {
+    const placedBody = `Your "${order.item_name}" order has been placed and is being fulfilled. We'll let you know when it ships.`;
+    await db.from("notifications").insert({
+      user_id: order.user_id,
+      title: "Order placed! 📦",
+      body: placedBody,
+    });
+  }
+  if (outcome.kind === "claimed" && outcome.code === "already_claimed") {
+    revalidatePath("/fulfillment");
+    return;
+  }
   const claimNote =
     outcome.kind === "unledgered"
       ? "claimed and placed WITHOUT a funding ledger entry (migration 0229 not applied)"
@@ -5633,7 +5640,7 @@ export const markOrderCredited = guardedAction("markOrderCredited", "fulfiller",
   if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId)) {
     throw new Error("You can't fulfill your own shop order.");
   }
-  const { error } = await db
+  const { data: changed, error } = await db
     .from("shop_orders")
     .update({
       status: "credited",
@@ -5642,8 +5649,12 @@ export const markOrderCredited = guardedAction("markOrderCredited", "fulfiller",
       actual_cost_usd: actualCostUsd,
     })
     .eq("id", id)
-    .eq("status", "ordered");
+    .eq("status", "ordered")
+    .eq("claimed_by_slack", access.session.slackId)
+    .select("id")
+    .maybeSingle();
   if (error) throw new Error(error.message);
+  if (!changed) { revalidatePath("/fulfillment"); return; }
   if ((await refreshCommitmentAmount(id, { ships: shipsProvider() })) === "failed") {
     await logOrderAction(id, "ledger_refresh_failed", "funding ledger amount could not be updated", actorName(access));
   }
@@ -5689,18 +5700,12 @@ export const shipOrder = guardedAction("shipOrder", "fulfiller", async (access, 
   if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId)) {
     throw new Error("You can't fulfill your own shop order.");
   }
-  const { error } = await db
-    .from("shop_orders")
-    .update({
-      status: "shipped",
-      shipped_at: new Date().toISOString(),
-      fulfilled_at: new Date().toISOString(),
-      fulfilled_by: actorName(access),
-      tracking,
-    })
-    .eq("id", id)
-    .eq("status", "credited");
-  if (error) throw new Error(error.message);
+  // Database transaction rechecks ownership and credits the fulfiller
+  // atomically with the shipment status transition.
+  const settled = await settleShipment(
+    id, tracking, access.session.slackId, actorName(access), FULFILLMENT_PAYOUT_PIXELS,
+  );
+  if (!settled) { revalidatePath("/fulfillment"); return; }
 
   // Slack renders <#ID> as a channel link in the DM, but the in-app
   // notification is plain text, so it names the channel instead.
@@ -5730,25 +5735,13 @@ export const shipOrder = guardedAction("shipOrder", "fulfiller", async (access, 
   }
   await logOrderAction(id, "order_shipped", `tracking ${tracking}`, actorName(access), order);
 
-  // Flat payout to whoever actually did the fulfillment work - claimed_by_slack
-  // is exactly who that is (ownsOrder already confirmed it's the caller).
-  // Best-effort: a failed credit shouldn't undo a shipment that already went out.
-  const fulfillerSlackId = access.session.slackId;
-  const credited = await creditFulfillerPixels(fulfillerSlackId, FULFILLMENT_PAYOUT_PIXELS);
-  if (credited === "credited") {
-    const { error: paidErr } = await db
-      .from("shop_orders")
-      .update({ fulfillment_pixels_paid: FULFILLMENT_PAYOUT_PIXELS })
-      .eq("id", id);
-    if (paidErr) console.error("shipOrder (fulfillment payout stamp)", paidErr.message);
-    try {
-      await dmUser(
-        fulfillerSlackId,
-        `You earned ${FULFILLMENT_PAYOUT_PIXELS} pixels for fulfilling "${order.item_name}". Thanks for keeping orders moving!`,
-      );
-    } catch (err) {
-      console.error("shipOrder (fulfillment payout DM)", err instanceof Error ? err.message : err);
-    }
+  try {
+    await dmUser(
+      access.session.slackId,
+      `You earned ${FULFILLMENT_PAYOUT_PIXELS} pixels for fulfilling "${settled.itemName}". Thanks for keeping orders moving!`,
+    );
+  } catch (err) {
+    console.error("shipOrder (fulfillment payout DM)", err instanceof Error ? err.message : err);
   }
   revalidatePath("/fulfillment");
 });
