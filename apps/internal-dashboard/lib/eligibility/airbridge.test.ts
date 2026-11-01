@@ -30,6 +30,22 @@ describe("targeted official Unified approval", () => {
     expect(() => parseApproval(approval(ID, -1), ID)).toThrow();
     expect(() => parseApproval({ ...approval(), fields: { ...approval().fields, "Code URL": "https://evil.test/x" } }, ID)).toThrow();
   });
+  test("accepts official GitLab and Codeberg repositories without opening arbitrary hosts", () => {
+    for (const repoUrl of [
+      "https://gitlab.com/Ratainen/ratainen-pixl-builder-page",
+      "https://codeberg.org/umarfarooq/cricket-scoreboard-calculator",
+    ]) {
+      const approvalOnHost = { ...approval(), fields: { ...approval().fields, "Code URL": repoUrl } };
+      expect(parseApproval(approvalOnHost, ID).repoUrl).toBe(repoUrl);
+    }
+    for (const repoUrl of [
+      "https://evil.test/x/repo", "https://gitlab.com/group/subgroup/repo",
+      "http://gitlab.com/group/repo", "https://codeberg.org.evil.test/group/repo",
+    ]) {
+      expect(() => parseApproval({ ...approval(), fields: { ...approval().fields,
+        "Code URL": repoUrl } }, ID)).toThrow();
+    }
+  });
   test("escapes no user input and builds an exact, bounded Airbridge query", () => {
     const url = new URL(airbridgeLookupUrl([ID, OTHER]));
     const select = JSON.parse(url.searchParams.get("select")!);

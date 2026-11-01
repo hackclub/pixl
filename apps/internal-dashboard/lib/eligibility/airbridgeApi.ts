@@ -15,9 +15,14 @@ export function githubRepo(value: string | null): string | null {
   try {
     const u = new URL(value ?? "");
     const path = u.pathname.replace(/\.git$/i, "").split("/").filter(Boolean);
-    return u.protocol === "https:" && u.hostname.toLowerCase() === "github.com" &&
-      path.length >= 2 && path.slice(0, 2).every(v => /^[a-z0-9_.-]+$/i.test(v))
-      ? "github.com/" + path[0]!.toLowerCase() + "/" + path[1]!.toLowerCase() : null;
+    const host = u.hostname.toLowerCase();
+    // The official Pixl approvals include GitLab and Codeberg repositories.
+    // Keep the host allowlist narrow; exact staging-repo matching still applies.
+    const allowed = host === "github.com" || host === "gitlab.com" || host === "codeberg.org";
+    const validDepth = host === "github.com" ? path.length >= 2 : path.length === 2;
+    return u.protocol === "https:" && !u.username && !u.password && allowed &&
+      validDepth && path.slice(0, 2).every(v => /^[a-z0-9_.-]+$/i.test(v))
+      ? host + "/" + path[0]!.toLowerCase() + "/" + path[1]!.toLowerCase() : null;
   } catch { return null; }
 }
 export function parseApproval(value: unknown, id: string): Approval {
