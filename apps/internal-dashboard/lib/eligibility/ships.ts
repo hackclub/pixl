@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { createAirbridgeProvider } from "./airbridgeCache";
 import {
   createShipsSnapshotStore,
   SHIPS_REFRESH_LEASE_MS,
@@ -20,6 +21,8 @@ const SHRINK_GUARD = 0.5;
 const MAX_INVALID_RATIO = 0.1;
 
 export interface ShipsEntry {
+  /** Cache verification instant (milliseconds), required for Airbridge sources. */
+  checkedAt?: number;
   id: string;
   approvedAt: number | null;
   hours: number;
@@ -27,9 +30,13 @@ export interface ShipsEntry {
   repoKey: string | null;
   githubUsername: string;
   slackId: string | null;
+  /** A previously known Otter identity became unverified: manual review required. */
+  identityBlocked?: boolean;
 }
 
 export interface ShipsSnapshot {
+  /** The selected source; never merge data from different approval sources. */
+  source?: "ships" | "airbridge";
   fetchedAt: number;
   byId: Map<string, ShipsEntry>;
   ambiguousIds: Set<string>;
@@ -41,6 +48,8 @@ export interface ShipsSnapshot {
   invalidCount: number;
   duplicateCount: number;
   bytes: number;
+  /** Airbridge-only state of the entire active Pixl staging cohort. */
+  syncHealth?: { total: number; current: number; unsynced: number; stale: number; errors: number; identityReview: number };
 }
 
 export interface ShipsView {
@@ -580,7 +589,13 @@ function persistentShipsProvider(): ReturnType<typeof createPersistentShipsProvi
   return persistentShared;
 }
 
+let airbridgeShared: ShipsProvider | null = null;
+
 export function shipsProvider(): ShipsProvider {
+  if (process.env.FULFILLMENT_SHIPS_SOURCE === "airbridge") {
+    if (!airbridgeShared) airbridgeShared = createAirbridgeProvider();
+    return airbridgeShared;
+  }
   if (shipsSnapshotReaderEnabled(process.env.SHIPS_SNAPSHOT_READER_ENABLED)) return persistentShipsProvider();
   if (!legacyShared)
     legacyShared = createShipsProvider({
