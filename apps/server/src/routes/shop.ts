@@ -821,7 +821,10 @@ router.post("/api/shop/buy/:id", validate({ query: v.noQuery, params: params({ i
       .from("users")
       .update({ phone: encryptPII(rawPhone) })
       .eq("id", session.userId);
-    if (phoneErr) console.error("[shop] failed to save phone", phoneErr.message);
+    if (phoneErr) {
+      console.error("[shop] failed to save phone", phoneErr.message);
+      return res.status(503).json({ ok: false, error: "phone_save_failed" });
+    }
   }
 
   const id = Number(req.params.id);
