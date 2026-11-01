@@ -17,12 +17,13 @@ Replace the unreliable bulk Ships API with targeted Airbridge reads of individua
 - No currency or shop-order writes. Existing payout, commitment, and grant checks remain in force.
 
 ## Local verification
+- Staff-owner-only **read-only** diagnostic page `/fulfillment/airbridge-preview` shows the real cache and per-record status without affecting the live funding verifier or any claim, payout or order action. Use this to test warm-up while the legacy verifier remains active.
 - `/fulfillment` uses `shipsProvider().get()` which performs only local Postgres reads. Sync health is computed across the **full active approved owner/collaborator staging cohort** (including not-yet-cached records), and reports current, unsynced, stale, failed and identity-review counts. The newest approval's timestamp is only shown as *latest update*, never as whole-cohort freshness.
 - `loadPlayerEvidence` fetches staging->Unified mappings from Postgres when Airbridge is enabled, not the staging API.
 - On claim, eligibility is re-evaluated against the local cache and existing fulfillment ledger. **The existing claim enforcement policy has not been changed by this PR.**
 
 ## Scheduled reconciliation
-GET `/api/cron/fulfillment-airbridge`, authenticated by dashboard `CRON_SECRET`. It synchronizes up to 60 least-recently-attempted staging records per invocation. Run every **5 minutes** with an Orchard scheduled Job, passing the credential securely. The old Ships GitHub scheduled workflow remains disabled.
+GET `/api/cron/fulfillment-airbridge`, authenticated by dashboard `CRON_SECRET`. It can populate the local read model **before** `FULFILLMENT_SHIPS_SOURCE=airbridge` is enabled; the cron's authentication, not the reader flag, gates reconciliation. It synchronizes up to 60 least-recently-attempted staging records per invocation. Run every **5 minutes** with an Orchard scheduled Job, passing the credential securely. The old Ships GitHub scheduled workflow remains disabled.
 
 ### Production cutover checklist (must complete before enabling the flag)
 1. Apply migration 0236 through the standard Pixl migration process; verify the cache tables and audit trigger exist.

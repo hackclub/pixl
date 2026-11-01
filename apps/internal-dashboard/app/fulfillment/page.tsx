@@ -334,6 +334,11 @@ export default async function FulfillmentPage({
                 Leaderboard
               </ButtonLink>
             )}
+            {access.isOwner && (
+              <ButtonLink href="/fulfillment/airbridge-preview" variant="outline" size="sm" icon="analytics">
+                Airbridge preview
+              </ButtonLink>
+            )}
             {access.isOwner && !showingFulfillers && (
               <ButtonLink href={hrefFor({ status: "fulfillers" })} variant="outline" size="sm" icon="person">
                 Fulfillers

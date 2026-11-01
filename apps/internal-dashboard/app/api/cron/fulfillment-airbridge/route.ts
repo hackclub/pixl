@@ -6,10 +6,10 @@ import { refreshAirbridgeCache } from "@/lib/eligibility/airbridgeCache";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-/** Scheduler-only endpoint; no unauthenticated refresh or browser activity. */
+/** Scheduler-only endpoint; authenticated cache warm-up is safe before the
+ * reader flag is enabled. Never require FULFILLMENT_SHIPS_SOURCE here.
+ */
 export async function GET(req: Request) {
-  if (process.env.FULFILLMENT_SHIPS_SOURCE !== "airbridge")
-    return NextResponse.json({ ok: false, error: "Airbridge provider disabled" }, { status: 409 });
   const secret = process.env.CRON_SECRET;
   if (!secret) return NextResponse.json({ ok: false, error: "Cron secret not configured" }, { status: 503 });
   if (!bearerMatches(req.headers.get("authorization"), secret)) {
