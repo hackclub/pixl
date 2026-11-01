@@ -1,61 +1,72 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { NotFoundDetails } from "./not-found-details";
+import styles from "./not-found.module.css";
 
 export const metadata: Metadata = { title: "Page not found" };
 
-// A missing-texture tile, the checkerboard games draw when an asset is gone.
-// It stands in for the 0 so the error reads as "this tile is missing".
+// Keep the same missing-texture symbol as the previous Pixl 404 page.
 function MissingTile() {
-  const cells = [];
-  for (let y = 0; y < 6; y++) {
-    for (let x = 0; x < 6; x++) {
-      if ((x + y) % 2 === 0) cells.push(<rect key={`${x}-${y}`} x={x} y={y} width="1" height="1" />);
-    }
-  }
+  const squares = Array.from({ length: 36 }, (_, index) => ({
+    x: index % 6,
+    y: Math.floor(index / 6),
+  })).filter(({ x, y }) => (x + y) % 2 === 0);
+
   return (
-    <svg
-      viewBox="0 0 6 6"
-      shapeRendering="crispEdges"
-      aria-hidden="true"
-      className="not-found-tile h-[0.8em] w-[0.8em] border-[3px] border-stroke bg-panel fill-accent shadow-drop"
-    >
-      {cells}
-    </svg>
+    <span className={styles.missingTile} aria-hidden="true">
+      <svg viewBox="0 0 6 6" shapeRendering="crispEdges" focusable="false">
+        {squares.map(({ x, y }) => (
+          <rect key={x + y * 6} x={x} y={y} width="1" height="1" />
+        ))}
+      </svg>
+    </span>
   );
 }
 
 export default function NotFound() {
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-panel-deep px-4 py-12 text-ink">
-      <section className="w-full max-w-xl border-[3px] border-stroke bg-panel p-6 shadow-drop-lg sm:p-10">
-        <p
-          role="img"
-          aria-label="404"
-          className="flex items-center gap-[0.12em] font-pixel text-[7rem] leading-none sm:text-[9rem]"
-        >
-          <span aria-hidden="true">4</span>
+    <main className={styles.page}>
+      <section className={styles.gameWindow} aria-label="Page not found">
+        <header className={styles.windowBar}>
+          <span className={styles.wordmark}>Pixl</span>
+          <span className={styles.windowStatus}>404 / LOST TILE</span>
+        </header>
+
+        <div className={styles.world}>
+          {/* Actual village map from apps/game/assets/map/village.png. */}
+          <div className={styles.mapLabel}>WORLD 01 / UNKNOWN TILE</div>
+          <div className={styles.errorLabel}>OUT OF BOUNDS</div>
+
           <MissingTile />
-          <span aria-hidden="true">4</span>
-        </p>
+          <div className={styles.worldPixo} aria-hidden="true">
+            <span className={styles.worldSprite} />
+            <span className={styles.questionEmote} />
+          </div>
 
-        <h1 className="mt-8 font-pixel text-3xl font-semibold sm:text-4xl">That tile isn&apos;t on the map</h1>
-        <NotFoundDetails />
-
-        <div className="mt-8 flex flex-wrap gap-3">
-          <Link
-            href="/"
-            className="border-[3px] border-stroke bg-accent px-5 py-2.5 text-sm font-semibold text-white shadow-drop hover:text-white transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink"
-          >
-            Go to Pixl
-          </Link>
-          <Link
-            href="/dashboard"
-            className="border-[3px] border-stroke bg-panel-2 px-5 py-2.5 text-sm font-semibold text-ink shadow-drop hover:text-ink transition-transform hover:-translate-x-0.5 hover:-translate-y-0.5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink"
-          >
-            Open your dashboard
-          </Link>
+          <div className={styles.dialogue}>
+            <span className={styles.speaker}>PIXO</span>
+            <div className={styles.portrait} aria-hidden="true">
+              <span className={styles.portraitSprite} />
+            </div>
+            <div className={styles.dialogueCopy}>
+              <h1>yo, you got lost or sm?</h1>
+              <p>That tile isn&apos;t on the map. Wanna head back?</p>
+            </div>
+            <nav className={styles.actions} aria-label="Find your way back">
+              <Link href="/" className={styles.primaryAction}>
+                Back to Pixl
+              </Link>
+              <Link href="/dashboard" className={styles.secondaryAction}>
+                Open dashboard
+              </Link>
+            </nav>
+          </div>
         </div>
+
+        <footer className={styles.footer}>
+          <span className={styles.coords}>X: ??? &nbsp; Y: ???</span>
+          <NotFoundDetails />
+        </footer>
       </section>
     </main>
   );
