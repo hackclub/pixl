@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { airbridgeLookupUrl, getApprovals, getOtterSlack, parseApproval } from "./airbridgeApi";
-import { lookupFromCache, viewFromCache } from "./airbridgeCache";
+import { lookupFromCache, resolveOtterIdentity, viewFromCache } from "./airbridgeCache";
 import { matchShips } from "./shipsMatch";
 
 const ID = "recAAAAAAAAAAAAAA";
@@ -16,7 +16,8 @@ const row = (over: Record<string, unknown> = {}) => ({
   staging_id: OTHER, mapping_state: "mapped", unified_id: ID,
   unified_state: "approved", code_url: "https://github.com/Example/Project",
   approved_hours: "9.80", approved_at_s: 1793448000, program: "Pixl",
-  otter_slack_id: "U0123456789", otter_checked_ms: NOW, last_attempt_ms: NOW,
+  otter_slack_id: "U0123456789", otter_identity_blocked: false,
+  otter_checked_ms: NOW, last_attempt_ms: NOW,
   mapping_checked_ms: NOW, verified_at_ms: NOW,
   error: null, ...over,
 });
@@ -89,6 +90,43 @@ describe("targeted official Unified approval", () => {
 });
 
 describe("local fulfillment cache", () => {
+  test("Otter negative lookup never converts known Slack mismatch into an approval", () => {
+    const previous = { slackId: "U0123456789", checkedAt: NOW - 60_000, blocked: false };
+    const denied = resolveOtterIdentity(previous, { state: "not_found" }, NOW);
+    expect(denied).toEqual({ slackId: null, checkedAt: NOW, blocked: true });
+    const view = viewFromCache([row({
+      otter_slack_id: denied.slackId, otter_identity_blocked: denied.blocked,
+    })], NOW);
+    expect(matchShips(view, {
+      mapping: { kind: "mapped", stagingId: OTHER, unifiedId: ID },
+      repoKey: "github.com/example/project", playerSlackId: "U0999999999",
+    }, NOW).state).toBe("identity_mismatch");
+    expect(resolveOtterIdentity(denied, { state: "not_found" }, NOW + 1).blocked).toBe(true);
+    const cleared = resolveOtterIdentity(denied, { state: "verified", slackId: "U0999999999" }, NOW + 2);
+    expect(cleared).toEqual({ slackId: "U0999999999", checkedAt: NOW + 2, blocked: false });
+    expect(resolveOtterIdentity(previous, { state: "unavailable" }, NOW)).toEqual(previous);
+    expect(resolveOtterIdentity({ slackId: null, checkedAt: 0, blocked: false },
+      { state: "not_found" }, NOW).blocked).toBe(false);
+  });
+  test("sync health includes missing, stale, failed, and identity review records", () => {
+    const good = row();
+    const old = row({ staging_id: "recCCCCCCCCCCCCCC", unified_id: "recDDDDDDDDDDDDDD",
+      mapping_checked_ms: NOW - 31 * 60_000, verified_at_ms: NOW - 31 * 60_000 });
+    const bad = row({ staging_id: "recEEEEEEEEEEEEEE", unified_id: "recFFFFFFFFFFFFFF",
+      error: "upstream unavailable" });
+    const blocked = row({ staging_id: "recGGGGGGGGGGGGGG", unified_id: "recHHHHHHHHHHHHHH",
+      otter_identity_blocked: true });
+    const expected = [good.staging_id, old.staging_id, bad.staging_id, blocked.staging_id, "recIIIIIIIIIIIIII"];
+    const view = viewFromCache([good, old, bad, blocked], NOW, expected);
+    expect(view.snapshot?.syncHealth).toEqual({
+      total: 5, current: 1, unsynced: 1, stale: 2, errors: 1, identityReview: 1,
+    });
+    expect(view.fresh).toBe(false);
+    expect(view.error).toContain("1 upstream");
+    expect(viewFromCache([good], NOW, [good.staging_id]).fresh).toBe(true);
+    expect(viewFromCache([], NOW, [good.staging_id]).snapshot?.syncHealth.unsynced).toBe(1);
+    expect(viewFromCache([], NOW, []).fresh).toBe(false);
+  });
   test("staging mappings are never treated as fresh after 30 minutes", () => {
     expect(lookupFromCache([OTHER], [row()], NOW).get(OTHER)).toEqual({
       kind: "found", info: { submitted: true, unifiedId: ID },

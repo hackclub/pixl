@@ -30,6 +30,8 @@ export interface ShipsEntry {
   repoKey: string | null;
   githubUsername: string;
   slackId: string | null;
+  /** A previously known Otter identity became unverified: manual review required. */
+  identityBlocked?: boolean;
 }
 
 export interface ShipsSnapshot {
@@ -46,6 +48,8 @@ export interface ShipsSnapshot {
   invalidCount: number;
   duplicateCount: number;
   bytes: number;
+  /** Airbridge-only state of the entire active Pixl staging cohort. */
+  syncHealth?: { total: number; current: number; unsynced: number; stale: number; errors: number; identityReview: number };
 }
 
 export interface ShipsView {

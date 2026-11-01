@@ -13,16 +13,16 @@ Replace the unreliable bulk Ships API with targeted Airbridge reads of individua
 - Each approval has a verified timestamp. Older than 30 minutes means unavailable, not approved. A successful "not found" removes verification only after independently checking the absent ID. Network failures do not silently refresh timestamps.
 - Refresh fairness uses last attempted time, independent from verification time, so persistent failures cannot starve healthy records. Bad Airbridge batches do not invalidate successful batches.
 - Conflicting staging→Unified mappings are rejected even if one of the mappings has no current approval.
-- Otter distinguishes a negative match (clear old Slack enrichment) from a network outage (retain prior matching evidence and retry soon).
+- Otter distinguishes a negative match from a network outage. If previously known Slack identity disappears, a sticky identity-review flag blocks approval until a fresh exact Otter match; no known identity can silently degrade into a permissive null. No match for a record that never had Otter identity remains optional under the existing exact staging-ID/repository trust model.
 - No currency or shop-order writes. Existing payout, commitment, and grant checks remain in force.
 
 ## Local verification
-- `/fulfillment` uses `shipsProvider().get()` which performs only a local indexed Postgres read.
+- `/fulfillment` uses `shipsProvider().get()` which performs only local Postgres reads. Sync health is computed across the **full active approved owner/collaborator staging cohort** (including not-yet-cached records), and reports current, unsynced, stale, failed and identity-review counts. The newest approval's timestamp is only shown as *latest update*, never as whole-cohort freshness.
 - `loadPlayerEvidence` fetches staging->Unified mappings from Postgres when Airbridge is enabled, not the staging API.
 - On claim, eligibility is re-evaluated against the local cache and existing fulfillment ledger. **The existing claim enforcement policy has not been changed by this PR.**
 
 ## Scheduled reconciliation
-GET `/api/cron/fulfillment-airbridge`, authenticated by dashboard `CRON_SECRET`. It synchronizes up to 60 least-recently-verified staging records per invocation. Run every **5 minutes** with an Orchard scheduled Job, passing the credential securely. The old Ships GitHub scheduled workflow remains disabled.
+GET `/api/cron/fulfillment-airbridge`, authenticated by dashboard `CRON_SECRET`. It synchronizes up to 60 least-recently-attempted staging records per invocation. Run every **5 minutes** with an Orchard scheduled Job, passing the credential securely. The old Ships GitHub scheduled workflow remains disabled.
 
 ### Production cutover checklist (must complete before enabling the flag)
 1. Apply migration 0236 through the standard Pixl migration process; verify the cache tables and audit trigger exist.
@@ -36,4 +36,4 @@ GET `/api/cron/fulfillment-airbridge`, authenticated by dashboard `CRON_SECRET`.
 ## Limits
 Airbridge's public allowlisted fields do not include Slack identity; trusted staging mapping plus repo identifies the record, with optional Otter cross-check. Missing Otter identity does not automatically block an otherwise exact mapped record; team should confirm that trust model. The public Approved Projects table may temporarily omit a fine-affected row: absence triggers manual review rather than an automatic reversal. A YSWS-level HCB fine must be reconciled against the **program budget**, not automatically deducted from a player's hours.
 
-The Otter Slack enrichment is checked at most once every 12 hours per mapped record. Transient Otter failures preserve a previously verified matching Slack ID rather than erasing identity evidence.
+The Otter Slack enrichment is checked at most once every 12 hours after a completed lookup. Transient Otter failures preserve a previously verified matching Slack ID without extending its enrichment-check timestamp. A negative response after a previously observed ID requires manual review rather than silently permitting record-only verification.

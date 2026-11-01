@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "../pgCompat";
 import { fetchSubmissionStates, type SubmissionLookup } from "../airtable";
-import { getApprovals, getOtterSlack, githubRepo, type Approval } from "./airbridgeApi";
+import { getApprovals, getOtterSlack, githubRepo, type Approval, type OtterSlackResult } from "./airbridgeApi";
 import type { ShipsEntry, ShipsProvider, ShipsSnapshot, ShipsView } from "./ships";
 
 const MAX_AGE_MS = 30 * 60_000;
@@ -12,6 +12,7 @@ interface CacheRow {
   unified_state: string; code_url: string | null; approved_hours: number | string | null;
   approved_at_s: number | string | null; program: string | null; otter_slack_id: string | null;
   otter_checked_ms: number | string;
+  otter_identity_blocked: boolean;
   last_attempt_ms: number | string;
   mapping_checked_ms: number | string; verified_at_ms: number | string;
   error: string | null;
@@ -36,10 +37,51 @@ export async function readCachedStaging(ids: string[]): Promise<Map<string, Subm
     select * from fulfillment_unified_cache where staging_id in ${sql(ids)}`;
   return lookupFromCache(ids, rows);
 }
-export function viewFromCache(rows: CacheRow[], now: number): ShipsView {
+export interface CachedOtterIdentity {
+  slackId: string | null;
+  checkedAt: number;
+  blocked: boolean;
+}
+
+/** Never downgrade a previously established identity to an unguarded null.
+ * A negative lookup after an observed identity requires human reconciliation.
+ */
+export function resolveOtterIdentity(
+  previous: CachedOtterIdentity, result: OtterSlackResult, now: number,
+): CachedOtterIdentity {
+  if (result.state === "verified")
+    return { slackId: result.slackId, checkedAt: now, blocked: false };
+  if (result.state === "not_found")
+    return { slackId: null, checkedAt: now, blocked: previous.blocked || !!previous.slackId };
+  return previous; // outage: no successful timestamp or identity state update
+}
+
+export function viewFromCache(rows: CacheRow[], now: number, expectedIds: string[] = rows.map(r => r.staging_id)): ShipsView {
   const byId = new Map<string, ShipsEntry>(), byRepo = new Map<string, ShipsEntry[]>(),
     byGithub = new Map<string, ShipsEntry[]>();
   const ambiguousIds = new Set<string>();
+  const cached = new Map(rows.map(r => [r.staging_id, r]));
+  const health = { total: 0, current: 0, unsynced: 0, stale: 0, errors: 0, identityReview: 0 };
+  // Determine completeness from active approved owners/collaborators, not from
+  // whatever portion of the cache has happened to be populated.
+  for (const id of new Set(expectedIds)) {
+    health.total++;
+    const row = cached.get(id);
+    if (!row) { health.unsynced++; continue; }
+    const mappingFresh = Number(row.mapping_checked_ms) > 0 &&
+      now >= Number(row.mapping_checked_ms) && now - Number(row.mapping_checked_ms) < MAX_AGE_MS;
+    const approvalFresh = row.mapping_state !== "mapped" ||
+      (Number(row.verified_at_ms) > 0 &&
+        now >= Number(row.verified_at_ms) && now - Number(row.verified_at_ms) < MAX_AGE_MS);
+    const failed = !!row.error || row.mapping_state === "error" ||
+      row.unified_state === "error" ||
+      (row.mapping_state === "mapped" && row.unified_state === "pending");
+    if (failed) health.errors++;
+    if (row.otter_identity_blocked && row.mapping_state === "mapped" && row.unified_state === "approved")
+      health.identityReview++;
+    if (!mappingFresh || !approvalFresh || failed) health.stale++;
+    else if (!row.otter_identity_blocked) health.current++;
+  }
   const mappingUse = new Map<string, number>();
   // Check every mapped staging record, including pending/missing approvals.
   // Filtering to approved entries first would hide cross-record conflicts.
@@ -60,7 +102,8 @@ export function viewFromCache(rows: CacheRow[], now: number): ShipsView {
       id: row.unified_id, repoKey, codeUrl: row.code_url,
       hours: Number(row.approved_hours), approvedAt: Number(row.approved_at_s),
       githubUsername: repoKey.split("/")[1] ?? "",
-      slackId: row.otter_slack_id, checkedAt: Number(row.verified_at_ms),
+      slackId: row.otter_slack_id, identityBlocked: row.otter_identity_blocked,
+      checkedAt: Number(row.verified_at_ms),
     };
     if (ambiguousIds.has(entry.id)) continue;
     byId.set(entry.id, entry);
@@ -74,16 +117,31 @@ export function viewFromCache(rows: CacheRow[], now: number): ShipsView {
     source: "airbridge", fetchedAt: newest, byId, byRepo, byGithub, ambiguousIds,
     invalidIds: new Set(), totalReturned: rows.length, pixlCount: byId.size,
     invalidCount: 0, duplicateCount: ambiguousIds.size, bytes: 0,
+    syncHealth: health,
   };
   const ageMs = newest > 0 ? Math.max(0, now - newest) : null;
   return { snapshot, fetchedAt: newest || null, ageMs,
-    fresh: ageMs !== null && ageMs < MAX_AGE_MS,
-    error: null, lastAttemptAt: null, nextRetryAt: null };
+    fresh: health.total > 0 && health.current === health.total && health.identityReview === 0,
+    error: health.errors ? `${health.errors} upstream verification record(s) failed` : null,
+    lastAttemptAt: null, nextRetryAt: null };
 }
 export async function readAirbridgeCache(): Promise<ShipsView> {
   try {
-    const rows = await sql<CacheRow[]>`select * from fulfillment_unified_cache`;
-    return viewFromCache(rows, Date.now());
+    // Fetch exactly the active approved cohort and the matching cache state
+    // in one local PostgreSQL query. Unsynced records appear via LEFT JOIN.
+    const cohort = await sql<(CacheRow & { eligible_id: string })[]>`with eligible as (
+      select airtable_record_id id from projects
+        where status = 'approved' and banned_at is null and airtable_record_id is not null
+      union
+      select c.airtable_record_id id from project_collaborators c
+        join projects p on p.id = c.project_id
+        where p.status = 'approved' and p.banned_at is null
+          and c.status = 'accepted' and c.airtable_record_id is not null
+    )
+    select e.id as eligible_id, c.* from eligible e
+    left join fulfillment_unified_cache c on c.staging_id = e.id`;
+    const rows = cohort.filter(r => r.staging_id !== null) as CacheRow[];
+    return viewFromCache(rows, Date.now(), cohort.map(r => r.eligible_id));
   } catch (e) {
     return { snapshot: null, fetchedAt: null, ageMs: null, fresh: false,
       error: "Local verification cache unavailable: " + (e as Error).message,
@@ -92,7 +150,7 @@ export async function readAirbridgeCache(): Promise<ShipsView> {
 }
 async function save(
   stagingId: string, mapping: SubmissionLookup, approval: Approval | null,
-  slack: string | null, now: number, error: string | null, otterCheckedAt: number,
+  identity: CachedOtterIdentity, now: number, error: string | null,
 ): Promise<void> {
   if (mapping.kind === "error" || error) {
     // On a failed fetch, leave old evidence timestamp untouched: it must age out.
@@ -114,16 +172,19 @@ async function save(
   const verified = state === "mapped" ? (approval ? "approved" : "missing") : "pending";
   await sql`insert into fulfillment_unified_cache
     (staging_id, mapping_state, unified_id, unified_state, code_url, approved_hours,
-     approved_at_s, program, otter_slack_id, otter_checked_ms, last_attempt_ms, mapping_checked_ms, verified_at_ms, error)
+     approved_at_s, program, otter_slack_id, otter_identity_blocked, otter_checked_ms,
+     last_attempt_ms, mapping_checked_ms, verified_at_ms, error)
     values (${stagingId}, ${state}, ${unifiedId}, ${verified},
       ${approval?.repoUrl ?? null}, ${approval?.hours ?? null},
-      ${approval?.approvedAt ?? null}, ${approval ? "Pixl" : null}, ${slack}, ${otterCheckedAt},
+      ${approval?.approvedAt ?? null}, ${approval ? "Pixl" : null},
+      ${identity.slackId}, ${identity.blocked}, ${identity.checkedAt},
       ${now}, ${now}, ${now}, null)
     on conflict (staging_id) do update set
       mapping_state = excluded.mapping_state, unified_id = excluded.unified_id,
       unified_state = excluded.unified_state, code_url = excluded.code_url,
       approved_hours = excluded.approved_hours, approved_at_s = excluded.approved_at_s,
       program = excluded.program, otter_slack_id = excluded.otter_slack_id,
+      otter_identity_blocked = excluded.otter_identity_blocked,
       otter_checked_ms = excluded.otter_checked_ms,
       last_attempt_ms = excluded.last_attempt_ms,
       mapping_checked_ms = excluded.mapping_checked_ms,
@@ -182,16 +243,18 @@ export async function refreshAirbridgeCache(limit = 30): Promise<SyncResult> {
     const prior = await sql<CacheRow[]>`select * from fulfillment_unified_cache
       where staging_id in ${sql(ids)}`;
     const oldById = new Map(prior.filter(row => !!row.unified_id).map(row => [row.unified_id!, row]));
-    const slackIds = new Map<string, string | null>();
-    const lastOtterCheck = new Map<string, number>();
+    const identities = new Map<string, CachedOtterIdentity>();
     const approvals = [...lookups.values()].filter((v): v is Approval => !!v);
     const toCheck = approvals.filter(a => {
       const old = oldById.get(a.id);
       const sameRepo = !!old && githubRepo(old.code_url) === githubRepo(a.repoUrl);
-      if (sameRepo && old) {
-        slackIds.set(a.id, old.otter_slack_id);
-        lastOtterCheck.set(a.id, Number(old.otter_checked_ms));
-      }
+      // A repo change cannot reuse its old identity proof. Keep a review
+      // block until an exact new Otter match establishes the new identity.
+      identities.set(a.id, {
+        slackId: sameRepo ? old?.otter_slack_id ?? null : null,
+        checkedAt: sameRepo ? Number(old?.otter_checked_ms ?? 0) : 0,
+        blocked: !!old?.otter_identity_blocked || (!sameRepo && !!old?.otter_slack_id),
+      });
       return !sameRepo || !old?.otter_checked_ms ||
         now - Number(old.otter_checked_ms) > 12 * 60 * 60_000;
     });
@@ -199,17 +262,8 @@ export async function refreshAirbridgeCache(limit = 30): Promise<SyncResult> {
       const block = toCheck.slice(i, i + 6);
       const values = await Promise.all(block.map(a => getOtterSlack(a)));
       block.forEach((a, j) => {
-        const result = values[j]!;
-        if (result.state === "verified") {
-          slackIds.set(a.id, result.slackId);
-          lastOtterCheck.set(a.id, now);
-        } else if (result.state === "not_found") {
-          // A confirmed negative revokes previous enrichment.
-          slackIds.set(a.id, null);
-          lastOtterCheck.set(a.id, now);
-        }
-        // Outage: retain known matching evidence, but do not claim a new
-        // successful Otter check or delay the next retry by twelve hours.
+        const previous = identities.get(a.id)!;
+        identities.set(a.id, resolveOtterIdentity(previous, values[j]!, now));
       });
     }
     for (const id of ids) {
@@ -217,8 +271,10 @@ export async function refreshAirbridgeCache(limit = 30): Promise<SyncResult> {
       const unified = mapping.kind === "found" ? mapping.info.unifiedId : null;
       const error = unified ? lookupErrors.get(unified) ?? null : null;
       const approval = unified && !error ? lookups.get(unified) ?? null : null;
-      await save(id, mapping, approval, approval ? slackIds.get(approval.id) ?? null : null,
-        now, error, approval ? lastOtterCheck.get(approval.id) ?? 0 : 0);
+      await save(id, mapping, approval,
+        approval ? identities.get(approval.id) ?? { slackId: null, checkedAt: 0, blocked: false }
+          : { slackId: null, checkedAt: 0, blocked: false },
+        now, error);
       checked++;
       if (error || mapping.kind === "error") errors++;
       if (approval) approved++;

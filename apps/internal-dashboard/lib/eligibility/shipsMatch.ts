@@ -100,6 +100,9 @@ export function matchShips(view: ShipsView, target: MatchTarget, nowMs: number =
     if (!target.repoKey || !entry.repoKey || entry.repoKey !== target.repoKey) {
       return blank("identity_mismatch", "The Ships entry for this Unified record points at a different repository.", id);
     }
+    if (snap.source === "airbridge" && entry.identityBlocked) {
+      return blank("identity_mismatch", "Previously known Slack identity could not be revalidated; manual review required.", id);
+    }
     if (sameSlack(entry, target.playerSlackId) === false) {
       return blank("identity_mismatch", "The Ships entry for this Unified record belongs to a different Slack user.", id);
     }
