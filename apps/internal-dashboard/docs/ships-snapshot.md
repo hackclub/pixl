@@ -28,3 +28,13 @@ The route returns only aggregate counts, timestamps, and the last error. It requ
 The authenticated route reports `outcome`, `snapshot.fetchedAt`, age, counts, bytes, `lastAttemptAt`, `nextRetryAt`, and the last error. Outcomes are `refreshed`, `not_modified`, `skipped_fresh`, `skipped_busy`, `skipped_backoff`, or `failed`. Failed refreshes and an active retry backoff return HTTP 503 so GitHub Actions records the run as failed; a busy/fresh skip returns HTTP 200.
 
 No Sainath-specific record data is persisted separately. The matcher regression test uses the three public PIXL Unified record IDs and checks exact ID plus repository matching, wrong-repository rejection, and refusal to match by repository alone when Ships has no Slack ID.
+
+## Optional Halceon replacement provider (experimental)
+
+The internal fulfillment reader can select the public Halceon Unified explorer instead of the bulk Ships JSON API by setting \`FULFILLMENT_SHIPS_SOURCE=halceon\` on the internal-dashboard deployment. Leave this unset for the existing source. The switch is **exclusive**: it does not silently fall back to the unreliable full-archive endpoint.
+
+The Halceon URL uses the exact \`ysws:pixl\` filter and reads only normalized GitHub repositories, per-row Slack profile IDs, hours, and approval dates. The importer has a timeout, response size cap, freshness TTL, backoff, and strict HTML structure checks. If the source changes shape, loses rows, or returns an error, existing snapshots are retained but eventually become stale; fulfillment must not count stale evidence as verified.
+
+**Identity limits:** Halceon currently exposes HTML, not a documented JSON API or the underlying Unified record IDs. A unique repository + Slack profile match can establish provisional external evidence, but multiple updates to the same repository/Slack ID must remain \`Review required\`. Synthetic local row keys must never be passed off as Unified IDs. Missing Slack identity or missing data must never automatically approve an order. These limitations should be evaluated with fulfillment operators before enabling the environment flag.
+
+Reverting to \`FULFILLMENT_SHIPS_SOURCE\` unset returns the dashboard to its prior provider. No migration, payment mutation, scheduled job, or API credential is part of this experimental replacement. The paused Ships snapshot workflow remains paused.

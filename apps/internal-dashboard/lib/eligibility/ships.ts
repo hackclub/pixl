@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { createHalceonProvider } from "./halceon";
 import {
   createShipsSnapshotStore,
   SHIPS_REFRESH_LEASE_MS,
@@ -30,6 +31,8 @@ export interface ShipsEntry {
 }
 
 export interface ShipsSnapshot {
+  /** Original Ships API (default) or an opt-in bounded Halceon HTML lookup. */
+  source?: "ships" | "halceon";
   fetchedAt: number;
   byId: Map<string, ShipsEntry>;
   ambiguousIds: Set<string>;
@@ -580,7 +583,16 @@ function persistentShipsProvider(): ReturnType<typeof createPersistentShipsProvi
   return persistentShared;
 }
 
+let halceonShared: ShipsProvider | null = null;
+
 export function shipsProvider(): ShipsProvider {
+  // Explicit opt-in to a different verification SOURCE, not an extra fallback.
+  // Never query the old bulk Ships endpoint when this provider is selected.
+  if (process.env.FULFILLMENT_SHIPS_SOURCE === "halceon") {
+    if (!halceonShared)
+      halceonShared = createHalceonProvider({ ttlMs: ttlFromEnv(process.env.SHIPS_CACHE_TTL_MS) });
+    return halceonShared;
+  }
   if (shipsSnapshotReaderEnabled(process.env.SHIPS_SNAPSHOT_READER_ENABLED)) return persistentShipsProvider();
   if (!legacyShared)
     legacyShared = createShipsProvider({

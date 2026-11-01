@@ -78,7 +78,9 @@ export function parseHalceonPixlHtml(html: string, fetchedAt: number): ShipsSnap
     if (cells.length < 8 || textOf(cells[1]!).toLowerCase() !== "pixl") continue;
     pixlCount++;
     const links = hrefs(tr[1]!);
-    const repo = githubRepo(links);
+    // Only the dedicated Links cell can establish the repository. Profile
+    // links and descriptions are not authoritative project URLs.
+    const repo = githubRepo(hrefs(cells[7]!));
     const hours = Number(textOf(cells[3]!));
     const date = textOf(cells[6]!);
     const approvedAt = /^\d{4}-\d{2}-\d{2}$/.test(date)

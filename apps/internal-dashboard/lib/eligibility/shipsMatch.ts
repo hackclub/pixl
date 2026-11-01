@@ -85,6 +85,29 @@ export function matchShips(view: ShipsView, target: MatchTarget, nowMs: number =
   if (m.kind === "empty") {
     return blank("no_record", "The Airtable record has no Unified record id yet, so it cannot be matched to Ships.", m.stagingId);
   }
+  if (snap.source === "halceon") {
+    // The external viewer does not expose Unified record IDs. Never pretend
+    // its synthetic row ID equals the Airtable -> Unified record mapping.
+    // Only a unique exact repository AND Slack ID pair may establish approval;
+    // updates to the same repo remain ambiguous and require human review.
+    if (!target.repoKey || !target.playerSlackId)
+      return blank("ambiguous", "Halceon cannot identify both the repository and Slack account.");
+    const matching = (snap.byRepo.get(target.repoKey) ?? [])
+      .filter((e) => sameSlack(e, target.playerSlackId) === true);
+    if (matching.length !== 1)
+      return blank(matching.length > 1 ? "ambiguous" : "not_found",
+        matching.length > 1
+          ? "Multiple Halceon approvals share the repository and Slack account; the exact Unified record cannot be identified."
+          : "No matching Halceon approval with this repository and Slack account.");
+    const evidence = evidenceOf(matching[0]!, "repo_slack", nowMs, view);
+    return {
+      ...evidence,
+      recordId: null,
+      note: evidence.note.replace("Found in Ships", "Listed in Halceon") +
+        " (repository + Slack match only; Unified record ID not exposed).",
+    };
+  }
+
   if (m.kind === "mapped") {
     const id = m.unifiedId;
     if (snap.ambiguousIds.has(id)) return blank("ambiguous", "Ships lists this Unified record more than once.", id);
