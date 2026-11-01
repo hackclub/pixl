@@ -15,6 +15,7 @@ import {
   type UnifiedState,
 } from "./engine";
 import { matchShips, type UnifiedMapping } from "./shipsMatch";
+import { readCachedStaging } from "./airbridgeCache";
 import { repoKeyOf, type ShipsProvider, type ShipsView } from "./ships";
 import { currentPolicy, FUNDING_ORDER_PREFIX, type EligibilityPolicy } from "./policy";
 
@@ -519,7 +520,11 @@ export async function loadPlayerEvidence(
   let airtableOk = true;
   const approved = raw.filter((x) => x.p.status === "approved" && !x.p.banned);
   const uniqueIds = [...new Set(approved.map((x) => x.recordId).filter((x): x is string => !!x))];
-  const lookups = await airtableLookups(uniqueIds, opts.liveAirtable || !!opts.airtable, opts.airtable ?? fetchSubmissionStates);
+  // Airbridge dashboard reads only local PostgreSQL. External staging data is
+  // refreshed by the worker; no Airtable request is made during page render.
+  const lookups = process.env.FULFILLMENT_SHIPS_SOURCE === "airbridge" && !opts.airtable
+    ? await readCachedStaging(uniqueIds)
+    : await airtableLookups(uniqueIds, opts.liveAirtable || !!opts.airtable, opts.airtable ?? fetchSubmissionStates);
   for (const x of raw) {
     if (!x.recordId) continue;
     if (lookups.has(x.recordId)) {

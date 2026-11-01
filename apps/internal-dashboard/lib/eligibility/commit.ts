@@ -1,6 +1,7 @@
 import { db as realDb } from "../pgCompat";
 import { config } from "@/app/_generated/config";
 import type { ShipsProvider, ShipsView } from "./ships";
+import { shipsProvider } from "./ships";
 import { toOrderInput, loadPlayerEvidence, evaluateFromEvidence, withGrantLink, type SqlLike, type UnifiedVerifier } from "./evidence";
 import { orderAmount, type EligibilityResult } from "./engine";
 import { currentPolicy, type EligibilityPolicy } from "./policy";
@@ -109,7 +110,8 @@ export async function claimOrderWithFunding(
 
   let result: EligibilityResult | null = null;
   try {
-    const ev = await loadPlayerEvidence([row.user_id as string], { liveAirtable: true, verifier: opts.verifier, sql: opts.sql, ships: opts.ships });
+    const provider = opts.ships ?? (process.env.FULFILLMENT_SHIPS_SOURCE === "airbridge" ? shipsProvider() : undefined);
+    const ev = await loadPlayerEvidence([row.user_id as string], { liveAirtable: true, verifier: opts.verifier, sql: opts.sql, ships: provider });
     const player = ev.get(row.user_id as string);
     if (player) result = evaluateFromEvidence(player, toOrderInput(row as Parameters<typeof toOrderInput>[0]), policy);
   } catch (e) {

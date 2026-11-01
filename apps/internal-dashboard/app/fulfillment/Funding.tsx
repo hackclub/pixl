@@ -24,22 +24,23 @@ export function VerificationBadge({ label }: { label: keyof typeof VERIFICATION_
 export function ShipsSyncBar({ view }: { view: ShipsView }) {
   const snap = view.snapshot;
   const ok = !!snap && !view.error;
+  const source = snap?.source === "airbridge" ? "Unified / Airbridge" : "Ships";
   return (
     <div className="fw-sync" data-state={ok ? "ok" : snap ? "stale" : "down"} role="status">
       <span>
         {snap ? (
           <>
-            Ships synced <strong>{syncAgeText(view.ageMs)}</strong> · {snap.pixlCount} PIXL entries
+            {source} synced <strong>{syncAgeText(view.ageMs)}</strong> · {snap.pixlCount} PIXL entries
             {snap.invalidCount + snap.duplicateCount > 0 && ` (${snap.invalidCount + snap.duplicateCount} unusable)`}
           </>
         ) : (
-          <>Ships has not been reached. Project hours cannot be verified; reviewer payout ledger funding can still cover orders.</>
+          <>Approval verification has not been synchronized. Project hours cannot be verified; reviewer payout ledger funding can still cover orders.</>
         )}
         {view.error && <Muted> · last refresh failed: {view.error}</Muted>}
       </span>
       <form action={refreshShipsSnapshot}>
         <ActionButton variant="outline" pendingLabel="Refreshing...">
-          Refresh Ships
+          Refresh verification
         </ActionButton>
       </form>
     </div>

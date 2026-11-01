@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { createAirbridgeProvider } from "./airbridgeCache";
 import {
   createShipsSnapshotStore,
   SHIPS_REFRESH_LEASE_MS,
@@ -20,6 +21,8 @@ const SHRINK_GUARD = 0.5;
 const MAX_INVALID_RATIO = 0.1;
 
 export interface ShipsEntry {
+  /** Cache verification instant (milliseconds), required for Airbridge sources. */
+  checkedAt?: number;
   id: string;
   approvedAt: number | null;
   hours: number;
@@ -30,6 +33,8 @@ export interface ShipsEntry {
 }
 
 export interface ShipsSnapshot {
+  /** The selected source; never merge data from different approval sources. */
+  source?: "ships" | "airbridge";
   fetchedAt: number;
   byId: Map<string, ShipsEntry>;
   ambiguousIds: Set<string>;
@@ -580,7 +585,13 @@ function persistentShipsProvider(): ReturnType<typeof createPersistentShipsProvi
   return persistentShared;
 }
 
+let airbridgeShared: ShipsProvider | null = null;
+
 export function shipsProvider(): ShipsProvider {
+  if (process.env.FULFILLMENT_SHIPS_SOURCE === "airbridge") {
+    if (!airbridgeShared) airbridgeShared = createAirbridgeProvider();
+    return airbridgeShared;
+  }
   if (shipsSnapshotReaderEnabled(process.env.SHIPS_SNAPSHOT_READER_ENABLED)) return persistentShipsProvider();
   if (!legacyShared)
     legacyShared = createShipsProvider({
