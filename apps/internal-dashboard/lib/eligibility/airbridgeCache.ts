@@ -12,6 +12,7 @@ interface CacheRow {
   unified_state: string; code_url: string | null; approved_hours: number | string | null;
   approved_at_s: number | string | null; program: string | null; otter_slack_id: string | null;
   otter_checked_ms: number | string;
+  last_attempt_ms: number | string;
   mapping_checked_ms: number | string; verified_at_ms: number | string;
   error: string | null;
 }
@@ -39,6 +40,14 @@ export function viewFromCache(rows: CacheRow[], now: number): ShipsView {
   const byId = new Map<string, ShipsEntry>(), byRepo = new Map<string, ShipsEntry[]>(),
     byGithub = new Map<string, ShipsEntry[]>();
   const ambiguousIds = new Set<string>();
+  const mappingUse = new Map<string, number>();
+  // Check every mapped staging record, including pending/missing approvals.
+  // Filtering to approved entries first would hide cross-record conflicts.
+  for (const row of rows) {
+    if (row.mapping_state === "mapped" && row.unified_id)
+      mappingUse.set(row.unified_id, (mappingUse.get(row.unified_id) ?? 0) + 1);
+  }
+  for (const [id, count] of mappingUse) if (count > 1) ambiguousIds.add(id);
   let newest = 0;
   for (const row of rows) {
     if (row.mapping_state !== "mapped" || row.unified_state !== "approved" ||
@@ -53,7 +62,6 @@ export function viewFromCache(rows: CacheRow[], now: number): ShipsView {
       githubUsername: repoKey.split("/")[1] ?? "",
       slackId: row.otter_slack_id, checkedAt: Number(row.verified_at_ms),
     };
-    if (byId.has(entry.id)) { ambiguousIds.add(entry.id); byId.delete(entry.id); continue; }
     if (ambiguousIds.has(entry.id)) continue;
     byId.set(entry.id, entry);
   }
@@ -89,8 +97,15 @@ async function save(
   if (mapping.kind === "error" || error) {
     // On a failed fetch, leave old evidence timestamp untouched: it must age out.
     const message = (error ?? (mapping.kind === "error" ? mapping.error : "")).slice(0, 250);
-    await sql`update fulfillment_unified_cache set error = ${message}, updated_at = now()
-      where staging_id = ${stagingId}`;
+    // Record the attempted refresh even on failure, without extending the
+    // validity of previously verified evidence. New failures need a row too,
+    // otherwise they permanently occupy the front of the refresh queue.
+    await sql`insert into fulfillment_unified_cache
+      (staging_id, mapping_state, unified_state, last_attempt_ms, error)
+      values (${stagingId}, 'error', 'error', ${now}, ${message})
+      on conflict (staging_id) do update set
+        last_attempt_ms = excluded.last_attempt_ms, error = excluded.error,
+        updated_at = now()`;
     return;
   }
   const state = mapping.kind === "missing" ? "missing" :
@@ -99,17 +114,18 @@ async function save(
   const verified = state === "mapped" ? (approval ? "approved" : "missing") : "pending";
   await sql`insert into fulfillment_unified_cache
     (staging_id, mapping_state, unified_id, unified_state, code_url, approved_hours,
-     approved_at_s, program, otter_slack_id, otter_checked_ms, mapping_checked_ms, verified_at_ms, error)
+     approved_at_s, program, otter_slack_id, otter_checked_ms, last_attempt_ms, mapping_checked_ms, verified_at_ms, error)
     values (${stagingId}, ${state}, ${unifiedId}, ${verified},
       ${approval?.repoUrl ?? null}, ${approval?.hours ?? null},
       ${approval?.approvedAt ?? null}, ${approval ? "Pixl" : null}, ${slack}, ${otterCheckedAt},
-      ${now}, ${now}, null)
+      ${now}, ${now}, ${now}, null)
     on conflict (staging_id) do update set
       mapping_state = excluded.mapping_state, unified_id = excluded.unified_id,
       unified_state = excluded.unified_state, code_url = excluded.code_url,
       approved_hours = excluded.approved_hours, approved_at_s = excluded.approved_at_s,
       program = excluded.program, otter_slack_id = excluded.otter_slack_id,
       otter_checked_ms = excluded.otter_checked_ms,
+      last_attempt_ms = excluded.last_attempt_ms,
       mapping_checked_ms = excluded.mapping_checked_ms,
       verified_at_ms = excluded.verified_at_ms, error = null, updated_at = now()`;
 }
@@ -140,7 +156,8 @@ export async function refreshAirbridgeCache(limit = 30): Promise<SyncResult> {
     select e.id from eligible e
     left join fulfillment_unified_cache c on c.staging_id = e.id
     where e.id ~ '^rec[A-Za-z0-9]{14}$'
-    order by least(coalesce(c.mapping_checked_ms, 0), coalesce(c.verified_at_ms, 0)), e.id
+    -- Fair round-robin: failures must not starve otherwise healthy records.
+    order by coalesce(c.last_attempt_ms, 0), e.id
     limit ${limit}`;
     if (!projects.length) return { outcome: "empty", checked: 0, approved: 0, errors: 0 };
     const ids = projects.map(row => row.id);
@@ -148,13 +165,17 @@ export async function refreshAirbridgeCache(limit = 30): Promise<SyncResult> {
     const unifiedIds = [...new Set([...mappings.values()]
       .flatMap(m => m.kind === "found" && m.info.unifiedId ? [m.info.unifiedId] : []))];
     const lookups = new Map<string, Approval | null>();
-    let apiError: string | null = null;
-    try {
-      for (let i = 0; i < unifiedIds.length; i += 25) {
-        const found = await getApprovals(unifiedIds.slice(i, i + 25));
+    const lookupErrors = new Map<string, string>();
+    for (let i = 0; i < unifiedIds.length; i += 25) {
+      const batch = unifiedIds.slice(i, i + 25);
+      try {
+        const found = await getApprovals(batch);
         for (const [key, value] of found) lookups.set(key, value);
+      } catch (e) {
+        // A failing batch does not erase approvals verified by other batches.
+        for (const id of batch) lookupErrors.set(id, (e as Error).message);
       }
-    } catch (e) { apiError = (e as Error).message; }
+    }
     // Preserve previously verified Slack identity across an Otter outage.
     // Recheck external enrichment only once every 12h per record, reducing
     // background network fanout by orders of magnitude.
@@ -166,25 +187,36 @@ export async function refreshAirbridgeCache(limit = 30): Promise<SyncResult> {
     const approvals = [...lookups.values()].filter((v): v is Approval => !!v);
     const toCheck = approvals.filter(a => {
       const old = oldById.get(a.id);
-      if (old && githubRepo(old.code_url) === githubRepo(a.repoUrl)) {
+      const sameRepo = !!old && githubRepo(old.code_url) === githubRepo(a.repoUrl);
+      if (sameRepo && old) {
         slackIds.set(a.id, old.otter_slack_id);
         lastOtterCheck.set(a.id, Number(old.otter_checked_ms));
       }
-      return !old || !old.otter_checked_ms || now - Number(old.otter_checked_ms) > 12 * 60 * 60_000;
+      return !sameRepo || !old?.otter_checked_ms ||
+        now - Number(old.otter_checked_ms) > 12 * 60 * 60_000;
     });
     for (let i = 0; i < toCheck.length; i += 6) {
       const block = toCheck.slice(i, i + 6);
       const values = await Promise.all(block.map(a => getOtterSlack(a)));
       block.forEach((a, j) => {
-        slackIds.set(a.id, values[j] ?? slackIds.get(a.id) ?? null);
-        lastOtterCheck.set(a.id, now);
+        const result = values[j]!;
+        if (result.state === "verified") {
+          slackIds.set(a.id, result.slackId);
+          lastOtterCheck.set(a.id, now);
+        } else if (result.state === "not_found") {
+          // A confirmed negative revokes previous enrichment.
+          slackIds.set(a.id, null);
+          lastOtterCheck.set(a.id, now);
+        }
+        // Outage: retain known matching evidence, but do not claim a new
+        // successful Otter check or delay the next retry by twelve hours.
       });
     }
     for (const id of ids) {
       const mapping = mappings.get(id) ?? { kind: "error" as const, error: "No staging result" };
       const unified = mapping.kind === "found" ? mapping.info.unifiedId : null;
-      const approval = unified && !apiError ? lookups.get(unified) ?? null : null;
-      const error = unified ? apiError : null;
+      const error = unified ? lookupErrors.get(unified) ?? null : null;
+      const approval = unified && !error ? lookups.get(unified) ?? null : null;
       await save(id, mapping, approval, approval ? slackIds.get(approval.id) ?? null : null,
         now, error, approval ? lastOtterCheck.get(approval.id) ?? 0 : 0);
       checked++;

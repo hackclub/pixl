@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS fulfillment_unified_cache (
   program text,
   otter_slack_id text,
   otter_checked_ms bigint NOT NULL DEFAULT 0,
+  last_attempt_ms bigint NOT NULL DEFAULT 0,
   mapping_checked_ms bigint NOT NULL DEFAULT 0,
   verified_at_ms bigint NOT NULL DEFAULT 0,
   error text,
@@ -20,6 +21,7 @@ CREATE TABLE IF NOT EXISTS fulfillment_unified_cache (
 CREATE INDEX IF NOT EXISTS fulfillment_unified_cache_unified_idx ON fulfillment_unified_cache (unified_id)
   WHERE unified_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS fulfillment_unified_cache_refresh_idx ON fulfillment_unified_cache (mapping_checked_ms, verified_at_ms);
+CREATE INDEX IF NOT EXISTS fulfillment_unified_cache_attempt_idx ON fulfillment_unified_cache (last_attempt_ms);
 
 CREATE TABLE IF NOT EXISTS fulfillment_unified_changes (
   id bigserial PRIMARY KEY,

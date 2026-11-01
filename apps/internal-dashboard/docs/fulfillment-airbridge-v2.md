@@ -10,7 +10,10 @@ Replace the unreliable bulk Ships API with targeted Airbridge reads of individua
 - `fulfillment_unified_sync_lease` prevents overlapping reconciliation workers across dashboard replicas.
 - The background job fetches staging mapping with Pixl's existing private Airtable token, then does **bounded server-side Airbridge record-ID queries** of up to 25 at a time.
 - Otter is enrichment only. Its Slack ID is accepted only if it returns an exact matching Unified record ID **and** exact normalized repository and YSWS. It can veto a mismatched identity, never establish approval by itself.
-- Each approval has a verified timestamp. Older than 30 minutes means unavailable, not approved. A successful "not found" removes verification. Network failures do not silently refresh timestamps.
+- Each approval has a verified timestamp. Older than 30 minutes means unavailable, not approved. A successful "not found" removes verification only after independently checking the absent ID. Network failures do not silently refresh timestamps.
+- Refresh fairness uses last attempted time, independent from verification time, so persistent failures cannot starve healthy records. Bad Airbridge batches do not invalidate successful batches.
+- Conflicting staging→Unified mappings are rejected even if one of the mappings has no current approval.
+- Otter distinguishes a negative match (clear old Slack enrichment) from a network outage (retain prior matching evidence and retry soon).
 - No currency or shop-order writes. Existing payout, commitment, and grant checks remain in force.
 
 ## Local verification

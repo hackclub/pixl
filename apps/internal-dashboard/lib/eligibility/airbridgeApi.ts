@@ -69,7 +69,9 @@ export function airbridgeLookupUrl(ids: string[]): string {
   };
   return AIRBRIDGE_API + "?select=" + encodeURIComponent(JSON.stringify(query));
 }
-export async function getApprovals(ids: string[], fetchImpl: typeof fetch = fetch):
+// Parse one exact-ID query. The public endpoint returns a bare array, so a
+// short response alone cannot prove whether an omitted ID was really removed.
+async function fetchApprovalBatch(ids: string[], fetchImpl: typeof fetch):
   Promise<Map<string, Approval | null>> {
   const res = await fetchImpl(airbridgeLookupUrl(ids), {
     headers: { Accept: "application/json" },
@@ -90,22 +92,52 @@ export async function getApprovals(ids: string[], fetchImpl: typeof fetch = fetc
   }
   return found;
 }
+
+/** Recheck every omitted bulk ID with its own exact query before calling it missing.
+ * A single-ID absence is itself checked twice to guard against transient empty
+ * responses. Any failed confirmation rejects the entire batch (fail closed).
+ */
+export async function getApprovals(ids: string[], fetchImpl: typeof fetch = fetch):
+  Promise<Map<string, Approval | null>> {
+  const found = await fetchApprovalBatch(ids, fetchImpl);
+  const missing = ids.filter(id => !found.get(id));
+  if (missing.length === 0) return found;
+  for (let i = 0; i < missing.length; i += 6) {
+    const chunk = missing.slice(i, i + 6);
+    const confirmations = await Promise.all(chunk.map(async id => {
+      // For a single-ID first query, retry once; for a bulk omission, obtain
+      // an independent single-ID response rather than trusting pagination.
+      const result = await fetchApprovalBatch([id], fetchImpl);
+      return [id, result.get(id) ?? null] as const;
+    }));
+    for (const [id, approval] of confirmations) found.set(id, approval);
+  }
+  return found;
+}
+
+export type OtterSlackResult =
+  | { state: "verified"; slackId: string }
+  | { state: "not_found" }
+  | { state: "unavailable" };
+
 export async function getOtterSlack(approval: Approval, fetchImpl: typeof fetch = fetch):
-  Promise<string | null> {
+  Promise<OtterSlackResult> {
   try {
     const res = await fetchImpl(OTTER_SEARCH + "?q=" + encodeURIComponent(approval.repoUrl), {
       signal: AbortSignal.timeout(5_000), redirect: "error",
     });
-    if (!res.ok) return null;
+    if (!res.ok) return { state: "unavailable" };
     const data = await limitedJson(res) as { data?: unknown };
-    const matches = Array.isArray(data.data) ? data.data.filter((r: unknown) => {
+    if (!data || !Array.isArray(data.data)) return { state: "unavailable" };
+    const matches = data.data.filter((r: unknown) => {
       if (!r || typeof r !== "object") return false;
       const row = r as Record<string, unknown>;
       return row.airtable_id === approval.id && row.ysws === "Pixl" &&
         typeof row.code_url === "string" && githubRepo(row.code_url) === githubRepo(approval.repoUrl);
-    }) : [];
-    if (matches.length !== 1) return null;
+    });
+    if (matches.length !== 1) return { state: "not_found" };
     const slack = (matches[0] as { slack_id?: unknown }).slack_id;
-    return typeof slack === "string" && /^[UW][A-Z0-9]{8,}$/.test(slack) ? slack : null;
-  } catch { return null; }
+    return typeof slack === "string" && /^[UW][A-Z0-9]{8,}$/.test(slack)
+      ? { state: "verified", slackId: slack } : { state: "not_found" };
+  } catch { return { state: "unavailable" }; }
 }

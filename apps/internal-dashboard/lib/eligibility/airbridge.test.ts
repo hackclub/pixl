@@ -40,10 +40,34 @@ describe("targeted official Unified approval", () => {
   test("rejects unexpected IDs or truncated envelopes", async () => {
     const fetchImpl: typeof fetch = async () => new Response(JSON.stringify([approval(OTHER)]));
     await expect(getApprovals([ID], fetchImpl)).rejects.toThrow();
-    const valid: typeof fetch = async () => new Response(JSON.stringify([approval(ID)]));
+    const valid: typeof fetch = async (url) => {
+      const formula = JSON.parse(new URL(String(url)).searchParams.get("select")!).filterByFormula as string;
+      return new Response(JSON.stringify(formula.includes(ID) ? [approval(ID)] : []));
+    };
     const found = await getApprovals([ID, OTHER], valid);
     expect(found.get(ID)?.hours).toBe(9.8);
     expect(found.get(OTHER)).toBeNull();
+  });
+  test("an omitted bulk record is independently retrieved before declaring removal", async () => {
+    const queries: string[] = [];
+    const truncated: typeof fetch = async url => {
+      const formula = JSON.parse(new URL(String(url)).searchParams.get("select")!).filterByFormula as string;
+      queries.push(formula);
+      return new Response(JSON.stringify(formula.includes(ID) && formula.includes(OTHER)
+        ? [approval(ID)] : formula.includes(OTHER) ? [approval(OTHER)] : [approval(ID)]));
+    };
+    const found = await getApprovals([ID, OTHER], truncated);
+    expect(found.get(OTHER)?.id).toBe(OTHER);
+    expect(queries).toHaveLength(2);
+  });
+  test("single-ID misses require a second confirmation", async () => {
+    let calls = 0;
+    const flaky: typeof fetch = async () => {
+      calls++;
+      return new Response(JSON.stringify(calls === 1 ? [] : [approval(ID)]));
+    };
+    expect((await getApprovals([ID], flaky)).get(ID)?.hours).toBe(9.8);
+    expect(calls).toBe(2);
   });
   test("Otter only supplies identity when it matches the exact Unified record", async () => {
     const candidate = parseApproval(approval(), ID);
@@ -51,11 +75,15 @@ describe("targeted official Unified approval", () => {
       { airtable_id: OTHER, code_url: candidate.repoUrl, ysws: "Pixl", slack_id: "U0999999999" },
       { airtable_id: ID, code_url: candidate.repoUrl, ysws: "Pixl", slack_id: "U0123456789" },
     ] }));
-    expect(await getOtterSlack(candidate, fake)).toBe("U0123456789");
+    expect(await getOtterSlack(candidate, fake)).toEqual({ state: "verified", slackId: "U0123456789" });
     const invalid: typeof fetch = async () => new Response(JSON.stringify({ data: [
       { airtable_id: ID, code_url: "https://github.com/Evil/repo", ysws: "Pixl", slack_id: "U0123456789" },
     ] }));
-    expect(await getOtterSlack(candidate, invalid)).toBeNull();
+    expect(await getOtterSlack(candidate, invalid)).toEqual({ state: "not_found" });
+    const outage: typeof fetch = async () => new Response("down", { status: 503 });
+    expect(await getOtterSlack(candidate, outage)).toEqual({ state: "unavailable" });
+    const malformed: typeof fetch = async () => new Response(JSON.stringify({ broken: [] }));
+    expect(await getOtterSlack(candidate, malformed)).toEqual({ state: "unavailable" });
   });
 });
 
@@ -87,6 +115,13 @@ describe("local fulfillment cache", () => {
   });
   test("duplicate Unified IDs never become verified credits", () => {
     const view = viewFromCache([row(), row({ staging_id: "recCCCCCCCCCCCCCC" })], NOW);
+    expect(view.snapshot?.ambiguousIds.has(ID)).toBe(true);
+    expect(view.snapshot?.byId.has(ID)).toBe(false);
+  });
+  test("a pending/missing record sharing a Unified ID also blocks approval", () => {
+    const view = viewFromCache([
+      row(), row({ staging_id: "recCCCCCCCCCCCCCC", unified_state: "missing", approved_hours: null }),
+    ], NOW);
     expect(view.snapshot?.ambiguousIds.has(ID)).toBe(true);
     expect(view.snapshot?.byId.has(ID)).toBe(false);
   });

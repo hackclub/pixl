@@ -50,6 +50,16 @@ suite("Airbridge cache migration", () => {
     expect(rows[2]!.before_state.state).toBe("approved");
     expect(rows[2]!.after_state.state).toBe("missing");
   });
+  test("failed rows can move behind unattempted records without freshening evidence", async () => {
+    const failed = "recDDDDDDDDDDDDDD", next = "recEEEEEEEEEEEEEE";
+    await db`insert into fulfillment_unified_cache
+      (staging_id, mapping_state, unified_state, last_attempt_ms)
+      values (${failed}, 'error', 'error', 300), (${next}, 'error', 'error', 0)`;
+    const ordered = await db`select staging_id, verified_at_ms from fulfillment_unified_cache
+      where staging_id in (${failed}, ${next}) order by last_attempt_ms, staging_id`;
+    expect(ordered.map(r => r.staging_id)).toEqual([next, failed]);
+    expect(ordered.every(r => Number(r.verified_at_ms) === 0)).toBe(true);
+  });
   test("refresh lease admits only one holder", async () => {
     const a = "11111111-1111-4111-8111-111111111111";
     const b = "22222222-2222-4222-8222-222222222222";
