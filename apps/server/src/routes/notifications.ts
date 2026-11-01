@@ -80,7 +80,10 @@ router.get("/api/notifications", async (req, res) => {
       .limit(50),
     db.from("notifications").select("id", { count: "exact", head: true })
       .eq("user_id", session.userId)
-      .eq("read", false),
+      .eq("read", false)
+      // pgCompat does not implement Supabase head:true: without limit(0) it
+      // fetches every matching ID before issuing the separate exact COUNT.
+      .limit(0),
   ]);
   if (listing.error || unreadTotal.error || unreadTotal.count === null) {
     console.error("[notifications] list/count failed", listing.error ?? unreadTotal.error);
