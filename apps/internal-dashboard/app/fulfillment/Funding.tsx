@@ -132,12 +132,12 @@ export function FundingBreakdown({ result, orderId }: { result: EligibilityResul
         <div className="fw-funding-metrics">
           <div><span>Verified earned</span><strong>{usd(r.verifiedFundingCents)}</strong></div>
           <div><span>Already committed</span><strong>{usd(r.committedCents)}</strong></div>
-          <div><span>Available now</span><strong>{usd(r.remainingCents)}</strong></div>
+          <div><span>Verified balance</span><strong>{usd(r.remainingCents)}</strong></div>
           <div><span>This order</span><strong>{usd(r.amount.cents)}</strong></div>
         </div>
         <div className="fw-funding-coverage">
           <div className="fw-funding-coverage-head">
-            <span>Verified funds available for this order</span>
+            <span>Verified balance vs. order cost</span>
             <strong>{coveragePercent}% of cost</strong>
           </div>
           <div
@@ -151,7 +151,7 @@ export function FundingBreakdown({ result, orderId }: { result: EligibilityResul
             <span data-coverage={r.afterCents >= 0 ? "enough" : "short"} style={{ width: `${coveragePercent}%` }} />
           </div>
           <div className="fw-funding-outcome" data-state={r.afterCents >= 0 ? "enough" : "short"}>
-            <span>{r.afterCents >= 0 ? "Verified funds left after order" : "Verified funding shortfall"}</span>
+            <span>{r.afterCents >= 0 ? "Projected balance after order" : "Shortfall against verified balance"}</span>
             <strong>{usd(Math.abs(r.afterCents))}</strong>
           </div>
         </div>
