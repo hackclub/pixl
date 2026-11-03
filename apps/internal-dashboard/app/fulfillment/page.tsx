@@ -37,11 +37,9 @@ import { config } from "@/app/_generated/config";
 import {
   ActionButton,
   ButtonLink,
-  Callout,
   Card,
   CardHeader,
   CountBadge,
-  Details,
   EmptyRow,
   EmptyState,
   Field,
@@ -354,20 +352,43 @@ export default async function FulfillmentPage({
         }
       />
 
-      <Callout tone="info" icon="payment">
-        Every order shows a <strong>budget</strong>: what the player&apos;s pixels are worth at $
-        {config.economy.pixelValueUsd.toFixed(2)} per pixel. Buy it for that or less. If the cheapest you can find is
-        over budget, don&apos;t place the order: flag it with what you found and an owner picks it up from the Over
-        budget tab.
-      </Callout>
+      <div className={`fw-ops-strip${shipsView ? "" : " fw-ops-strip-no-sync"}${economy ? "" : " fw-ops-strip-no-economy"}`} aria-label="Fulfillment tools and status">
+        {shipsView && (
+          <section className="fw-ops-tile fw-ops-sync-tile" aria-label="Approval verification">
+            <p className="fw-ops-kicker">APPROVAL VERIFICATION</p>
+            <ShipsSyncBar view={shipsView} compact />
+          </section>
+        )}
 
-      {economy && (
-        <Details summary="Shop economy">
-          <ShopEconomy economy={economy} />
-        </Details>
-      )}
+        <details className="fw-ops-tile fw-ops-disclosure">
+          <summary>
+            <span className="fw-ops-summary-label">
+              <span className="fw-ops-kicker">SPENDING GUIDE</span>
+              <strong>${config.economy.pixelValueUsd.toFixed(2)} / pixel</strong>
+            </span>
+            <span className="fw-ops-expand-label">Budget rules <span aria-hidden="true">⌄</span></span>
+          </summary>
+          <div className="fw-ops-expanded">
+            <p>The order budget is the player&apos;s pixels multiplied by ${config.economy.pixelValueUsd.toFixed(2)}.</p>
+            <p>Buy for that amount or less. If the lowest price is higher, <strong>do not order</strong>. Flag the request with your source and price for an owner to review.</p>
+          </div>
+        </details>
 
-      {shipsView && <ShipsSyncBar view={shipsView} />}
+        {economy && (
+          <details className="fw-ops-tile fw-ops-disclosure">
+            <summary>
+              <span className="fw-ops-summary-label">
+                <span className="fw-ops-kicker">OWNER OVERVIEW</span>
+                <strong>Shop economy</strong>
+              </span>
+              <span className="fw-ops-expand-label">View stats <span aria-hidden="true">⌄</span></span>
+            </summary>
+            <div className="fw-ops-expanded fw-ops-economy">
+              <ShopEconomy economy={economy} />
+            </div>
+          </details>
+        )}
+      </div>
 
       {showingQueue && counts && !mineOnly && (
         <section className="fw-pipeline" aria-label="Fulfillment pipeline">
