@@ -360,9 +360,10 @@ router.get("/api/explore/players/:id", async (req, res) => {
       .from("projects")
       .select(PUBLIC_PROJECT_COLUMNS)
       .eq("user_id", id)
+      .eq("status", "approved")
       .is("archived_at", null)
       .is("rejected_at", null)
-    .is("banned_at", null)
+      .is("banned_at", null)
       .order("created_at", { ascending: false }),
     db
       .from("collectible_purchases")
