@@ -450,99 +450,99 @@ export default async function FulfillmentPage({
                 <span className="hc-muted text-xs">{orders.length.toLocaleString()} shown{hasNext ? " on this page" : ""}</span>
               </div>
               <div className="fw-list-tools">
-              <form action="/fulfillment" method="get" role="search" className="fw-search">
-                {active !== "pending" && <input type="hidden" name="status" value={active} />}
-                {mineOnly && <input type="hidden" name="mine" value="1" />}
-                {eligFilter && <input type="hidden" name="elig" value={eligFilter} />}
-                {verifyFilter && <input type="hidden" name="verify" value={verifyFilter} />}
-                {sortKey !== "newest" && <input type="hidden" name="sort" value={sortKey} />}
-                <Input name="q" type="search" defaultValue={query} maxLength={100} placeholder="Search requests..." aria-label="Search requests" />
-                <button type="submit" className={buttonClass("outline", "sm")} aria-label="Search requests" title="Search requests">
-                  <Icon glyph="search" size={17} />
-                </button>
-              </form>
-            {showingQueue && (
-              <div className="fw-filters-shell">
-                <details className="fw-filters">
-                  <summary className="fw-filter-toggle">
-                    <Icon glyph="settings" size={16} />
-                    <span>Filters</span>
-                    {(Number(Boolean(eligFilter)) + Number(Boolean(verifyFilter)) + Number(sortKey !== "newest")) > 0 && (
-                      <span className="fw-filter-count">
-                        {Number(Boolean(eligFilter)) + Number(Boolean(verifyFilter)) + Number(sortKey !== "newest")} active
-                      </span>
-                    )}
-                  </summary>
-                  <div className="fw-filter-body">
-                    <div className="fw-filter-group">
-                      <div className="fw-filter-group-title">
-                        <strong>Funding</strong>
-                        <span>Does the player have enough verified budget?</span>
-                      </div>
-                      <nav className="fw-chips" aria-label="Filter by funding">
-                        <Link href={hrefFor({ elig: null, order: undefined })} className="fw-chip" aria-current={eligFilter ? undefined : "page"}>
-                          All
-                        </Link>
-                        {ELIGIBILITY_FILTERS.map((f) => (
-                          <Link
-                            key={f}
-                            href={hrefFor({ elig: f, order: undefined })}
-                            className="fw-chip"
-                            aria-current={f === eligFilter ? "page" : undefined}
-                          >
-                            {ELIGIBILITY_LABEL[f]}
+                <form action="/fulfillment" method="get" role="search" className="fw-search">
+                  {active !== "pending" && <input type="hidden" name="status" value={active} />}
+                  {mineOnly && <input type="hidden" name="mine" value="1" />}
+                  {eligFilter && <input type="hidden" name="elig" value={eligFilter} />}
+                  {verifyFilter && <input type="hidden" name="verify" value={verifyFilter} />}
+                  {sortKey !== "newest" && <input type="hidden" name="sort" value={sortKey} />}
+                  <Input name="q" type="search" defaultValue={query} maxLength={100} placeholder="Search requests..." aria-label="Search requests" />
+                  <button type="submit" className={buttonClass("outline", "sm")} aria-label="Search requests" title="Search requests">
+                    <Icon glyph="search" size={17} />
+                  </button>
+                </form>
+                {showingQueue && (
+                  <div className="fw-filters-shell">
+                    <details className="fw-filters">
+                      <summary className="fw-filter-toggle">
+                        <Icon glyph="settings" size={16} />
+                        <span>Filters</span>
+                        {(Number(Boolean(eligFilter)) + Number(Boolean(verifyFilter)) + Number(sortKey !== "newest")) > 0 && (
+                          <span className="fw-filter-count">
+                            {Number(Boolean(eligFilter)) + Number(Boolean(verifyFilter)) + Number(sortKey !== "newest")} active
+                          </span>
+                        )}
+                      </summary>
+                      <div className="fw-filter-body">
+                        <div className="fw-filter-group">
+                          <div className="fw-filter-group-title">
+                            <strong>Funding</strong>
+                            <span>Does the player have enough verified budget?</span>
+                          </div>
+                          <nav className="fw-chips" aria-label="Filter by funding">
+                            <Link href={hrefFor({ elig: null, order: undefined })} className="fw-chip" aria-current={eligFilter ? undefined : "page"}>
+                              All
+                            </Link>
+                            {ELIGIBILITY_FILTERS.map((f) => (
+                              <Link
+                                key={f}
+                                href={hrefFor({ elig: f, order: undefined })}
+                                className="fw-chip"
+                                aria-current={f === eligFilter ? "page" : undefined}
+                              >
+                                {ELIGIBILITY_LABEL[f]}
+                              </Link>
+                            ))}
+                          </nav>
+                        </div>
+                        <div className="fw-filter-group">
+                          <div className="fw-filter-group-title">
+                            <strong>Ships verification</strong>
+                            <span>Is the player's project approval confirmed?</span>
+                          </div>
+                          <nav className="fw-chips" aria-label="Filter by verification">
+                            <Link href={hrefFor({ verify: null, order: undefined })} className="fw-chip" aria-current={verifyFilter ? undefined : "page"}>
+                              All
+                            </Link>
+                            {VERIFICATION_FILTERS.map((f) => (
+                              <Link
+                                key={f}
+                                href={hrefFor({ verify: f, order: undefined })}
+                                className="fw-chip"
+                                aria-current={f === verifyFilter ? "page" : undefined}
+                              >
+                                {VERIFICATION_LABEL[f]}
+                              </Link>
+                            ))}
+                          </nav>
+                        </div>
+                        <div className="fw-filter-group">
+                          <div className="fw-filter-group-title">
+                            <strong>Sort requests</strong>
+                            <span>Choose which requests appear first</span>
+                          </div>
+                          <nav className="fw-chips" aria-label="Sort">
+                            {SORT_KEYS.map((k) => (
+                              <Link
+                                key={k}
+                                href={hrefFor({ sort: k, order: undefined })}
+                                className="fw-chip"
+                                aria-current={k === sortKey ? "page" : undefined}
+                              >
+                                {SORT_LABEL[k]}
+                              </Link>
+                            ))}
+                          </nav>
+                        </div>
+                        {(eligFilter || verifyFilter || sortKey !== "newest") && (
+                          <Link className="fw-filter-reset" href={hrefFor({ elig: null, verify: null, sort: "newest", order: undefined })}>
+                            Clear extra filters
                           </Link>
-                        ))}
-                      </nav>
-                    </div>
-                    <div className="fw-filter-group">
-                      <div className="fw-filter-group-title">
-                        <strong>Ships verification</strong>
-                        <span>Is the player's project approval confirmed?</span>
+                        )}
                       </div>
-                      <nav className="fw-chips" aria-label="Filter by verification">
-                        <Link href={hrefFor({ verify: null, order: undefined })} className="fw-chip" aria-current={verifyFilter ? undefined : "page"}>
-                          All
-                        </Link>
-                        {VERIFICATION_FILTERS.map((f) => (
-                          <Link
-                            key={f}
-                            href={hrefFor({ verify: f, order: undefined })}
-                            className="fw-chip"
-                            aria-current={f === verifyFilter ? "page" : undefined}
-                          >
-                            {VERIFICATION_LABEL[f]}
-                          </Link>
-                        ))}
-                      </nav>
-                    </div>
-                    <div className="fw-filter-group">
-                      <div className="fw-filter-group-title">
-                        <strong>Sort requests</strong>
-                        <span>Choose which requests appear first</span>
-                      </div>
-                      <nav className="fw-chips" aria-label="Sort">
-                        {SORT_KEYS.map((k) => (
-                          <Link
-                            key={k}
-                            href={hrefFor({ sort: k, order: undefined })}
-                            className="fw-chip"
-                            aria-current={k === sortKey ? "page" : undefined}
-                          >
-                            {SORT_LABEL[k]}
-                          </Link>
-                        ))}
-                      </nav>
-                    </div>
-                    {(eligFilter || verifyFilter || sortKey !== "newest") && (
-                      <Link className="fw-filter-reset" href={hrefFor({ elig: null, verify: null, sort: "newest", order: undefined })}>
-                        Clear extra filters
-                      </Link>
-                    )}
+                    </details>
                   </div>
-                </details>
-              </div>
-            )}
+                )}
               </div>
             </div>
             {orders.length === 0 ? (
