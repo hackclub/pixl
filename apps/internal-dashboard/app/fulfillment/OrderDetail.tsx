@@ -16,7 +16,7 @@ import {
 } from "@/app/_ui/ui";
 import type { EligibilityResult } from "@/lib/eligibility/engine";
 import { SlackHandle } from "./SlackHandle";
-import { FundingBreakdown } from "./Funding";
+import { FundingDisclosure } from "./Funding";
 import { EditFulfillmentInfo, FlagControls, OrderActions } from "./OrderActions";
 import { ItemThumb, TypeBadge } from "./OrderList";
 import { STAGE_HINT, STAGE_LABEL, STAGE_TONE, SafeLink, slackLink, usdBudget } from "./shared";
@@ -227,18 +227,16 @@ export function OrderDetail({
         </Callout>
       )}
 
-      <Panel title="Funding breakdown" icon="bolt">
-        <FundingBreakdown result={eligibility} orderId={o.id} />
-      </Panel>
-
       <div className="fw-cols">
         <div className="fw-col">
-          <Panel title="Buyer note" icon="message">
-            {o.buyer_note ? <p className="fw-note">{o.buyer_note}</p> : <Muted>The buyer left no note.</Muted>}
-          </Panel>
           <Panel title="Shipping info" icon="pin">
             <ShippingPanel order={o} buyer={buyer} country={country} />
           </Panel>
+          {o.buyer_note && (
+            <Panel title="Buyer note" icon="message">
+              <p className="fw-note">{o.buyer_note}</p>
+            </Panel>
+          )}
         </div>
         <div className="fw-col">
           <Panel title="Requester" icon="person">
@@ -308,6 +306,8 @@ export function OrderDetail({
           </div>
         </Panel>
       )}
+
+      <FundingDisclosure key={o.id} result={eligibility} orderId={o.id} />
     </article>
   );
 }
