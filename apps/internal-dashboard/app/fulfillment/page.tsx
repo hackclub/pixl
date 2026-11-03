@@ -449,23 +449,24 @@ export default async function FulfillmentPage({
                 <h2 className="hc-heading text-lg">Requests</h2>
                 <span className="hc-muted text-xs">{orders.length.toLocaleString()} shown{hasNext ? " on this page" : ""}</span>
               </div>
+              <div className="fw-list-tools">
               <form action="/fulfillment" method="get" role="search" className="fw-search">
                 {active !== "pending" && <input type="hidden" name="status" value={active} />}
                 {mineOnly && <input type="hidden" name="mine" value="1" />}
                 {eligFilter && <input type="hidden" name="elig" value={eligFilter} />}
                 {verifyFilter && <input type="hidden" name="verify" value={verifyFilter} />}
                 {sortKey !== "newest" && <input type="hidden" name="sort" value={sortKey} />}
-                <Input name="q" type="search" defaultValue={query} maxLength={100} placeholder="Search players, GitHub, projects, items..." aria-label="Search requests" />
-                <button type="submit" className={buttonClass("outline")}>
-                  Search
+                <Input name="q" type="search" defaultValue={query} maxLength={100} placeholder="Search requests..." aria-label="Search requests" />
+                <button type="submit" className={buttonClass("outline", "sm")} aria-label="Search requests" title="Search requests">
+                  <Icon glyph="search" size={17} />
                 </button>
               </form>
-            </div>
             {showingQueue && (
               <div className="fw-filters-shell">
-                <details className="fw-filters" open={Boolean(eligFilter || verifyFilter || sortKey !== "newest")}>
+                <details className="fw-filters">
                   <summary className="fw-filter-toggle">
-                    <span>Filters &amp; sort</span>
+                    <Icon glyph="settings" size={16} />
+                    <span>Filters</span>
                     {(Number(Boolean(eligFilter)) + Number(Boolean(verifyFilter)) + Number(sortKey !== "newest")) > 0 && (
                       <span className="fw-filter-count">
                         {Number(Boolean(eligFilter)) + Number(Boolean(verifyFilter)) + Number(sortKey !== "newest")} active
@@ -540,17 +541,10 @@ export default async function FulfillmentPage({
                     )}
                   </div>
                 </details>
-                {(eligFilter || verifyFilter || sortKey !== "newest") && (
-                  <div className="fw-filter-active" aria-label="Applied filters">
-                    <span className="fw-filter-active-label">Showing:</span>
-                    {eligFilter && <span>Funding: {ELIGIBILITY_LABEL[eligFilter]}</span>}
-                    {verifyFilter && <span>Ships: {VERIFICATION_LABEL[verifyFilter]}</span>}
-                    {sortKey !== "newest" && <span>Sort: {SORT_LABEL[sortKey]}</span>}
-                    <Link href={hrefFor({ elig: null, verify: null, sort: "newest", order: undefined })}>Clear</Link>
-                  </div>
-                )}
               </div>
             )}
+              </div>
+            </div>
             {orders.length === 0 ? (
               <EmptyState title={emptyTitle} icon="package" />
             ) : (
