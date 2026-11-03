@@ -44,10 +44,9 @@ import {
   EmptyState,
   Field,
   Input,
+  Icon,
   Mono,
   PageHeader,
-  Stat,
-  StatGrid,
   Table,
   TextLink,
   buttonClass,
@@ -71,23 +70,19 @@ const PRIMARY_QUEUE_TABS: readonly TabKey[] = ["pending", "ordered", "shipped", 
 function ShopEconomy({ economy }: { economy: ShopEconomySummary }) {
   const redeemedUsd = economy.totalPx * config.economy.pixelValueUsd;
   const net = redeemedUsd - economy.totalActualCostUsd;
-  const orders = economy.ordersWithCost > 0 ? `${economy.ordersWithCost} fulfilled orders` : "Fulfilled orders";
   return (
-    <StatGrid>
-      <Stat
-        label="Redeemed by players"
-        icon="enter"
-        value={`${economy.totalPx.toLocaleString()} px`}
-        hint={`$${redeemedUsd.toFixed(2)} · ${orders}`}
-      />
-      <Stat label="Spent fulfilling" icon="payment" value={`$${economy.totalActualCostUsd.toFixed(2)}`} />
-      <Stat
-        label="Net"
-        icon="analytics"
-        tone={net >= 0 ? "success" : "danger"}
-        value={`${net >= 0 ? "+" : "-"}$${Math.abs(net).toFixed(2)}`}
-      />
-    </StatGrid>
+    <div className="fw-menu-economy">
+      <dl>
+        <div><dt>Redeemed by players</dt><dd>{economy.totalPx.toLocaleString()} px</dd></div>
+        <div><dt>Redeemed value</dt><dd>{"$"}{redeemedUsd.toFixed(2)}</dd></div>
+        <div><dt>Spent fulfilling</dt><dd>{"$"}{economy.totalActualCostUsd.toFixed(2)}</dd></div>
+        <div className="fw-menu-economy-net" data-positive={net >= 0}>
+          <dt>Net of these orders</dt>
+          <dd>{net >= 0 ? "+" : "-"}{"$"}{Math.abs(net).toFixed(2)}</dd>
+        </div>
+      </dl>
+      <p className="hc-muted">Across {economy.ordersWithCost.toLocaleString()} orders with recorded costs; not overall program profit.</p>
+    </div>
   );
 }
 
@@ -325,7 +320,7 @@ export default async function FulfillmentPage({
         title={mineOnly ? "My queue" : "Fulfillment"}
         description="Process player requests, place orders, and keep everything moving. Claim one to place the real order; tracking is DM'd to the buyer when it ships, and an order can be cancelled for a refund until someone claims it."
         actions={
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="fw-header-actions">
             {showingQueue ? (
               <ButtonLink href={hrefFor({ mine: !mineOnly })} variant={mineOnly ? "primary" : "outline"} size="sm" icon="list">
                 {mineOnly ? "Back to all orders" : "My queue"}
@@ -348,47 +343,57 @@ export default async function FulfillmentPage({
                 Fulfillers
               </ButtonLink>
             )}
+
+            <span className="fw-header-divider" aria-hidden="true" />
+            {shipsView && (
+              <details className="fw-header-menu" name="fulfillment-tools">
+                <summary className={buttonClass("outline", "sm") + " fw-header-menu-trigger"}>
+                  <span
+                    className="fw-header-sync-dot"
+                    data-state={!shipsView.snapshot || shipsView.error ? "down" : shipsView.fresh ? "ok" : "stale"}
+                    aria-hidden="true"
+                  />
+                  {shipsView.snapshot?.source === "airbridge" ? "Unified" : "Ships"}
+                  <span className="fw-header-menu-sub">
+                    {shipsView.snapshot && shipsView.fresh && !shipsView.error ? "synced" : shipsView.snapshot ? "stale" : "unavailable"}
+                  </span>
+                  <span className="fw-header-chevron" aria-hidden="true">⌄</span>
+                </summary>
+                <div className="fw-header-menu-popover" role="group" aria-label="Approval verification">
+                  <p className="fw-header-menu-title">Approval verification</p>
+                  <ShipsSyncBar view={shipsView} compact />
+                </div>
+              </details>
+            )}
+            <details className="fw-header-menu" name="fulfillment-tools">
+              <summary className={buttonClass("outline", "sm") + " fw-header-menu-trigger"}>
+                <Icon glyph="payment" size={16} />
+                Budget rules
+                <span className="fw-header-chevron" aria-hidden="true">⌄</span>
+              </summary>
+              <div className="fw-header-menu-popover" role="group" aria-label="Spending guide">
+                <p className="fw-header-menu-title">Spending guide</p>
+                <p className="fw-header-rate">{"$"}{config.economy.pixelValueUsd.toFixed(2)} per pixel</p>
+                <p>Each order has a budget equal to its pixel price multiplied by this rate.</p>
+                <p>Buy at or below that amount. If the lowest available price is higher, <strong>do not order</strong>: flag the order with the vendor and price for an owner.</p>
+              </div>
+            </details>
+            {economy && (
+              <details className="fw-header-menu" name="fulfillment-tools">
+                <summary className={buttonClass("outline", "sm") + " fw-header-menu-trigger"}>
+                  <Icon glyph="analytics" size={16} />
+                  Shop economy
+                  <span className="fw-header-chevron" aria-hidden="true">⌄</span>
+                </summary>
+                <div className="fw-header-menu-popover" role="group" aria-label="Shop economy">
+                  <p className="fw-header-menu-title">Shop economy</p>
+                  <ShopEconomy economy={economy} />
+                </div>
+              </details>
+            )}
           </div>
         }
       />
-
-      <div className={`fw-ops-strip${shipsView ? "" : " fw-ops-strip-no-sync"}${economy ? "" : " fw-ops-strip-no-economy"}`} aria-label="Fulfillment tools and status">
-        {shipsView && (
-          <section className="fw-ops-tile fw-ops-sync-tile" aria-label="Approval verification">
-            <p className="fw-ops-kicker">APPROVAL VERIFICATION</p>
-            <ShipsSyncBar view={shipsView} compact />
-          </section>
-        )}
-
-        <details className="fw-ops-tile fw-ops-disclosure">
-          <summary>
-            <span className="fw-ops-summary-label">
-              <span className="fw-ops-kicker">SPENDING GUIDE</span>
-              <strong>${config.economy.pixelValueUsd.toFixed(2)} / pixel</strong>
-            </span>
-            <span className="fw-ops-expand-label">Budget rules <span aria-hidden="true">⌄</span></span>
-          </summary>
-          <div className="fw-ops-expanded">
-            <p>The order budget is the player&apos;s pixels multiplied by ${config.economy.pixelValueUsd.toFixed(2)}.</p>
-            <p>Buy for that amount or less. If the lowest price is higher, <strong>do not order</strong>. Flag the request with your source and price for an owner to review.</p>
-          </div>
-        </details>
-
-        {economy && (
-          <details className="fw-ops-tile fw-ops-disclosure">
-            <summary>
-              <span className="fw-ops-summary-label">
-                <span className="fw-ops-kicker">OWNER OVERVIEW</span>
-                <strong>Shop economy</strong>
-              </span>
-              <span className="fw-ops-expand-label">View stats <span aria-hidden="true">⌄</span></span>
-            </summary>
-            <div className="fw-ops-expanded fw-ops-economy">
-              <ShopEconomy economy={economy} />
-            </div>
-          </details>
-        )}
-      </div>
 
       {showingQueue && counts && !mineOnly && (
         <section className="fw-pipeline" aria-label="Fulfillment pipeline">
