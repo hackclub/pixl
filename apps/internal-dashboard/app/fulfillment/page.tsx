@@ -352,7 +352,7 @@ export default async function FulfillmentPage({
         }
       />
 
-      <div className={`fw-ops-strip${shipsView ? "" : " fw-ops-strip-no-sync"}`} aria-label="Fulfillment tools and status">
+      <div className={`fw-ops-strip${shipsView ? "" : " fw-ops-strip-no-sync"}${economy ? "" : " fw-ops-strip-no-economy"}`} aria-label="Fulfillment tools and status">
         {shipsView && (
           <section className="fw-ops-tile fw-ops-sync-tile" aria-label="Approval verification">
             <p className="fw-ops-kicker">APPROVAL VERIFICATION</p>
