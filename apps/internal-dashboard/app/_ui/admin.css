@@ -2465,97 +2465,91 @@ html[data-density="compact"] .hc-main {
   .fw-funding-disclosure-chevron { transition: none; }
 }
 
-
-/* Compact fulfillment tools: keeps policies and owner numbers available without
-   reserving three full-width rows above the order pipeline. */
-.fw-ops-strip {
+/* Fulfillment tools share the header action row; dropdowns never grow the page. */
+.fw-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  z-index: 30;
+}
+.fw-header-divider { width: 1px; height: 25px; background: var(--border); margin: 0 3px; }
+.fw-header-menu { position: relative; }
+.fw-header-menu > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.fw-header-menu > summary::-webkit-details-marker { display: none; }
+.fw-header-menu > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.fw-header-menu[open] > summary { background: var(--surface-hover); border-color: var(--primary); }
+.fw-header-chevron {
+  display: inline-block;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--muted);
+  transition: transform 150ms ease;
+}
+.fw-header-menu[open] .fw-header-chevron { transform: rotate(180deg); }
+.fw-header-menu-sub { font-size: 11px; color: var(--muted); }
+.fw-header-sync-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--hc-orange); flex: none; }
+.fw-header-sync-dot[data-state="ok"] { background: var(--hc-green); }
+.fw-header-sync-dot[data-state="down"] { background: var(--hc-red); }
+.fw-header-menu-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(350px, calc(100vw - 32px));
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
-  gap: 10px;
-  align-items: start;
-}
-.fw-ops-strip-no-sync {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-.fw-ops-strip-no-economy {
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-}
-.fw-ops-strip-no-sync.fw-ops-strip-no-economy {
-  grid-template-columns: minmax(0, 1fr);
-}
-.fw-ops-tile {
-  min-width: 0;
-  min-height: 62px;
+  gap: 11px;
+  padding: 14px;
+  z-index: 100;
+  max-height: min(70vh, 480px);
+  overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
-}
-.fw-ops-kicker {
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 750;
-  letter-spacing: .07em;
-}
-.fw-ops-sync-tile {
-  padding: 10px 12px;
-  border-left: 3px solid var(--hc-green);
-}
-.fw-ops-sync-tile:has(.fw-sync[data-state="stale"]) { border-left-color: var(--hc-orange); }
-.fw-ops-sync-tile:has(.fw-sync[data-state="down"]) { border-left-color: var(--hc-red); }
-.fw-ops-sync-tile .fw-sync-compact {
-  border: 0;
-  background: transparent;
-  border-radius: 0;
-  padding: 3px 0 0;
-  font-size: 12px;
-  gap: 8px;
-}
-.fw-ops-sync-tile .fw-sync-compact > span { min-width: 0; overflow-wrap: anywhere; }
-.fw-ops-sync-tile .fw-sync-compact-meta { color: var(--muted); }
-.fw-ops-sync-tile .fw-sync-compact form { flex: none; }
-.fw-ops-disclosure > summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 60px;
-  padding: 10px 12px;
-  cursor: pointer;
-  list-style: none;
-}
-.fw-ops-disclosure > summary::-webkit-details-marker { display: none; }
-.fw-ops-disclosure > summary:hover { background: var(--surface-hover); }
-.fw-ops-disclosure > summary:focus-visible { outline: 2px solid var(--primary); outline-offset: -3px; }
-.fw-ops-summary-label { display: grid; gap: 4px; min-width: 0; }
-.fw-ops-summary-label strong { font-size: 13px; line-height: 1.2; }
-.fw-ops-expand-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--secondary);
-  font-size: 11px;
-  white-space: nowrap;
-}
-.fw-ops-expand-label > span { display: inline-block; transition: transform 150ms ease; font-size: 15px; }
-.fw-ops-disclosure[open] .fw-ops-expand-label > span { transform: rotate(180deg); }
-.fw-ops-expanded {
-  display: grid;
-  gap: 8px;
-  padding: 12px;
-  border-top: 1px solid var(--border);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, .28);
   color: var(--secondary);
   font-size: 12px;
   line-height: 1.5;
 }
-.fw-ops-economy { min-width: 0; }
-@media (max-width: 900px) {
-  .fw-ops-strip:not(.fw-ops-strip-no-sync) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-  .fw-ops-sync-tile { grid-column: 1 / -1; }
+.fw-header-menu-title { color: var(--text); font-size: 14px; font-weight: 750; }
+.fw-header-rate { color: var(--text); font-size: 20px; font-weight: 750; font-variant-numeric: tabular-nums; }
+.fw-header-menu-popover .fw-sync-compact {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  gap: 12px;
 }
-@media (max-width: 560px) {
-  .fw-ops-strip { grid-template-columns: minmax(0, 1fr); }
-  .fw-ops-sync-tile { grid-column: auto; }
+.fw-header-menu-popover .fw-sync-compact > span { overflow-wrap: anywhere; }
+.fw-header-menu-popover .fw-sync-compact form { display: flex; justify-content: flex-start; }
+.fw-menu-economy dl { display: grid; gap: 0; }
+.fw-menu-economy dl > div { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+.fw-menu-economy dt { color: var(--secondary); }
+.fw-menu-economy dd { color: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fw-menu-economy-net dd { color: var(--hc-red); }
+.fw-menu-economy-net[data-positive="true"] dd { color: var(--hc-green); }
+.fw-menu-economy p { padding-top: 10px; line-height: 1.5; font-size: 11px; }
+@media (max-width: 640px) {
+  .fw-header-actions { gap: 6px; width: 100%; }
+  .fw-header-divider { display: none; }
+  .fw-header-menu-popover {
+    position: fixed;
+    top: 90px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-height: calc(100dvh - 110px);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .fw-ops-expand-label > span { transition: none; }
+  .fw-header-chevron { transition: none; }
 }
