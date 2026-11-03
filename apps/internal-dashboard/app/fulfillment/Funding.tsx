@@ -102,6 +102,9 @@ export function FundingBreakdown({ result, orderId }: { result: EligibilityResul
     .filter((p) => p.counted === "verified" && p.ships?.state === "approved")
     .reduce((sum, p) => sum + p.countedHours, 0);
   const otherVerifiedProjectHours = Math.max(0, r.verifiedHours - shipsVerifiedHours);
+  const coveragePercent = r.amount.cents > 0
+    ? Math.min(100, Math.max(0, Math.round((Math.max(0, r.remainingCents) / r.amount.cents) * 100)))
+    : 100;
   return (
     <div className="fw-funding">
       {r.projects.length > 0 ? (
@@ -125,6 +128,48 @@ export function FundingBreakdown({ result, orderId }: { result: EligibilityResul
         </ul>
       )}
 
+      <section className="fw-funding-summary" aria-label="Funding available for this order">
+        <div className="fw-funding-metrics">
+          <div><span>Verified earned</span><strong>{usd(r.verifiedFundingCents)}</strong></div>
+          <div><span>Already committed</span><strong>{usd(r.committedCents)}</strong></div>
+          <div><span>Available now</span><strong>{usd(r.remainingCents)}</strong></div>
+          <div><span>This order</span><strong>{usd(r.amount.cents)}</strong></div>
+        </div>
+        <div className="fw-funding-coverage">
+          <div className="fw-funding-coverage-head">
+            <span>Verified funds available for this order</span>
+            <strong>{coveragePercent}% of cost</strong>
+          </div>
+          <div
+            className="fw-funding-meter"
+            role="progressbar"
+            aria-label="Verified available funding compared with order cost"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={coveragePercent}
+          >
+            <span data-coverage={r.afterCents >= 0 ? "enough" : "short"} style={{ width: `${coveragePercent}%` }} />
+          </div>
+          <div className="fw-funding-outcome" data-state={r.afterCents >= 0 ? "enough" : "short"}>
+            <span>{r.afterCents >= 0 ? "Verified funds left after order" : "Verified funding shortfall"}</span>
+            <strong>{usd(Math.abs(r.afterCents))}</strong>
+          </div>
+        </div>
+        {r.unverifiedProjectFundingCents > 0 && (
+          <p className="fw-funding-caveat">
+            {usd(r.unverifiedProjectFundingCents)} in unverified project funding is <strong>not counted</strong> as available.
+          </p>
+        )}
+        {r.status !== "covered" && (
+          <p className="fw-funding-caveat">
+            Funding coverage alone does not authorize fulfillment. Resolve the verification or policy issue above first.
+          </p>
+        )}
+      </section>
+
+      <details className="fw-funding-evidence">
+        <summary>View evidence: projects, previous orders and reviewer payouts</summary>
+        <div className="fw-funding-evidence-body">
       <div className="fw-funding-scroll">
       <table className="fw-funding-table">
         <caption className="sr-only">Projects counted toward funding</caption>
@@ -274,6 +319,8 @@ export function FundingBreakdown({ result, orderId }: { result: EligibilityResul
         {r.integrations.unified ? "readable" : "unavailable"}. Ships{" "}
         {r.ships.fetchedAt == null ? "never synced" : `synced ${ageText(r.ships.ageMs ?? 0)}${r.ships.stale ? " (stale)" : ""}`}. Order #{orderId}.
       </p>
+        </div>
+      </details>
     </div>
   );
 }
