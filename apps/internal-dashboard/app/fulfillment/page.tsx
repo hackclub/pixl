@@ -61,9 +61,6 @@ export const dynamic = "force-dynamic";
 const TAB_KEYS = ["pending", "ordered", "credited", "shipped", "done", "cancelled", "flagged", "all", "leaderboard", "fulfillers"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
 
-// Keep the everyday fulfillment stages visible; uncommon stages live in Filters.
-const PRIMARY_QUEUE_TABS: readonly TabKey[] = ["pending", "ordered", "shipped", "done", "all"];
-
 // Lifetime shop P&L, fulfilled orders only. Both sides are scoped to the same
 // cohort (orders with an actual_cost_usd on file, i.e. credited or later), so
 // it compares fulfilled against fulfilled. New/Ordered orders aren't counted.
@@ -251,15 +248,6 @@ export default async function FulfillmentPage({
   // Owner-only: a financial rollup, not something a fulfiller needs to do the job.
   const economy = access.isOwner ? await shopEconomySummary() : null;
 
-  const pipelineStages = counts ? [
-    { key: "pending" as const, label: "New", count: counts.pending },
-    { key: "ordered" as const, label: "Ordered", count: counts.ordered },
-    { key: "credited" as const, label: "Credited", count: counts.credited },
-    { key: "shipped" as const, label: "Shipped", count: counts.shipped },
-    { key: "done" as const, label: "Done", count: counts.done },
-    { key: "cancelled" as const, label: "Cancelled", count: counts.cancelled },
-  ] : [];
-
   const tabs: { key: TabKey; label: string; count?: number }[] = [
     { key: "pending", label: "New", count: counts?.pending },
     { key: "ordered", label: "Ordered", count: counts?.ordered },
@@ -318,7 +306,7 @@ export default async function FulfillmentPage({
     <div className="flex flex-col gap-5">
       <PageHeader
         title={mineOnly ? "My queue" : "Fulfillment"}
-        description="Process player requests, place orders, and keep everything moving. Claim one to place the real order; tracking is DM'd to the buyer when it ships, and an order can be cancelled for a refund until someone claims it."
+        description="Find what needs attention, source within budget, and track each request through delivery."
         actions={
           <div className="fw-header-actions">
             {showingQueue ? (
@@ -396,47 +384,26 @@ export default async function FulfillmentPage({
       />
 
       {showingQueue && counts && !mineOnly && (
-        <section className="fw-pipeline" aria-label="Fulfillment pipeline">
-          <div className="fw-pipeline-heading">
-            <div>
-              <p className="fw-pipeline-eyebrow">ORDER WORKFLOW</p>
-              <h2 className="hc-heading text-lg">Fulfillment at a glance</h2>
-              <p className="hc-caption text-xs">All {counts.all.toLocaleString()} orders, not just this page or filter.</p>
-            </div>
-            <Link
-              href={hrefFor({ status: "flagged", q: "", elig: null, verify: null, sort: "newest" })}
-              className="fw-pipeline-flags"
-            >
-              Over budget <strong>{counts.flagged.toLocaleString()}</strong>
-            </Link>
+        <section className="fw-queue-nav" aria-label="Fulfillment queues">
+          <div className="fw-queue-nav-intro">
+            <strong>Orders</strong>
+            <span>{counts.all.toLocaleString()} total</span>
           </div>
-          <nav className="fw-pipeline-stages" aria-label="Jump to an order stage">
-            {pipelineStages.map((stage) => (
+          <nav className="fw-queue-stages" aria-label="Order stages">
+            {tabs.map((tab) => (
               <Link
-                key={stage.key}
-                href={hrefFor({ status: stage.key, q: "", elig: null, verify: null, sort: "newest" })}
-                className="fw-pipeline-stage"
-                data-stage={stage.key}
-                aria-current={active === stage.key ? "page" : undefined}
+                key={tab.key}
+                href={hrefFor({ status: tab.key, order: undefined })}
+                className="fw-queue-stage"
+                data-stage={tab.key}
+                aria-current={active === tab.key ? "page" : undefined}
+                title={`${tab.label}: ${tab.count ?? 0} orders across the whole shop`}
               >
-                <span>{stage.label}</span>
-                <strong className="tabular-nums">{stage.count.toLocaleString()}</strong>
+                {tab.label}
+                <span className="fw-queue-count tabular-nums">{(tab.count ?? 0).toLocaleString()}</span>
               </Link>
             ))}
           </nav>
-          <div className="fw-pipeline-track" role="img" aria-label="Distribution of all orders by fulfillment stage">
-            {pipelineStages.map((stage) => stage.count > 0 ? (
-              <span
-                key={stage.key}
-                data-stage={stage.key}
-                style={{ width: `${(stage.count / Math.max(1, counts.all)) * 100}%` }}
-                title={`${stage.label}: ${stage.count}`}
-              />
-            ) : null)}
-          </div>
-          <p className="fw-pipeline-note">
-            Select a stage to work on its orders. The over-budget queue is a flag, not an additional stage.
-          </p>
         </section>
       )}
 
@@ -448,9 +415,10 @@ export default async function FulfillmentPage({
         <div className="fw-grid" data-explicit={explicitSelection ? "true" : undefined}>
           <section className="fw-list" aria-label="Requests">
             <div className="fw-list-head">
-              <h2 className="hc-heading text-lg">
-                Requests <span className="hc-muted">({orders.length})</span>
-              </h2>
+              <div className="fw-list-heading">
+                <h2 className="hc-heading text-lg">Requests</h2>
+                <span className="hc-muted text-xs">{orders.length.toLocaleString()} shown{hasNext ? " on this page" : ""}</span>
+              </div>
               <form action="/fulfillment" method="get" role="search" className="fw-search">
                 {active !== "pending" && <input type="hidden" name="status" value={active} />}
                 {mineOnly && <input type="hidden" name="mine" value="1" />}
@@ -463,32 +431,6 @@ export default async function FulfillmentPage({
                 </button>
               </form>
             </div>
-            {!mineOnly && (
-              <nav className="fw-chips fw-stage-tabs" aria-label="Order stage">
-                {tabs.filter((t) => PRIMARY_QUEUE_TABS.includes(t.key)).map((t) => (
-                  <Link
-                    key={t.key}
-                    href={hrefFor({ status: t.key, order: undefined })}
-                    className="fw-chip"
-                    aria-current={t.key === active ? "page" : undefined}
-                  >
-                    {t.label}
-                    {t.count !== undefined && <CountBadge>{t.count}</CountBadge>}
-                  </Link>
-                ))}
-                {!PRIMARY_QUEUE_TABS.includes(active) && tabs.filter((t) => t.key === active).map((t) => (
-                  <Link
-                    key={t.key}
-                    href={hrefFor({ status: t.key, order: undefined })}
-                    className="fw-chip"
-                    aria-current="page"
-                  >
-                    {t.label}
-                    {t.count !== undefined && <CountBadge>{t.count}</CountBadge>}
-                  </Link>
-                ))}
-              </nav>
-            )}
             {showingQueue && (
               <div className="fw-filters-shell">
                 <details className="fw-filters" open={Boolean(eligFilter || verifyFilter || sortKey !== "newest")}>
@@ -501,27 +443,6 @@ export default async function FulfillmentPage({
                     )}
                   </summary>
                   <div className="fw-filter-body">
-                    {!mineOnly && (
-                      <div className="fw-filter-group">
-                        <div className="fw-filter-group-title">
-                          <strong>Other stages</strong>
-                          <span>Less commonly used order queues</span>
-                        </div>
-                        <nav className="fw-chips" aria-label="Other order stages">
-                          {tabs.filter((t) => !PRIMARY_QUEUE_TABS.includes(t.key)).map((t) => (
-                            <Link
-                              key={t.key}
-                              href={hrefFor({ status: t.key, order: undefined })}
-                              className="fw-chip"
-                              aria-current={t.key === active ? "page" : undefined}
-                            >
-                              {t.label}
-                              {t.count !== undefined && <CountBadge>{t.count}</CountBadge>}
-                            </Link>
-                          ))}
-                        </nav>
-                      </div>
-                    )}
                     <div className="fw-filter-group">
                       <div className="fw-filter-group-title">
                         <strong>Funding</strong>

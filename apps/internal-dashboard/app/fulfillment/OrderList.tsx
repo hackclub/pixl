@@ -4,7 +4,6 @@ import { SHOP_CATEGORY_LABELS } from "@/lib/shopCategories";
 import { isSafeImageUrl } from "@/lib/safeUrl";
 import { Badge, Icon, type Tone } from "@/app/_ui/ui";
 import type { EligibilityResult } from "@/lib/eligibility/engine";
-import { SlackHandle } from "./SlackHandle";
 import { FundingBadge } from "./Funding";
 import { listSummary } from "@/lib/eligibility/format";
 import { STAGE_LABEL, STAGE_TONE, ageLabel, lastUpdated, usdBudget } from "./shared";
@@ -62,19 +61,11 @@ export function OrderList({
   eligibility: Map<number, EligibilityResult>;
 }) {
   return (
-    <div className="fw-table" role="list" aria-label="Fulfillment requests">
-      <div className="fw-row fw-head" aria-hidden>
-        <span>Item</span>
-        <span>Requester</span>
-        <span>Budget</span>
-        <span>Pixels</span>
-        <span>Type</span>
-        <span>Status</span>
-        <span>Funding</span>
-        <span>Updated</span>
-      </div>
+    <div className="fw-request-list" role="list" aria-label="Fulfillment requests">
       {orders.map((o) => {
         const selected = o.id === selectedId;
+        const funding = eligibility.get(Number(o.id)) ?? null;
+        const age = ageLabel(lastUpdated(o), now);
         return (
           <Link
             key={o.id}
@@ -82,52 +73,38 @@ export function OrderList({
             scroll={false}
             role="listitem"
             aria-current={selected ? "true" : undefined}
-            className="fw-row fw-item"
+            className="fw-request-row"
             data-selected={selected ? "true" : undefined}
           >
-            <span className="fw-cell fw-cell-item">
-              <ItemThumb src={o.item_image_url} />
-              <span className="min-w-0">
-                <span className="fw-name">
+            <span className="fw-request-primary">
+              <ItemThumb src={o.item_image_url} size={44} />
+              <span className="fw-request-description">
+                <span className="fw-request-name">
                   {o.quantity > 1 ? `${o.quantity}x ` : ""}
                   {o.item_name || "(item removed)"}
                 </span>
-                {o.option && <span className="fw-sub">{o.option}</span>}
-                {o.item_beacon_locked && (
-                  <span className="mt-1 flex">
-                    <Badge tone="yellow" icon="rep">
-                      Beacon reward
-                    </Badge>
-                  </span>
-                )}
-                {o.flagged_at && <span className="fw-flag">Over budget</span>}
+                <span className="fw-request-byline">
+                  {nameFor(o)}
+                  {age && <span className="hc-muted"> · {age}</span>}
+                </span>
+                {o.option && <span className="fw-request-option">{o.option}</span>}
               </span>
             </span>
-            <span className="fw-cell min-w-0">
-              <span className="fw-name">{nameFor(o)}</span>
-              {o.player_slack && (
-                <span className="fw-sub">
-                  <SlackHandle id={o.player_slack} />
-                </span>
-              )}
+            <span className="fw-request-amount">
+              <strong className="tabular-nums">${usdBudget(o.price)}</strong>
+              <span className="tabular-nums">{o.price.toLocaleString()} px</span>
             </span>
-            <span className="fw-cell tabular-nums">${usdBudget(o.price)}</span>
-            <span className="fw-cell tabular-nums fw-px">{o.price.toLocaleString()} px</span>
-            <span className="fw-cell">
-              <TypeBadge category={o.item_category} />
-            </span>
-            <span className="fw-cell">
+            <span className="fw-request-meta">
               <span className="fw-status" data-tone={STAGE_TONE[o.status] ?? "neutral"}>
                 {STAGE_LABEL[o.status] ?? o.status}
               </span>
-            </span>
-            <span className="fw-cell">
-              <FundingBadge short status={eligibility.get(Number(o.id))?.status ?? null} />
-              <span className="fw-sub fw-fund-sub" title={eligibility.get(Number(o.id))?.verificationSummary}>
-                {listSummary(eligibility.get(Number(o.id)) ?? null)}
+              {o.flagged_at && <span className="fw-request-flag">Over budget</span>}
+              {o.item_beacon_locked && <Badge tone="yellow" icon="rep">Beacon</Badge>}
+              <FundingBadge short status={funding?.status ?? null} />
+              <span className="fw-request-funding-note" title={funding?.verificationSummary}>
+                {listSummary(funding)}
               </span>
             </span>
-            <span className="fw-cell hc-muted whitespace-nowrap">{ageLabel(lastUpdated(o), now)}</span>
           </Link>
         );
       })}
