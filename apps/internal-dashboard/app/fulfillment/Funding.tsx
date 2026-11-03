@@ -89,6 +89,62 @@ function signedPixelsText(pixels: number): string {
   return `${pixels < 0 ? "−" : ""}${Math.abs(pixels).toLocaleString(undefined, { maximumFractionDigits: 2 })} px`;
 }
 
+/**
+ * Collapsed by default: the whole summary (including the meter) toggles the
+ * underlying evidence without any client-side state or extra data requests.
+ */
+export function FundingDisclosure({ result, orderId }: { result: EligibilityResult | null; orderId: number }) {
+  const balance = result?.remainingCents ?? 0;
+  const cost = result?.amount.cents ?? 0;
+  const after = result?.afterCents ?? 0;
+  const percent = result
+    ? cost > 0 ? Math.min(100, Math.max(0, Math.round((Math.max(0, balance) / cost) * 100))) : 100
+    : 0;
+  const covered = result?.status === "covered" && after >= 0;
+
+  return (
+    <details className="fw-funding-disclosure" data-state={!result ? "unknown" : covered ? "covered" : "check"}>
+      <summary className="fw-funding-disclosure-trigger">
+        <span className="fw-funding-disclosure-top">
+          <span className="fw-funding-disclosure-title">Funding check</span>
+          <span className="fw-funding-disclosure-badges">
+            {result ? (
+              <>
+                <VerificationBadge label={result.verification} />
+                <FundingBadge status={result.status} short />
+              </>
+            ) : <FundingBadge status={null} />}
+          </span>
+          <span className="fw-funding-disclosure-chevron" aria-hidden="true">⌄</span>
+        </span>
+        {result ? (
+          <>
+            <span className="fw-funding-disclosure-totals">
+              <span>Verified balance <strong>{usd(balance)}</strong></span>
+              <span>Order <strong>{usd(cost)}</strong></span>
+              <span>{after >= 0 ? "After order" : "Shortfall"} <strong>{usd(after >= 0 ? after : -after)}</strong></span>
+            </span>
+            <span className="fw-funding-disclosure-meter" aria-hidden="true">
+              <span style={{ width: `${percent}%` }} />
+            </span>
+            {!covered && (
+              <span className="fw-funding-disclosure-warning">
+                {result.status === "restricted" ? "Restricted — do not fulfill without resolving the restriction." : "Check funding and eligibility before fulfilling."}
+              </span>
+            )}
+          </>
+        ) : (
+          <span className="fw-funding-disclosure-warning">Eligibility evidence unavailable — verify manually before claiming.</span>
+        )}
+        <span className="fw-funding-disclosure-hint">View funding breakdown and evidence</span>
+      </summary>
+      <div className="fw-funding-disclosure-content">
+        <FundingBreakdown result={result} orderId={orderId} />
+      </div>
+    </details>
+  );
+}
+
 export function FundingBreakdown({ result, orderId }: { result: EligibilityResult | null; orderId: number }) {
   if (!result) {
     return (
