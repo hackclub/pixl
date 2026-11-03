@@ -22,6 +22,7 @@ describe("filters", () => {
     expect(parseFilters({})).toEqual({ q: "", tier: "all", shipped: "all" });
     expect(parseFilters({ q: "  bot ", tier: "3", shipped: "shipped" })).toEqual({ q: "bot", tier: "3", shipped: "shipped" });
     expect(parseFilters({ tier: "9", shipped: "maybe" })).toEqual({ q: "", tier: "all", shipped: "all" });
+    expect(parseFilters({ shipped: "unshipped" }).shipped).toBe("all");
     expect(parseFilters({ q: ["a", "b"] }).q).toBe("a");
     expect(parseFilters({ q: "x".repeat(200) }).q.length).toBe(64);
   });

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { hostIsPublic, isBlockedIp, safeJsonGet, type LookupImpl } from "./ssrfGuard";
+import { hostIsPublic, isBlockedIp, MAX_SAFE_JSON_BYTES, safeJsonGet, type LookupImpl } from "./ssrfGuard";
 import { startHttpServer, startHttpsServer, tlsFixture, type Handler } from "./testTls";
 
 function lookupOf(...addrs: { address: string; family: number }[]): LookupImpl {
@@ -235,6 +235,45 @@ describe("safeJsonGet credential handling", () => {
       expect(out).toBeNull();
     } finally {
       await a.close();
+    }
+  });
+});
+
+describe("safeJsonGet response bounds", () => {
+  const guard = {
+    lookupImpl: lookupOf({ address: "127.0.0.1", family: 4 }),
+    isBlockedIp: (ip: string) => ip !== "127.0.0.1",
+  };
+
+  test("accepts an ordinary bounded JSON response", async () => {
+    const s = await startHttpServer((_req, res) => res.writeHead(200).end('{"ok":true}'));
+    try {
+      expect((await safeJsonGet(`http://git.example.test:${s.port}/api`, {}, guard))?.json).toEqual({ ok: true });
+    } finally {
+      await s.close();
+    }
+  });
+
+  test("rejects a declared oversized response before buffering it", async () => {
+    const s = await startHttpServer((_req, res) =>
+      res.writeHead(200, { "content-length": String(MAX_SAFE_JSON_BYTES + 1) }).end("{}"),
+    );
+    try {
+      expect(await safeJsonGet(`http://git.example.test:${s.port}/api`, {}, guard)).toBeNull();
+    } finally {
+      await s.close();
+    }
+  });
+
+  test("stops an oversized streamed response without Content-Length", async () => {
+    const s = await startHttpServer((_req, res) => {
+      res.writeHead(200, { "transfer-encoding": "chunked" });
+      res.end(Buffer.alloc(MAX_SAFE_JSON_BYTES + 1024, 0x20));
+    });
+    try {
+      expect(await safeJsonGet(`http://git.example.test:${s.port}/api`, {}, guard)).toBeNull();
+    } finally {
+      await s.close();
     }
   });
 });

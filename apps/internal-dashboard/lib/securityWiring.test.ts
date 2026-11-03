@@ -162,6 +162,15 @@ describe("routes", () => {
     expect(src("app/api/auth/login/route.ts")).toMatch(/secure: true/);
     expect(src("lib/session.ts")).toContain("secure: secureCookies()");
   });
+  test("dashboard headers restrict external scripts and sensitive referrers", () => {
+    const config = src("next.config.ts");
+    expect(config).toContain("script-src 'self'");
+    expect(config).toContain("object-src 'none'");
+    expect(config).toContain("base-uri 'self'");
+    expect(config).toContain("form-action 'self'");
+    expect(config).toContain("Referrer-Policy");
+  });
+
   test("shop image URL fetch is pinned and capped", () => {
     const body = fnBody("app/actions.ts", "async function uploadShopImageFromUrl");
     expect(body).toContain("safeBinaryGet(");

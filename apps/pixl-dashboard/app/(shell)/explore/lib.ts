@@ -35,7 +35,7 @@ export function parseFilters(sp: Record<string, string | string[] | undefined>):
   return {
     q,
     tier: t === "1" || t === "2" || t === "3" || t === "4" ? t : "all",
-    shipped: s === "shipped" || s === "unshipped" ? s : "all",
+    shipped: s === "shipped" ? s : "all",
   };
 }
 
