@@ -248,6 +248,15 @@ export default async function FulfillmentPage({
   // Owner-only: a financial rollup, not something a fulfiller needs to do the job.
   const economy = access.isOwner ? await shopEconomySummary() : null;
 
+  const pipelineStages = counts ? [
+    { key: "pending" as const, label: "New", count: counts.pending },
+    { key: "ordered" as const, label: "Ordered", count: counts.ordered },
+    { key: "credited" as const, label: "Credited", count: counts.credited },
+    { key: "shipped" as const, label: "Shipped", count: counts.shipped },
+    { key: "done" as const, label: "Done", count: counts.done },
+    { key: "cancelled" as const, label: "Cancelled", count: counts.cancelled },
+  ] : [];
+
   const tabs: { key: TabKey; label: string; count?: number }[] = [
     { key: "pending", label: "New", count: counts?.pending },
     { key: "ordered", label: "Ordered", count: counts?.ordered },
@@ -384,26 +393,47 @@ export default async function FulfillmentPage({
       />
 
       {showingQueue && counts && !mineOnly && (
-        <section className="fw-queue-nav" aria-label="Fulfillment queues">
-          <div className="fw-queue-nav-intro">
-            <strong>Orders</strong>
-            <span>{counts.all.toLocaleString()} total</span>
+        <section className="fw-pipeline" aria-label="Fulfillment pipeline">
+          <div className="fw-pipeline-heading">
+            <div>
+              <p className="fw-pipeline-eyebrow">ORDER WORKFLOW</p>
+              <h2 className="hc-heading text-lg">Fulfillment at a glance</h2>
+              <p className="hc-caption text-xs">All {counts.all.toLocaleString()} orders, not just this page or filter.</p>
+            </div>
+            <Link
+              href={hrefFor({ status: "flagged", q: "", elig: null, verify: null, sort: "newest" })}
+              className="fw-pipeline-flags"
+            >
+              Over budget <strong>{counts.flagged.toLocaleString()}</strong>
+            </Link>
           </div>
-          <nav className="fw-queue-stages" aria-label="Order stages">
-            {tabs.map((tab) => (
+          <nav className="fw-pipeline-stages" aria-label="Jump to an order stage">
+            {pipelineStages.map((stage) => (
               <Link
-                key={tab.key}
-                href={hrefFor({ status: tab.key, order: undefined })}
-                className="fw-queue-stage"
-                data-stage={tab.key}
-                aria-current={active === tab.key ? "page" : undefined}
-                title={`${tab.label}: ${tab.count ?? 0} orders across the whole shop`}
+                key={stage.key}
+                href={hrefFor({ status: stage.key, q: "", elig: null, verify: null, sort: "newest" })}
+                className="fw-pipeline-stage"
+                data-stage={stage.key}
+                aria-current={active === stage.key ? "page" : undefined}
               >
-                {tab.label}
-                <span className="fw-queue-count tabular-nums">{(tab.count ?? 0).toLocaleString()}</span>
+                <span>{stage.label}</span>
+                <strong className="tabular-nums">{stage.count.toLocaleString()}</strong>
               </Link>
             ))}
           </nav>
+          <div className="fw-pipeline-track" role="img" aria-label="Distribution of all orders by fulfillment stage">
+            {pipelineStages.map((stage) => stage.count > 0 ? (
+              <span
+                key={stage.key}
+                data-stage={stage.key}
+                style={{ width: `${(stage.count / Math.max(1, counts.all)) * 100}%` }}
+                title={`${stage.label}: ${stage.count}`}
+              />
+            ) : null)}
+          </div>
+          <p className="fw-pipeline-note">
+            Select a stage to work on its orders. The over-budget queue is a flag, not an additional stage.
+          </p>
         </section>
       )}
 
