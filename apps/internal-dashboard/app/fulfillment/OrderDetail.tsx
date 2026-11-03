@@ -17,6 +17,7 @@ import {
 import type { EligibilityResult } from "@/lib/eligibility/engine";
 import { SlackHandle } from "./SlackHandle";
 import { FundingDisclosure } from "./Funding";
+import { ELIGIBILITY_HINT } from "@/lib/eligibility/format";
 import { EditFulfillmentInfo, FlagControls, OrderActions } from "./OrderActions";
 import { ItemThumb, TypeBadge } from "./OrderList";
 import { STAGE_HINT, STAGE_LABEL, STAGE_TONE, SafeLink, slackLink, usdBudget } from "./shared";
@@ -227,6 +228,14 @@ export function OrderDetail({
         </Callout>
       )}
 
+      {actionable && eligibility?.status !== "covered" && (
+        <Callout tone={eligibility?.status === "restricted" ? "danger" : "warning"} icon="important">
+          <strong>Funding needs attention.</strong>{" "}
+          {eligibility ? ELIGIBILITY_HINT[eligibility.status] : "Eligibility evidence could not be loaded."}
+          {" "}Resolve this before proceeding with the order. The server rechecks eligibility on claim.
+        </Callout>
+      )}
+
       <div className="fw-cols">
         <div className="fw-col">
           <Panel title="Shipping info" icon="pin">
@@ -235,6 +244,29 @@ export function OrderDetail({
           {o.buyer_note && (
             <Panel title="Buyer note" icon="message">
               <p className="fw-note">{o.buyer_note}</p>
+            </Panel>
+          )}
+
+          {actionable && /robux/i.test(o.item_name ?? "") && (
+            <TextLink href="https://www.roblox.com/fr/shopgiftcards?location=us&locale=us_us" external className="text-sm">
+              Buy Robux here
+            </TextLink>
+          )}
+
+          {visible.any && (
+            <Panel title="Actions" icon="bolt">
+              <div className="flex flex-col gap-3">
+                {visible.primary && <OrderActions order={o} mine={mine} ownOrder={ownOrder} canManage={canManage} />}
+                {visible.flag && <FlagControls order={o} canManage={canManage} budget={budget} />}
+                {visible.contact && o.player_slack && (
+                  <div>
+                    <ButtonLink href={slackLink(o.player_slack)} external variant="outline" size="sm" icon="message">
+                      Contact buyer
+                    </ButtonLink>
+                  </div>
+                )}
+                {visible.edit && <EditFulfillmentInfo order={o} />}
+              </div>
             </Panel>
           )}
         </div>
@@ -283,29 +315,6 @@ export function OrderDetail({
           )}
         </div>
       </div>
-
-      {actionable && /robux/i.test(o.item_name ?? "") && (
-        <TextLink href="https://www.roblox.com/fr/shopgiftcards?location=us&locale=us_us" external className="text-sm">
-          Buy Robux here
-        </TextLink>
-      )}
-
-      {visible.any && (
-        <Panel title="Actions" icon="bolt">
-          <div className="flex flex-col gap-3">
-            {visible.primary && <OrderActions order={o} mine={mine} ownOrder={ownOrder} canManage={canManage} />}
-            {visible.flag && <FlagControls order={o} canManage={canManage} budget={budget} />}
-            {visible.contact && o.player_slack && (
-              <div>
-                <ButtonLink href={slackLink(o.player_slack)} external variant="outline" size="sm" icon="message">
-                  Contact buyer
-                </ButtonLink>
-              </div>
-            )}
-            {visible.edit && <EditFulfillmentInfo order={o} />}
-          </div>
-        </Panel>
-      )}
 
       <FundingDisclosure key={o.id} result={eligibility} orderId={o.id} />
     </article>
