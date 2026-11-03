@@ -2138,15 +2138,24 @@ html[data-density="compact"] .hc-main {
   border-radius: var(--radius-lg);
 }
 .fw-list-head {
+  position: relative;
+  z-index: 5;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 16px 16px 8px;
+  gap: 10px;
+  padding: 12px 14px;
 }
-.fw-search { display: flex; gap: 8px; flex: 1 1 220px; max-width: 360px; }
+.fw-list-tools { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 290px; justify-content: flex-end; }
+.fw-search { display: flex; align-items: center; gap: 6px; min-width: 0; width: min(300px, 100%); }
 .fw-search input { min-width: 0; flex: 1; }
+.fw-search button { display: inline-flex; align-items: center; justify-content: center; flex: none; }
+@media (max-width: 600px) {
+  .fw-list-head { padding: 10px; }
+  .fw-list-tools { flex-basis: 100%; }
+  .fw-search { width: 100%; flex: 1 1 auto; }
+}
 .fw-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 16px 12px; }
 .fw-chip {
   display: inline-flex;
@@ -2166,7 +2175,7 @@ html[data-density="compact"] .hc-main {
 .fw-chip:focus-visible,
 .fw-request-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
 
-.fw-filters-shell { padding: 0 16px 12px; }
+.fw-filters-shell { position: relative; padding: 0; flex: none; }
 .fw-filter-toggle {
   display: inline-flex;
   align-items: center;
@@ -2201,13 +2210,20 @@ html[data-density="compact"] .hc-main {
   color: var(--text);
 }
 .fw-filter-body {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 20;
   display: grid;
   gap: 16px;
-  margin-top: 10px;
+  width: min(430px, calc(100vw - 40px));
+  max-height: min(65vh, 540px);
+  overflow-y: auto;
   padding: 14px;
-  background: var(--sunken);
+  background: var(--surface);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .24);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
 }
 .fw-filter-group { display: grid; gap: 8px; }
 .fw-filter-group-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; font-size: 13px; }
