@@ -105,7 +105,10 @@ export function parseSort(v: string | undefined): SortKey {
 }
 
 export function listSummary(r: EligibilityResult | null): string {
-  if (!r) return "Not loaded";
+  if (!r) return "Evidence unavailable";
+  if (r.status === "restricted") return "Restriction blocks fulfillment";
+  if (r.status === "review_required") return "Policy review required";
+  if (r.status === "unverified") return "Funding not established";
   if (r.verification !== "verified") return VERIFICATION_LABEL[r.verification];
   const hours = `${r.verifiedHours % 1 === 0 ? r.verifiedHours.toFixed(0) : r.verifiedHours.toFixed(1)}h`;
   if (r.status === "insufficient" || r.afterCents < 0) return `${hours} · short ${usd(-r.afterCents)}`;
