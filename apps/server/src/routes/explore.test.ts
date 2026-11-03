@@ -119,6 +119,14 @@ describe("public project publication policy", () => {
     expect(detail).toMatch(/\.eq\("id", id\)\s*\.eq\("status", "approved"\)/);
   });
 
+  test("other players' authenticated profiles don't reveal unfinished projects", () => {
+    const profile = source.slice(
+      source.indexOf('router.get("/api/explore/players/:id",'),
+      source.indexOf('router.get("/api/explore/players/:id/public",'),
+    );
+    expect(profile).toMatch(/\.select\(PUBLIC_PROJECT_COLUMNS\)\s*\.eq\("user_id", id\)\s*\.eq\("status", "approved"\)/);
+  });
+
   test("public player-directory counts don't reveal unfinished projects", () => {
     const directory = source.slice(
       source.indexOf('router.get("/api/explore/players",'),
