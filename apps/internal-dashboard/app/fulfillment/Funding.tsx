@@ -21,14 +21,36 @@ export function VerificationBadge({ label }: { label: keyof typeof VERIFICATION_
   );
 }
 
-export function ShipsSyncBar({ view }: { view: ShipsView }) {
+export function ShipsSyncBar({ view, compact = false }: { view: ShipsView; compact?: boolean }) {
   const snap = view.snapshot;
   const ok = !!snap && view.fresh && !view.error;
   const source = snap?.source === "airbridge" ? "Unified / Airbridge" : "Ships";
   return (
-    <div className="fw-sync" data-state={ok ? "ok" : snap ? "stale" : "down"} role="status">
+    <div className={compact ? "fw-sync fw-sync-compact" : "fw-sync"} data-state={ok ? "ok" : snap ? "stale" : "down"} role="status">
       <span>
-        {snap ? (
+        {compact ? (
+          snap ? (
+            <>
+              <strong>{source}</strong> · {ok ? "Synced" : "Stale"} {syncAgeText(view.ageMs)}
+              <span className="fw-sync-compact-meta"> · {snap.pixlCount} PIXL entries</span>
+              {snap.source === "airbridge" && snap.syncHealth && (
+                <span className="fw-sync-compact-meta">
+                  {" · "}{snap.syncHealth.current}/{snap.syncHealth.total} current
+                  {" · "}{snap.syncHealth.unsynced} unsynced
+                  {" · "}{snap.syncHealth.stale} stale
+                  {" · "}{snap.syncHealth.errors} errors
+                  {" · "}{snap.syncHealth.identityReview} identity reviews
+                </span>
+              )}
+              {snap.invalidCount + snap.duplicateCount > 0 && (
+                <span className="fw-sync-compact-meta"> · {snap.invalidCount + snap.duplicateCount} unusable</span>
+              )}
+              {view.error && <Muted> · {view.error}</Muted>}
+            </>
+          ) : (
+            <>Verification not synced. Project approvals cannot be verified. Reviewer payout funding may still be available.</>
+          )
+        ) : snap ? (
           <>
             {snap.source === "airbridge" && snap.syncHealth ? (
               <>
@@ -54,7 +76,7 @@ export function ShipsSyncBar({ view }: { view: ShipsView }) {
       </span>
       <form action={refreshShipsSnapshot}>
         <ActionButton variant="outline" pendingLabel="Refreshing...">
-          Refresh verification
+          {compact ? "Refresh" : "Refresh verification"}
         </ActionButton>
       </form>
     </div>
