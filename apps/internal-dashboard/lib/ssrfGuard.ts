@@ -184,8 +184,8 @@ function requestOnce(
         // A redirect's body is irrelevant; do not buffer a host-controlled
         // response just to read its Location header.
         if (status >= 300 && status < 400) {
-          res.resume();
           resolve({ status, location, body: "" });
+          res.destroy();
           return;
         }
         const declared = Number(res.headers["content-length"]);
