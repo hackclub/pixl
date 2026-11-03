@@ -2477,6 +2477,12 @@ html[data-density="compact"] .hc-main {
 .fw-ops-strip-no-sync {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
+.fw-ops-strip-no-economy {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+}
+.fw-ops-strip-no-sync.fw-ops-strip-no-economy {
+  grid-template-columns: minmax(0, 1fr);
+}
 .fw-ops-tile {
   min-width: 0;
   min-height: 62px;
@@ -2543,7 +2549,7 @@ html[data-density="compact"] .hc-main {
 }
 .fw-ops-economy { min-width: 0; }
 @media (max-width: 900px) {
-  .fw-ops-strip { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .fw-ops-strip:not(.fw-ops-strip-no-sync) { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .fw-ops-sync-tile { grid-column: 1 / -1; }
 }
 @media (max-width: 560px) {
