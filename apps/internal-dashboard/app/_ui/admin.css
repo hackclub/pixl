@@ -2138,15 +2138,24 @@ html[data-density="compact"] .hc-main {
   border-radius: var(--radius-lg);
 }
 .fw-list-head {
+  position: relative;
+  z-index: 5;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 16px 16px 8px;
+  gap: 10px;
+  padding: 12px 14px;
 }
-.fw-search { display: flex; gap: 8px; flex: 1 1 220px; max-width: 360px; }
+.fw-list-tools { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 290px; justify-content: flex-end; }
+.fw-search { display: flex; align-items: center; gap: 6px; min-width: 0; width: min(300px, 100%); }
 .fw-search input { min-width: 0; flex: 1; }
+.fw-search button { display: inline-flex; align-items: center; justify-content: center; flex: none; }
+@media (max-width: 600px) {
+  .fw-list-head { padding: 10px; }
+  .fw-list-tools { flex-basis: 100%; }
+  .fw-search { width: 100%; flex: 1 1 auto; }
+}
 .fw-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 16px 12px; }
 .fw-chip {
   display: inline-flex;
@@ -2166,7 +2175,7 @@ html[data-density="compact"] .hc-main {
 .fw-chip:focus-visible,
 .fw-request-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
 
-.fw-filters-shell { padding: 0 16px 12px; }
+.fw-filters-shell { position: relative; padding: 0; flex: none; }
 .fw-filter-toggle {
   display: inline-flex;
   align-items: center;
@@ -2201,13 +2210,20 @@ html[data-density="compact"] .hc-main {
   color: var(--text);
 }
 .fw-filter-body {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 20;
   display: grid;
   gap: 16px;
-  margin-top: 10px;
+  width: min(430px, calc(100vw - 40px));
+  max-height: min(65vh, 540px);
+  overflow-y: auto;
   padding: 14px;
-  background: var(--sunken);
+  background: var(--surface);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .24);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
 }
 .fw-filter-group { display: grid; gap: 8px; }
 .fw-filter-group-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; font-size: 13px; }
@@ -2336,55 +2352,45 @@ html[data-density="compact"] .hc-main {
 .fw-funding-list { margin: 4px 0 0; padding-left: 16px; font-size: 12px; }
 
 
-.fw-queue-nav {
-  display: flex;
-  align-items: center;
+/* Fulfillment workflow summary; all numbers come from server-side order counts. */
+.fw-pipeline {
+  display: grid;
   gap: 14px;
-  min-width: 0;
-  padding: 10px 12px;
+  padding: 18px;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
 }
-.fw-queue-nav-intro { display: flex; flex-direction: column; gap: 1px; flex: none; font-size: 13px; }
-.fw-queue-nav-intro span { color: var(--muted); font-size: 11px; }
-.fw-queue-stages {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  padding: 3px;
-  flex: 1;
-  overflow-x: auto;
-  scrollbar-width: thin;
+.fw-pipeline-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.fw-pipeline-eyebrow { margin-bottom: 5px; color: var(--muted); font-size: 10px; font-weight: 800; letter-spacing: .13em; }
+.fw-pipeline-flags {
+  display: inline-flex; align-items: center; gap: 10px; padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--hc-orange) 45%, var(--border));
+  border-radius: var(--radius); background: color-mix(in srgb, var(--hc-orange) 9%, var(--surface));
+  font-size: 12px; font-weight: 700;
 }
-.fw-queue-stage {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex: none;
-  min-height: 33px;
-  padding: 5px 10px;
-  border: 1px solid transparent;
-  border-radius: var(--radius);
-  color: var(--secondary);
-  font-size: 12px;
-  font-weight: 700;
-  white-space: nowrap;
+.fw-pipeline-flags strong { color: var(--hc-orange); font-variant-numeric: tabular-nums; font-size: 17px; }
+.fw-pipeline-stages { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.fw-pipeline-stage {
+  min-width: 0; display: grid; gap: 5px; padding: 12px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--sunken); font-size: 12px; color: var(--secondary);
 }
-.fw-queue-stage:hover { background: var(--surface-hover); color: var(--text); }
-.fw-queue-stage[aria-current="page"] {
-  border-color: var(--primary);
-  color: var(--text);
-  background: color-mix(in srgb, var(--primary) 14%, var(--surface));
+.fw-pipeline-stage strong { color: var(--text); font-size: 24px; line-height: 1.1; }
+.fw-pipeline-stage:hover { background: var(--surface-hover); }
+.fw-pipeline-stage[aria-current="page"] { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
+.fw-pipeline-stage:focus-visible, .fw-pipeline-flags:focus-visible, .fw-funding-evidence summary:focus-visible {
+  outline: 2px solid var(--primary); outline-offset: 3px;
 }
-.fw-queue-stage:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
-.fw-queue-count { color: var(--muted); font-size: 11px; font-weight: 700; }
-.fw-queue-stage[data-stage="flagged"] .fw-queue-count { color: var(--hc-orange); }
-@media (max-width: 760px) {
-  .fw-queue-nav { display: block; padding: 9px 10px; }
-  .fw-queue-nav-intro { flex-direction: row; align-items: baseline; gap: 8px; margin: 0 3px 7px; }
-}
+.fw-pipeline-track { display: flex; height: 10px; width: 100%; overflow: hidden; border-radius: 99px; background: var(--sunken); }
+.fw-pipeline-track span { display: block; min-width: 0; height: 100%; }
+.fw-pipeline-track [data-stage="pending"] { background: var(--hc-orange); }
+.fw-pipeline-track [data-stage="ordered"] { background: var(--hc-cyan); }
+.fw-pipeline-track [data-stage="credited"] { background: #a76bda; }
+.fw-pipeline-track [data-stage="shipped"] { background: var(--primary); }
+.fw-pipeline-track [data-stage="done"] { background: var(--hc-green); }
+.fw-pipeline-track [data-stage="cancelled"] { background: var(--muted); }
+.fw-pipeline-note { color: var(--muted); font-size: 12px; }
 
 .fw-funding-summary {
   display: grid; gap: 13px; padding: 14px; border: 1px solid var(--border);
@@ -2409,7 +2415,12 @@ html[data-density="compact"] .hc-main {
 .fw-funding-evidence > summary { cursor: pointer; padding: 11px 13px; font-size: 12px; font-weight: 700; color: var(--secondary); }
 .fw-funding-evidence[open] > summary { border-bottom: 1px solid var(--border); }
 .fw-funding-evidence-body { display: grid; gap: 14px; padding: 12px; min-width: 0; }
+@media (max-width: 940px) {
+  .fw-pipeline-stages { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 @media (max-width: 600px) {
+  .fw-pipeline { padding: 12px; }
+  .fw-pipeline-stages { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .fw-funding-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 

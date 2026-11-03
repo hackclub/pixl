@@ -248,6 +248,15 @@ export default async function FulfillmentPage({
   // Owner-only: a financial rollup, not something a fulfiller needs to do the job.
   const economy = access.isOwner ? await shopEconomySummary() : null;
 
+  const pipelineStages = counts ? [
+    { key: "pending" as const, label: "New", count: counts.pending },
+    { key: "ordered" as const, label: "Ordered", count: counts.ordered },
+    { key: "credited" as const, label: "Credited", count: counts.credited },
+    { key: "shipped" as const, label: "Shipped", count: counts.shipped },
+    { key: "done" as const, label: "Done", count: counts.done },
+    { key: "cancelled" as const, label: "Cancelled", count: counts.cancelled },
+  ] : [];
+
   const tabs: { key: TabKey; label: string; count?: number }[] = [
     { key: "pending", label: "New", count: counts?.pending },
     { key: "ordered", label: "Ordered", count: counts?.ordered },
@@ -384,26 +393,47 @@ export default async function FulfillmentPage({
       />
 
       {showingQueue && counts && !mineOnly && (
-        <section className="fw-queue-nav" aria-label="Fulfillment queues">
-          <div className="fw-queue-nav-intro">
-            <strong>Orders</strong>
-            <span>{counts.all.toLocaleString()} total</span>
+        <section className="fw-pipeline" aria-label="Fulfillment pipeline">
+          <div className="fw-pipeline-heading">
+            <div>
+              <p className="fw-pipeline-eyebrow">ORDER WORKFLOW</p>
+              <h2 className="hc-heading text-lg">Fulfillment at a glance</h2>
+              <p className="hc-caption text-xs">All {counts.all.toLocaleString()} orders, not just this page or filter.</p>
+            </div>
+            <Link
+              href={hrefFor({ status: "flagged", q: "", elig: null, verify: null, sort: "newest" })}
+              className="fw-pipeline-flags"
+            >
+              Over budget <strong>{counts.flagged.toLocaleString()}</strong>
+            </Link>
           </div>
-          <nav className="fw-queue-stages" aria-label="Order stages">
-            {tabs.map((tab) => (
+          <nav className="fw-pipeline-stages" aria-label="Jump to an order stage">
+            {pipelineStages.map((stage) => (
               <Link
-                key={tab.key}
-                href={hrefFor({ status: tab.key, order: undefined })}
-                className="fw-queue-stage"
-                data-stage={tab.key}
-                aria-current={active === tab.key ? "page" : undefined}
-                title={`${tab.label}: ${tab.count ?? 0} orders across the whole shop`}
+                key={stage.key}
+                href={hrefFor({ status: stage.key, q: "", elig: null, verify: null, sort: "newest" })}
+                className="fw-pipeline-stage"
+                data-stage={stage.key}
+                aria-current={active === stage.key ? "page" : undefined}
               >
-                {tab.label}
-                <span className="fw-queue-count tabular-nums">{(tab.count ?? 0).toLocaleString()}</span>
+                <span>{stage.label}</span>
+                <strong className="tabular-nums">{stage.count.toLocaleString()}</strong>
               </Link>
             ))}
           </nav>
+          <div className="fw-pipeline-track" role="img" aria-label="Distribution of all orders by fulfillment stage">
+            {pipelineStages.map((stage) => stage.count > 0 ? (
+              <span
+                key={stage.key}
+                data-stage={stage.key}
+                style={{ width: `${(stage.count / Math.max(1, counts.all)) * 100}%` }}
+                title={`${stage.label}: ${stage.count}`}
+              />
+            ) : null)}
+          </div>
+          <p className="fw-pipeline-note">
+            Select a stage to work on its orders. The over-budget queue is a flag, not an additional stage.
+          </p>
         </section>
       )}
 
@@ -419,108 +449,102 @@ export default async function FulfillmentPage({
                 <h2 className="hc-heading text-lg">Requests</h2>
                 <span className="hc-muted text-xs">{orders.length.toLocaleString()} shown{hasNext ? " on this page" : ""}</span>
               </div>
-              <form action="/fulfillment" method="get" role="search" className="fw-search">
-                {active !== "pending" && <input type="hidden" name="status" value={active} />}
-                {mineOnly && <input type="hidden" name="mine" value="1" />}
-                {eligFilter && <input type="hidden" name="elig" value={eligFilter} />}
-                {verifyFilter && <input type="hidden" name="verify" value={verifyFilter} />}
-                {sortKey !== "newest" && <input type="hidden" name="sort" value={sortKey} />}
-                <Input name="q" type="search" defaultValue={query} maxLength={100} placeholder="Search players, GitHub, projects, items..." aria-label="Search requests" />
-                <button type="submit" className={buttonClass("outline")}>
-                  Search
-                </button>
-              </form>
-            </div>
-            {showingQueue && (
-              <div className="fw-filters-shell">
-                <details className="fw-filters" open={Boolean(eligFilter || verifyFilter || sortKey !== "newest")}>
-                  <summary className="fw-filter-toggle">
-                    <span>Filters &amp; sort</span>
-                    {(Number(Boolean(eligFilter)) + Number(Boolean(verifyFilter)) + Number(sortKey !== "newest")) > 0 && (
-                      <span className="fw-filter-count">
-                        {Number(Boolean(eligFilter)) + Number(Boolean(verifyFilter)) + Number(sortKey !== "newest")} active
-                      </span>
-                    )}
-                  </summary>
-                  <div className="fw-filter-body">
-                    <div className="fw-filter-group">
-                      <div className="fw-filter-group-title">
-                        <strong>Funding</strong>
-                        <span>Does the player have enough verified budget?</span>
-                      </div>
-                      <nav className="fw-chips" aria-label="Filter by funding">
-                        <Link href={hrefFor({ elig: null, order: undefined })} className="fw-chip" aria-current={eligFilter ? undefined : "page"}>
-                          All
-                        </Link>
-                        {ELIGIBILITY_FILTERS.map((f) => (
-                          <Link
-                            key={f}
-                            href={hrefFor({ elig: f, order: undefined })}
-                            className="fw-chip"
-                            aria-current={f === eligFilter ? "page" : undefined}
-                          >
-                            {ELIGIBILITY_LABEL[f]}
+              <div className="fw-list-tools">
+                <form action="/fulfillment" method="get" role="search" className="fw-search">
+                  {active !== "pending" && <input type="hidden" name="status" value={active} />}
+                  {mineOnly && <input type="hidden" name="mine" value="1" />}
+                  {eligFilter && <input type="hidden" name="elig" value={eligFilter} />}
+                  {verifyFilter && <input type="hidden" name="verify" value={verifyFilter} />}
+                  {sortKey !== "newest" && <input type="hidden" name="sort" value={sortKey} />}
+                  <Input name="q" type="search" defaultValue={query} maxLength={100} placeholder="Search requests..." aria-label="Search requests" />
+                  <button type="submit" className={buttonClass("outline", "sm")} aria-label="Search requests" title="Search requests">
+                    <Icon glyph="search" size={17} />
+                  </button>
+                </form>
+                {showingQueue && (
+                  <div className="fw-filters-shell">
+                    <details className="fw-filters">
+                      <summary className="fw-filter-toggle">
+                        <Icon glyph="settings" size={16} />
+                        <span>Filters</span>
+                        {(Number(Boolean(eligFilter)) + Number(Boolean(verifyFilter)) + Number(sortKey !== "newest")) > 0 && (
+                          <span className="fw-filter-count">
+                            {Number(Boolean(eligFilter)) + Number(Boolean(verifyFilter)) + Number(sortKey !== "newest")} active
+                          </span>
+                        )}
+                      </summary>
+                      <div className="fw-filter-body">
+                        <div className="fw-filter-group">
+                          <div className="fw-filter-group-title">
+                            <strong>Funding</strong>
+                            <span>Does the player have enough verified budget?</span>
+                          </div>
+                          <nav className="fw-chips" aria-label="Filter by funding">
+                            <Link href={hrefFor({ elig: null, order: undefined })} className="fw-chip" aria-current={eligFilter ? undefined : "page"}>
+                              All
+                            </Link>
+                            {ELIGIBILITY_FILTERS.map((f) => (
+                              <Link
+                                key={f}
+                                href={hrefFor({ elig: f, order: undefined })}
+                                className="fw-chip"
+                                aria-current={f === eligFilter ? "page" : undefined}
+                              >
+                                {ELIGIBILITY_LABEL[f]}
+                              </Link>
+                            ))}
+                          </nav>
+                        </div>
+                        <div className="fw-filter-group">
+                          <div className="fw-filter-group-title">
+                            <strong>Ships verification</strong>
+                            <span>Is the player's project approval confirmed?</span>
+                          </div>
+                          <nav className="fw-chips" aria-label="Filter by verification">
+                            <Link href={hrefFor({ verify: null, order: undefined })} className="fw-chip" aria-current={verifyFilter ? undefined : "page"}>
+                              All
+                            </Link>
+                            {VERIFICATION_FILTERS.map((f) => (
+                              <Link
+                                key={f}
+                                href={hrefFor({ verify: f, order: undefined })}
+                                className="fw-chip"
+                                aria-current={f === verifyFilter ? "page" : undefined}
+                              >
+                                {VERIFICATION_LABEL[f]}
+                              </Link>
+                            ))}
+                          </nav>
+                        </div>
+                        <div className="fw-filter-group">
+                          <div className="fw-filter-group-title">
+                            <strong>Sort requests</strong>
+                            <span>Choose which requests appear first</span>
+                          </div>
+                          <nav className="fw-chips" aria-label="Sort">
+                            {SORT_KEYS.map((k) => (
+                              <Link
+                                key={k}
+                                href={hrefFor({ sort: k, order: undefined })}
+                                className="fw-chip"
+                                aria-current={k === sortKey ? "page" : undefined}
+                              >
+                                {SORT_LABEL[k]}
+                              </Link>
+                            ))}
+                          </nav>
+                        </div>
+                        {(eligFilter || verifyFilter || sortKey !== "newest") && (
+                          <Link className="fw-filter-reset" href={hrefFor({ elig: null, verify: null, sort: "newest", order: undefined })}>
+                            Clear extra filters
                           </Link>
-                        ))}
-                      </nav>
-                    </div>
-                    <div className="fw-filter-group">
-                      <div className="fw-filter-group-title">
-                        <strong>Ships verification</strong>
-                        <span>Is the player's project approval confirmed?</span>
+                        )}
                       </div>
-                      <nav className="fw-chips" aria-label="Filter by verification">
-                        <Link href={hrefFor({ verify: null, order: undefined })} className="fw-chip" aria-current={verifyFilter ? undefined : "page"}>
-                          All
-                        </Link>
-                        {VERIFICATION_FILTERS.map((f) => (
-                          <Link
-                            key={f}
-                            href={hrefFor({ verify: f, order: undefined })}
-                            className="fw-chip"
-                            aria-current={f === verifyFilter ? "page" : undefined}
-                          >
-                            {VERIFICATION_LABEL[f]}
-                          </Link>
-                        ))}
-                      </nav>
-                    </div>
-                    <div className="fw-filter-group">
-                      <div className="fw-filter-group-title">
-                        <strong>Sort requests</strong>
-                        <span>Choose which requests appear first</span>
-                      </div>
-                      <nav className="fw-chips" aria-label="Sort">
-                        {SORT_KEYS.map((k) => (
-                          <Link
-                            key={k}
-                            href={hrefFor({ sort: k, order: undefined })}
-                            className="fw-chip"
-                            aria-current={k === sortKey ? "page" : undefined}
-                          >
-                            {SORT_LABEL[k]}
-                          </Link>
-                        ))}
-                      </nav>
-                    </div>
-                    {(eligFilter || verifyFilter || sortKey !== "newest") && (
-                      <Link className="fw-filter-reset" href={hrefFor({ elig: null, verify: null, sort: "newest", order: undefined })}>
-                        Clear extra filters
-                      </Link>
-                    )}
-                  </div>
-                </details>
-                {(eligFilter || verifyFilter || sortKey !== "newest") && (
-                  <div className="fw-filter-active" aria-label="Applied filters">
-                    <span className="fw-filter-active-label">Showing:</span>
-                    {eligFilter && <span>Funding: {ELIGIBILITY_LABEL[eligFilter]}</span>}
-                    {verifyFilter && <span>Ships: {VERIFICATION_LABEL[verifyFilter]}</span>}
-                    {sortKey !== "newest" && <span>Sort: {SORT_LABEL[sortKey]}</span>}
-                    <Link href={hrefFor({ elig: null, verify: null, sort: "newest", order: undefined })}>Clear</Link>
+                    </details>
                   </div>
                 )}
               </div>
-            )}
+            </div>
             {orders.length === 0 ? (
               <EmptyState title={emptyTitle} icon="package" />
             ) : (
