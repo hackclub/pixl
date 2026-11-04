@@ -66,6 +66,16 @@ export function SearchBar({
             <option value="3">TIER 3</option>
             <option value="4">TIER 4</option>
           </Select>
+          <Select
+            className="w-auto"
+            aria-label="Shipped"
+            value={v.shipped ?? "all"}
+            onChange={(e) => setV((s) => ({ ...s, shipped: e.target.value }))}
+          >
+            <option value="all">ALL PROJECTS</option>
+            <option value="shipped">SHIPPED</option>
+            <option value="unshipped">UNSHIPPED</option>
+          </Select>
         </>
       ) : null}
       {pending ? <span className={spinnerSm} aria-hidden /> : null}
