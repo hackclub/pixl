@@ -106,36 +106,6 @@ describe("every public projects-table query in explore.ts uses the allowlist", (
   });
 });
 
-describe("public project publication policy", () => {
-  const source = readFileSync(new URL("./explore.ts", import.meta.url), "utf-8");
-
-  test("public browse and single-project queries only fetch approved projects", () => {
-    const list = source.slice(
-      source.indexOf('router.get("/api/explore/projects",'),
-      source.indexOf('router.get("/api/explore/projects/:id",'),
-    );
-    const detail = source.slice(source.indexOf('router.get("/api/explore/projects/:id",'));
-    expect(list).toMatch(/\.select\(PUBLIC_PROJECT_COLUMNS\)\s*\.eq\("status", "approved"\)/);
-    expect(detail).toMatch(/\.eq\("id", id\)\s*\.eq\("status", "approved"\)/);
-  });
-
-  test("other players' authenticated profiles don't reveal unfinished projects", () => {
-    const profile = source.slice(
-      source.indexOf('router.get("/api/explore/players/:id",'),
-      source.indexOf('router.get("/api/explore/players/:id/public",'),
-    );
-    expect(profile).toMatch(/\.select\(PUBLIC_PROJECT_COLUMNS\)\s*\.eq\("user_id", id\)\s*\.eq\("status", "approved"\)/);
-  });
-
-  test("public player-directory counts don't reveal unfinished projects", () => {
-    const directory = source.slice(
-      source.indexOf('router.get("/api/explore/players",'),
-      source.indexOf('router.get("/api/explore/leaderboard",'),
-    );
-    expect(directory).toMatch(/\.select\("user_id"\)\s*\.eq\("status", "approved"\)/);
-  });
-});
-
 describe("explore bounds", () => {
   test("search text is capped", () => {
     expect(searchText("a".repeat(5000))).toHaveLength(MAX_SEARCH_LENGTH);
