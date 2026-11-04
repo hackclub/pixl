@@ -86,7 +86,7 @@ export async function GET(req: Request) {
         slackId,
         `"${p.name}" was waiting for you for 3 days after the maker re-shipped it, so it went back to the shared queue.` +
           (lostPixel ? " The pixel held for your request for changes was forfeited." : "") +
-          ` You can still review it from the queue if it is on the first page: ${link}`,
+          ` You can still review it from the queue: ${link}`,
       );
       continue;
     }

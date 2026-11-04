@@ -86,13 +86,11 @@ export function ReviewTable({
         const lock = locks?.[Number(p.id)];
         const lockLabel = !lock
           ? null
-          : lock.reason === "page"
-            ? "Locked: only the first page can be opened"
-            : `Reserved for ${lock.assignee ?? "the reviewer who asked for changes"}${
-                lock.until
-                  ? ` until ${new Date(lock.until).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })}`
-                  : ""
-              }`;
+          : `Reserved for ${lock.assignee ?? "the reviewer who asked for changes"}${
+              lock.until
+                ? ` until ${new Date(lock.until).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })}`
+                : ""
+            }`;
         return (
           <tr
             key={p.id}

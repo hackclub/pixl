@@ -850,14 +850,7 @@ export async function firstPassAccess(
       message:
         "This project is reserved for the reviewer who requested its changes. It goes back to the shared queue if they don't review it within 3 days of the re-ship.",
     };
-  const kind = data.kind === "hardware" ? "hardware" : "software";
-  const queue = (await listShippedQueueCached(viewer, undefined)).filter((p) => (p.kind === "hardware" ? "hardware" : "software") === kind);
-  if (!queue.some((p) => Number(p.id) === projectId)) return { ok: true };
-  if (openableQueueIds(queue, viewer, false, now).has(projectId)) return { ok: true };
-  return {
-    ok: false,
-    message: "You can only open the first page of the queue. Review those projects first.",
-  };
+  return { ok: true };
 }
 
 // Second pass tab: projects that passed a first review and are parked
@@ -917,8 +910,7 @@ export async function nextReviewId(opts: {
   by: string; // actorName(access), matches first_pass_by
   canSecondPass: boolean;
   isSuper: boolean;
-  // Can open any first-pass project, not only the first page (owners, or a
-  // reviewer with the full_queue permission).
+  // Owners and full_queue reviewers also skip the assignment reservation.
   fullQueue?: boolean;
   excludeId: number;
   prefer: "shipped" | "second_review";
@@ -937,9 +929,8 @@ export async function nextReviewId(opts: {
   // A held project (hold_at set) blocks canReview for everyone, including a
   // super admin - they'd have to release the hold first, a separate action -
   // so it must never be what "next" jumps a reviewer onto.
-  // Only what the reviewer could open from the queue: the first page, plus
-  // projects assigned to them (owners can open everything). See
-  // openableQueueIds, which also skips rows claimed by someone else.
+  // Only what the reviewer could open from the queue: everything except
+  // projects reserved for another reviewer. See openableQueueIds.
   const queue = await listShippedProjects(viewer, kind, { includeClaimed: true });
   const openIds = openableQueueIds(queue, viewer, isSuper || !!fullQueue, Date.now());
   const firstPass = queue.filter(

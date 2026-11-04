@@ -73,9 +73,8 @@ export default async function ReviewListPage({
   ]);
   const blackoutSet = new Set(blackoutIds);
   const nowMs = Date.now();
-  // Owners (and reviewers with full_queue) can open anything. A plain reviewer sees the whole queue but can
-  // only open its first page plus what is assigned to
-  // them. See lib/reviewAssignment.ts.
+  // Everyone can open every row except one reserved for another reviewer.
+  // See lib/reviewAssignment.ts.
   const openIds = openableQueueIds(rowsAll, viewer, access.canOpenFullQueue, nowMs);
   const inBlackout = (p: { id: number | string }) => blackoutSet.has(Number(p.id));
   const blackoutCount = rowsAll.filter(inBlackout).length;
@@ -96,20 +95,17 @@ export default async function ReviewListPage({
     list.flatMap((p) => [p.users?.slack_id, p.claimedBy, assigneeOf(p) || null]);
   const handles = await slackHandles(handleIds(slice), { maxWaitMs: HANDLE_WAIT_MS });
   warmSlackHandles(handleIds(rows.slice(cur * PER, (cur + 1) * PER)));
-  // Rows this viewer can't open: reserved for another reviewer, or past the
-  // first page. Owners get none.
+  // Rows this viewer can't open: reserved for another reviewer. Owners get none.
   const locks: Record<number, QueueLock> = {};
   for (const p of slice) {
     if (openIds.has(Number(p.id))) continue;
     const assignee = assigneeOf(p);
     const deadline = assignmentDeadlineMs(p);
-    locks[Number(p.id)] = lockedForViewer(p, viewer, access.canOpenFullQueue, nowMs)
-      ? {
-          reason: "assigned",
-          assignee: assignee ? (handles.get(assignee) ?? null) : null,
-          until: deadline === null ? null : new Date(deadline).toISOString(),
-        }
-      : { reason: "page" };
+    locks[Number(p.id)] = {
+      reason: "assigned",
+      assignee: assignee ? (handles.get(assignee) ?? null) : null,
+      until: deadline === null ? null : new Date(deadline).toISOString(),
+    };
   }
 
   const blackoutQ = onlyBlackout ? "&blackout=1" : "";

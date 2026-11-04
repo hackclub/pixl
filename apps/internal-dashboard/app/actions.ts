@@ -1050,9 +1050,9 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
   // not only on the page.
   if (!queueAllows(access.reviewQueues, (current as { kind?: string | null }).kind ?? null))
     redirect(`${back}?error=${encodeURIComponent("This project isn't in your review queue.")}`);
-  // First pass: only the first page of the queue, and projects assigned to
-  // this reviewer, can be acted on (owners exempt). The queue greys the rest
-  // out, this keeps a hand-made form post from getting around it.
+  // First pass: a project reserved for another reviewer can't be acted on
+  // (owners exempt). The queue greys it out, this keeps a hand-made form post
+  // from getting around it.
   if (stage === "shipped") {
     const gate = await firstPassAccess(projectId, access.session.slackId, access.canOpenFullQueue);
     if (!gate.ok) redirect(`${back}?error=${encodeURIComponent(gate.message)}`);
