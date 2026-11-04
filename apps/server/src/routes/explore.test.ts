@@ -106,6 +106,42 @@ describe("every public projects-table query in explore.ts uses the allowlist", (
   });
 });
 
+// PIXL intentionally exposes unfinished projects read-only in Explore.
+// Keep the public column allowlist above: discoverability must not expose
+// reviewer, fraud, or other internal fields.
+describe("public read-only project discovery", () => {
+  const source = readFileSync(new URL("./explore.ts", import.meta.url), "utf-8");
+
+  test("Explore includes unfinished projects by default and supports shipped filters", () => {
+    const list = source.slice(
+      source.indexOf('router.get("/api/explore/projects",'),
+      source.indexOf('router.get("/api/explore/projects/:id",'),
+    );
+    expect(list).toContain(".select(PUBLIC_PROJECT_COLUMNS)");
+    expect(list).not.toMatch(/\.select\(PUBLIC_PROJECT_COLUMNS\)\s*\.eq\("status", "approved"\)/);
+    expect(list).toContain('if (shipped === "shipped") query = query.eq("status", "approved")');
+    expect(list).toContain('else if (shipped === "unshipped") query = query.neq("status", "approved")');
+  });
+
+  test("read-only project links and player lists do not require approval", () => {
+    const single = source.slice(source.indexOf('router.get("/api/explore/projects/:id",'));
+    const listing = source.slice(
+      source.indexOf('router.get("/api/explore/players/:id",'),
+      source.indexOf('router.get("/api/explore/players/:id/public",'),
+    );
+    expect(single).toMatch(/\.select\(PUBLIC_PROJECT_COLUMNS\)\s*\.eq\("id", id\)\s*\.is\("archived_at"/);
+    expect(listing).toMatch(/\.select\(PUBLIC_PROJECT_COLUMNS\)\s*\.eq\("user_id", id\)\s*\.is\("archived_at"/);
+  });
+
+  test("public project counts include unfinished projects", () => {
+    const directory = source.slice(
+      source.indexOf('router.get("/api/explore/players",'),
+      source.indexOf('router.get("/api/explore/leaderboard",'),
+    );
+    expect(directory).toMatch(/\.select\("user_id"\)\s*\.is\("archived_at"/);
+  });
+});
+
 describe("explore bounds", () => {
   test("search text is capped", () => {
     expect(searchText("a".repeat(5000))).toHaveLength(MAX_SEARCH_LENGTH);
