@@ -168,25 +168,6 @@ export function ProjectForm({
       <Row label="HACKATIME PROJECTS (proof of hours)">
         <HtPicker stats={stats} value={form.hackatime} onChange={(v) => set({ hackatime: v })} disabled={locked} returnTo={returnTo} />
       </Row>
-      {form.isUpdate ? (
-        <Disclosure
-          checked
-          onChange={() => {}}
-          disabled
-          label="This is an update to a shipped project"
-          desc="You already shipped this project, so this counts as an update. Tell reviewers what you added or changed since the last approval: required to ship, and they'll only credit the new work."
-        >
-          <Row label="WHAT DID YOU CHANGE? *">
-            <CountedTextarea
-              value={form.updateNotes}
-              onChange={(v) => set({ updateNotes: v })}
-              max={8000}
-              disabled={locked}
-              placeholder="Describe the new work (min 100 characters)."
-            />
-          </Row>
-        </Disclosure>
-      ) : null}
       <Disclosure
         checked={form.usedAi}
         onChange={(v) => set({ usedAi: v })}
@@ -199,19 +180,23 @@ export function ProjectForm({
         </Row>
       </Disclosure>
       <Disclosure
-        checked={form.otherYsws}
+        checked={form.isUpdate || form.otherYsws}
         onChange={(v) => set({ otherYsws: v })}
-        disabled={locked}
-        label="Mark it as an update"
-        desc="If you already submitted this project to another Hack Club YSWS and you're shipping it again here as an update, mark this."
+        disabled={locked || form.isUpdate}
+        label="This is an update"
+        desc={
+          form.isUpdate
+            ? "You already shipped this project, so this counts as an update. Tell reviewers what you added or changed since the last approval: required to ship, and they'll only credit the new work."
+            : "Tick this if you already shipped this project, here or in another Hack Club YSWS, and you're shipping it again as an update. Tell reviewers what's new: they'll only credit the new work."
+        }
       >
-        <Row label="WHAT DID YOU UPDATE? *">
+        <Row label="WHAT DID YOU CHANGE? *">
           <CountedTextarea
-            value={form.otherYswsNotes}
-            onChange={(v) => set({ otherYswsNotes: v })}
-            max={2000}
+            value={form.isUpdate ? form.updateNotes : form.otherYswsNotes}
+            onChange={(v) => set(form.isUpdate ? { updateNotes: v, ...(form.otherYsws ? { otherYswsNotes: v } : {}) } : { otherYswsNotes: v })}
+            max={form.isUpdate && !form.otherYsws ? 8000 : 2000}
             disabled={locked}
-            placeholder="Describe what's new since that submission (min 100 characters)."
+            placeholder="Describe the new work since the last submission (min 100 characters)."
           />
         </Row>
       </Disclosure>
