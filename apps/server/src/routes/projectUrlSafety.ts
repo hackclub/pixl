@@ -3,9 +3,11 @@
 // projectUrlSafety.test.ts) and has one place to fix if another dangerous
 // scheme trick shows up later.
 //
-// Security context: public Explore only returns approved projects, but
-// drafts still render to their owners and authorized reviewers. Every
-// renderer that shows repo_url/demo_url - the game's project pages, and the dashboard's React
+// Security context: a draft project (never shipped) is exposed read-only,
+// with no auth required, through GET /api/explore/projects (see
+// routes/explore.ts, "Browse everyone's projects, including drafts" - no
+// status filter unless the caller asks for one). Every renderer that shows
+// repo_url/demo_url - the game's project pages, and the dashboard's React
 // review/detail pages - puts the raw value straight into <a href=...>.
 // Neither Pixl.esc() (HTML-escaping) nor React's JSX text escaping stops a
 // javascript: (or vbscript:/file:/data:) URL from executing when a visitor
