@@ -253,22 +253,7 @@ export function OrderDetail({
             </TextLink>
           )}
 
-          {visible.any && (
-            <Panel title="Actions" icon="bolt">
-              <div className="flex flex-col gap-3">
-                {visible.primary && <OrderActions order={o} mine={mine} ownOrder={ownOrder} canManage={canManage} />}
-                {visible.flag && <FlagControls order={o} canManage={canManage} budget={budget} />}
-                {visible.contact && o.player_slack && (
-                  <div>
-                    <ButtonLink href={slackLink(o.player_slack)} external variant="outline" size="sm" icon="message">
-                      Contact buyer
-                    </ButtonLink>
-                  </div>
-                )}
-                {visible.edit && <EditFulfillmentInfo order={o} />}
-              </div>
-            </Panel>
-          )}
+
         </div>
         <div className="fw-col">
           <Panel title="Requester" icon="person">
@@ -315,6 +300,23 @@ export function OrderDetail({
           )}
         </div>
       </div>
+
+      {visible.any && (
+        <Panel title="Actions" icon="bolt">
+          <div className="flex flex-col gap-3">
+            {visible.primary && <OrderActions order={o} mine={mine} ownOrder={ownOrder} canManage={canManage} />}
+            {visible.flag && <FlagControls order={o} canManage={canManage} budget={budget} />}
+            {visible.contact && o.player_slack && (
+              <div>
+                <ButtonLink href={slackLink(o.player_slack)} external variant="outline" size="sm" icon="message">
+                  Contact buyer
+                </ButtonLink>
+              </div>
+            )}
+            {visible.edit && <EditFulfillmentInfo order={o} />}
+          </div>
+        </Panel>
+      )}
 
       <FundingDisclosure key={o.id} result={eligibility} orderId={o.id} />
     </article>

@@ -2636,3 +2636,69 @@ html[data-density="compact"] .hc-main {
 @media (prefers-reduced-motion: reduce) {
   .fw-header-chevron { transition: none; }
 }
+
+
+/* Fulfillment order actions are full-width, with fields independent of
+   submit/cancel controls so neither button can overlap an input. */
+.fw-detail { min-width: 0; }
+.fw-order-action-stack {
+  display: grid;
+  align-items: start;
+  gap: 12px;
+  min-width: 0;
+}
+.fw-order-action-form {
+  display: grid;
+  gap: 14px;
+  width: 100%;
+  min-width: 0;
+}
+.fw-order-action-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  min-width: 0;
+}
+.fw-order-action-fields > .hc-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.fw-order-action-fields .hc-input,
+.fw-order-flag-form .hc-input {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.fw-order-action-field-wide { grid-column: 1 / -1; }
+.fw-order-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+.fw-order-action-buttons .hc-btn,
+.fw-order-action-stack > form:not(.fw-order-action-form) .hc-btn,
+.fw-order-flag-form .hc-btn {
+  max-width: 100%;
+  min-height: 36px;
+  white-space: normal;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.fw-order-action-stack > form:not(.fw-order-action-form) {
+  justify-self: start;
+}
+.fw-order-flag-form {
+  display: grid;
+  align-items: start;
+  justify-items: start;
+  gap: 12px;
+  min-width: 0;
+}
+.fw-order-flag-form > .hc-label { width: 100%; min-width: 0; }
+@media (max-width: 680px) {
+  .fw-order-action-fields { grid-template-columns: minmax(0, 1fr); }
+  .fw-order-action-buttons .hc-btn { width: 100%; }
+}
