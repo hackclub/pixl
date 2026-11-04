@@ -72,10 +72,9 @@ router.get("/api/explore/players", async (req, res) => {
     const { data: projects } = await db
       .from("projects")
       .select("user_id")
-      .eq("status", "approved")
       .is("archived_at", null)
       .is("rejected_at", null)
-      .is("banned_at", null)
+    .is("banned_at", null)
       .in("user_id", ids);
     for (const p of projects ?? [])
       counts.set(p.user_id as string, (counts.get(p.user_id as string) ?? 0) + 1);
@@ -360,10 +359,9 @@ router.get("/api/explore/players/:id", async (req, res) => {
       .from("projects")
       .select(PUBLIC_PROJECT_COLUMNS)
       .eq("user_id", id)
-      .eq("status", "approved")
       .is("archived_at", null)
       .is("rejected_at", null)
-      .is("banned_at", null)
+    .is("banned_at", null)
       .order("created_at", { ascending: false }),
     db
       .from("collectible_purchases")
@@ -441,8 +439,8 @@ router.get("/api/explore/players/:id/public", async (req, res) => {
   });
 });
 
-// Browse published projects only. Drafts, review submissions, and
-// needs-changes evidence belong to their owners and authorized reviewers.
+// Browse everyone's projects (including drafts), newest first, with optional
+// search/tier/shipped filters.
 // #public, token optional (just for has_upvoted)
 router.get("/api/explore/projects", async (req, res) => {
   const session = req.session;
@@ -455,7 +453,6 @@ router.get("/api/explore/projects", async (req, res) => {
   let query = db
     .from("projects")
     .select(PUBLIC_PROJECT_COLUMNS)
-    .eq("status", "approved")
     .is("archived_at", null)
     .is("rejected_at", null)
     .is("banned_at", null)
@@ -467,9 +464,8 @@ router.get("/api/explore/projects", async (req, res) => {
     .limit(limit);
   if (q) query = query.ilike("name", `%${q}%`);
   if (Number.isInteger(tier) && tier >= 1 && tier <= 4) query = query.eq("level", tier);
-  // Preserve old filter URLs, but do not offer private submissions to public
-  // visitors. The unpublished filter deliberately has no matches here.
-  if (shipped === "unshipped") query = query.neq("status", "approved");
+  if (shipped === "shipped") query = query.eq("status", "approved");
+  else if (shipped === "unshipped") query = query.neq("status", "approved");
   const { data: projects, error } = await query;
   if (error) {
     console.error("[explore] projects failed", error);
@@ -519,7 +515,6 @@ router.get("/api/explore/projects/:id", async (req, res) => {
     .from("projects")
     .select(PUBLIC_PROJECT_COLUMNS)
     .eq("id", id)
-    .eq("status", "approved")
     .is("archived_at", null)
     .is("rejected_at", null)
     .is("banned_at", null)
