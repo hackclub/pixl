@@ -14,6 +14,12 @@ import {
 } from "@/lib/reviewAssignment";
 import { LiveReview } from "@/app/_components/LiveReview";
 import {
+  REVIEW_TYPE_FILTERS,
+  filterReviewType,
+  parseReviewTypeFilter,
+  type ReviewTypeFilter,
+} from "@/lib/reviewTypeFilter";
+import {
   Badge,
   ButtonLink,
   Callout,
@@ -39,6 +45,7 @@ export default async function ReviewListPage({
     page?: string;
     kind?: string;
     blackout?: string;
+    type?: string;
     error?: string;
   }>;
 }) {
@@ -46,8 +53,9 @@ export default async function ReviewListPage({
   const guidelinesAck = requireGuidelinesAck(access);
   guidelinesAck.catch(() => {});
   const viewer = access.session.slackId;
-  const { page, kind: rawKind, blackout, error } = await searchParams;
+  const { page, kind: rawKind, blackout, type: rawType, error } = await searchParams;
   const onlyBlackout = blackout === "1";
+  const typeFilter = parseReviewTypeFilter(rawType);
   // Hardware and software have separate review queues. A reviewer restricted
   // to one queue (access.reviewQueues) can't view or query the other, so clamp
   // to their allowed queue regardless of what the URL asks for.
@@ -72,7 +80,11 @@ export default async function ReviewListPage({
   const inBlackout = (p: { id: number | string }) => blackoutSet.has(Number(p.id));
   const blackoutCount = rowsAll.filter(inBlackout).length;
   // Always oldest first: the queue arrives longest-wait first.
-  const rows = onlyBlackout ? rowsAll.filter(inBlackout) : rowsAll;
+  const baseRows = onlyBlackout ? rowsAll.filter(inBlackout) : rowsAll;
+  const types = REVIEW_TYPE_FILTERS.map((filter) => ({
+    ...filter, count: filterReviewType(baseRows, filter.id).length,
+  })).filter((filter) => filter.count > 0 || filter.id === "all" || filter.id === typeFilter);
+  const rows = filterReviewType(baseRows, typeFilter);
 
   const total = rows.length;
   const pages = Math.max(1, Math.ceil(total / PER));
@@ -101,7 +113,16 @@ export default async function ReviewListPage({
   }
 
   const blackoutQ = onlyBlackout ? "&blackout=1" : "";
-  const qp = (p: number) => `/review?page=${p}${kindQ}${blackoutQ}`;
+  const typeQ = typeFilter === "all" ? "" : `&type=${typeFilter}`;
+  const qp = (p: number) => `/review?page=${p}${kindQ}${blackoutQ}${typeQ}`;
+  const typeHref = (selected: ReviewTypeFilter) => {
+    const params = new URLSearchParams();
+    if (kind === "hardware") params.set("kind", "hardware");
+    if (onlyBlackout) params.set("blackout", "1");
+    if (selected !== "all") params.set("type", selected);
+    const query = params.toString();
+    return `/review${query ? `?${query}` : ""}`;
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -138,7 +159,7 @@ export default async function ReviewListPage({
                 {(blackoutCount > 0 || onlyBlackout) && (
                   <ButtonLink
                     href={
-                      onlyBlackout ? `/review${kindQ ? `?${kindQ.slice(1)}` : ""}` : `/review?blackout=1${kindQ}`
+                      onlyBlackout ? `/review?page=1${kindQ}${typeQ}` : `/review?blackout=1${kindQ}${typeQ}`
                     }
                     variant={onlyBlackout ? "primary" : "outline"}
                     size="sm"
@@ -149,12 +170,33 @@ export default async function ReviewListPage({
               </div>
             }
           />
+          <nav aria-label="Filter projects by type" className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] px-4 py-3">
+            <span className="mr-1 text-xs font-semibold text-[var(--muted)]">Project type</span>
+            {types.map((filter) => (
+              <Link
+                key={filter.id}
+                href={typeHref(filter.id)}
+                aria-current={typeFilter === filter.id ? "page" : undefined}
+                className={`inline-flex items-center gap-1.5 rounded-[var(--radius)] border px-3 py-1.5 text-xs font-semibold transition-colors ${typeFilter === filter.id ? "border-[var(--primary)] bg-[var(--surface-hover)] text-[var(--text)]" : "border-[var(--border)] text-[var(--secondary)] hover:bg-[var(--surface-hover)]"}`}
+              >
+                {filter.label}
+                <span className="font-mono text-[var(--muted)]">{filter.count}</span>
+              </Link>
+            ))}
+          </nav>
+          {typeFilter !== "all" && (
+            <p className="border-b border-[var(--border)] px-4 py-2 text-xs text-[var(--muted)]">
+              Types filter the list only. Review access still follows the oldest eligible projects in the full queue.
+            </p>
+          )}
           <ReviewTable makerLinks={access.isOwner}
             rows={slice}
             handles={handles}
             blackoutIds={blackoutIds}
             locks={locks}
-            emptyLabel="Queue's clear. Nothing waiting for review."
+            emptyLabel={typeFilter === "all"
+              ? "Queue's clear. Nothing waiting for review."
+              : "No submissions of this type are waiting in this queue."}
           />
         </Card>
         <Pagination page={cur} totalPages={pages} hrefFor={qp} />
