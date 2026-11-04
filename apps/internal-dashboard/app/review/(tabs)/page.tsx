@@ -13,7 +13,12 @@ import {
   type QueueLock,
 } from "@/lib/reviewAssignment";
 import { LiveReview } from "@/app/_components/LiveReview";
-import { REVIEW_TYPE_FILTERS, filterReviewType, parseReviewTypeFilter, type ReviewTypeFilter } from "@/lib/reviewTypeFilter";
+import {
+  REVIEW_TYPE_FILTERS,
+  filterReviewType,
+  parseReviewTypeFilter,
+  type ReviewTypeFilter,
+} from "@/lib/reviewTypeFilter";
 import {
   Badge,
   ButtonLink,
@@ -189,7 +194,9 @@ export default async function ReviewListPage({
             handles={handles}
             blackoutIds={blackoutIds}
             locks={locks}
-            emptyLabel="Queue's clear. Nothing waiting for review."
+            emptyLabel={typeFilter === "all"
+              ? "Queue's clear. Nothing waiting for review."
+              : "No submissions of this type are waiting in this queue."}
           />
         </Card>
         <Pagination page={cur} totalPages={pages} hrefFor={qp} />
