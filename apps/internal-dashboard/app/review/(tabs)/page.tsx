@@ -180,11 +180,6 @@ export default async function ReviewListPage({
               </Link>
             ))}
           </nav>
-          {typeFilter !== "all" && (
-            <p className="border-b border-[var(--border)] px-4 py-2 text-xs text-[var(--muted)]">
-              Types filter the list only. Review access still follows the oldest eligible projects in the full queue.
-            </p>
-          )}
           <ReviewTable makerLinks={access.isOwner}
             rows={slice}
             handles={handles}

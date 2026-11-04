@@ -45,23 +45,16 @@ describe("review project type filters", () => {
     expect(filterReviewType(rows, "all").map((p) => p.id)).toEqual([1, 2, 3, 4]);
   });
 
-  test("the games filter cannot unlock projects beyond the oldest-15 window", () => {
+  test("type filters never change which projects are openable", () => {
     const rows = Array.from({ length: 25 }, (_, i) => ({
-      id: i + 1, status: "shipped", project_type: "web", is_game: i >= 15,
+      id: i + 1, status: "shipped", project_type: i < 15 ? "web" : "python", is_game: i >= 15,
     }));
     const allowed = openableQueueIds(rows, "UREVIEWER", false, Date.now());
+    expect(allowed.size).toBe(25);
     const games = filterReviewType(rows, "games");
+    const web = filterReviewType(rows, "web");
     expect(games).toHaveLength(10);
-    expect(games.every((p) => !allowed.has(p.id))).toBe(true);
-  });
-
-  test("type choices never grant access past the original first 15 projects", () => {
-    const rows = Array.from({ length: 25 }, (_, i) => ({
-      id: i + 1, status: "shipped", project_type: i < 15 ? "web" : "python",
-    }));
-    const allowed = openableQueueIds(rows, "UREVIEWER", false, Date.now());
-    const python = filterReviewType(rows, "python");
-    expect(python).toHaveLength(10);
-    expect(python.every((p) => !allowed.has(p.id))).toBe(true);
+    expect(web).toHaveLength(15);
+    expect([...games, ...web].every((p) => allowed.has(p.id))).toBe(true);
   });
 });
