@@ -121,6 +121,7 @@ export interface ProjectRow {
   image_url: string;
   level: number;
   project_type: string | null;
+  is_game: boolean;
   kind: string;
   needs_funding: boolean;
   funding_usd: number;
@@ -640,6 +641,7 @@ const QUEUE_FIELDS = [
   "image_url",
   "level",
   "project_type",
+  "is_game",
   "kind",
   "status",
   "needs_funding",
