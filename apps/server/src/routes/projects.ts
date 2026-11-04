@@ -37,6 +37,7 @@ const projectBody = z.object({
   usedAi: optBool,
   aiNotes: optStr(20_000),
   projectType: optStr(64),
+  isGame: optBool,
   kind: optStr(32),
   needsFunding: optBool,
   fundingUsd: optNum,
@@ -73,6 +74,7 @@ const PLAYER_PROJECT_FIELDS = [
   "demo_url",
   "image_url",
   "project_type",
+  "is_game",
   "kind",
   "used_ai",
   "ai_notes",
@@ -370,6 +372,7 @@ interface ProjectFields {
   demo_url: string;
   image_url: string;
   project_type: string;
+  is_game: boolean;
   used_ai: boolean;
   ai_notes: string;
   hackatime_projects: string[];
@@ -465,6 +468,7 @@ export function parseProjectBody(
       demo_url: demoUrl,
       image_url: imageUrl,
       project_type: projectType,
+      is_game: body?.isGame === true,
       used_ai: usedAi,
       ai_notes: usedAi ? aiNotes : "",
       hackatime_projects: normalizeHackatimeProjects(body?.hackatimeProjects),
@@ -561,6 +565,9 @@ router.put("/api/projects/:id", validate({ query: v.noQuery, params: params({ id
   if (!mayEditProjectAtStatus(cur.status as string) || cur.banned_at)
     return res.status(409).json({ ok: false, error: "project_locked_in_review" });
   const fields: Record<string, unknown> = { ...parsed.fields };
+  // Old clients don't send isGame. Do not erase manually tagged projects
+  // when their owners save through a cached client version.
+  if (req.body?.isGame === undefined) delete fields.is_game;
   fields.bom_url = (cur as { bom_url?: string } | null)?.bom_url ?? "";
 
   // Trial link is picked at creation and editable while the project is a draft.

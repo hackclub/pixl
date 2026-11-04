@@ -192,6 +192,23 @@ describe("toPlayerProject", () => {
   });
 });
 
+describe("game category", () => {
+  test("keeps games separate from runtime and hardware/software review tracks", () => {
+    const game = parseProjectBody({ name: "Block Runner", projectType: "hardware", kind: "software", isGame: true });
+    expect(game.fields?.project_type).toBe("hardware");
+    expect(game.fields?.kind).toBe("software");
+    expect(game.fields?.is_game).toBe(true);
+    expect(parseProjectBody({ name: "IDE", projectType: "python", isGame: false }).fields?.is_game).toBe(false);
+    expect(parseProjectBody({ name: "Older client" }).fields?.is_game).toBe(false);
+  });
+
+  test("players can see their game's category without exposing reviewer fields", () => {
+    const safe = toPlayerProject({ id: 19, name: "My Game", status: "draft", is_game: true });
+    expect(safe.is_game).toBe(true);
+    expect("system_note" in safe).toBe(false);
+  });
+});
+
 describe("parseProjectBody image URLs", () => {
   const base = { name: "Thing" };
   test("a Hack Club CDN thumbnail is kept", () => {

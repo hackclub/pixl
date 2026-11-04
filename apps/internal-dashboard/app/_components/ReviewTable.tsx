@@ -133,6 +133,7 @@ export function ReviewTable({
                     {lockLabel && <Badge icon="private">{lockLabel}</Badge>}
                     <LevelBadge level={p.level} />
                     <TypeBadge type={p.project_type} />
+                    {p.is_game && <Badge tone="purple">Game</Badge>}
                     <FundingBadge needsFunding={p.needs_funding} fundingUsd={p.funding_usd} />
                     {p.is_peak && <BeaconBadge />}
                   </div>

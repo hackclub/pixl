@@ -155,6 +155,13 @@ export function ProjectForm({
           ))}
         </select>
       </Row>
+      <Disclosure
+        checked={form.isGame}
+        onChange={(value) => set({ isGame: value })}
+        disabled={locked}
+        label="This project is a game"
+        desc="Adds a Games category for reviewers. Your platform/type and Software or Hardware review track stay the same."
+      />
       <Row label="TIER (your call, the reviewer confirms it)">
         <select className={selectField} value={form.level} disabled={locked} onChange={(e) => set({ level: Number(e.target.value) })}>
           {LEVELS.map(([name], i) => (

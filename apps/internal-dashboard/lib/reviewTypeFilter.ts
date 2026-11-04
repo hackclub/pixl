@@ -2,6 +2,7 @@
 // They don't change the hardware/software review queues or reviewer access.
 export const REVIEW_TYPE_FILTERS = [
   { id: "all", label: "All types" },
+  { id: "games", label: "Games" },
   { id: "web", label: "Web" },
   { id: "desktop", label: "Desktop" },
   { id: "python", label: "Python" },
@@ -13,7 +14,8 @@ export const REVIEW_TYPE_FILTERS = [
 
 export type ReviewTypeFilter = (typeof REVIEW_TYPE_FILTERS)[number]["id"];
 
-export function reviewTypeGroup(projectType: string | null | undefined): Exclude<ReviewTypeFilter, "all"> {
+export function reviewTypeGroup(projectType: string | null | undefined, isGame = false): Exclude<ReviewTypeFilter, "all"> {
+  if (isGame) return "games";
   switch (projectType) {
     case "web": return "web";
     case "windows":
@@ -35,10 +37,10 @@ export function parseReviewTypeFilter(input: string | undefined): ReviewTypeFilt
 
 // Caller must compute allowed review IDs against the complete oldest-first
 // queue first. A filter must never unlock a project beyond that window.
-export function filterReviewType<T extends { project_type?: string | null }>(
+export function filterReviewType<T extends { project_type?: string | null; is_game?: boolean | null }>(
   rows: readonly T[],
   selected: ReviewTypeFilter,
 ): T[] {
   if (selected === "all") return [...rows];
-  return rows.filter((row) => reviewTypeGroup(row.project_type) === selected);
+  return rows.filter((row) => reviewTypeGroup(row.project_type, row.is_game === true) === selected);
 }
