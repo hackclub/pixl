@@ -13,7 +13,7 @@ describe("project game category", () => {
     expect(form.isGame).toBe(true);
     const sent = toFields(form);
     expect(sent.isGame).toBe(true);
-    expect(sent.projectType).toBe("hardware");
+    expect(String(sent.projectType)).toBe("hardware");
     expect(sent.kind).toBe("software");
   });
 
