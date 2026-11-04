@@ -83,7 +83,7 @@ export default async function ReviewListPage({
   const baseRows = onlyBlackout ? rowsAll.filter(inBlackout) : rowsAll;
   const types = REVIEW_TYPE_FILTERS.map((filter) => ({
     ...filter, count: filterReviewType(baseRows, filter.id).length,
-  })).filter((filter) => filter.count > 0 || filter.id === "all" || filter.id === typeFilter);
+  })).filter((filter) => filter.count > 0 || filter.id === "all" || filter.id === "games" || filter.id === typeFilter);
   const rows = filterReviewType(baseRows, typeFilter);
 
   const total = rows.length;
