@@ -3,7 +3,7 @@ import { pageSub, pageTitle } from "@/components/ui/primitives";
 import { cn } from "@/lib/cn";
 import { serverApi } from "@/lib/server-api";
 import { CalcForm, ProjectPicker, type CalcInputs, type ProjectOption } from "./calc-form";
-import { TIERS, clampHours, clampTier, economy, payoutStats, type PayoutStats } from "./economy";
+import { TIERS, clampHours, clampTier, combinedStats, economy, parseRows, payoutStats, type PayoutStats } from "./economy";
 
 export const metadata: Metadata = { title: "Payout calculator" };
 
@@ -12,9 +12,11 @@ interface Project {
   name: string;
   status?: string;
   level?: number | null;
+  approved_hours?: number | null;
+  rejected_at?: string | null;
 }
 
-type Search = { hours?: string; tier?: string; base?: string; project?: string };
+type Search = { rows?: string; hours?: string; tier?: string; base?: string; project?: string };
 
 const out = "border-2 border-stroke bg-panel-2 px-[18px] py-4";
 const outK = "font-pixel text-[11px] uppercase tracking-[1px] text-faint";
@@ -58,32 +60,46 @@ export default async function CalcPage({ searchParams }: { searchParams: Promise
   ]);
   const baseRe = wallet ? Number(wallet.re) || 0 : 0;
 
-  // Approved projects are already paid and on record, not a prediction.
-  const mine = (list?.projects ?? []).filter((p) => p.status !== "approved");
+  // Already-shipped (approved) projects stay in the list: re-shipping one is an
+  // update that only pays the hours added since the last approval.
+  const mine = list?.projects ?? [];
+  const isShipped = (p: Project) => p.status === "approved" && !p.rejected_at;
   const picked = mine.find((p) => String(p.id) === projectId) ?? null;
   const options: ProjectOption[] = mine.map((p) => ({
     id: String(p.id),
-    label: `${p.name} · ${TIERS[clampTier(p.level ?? 1) - 1]}`,
+    label: `${p.name} · ${TIERS[clampTier(p.level ?? 1) - 1]}${isShipped(p) ? " · shipped, new hours only" : ""}`,
   }));
 
   // A picked project with hours loaded seeds the inputs from its own tracked
   // hours and tier unless the URL already overrides them.
+  const priorHours = picked && isShipped(picked) ? Math.max(Number(picked.approved_hours) || 0, 0) : 0;
   const pickedHours =
     picked && tracked && typeof tracked.trackedSeconds === "number"
-      ? Math.round((tracked.trackedSeconds / 3600) * 100) / 100
+      ? Math.max(Math.round((tracked.trackedSeconds / 3600 - priorHours) * 100) / 100, 0)
       : null;
   const pickedTier = picked ? clampTier(picked.level ?? 1) : null;
 
+  // ?rows=h:t,h:t is the combined list; plain ?hours=&tier= (old links) is one row.
   const hoursRaw = one(sp.hours);
   const tierRaw = one(sp.tier);
+  let rows = parseRows(one(sp.rows));
+  if (!rows.length) {
+    rows = [
+      {
+        hours: hoursRaw !== undefined ? clampHours(hoursRaw) : (pickedHours ?? 10),
+        tier: tierRaw !== undefined ? clampTier(tierRaw) : (pickedTier ?? 1),
+      },
+    ];
+  }
   const inputs: CalcInputs = {
-    hours: hoursRaw !== undefined ? clampHours(hoursRaw) : (pickedHours ?? 10),
-    tier: tierRaw !== undefined ? clampTier(tierRaw) : (pickedTier ?? 1),
+    rows,
     base: one(sp.base) === "1" && !!wallet,
     project: picked ? String(picked.id) : "",
   };
   const reBefore = inputs.base ? baseRe : 0;
-  const stats = payoutStats(inputs.hours, inputs.tier, reBefore);
+  const combined = combinedStats(rows, reBefore);
+  const stats: PayoutStats = combined;
+  const rowSummaries = combined.rows.map((r) => `${r.px.toLocaleString("en-US")} px · ${r.re.toLocaleString("en-US")} RE`);
   const mineStats = picked && pickedHours !== null && pickedTier !== null ? payoutStats(pickedHours, pickedTier, baseRe) : null;
 
   return (
@@ -107,6 +123,12 @@ export default async function CalcPage({ searchParams }: { searchParams: Promise
             <ProjectPicker value={inputs.project} options={options} inputs={inputs} />
           </div>
           {picked && !mineStats ? <div className={cn(miniNote, "text-bad opacity-100")}>Couldn&apos;t load that project&apos;s tracked hours.</div> : null}
+          {picked && priorHours > 0 && pickedHours !== null ? (
+            <div className={miniNote}>
+              Already shipped with {priorHours.toLocaleString("en-US")}h approved. Only the {pickedHours.toLocaleString("en-US")}h
+              added since then count.
+            </div>
+          ) : null}
           {mineStats ? <Stats s={mineStats} /> : null}
           <div className={miniNote}>
             This is NOT your final payout. It&apos;s a live prediction off your currently tracked hours, and your hours may
@@ -116,7 +138,7 @@ export default async function CalcPage({ searchParams }: { searchParams: Promise
       ) : null}
 
       <div className={calcCard}>
-        <div className={cardH}>A NEW PROJECT</div>
+        <div className={cardH}>{rows.length > 1 ? `${rows.length} PROJECTS COMBINED` : "A NEW PROJECT"}</div>
         <div className={cn(note, "mt-0 mb-3.5")}>
           Rate ramps linearly from <b>${economy.basePayoutUsd.toFixed(2)}/hr</b> to{" "}
           <b>${economy.maxPayoutUsd.toFixed(2)}/hr</b>, every {economy.payoutSlopeRe.toLocaleString("en-US")} RE
@@ -124,6 +146,7 @@ export default async function CalcPage({ searchParams }: { searchParams: Promise
         </div>
         <CalcForm
           key={`${inputs.project}:${pickedHours ?? ""}`}
+          rowSummaries={rowSummaries}
           initial={inputs}
           tiers={TIERS}
           canUseBase={!!wallet}
@@ -132,7 +155,8 @@ export default async function CalcPage({ searchParams }: { searchParams: Promise
         <Stats s={stats} />
         <div className={note}>
           Computed straight from the same payout formula the server credits with, starting from{" "}
-          {reBefore > 0 ? `your ${Math.round(reBefore).toLocaleString("en-US")} RE` : "0 RE"}. The actual amount still
+          {reBefore > 0 ? `your ${Math.round(reBefore).toLocaleString("en-US")} RE` : "0 RE"}.
+          {rows.length > 1 ? " Projects are paid in the order listed, and each one's RE lifts the rate for the next." : ""} The actual amount still
           depends on the tier and hours a reviewer confirms when your project ships.
         </div>
       </div>
