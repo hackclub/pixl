@@ -603,21 +603,23 @@ router.put("/api/projects/:id", validate({ query: v.noQuery, params: params({ id
   res.json({ ok: true, project: toPlayerProject(data, session.userId) });
 });
 
-// Read-only, owner-scoped preview for the shipping panel. Uses the same
-// GitHub README logic as the ship gate, never fetching arbitrary URLs.
-router.get("/api/projects/:id/readme-check", validate({ query: v.noQuery, params: params({ id: v.id }) }), async (req, res) => {
+// Preview checks the currently typed URL without saving unsaved project edits.
+// The owner check and GitHub-only fetcher prevent arbitrary unauthenticated fetches.
+router.post("/api/projects/:id/readme-check", validate({
+  query: v.noQuery,
+  params: params({ id: v.id }),
+  body: z.object({ repoUrl: z.string().trim().min(1).max(500) }),
+}), async (req, res) => {
   const session = req.session;
   if (!session) return res.status(401).json({ ok: false });
   const id = Number(req.params.id);
   const { data: project, error } = await db.from("projects")
-    .select("repo_url")
+    .select("id")
     .eq("id", id)
     .eq("user_id", session.userId)
     .maybeSingle();
   if (error || !project) return res.status(404).json({ ok: false, error: "not_found" });
-  if (!String(project.repo_url ?? "").trim())
-    return res.status(400).json({ ok: false, error: "repo_required" });
-  const check = await checkReadmeLength(String(project.repo_url));
+  const check = await checkReadmeLength(req.body.repoUrl as string);
   return res.json({ ok: true, ...check });
 });
 
