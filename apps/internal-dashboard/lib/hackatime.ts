@@ -1,5 +1,6 @@
 import type { Commit } from "@/lib/commits";
 import { createConcurrencyLimiter } from "./concurrency";
+import { linkedEvidenceNames } from "./hackatimeEvidence";
 import { db, type ShippedProject } from "@/lib/db";
 
 const BASE = (process.env.HACKATIME_BASE ?? "https://hackatime.hackclub.com").replace(/\/$/, "");
@@ -256,24 +257,7 @@ export async function fetchHackatimeReport(
     const data = ((await statsRes.json()) as { data?: Record<string, unknown> }).data ?? {};
 
     const rawProjects = mapBreakdown(data.projects);
-    // Every project name the panel will actually display below (line ~313's
-    // filter) that's worth spending 2 extra network calls on. Not just the
-    // submission's explicitly linked projects - a Hackatime project with real
-    // tracked time but not in `linked` still gets shown (p.seconds > 0), so
-    // fetching spans/lapses only for `linked` left those rows permanently
-    // missing their session count and any lapse recordings. But an active
-    // coder's account can have dozens of unrelated projects with a handful of
-    // stray seconds each, and fetching spans+lapses for every single one of
-    // those fanned out to 50-100+ concurrent external requests per review
-    // page load, which is what actually made the page slow - so the eager
-    // fetch here is capped to `linked` plus unlinked projects with a
-    // meaningful amount of time, not literally any nonzero seconds.
-    const MEANINGFUL_UNLINKED_SECONDS = 180;
-    const displayNames = new Set(
-      rawProjects
-        .filter((p) => linked.has(p.name) || p.seconds >= MEANINGFUL_UNLINKED_SECONDS)
-        .map((p) => p.name),
-    );
+    const displayNames = new Set(linkedEvidenceNames(rawProjects, linked));
     // Limit this report's fan-out even when a maker has many Hackatime projects.
     const limitExternal = createConcurrencyLimiter(6);
     // Languages scoped to just this submission's linked projects , the
