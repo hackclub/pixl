@@ -1,5 +1,6 @@
-type StepState = "done" | "current" | "upcoming";
 import { currentFirstPassAt } from "@/lib/reviewCycleDisplay";
+
+type StepState = "done" | "current" | "upcoming";
 
 const DOT: Record<StepState, string> = {
   done: "var(--hc-green)",
