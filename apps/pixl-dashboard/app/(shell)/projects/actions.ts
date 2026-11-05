@@ -54,6 +54,19 @@ export const deleteProject = guardedAction(
   { revalidate: revalidate(), pick: () => ({ deleted: true }) },
 );
 
+export const checkProjectReadme = guardedAction(
+  "project.readme_check",
+  z.object({ id: pid, repoUrl: z.string().trim().min(1).max(500) }),
+  ({ id, repoUrl }) => ({ method: "POST", path: `/api/projects/${id}/readme-check`, body: json({ repoUrl }), target: `project:${id}` }),
+  {
+    pick: (d: { status: "passed" | "too_short" | "missing" | "unavailable" | "unsupported"; chars: number | null; minChars: number }) => ({
+      status: d.status,
+      chars: d.chars,
+      minChars: d.minChars,
+    }),
+  },
+);
+
 export const shipProject = guardedAction(
   "project.ship",
   z.object({

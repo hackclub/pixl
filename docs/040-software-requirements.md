@@ -27,7 +27,7 @@ Someone landing on your repo should be able to understand and run the project wi
 - **How to set it up and run it.** Install steps, environment variables, build and run commands. Enough that someone can get it working from the README alone.
 - **Screenshots** of it working.
 
-A repo that's a dump of files with two sentences for a README doesn't clear this bar, even when the demo link works.
+A repo that's a dump of files with two sentences for a README doesn't clear this bar, even when the demo link works. On GitHub submissions, the shipping panel checks for at least **200 characters of explanatory README text** (excluding badges, links, and code blocks). Short or missing READMEs cannot be shipped until fixed. Other Git hosts and temporary GitHub check failures still go to human review.
 
 ## Journal character rules
 

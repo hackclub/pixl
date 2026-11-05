@@ -8,6 +8,8 @@ const ERRORS: Record<string, string> = {
   repo_not_github: "The repo link must point to a Git repository.",
   ai_notes_required: "Describe how you used AI (at least 10 characters).",
   repo_required: "Add a GitHub repo link before shipping.",
+  readme_missing: "Your GitHub repo has no README. Add one before shipping.",
+  readme_too_short: "Your README needs at least 200 characters of actual explanation (not badges, links, or code).",
   demo_required: "Add a demo / playable link before shipping.",
   description_required: "Add a description before shipping.",
   image_required: "Upload a thumbnail before shipping.",

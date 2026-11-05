@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/client.js";
 import { runPrecheck, shouldPrecheck } from "../precheck/run.js";
+import { checkReadmeLength } from "../precheck/readmeLength.js";
 import { addNotification } from "./notifications.js";
 import { findAllInYswsArchive } from "../ysws/archive.js";
 import { buildDoubleDip, type TeamMember } from "../ysws/doubleDip.js";
@@ -602,6 +603,26 @@ router.put("/api/projects/:id", validate({ query: v.noQuery, params: params({ id
   res.json({ ok: true, project: toPlayerProject(data, session.userId) });
 });
 
+// Preview checks the currently typed URL without saving unsaved project edits.
+// The owner check and GitHub-only fetcher prevent arbitrary unauthenticated fetches.
+router.post("/api/projects/:id/readme-check", validate({
+  query: v.noQuery,
+  params: params({ id: v.id }),
+  body: z.object({ repoUrl: z.string().trim().min(1).max(500) }),
+}), async (req, res) => {
+  const session = req.session;
+  if (!session) return res.status(401).json({ ok: false });
+  const id = Number(req.params.id);
+  const { data: project, error } = await db.from("projects")
+    .select("id")
+    .eq("id", id)
+    .eq("user_id", session.userId)
+    .maybeSingle();
+  if (error || !project) return res.status(404).json({ ok: false, error: "not_found" });
+  const check = await checkReadmeLength(req.body.repoUrl as string);
+  return res.json({ ok: true, ...check });
+});
+
 // Ship a project for review: draft/needs_changes -> shipped, or approved ->
 // shipped again as an update (requires update notes). Requires repo, demo,
 // thumbnail, and an eligibility attestation (not a school assignment or paid
@@ -661,6 +682,19 @@ router.post("/api/projects/:id/ship", validate({ query: v.noQuery, params: param
   // URLs are only validated here, at ship time (save accepts anything).
   if (!(await isGitRepoUrl(project.repo_url as string)))
     return res.status(400).json({ ok: false, error: "repo_not_git" });
+  // Fast, deterministic README gate before this project enters the queue.
+  // Non-GitHub repos and temporary GitHub outages still get human review;
+  // neither should become a new reason to reject a legitimate ship.
+  const readmeCheck = await checkReadmeLength(project.repo_url as string);
+  if (readmeCheck.status === "missing")
+    return res.status(400).json({ ok: false, error: "readme_missing" });
+  if (readmeCheck.status === "too_short")
+    return res.status(400).json({
+      ok: false,
+      error: "readme_too_short",
+      need: readmeCheck.minChars,
+      have: readmeCheck.chars,
+    });
   const isHardware = project.kind === "hardware";
   const demoCheck = normalizeDemoUrl(project.demo_url as string, isHardware);
   if ("error" in demoCheck)
