@@ -28,7 +28,7 @@ import {
   fetchHackatimeReport,
   type HackatimePersonReport,
 } from "@/lib/hackatime";
-import { yswsShipsFor } from "@/lib/ysws";
+import { yswsShipsForReview } from "@/lib/ysws";
 import { renderMarkdown } from "@/lib/markdown";
 import { computeClaimedHours, round1 } from "@/lib/hours";
 import { isSafeUrl } from "@/lib/safeUrl";
@@ -369,7 +369,7 @@ export default async function ReviewDetail({
         })
       : Promise.resolve({});
   const trustPromise = fetchTrustFactor(p.users?.slack_id);
-  const yswsPromise = yswsShipsFor(p.users?.slack_id, p.repo_url, p.demo_url);
+  const yswsPromise = yswsShipsForReview(p.users?.slack_id, p.repo_url, p.demo_url);
   const ownerHandlePromise = slackHandle(p.users?.slack_id);
   const bomPromise = p.needs_funding && p.bom_url ? fetchBomRows(p.bom_url) : null;
   const claimByShown = !claim.ok && !!claim.by;
@@ -1491,7 +1491,7 @@ export default async function ReviewDetail({
                 fraudyChecksPromise,
               ])}
             >
-              {([commits, yswsShips, hackatimeReports, ownerHandle, fraudyChecks]) => (
+              {([commits, yswsArchive, hackatimeReports, ownerHandle, fraudyChecks]) => (
                 <ReviewDetailTabs
                   projectId={p.id}
                   commits={commits}
@@ -1500,7 +1500,8 @@ export default async function ReviewDetail({
                     contributorsFor(ownerNameFor(ownerHandle)).map((c) => [c.userId, c.name]),
                   )}
                   reviewAudits={reviewAudits}
-                  yswsShips={yswsShips}
+                  yswsShips={yswsArchive.ships}
+                  yswsArchiveStatus={yswsArchive.status}
                   yswsImport={
                     p.imported_from_ysws
                       ? {
