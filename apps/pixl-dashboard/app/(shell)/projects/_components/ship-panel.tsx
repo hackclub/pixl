@@ -7,7 +7,7 @@ import { ConfirmDialog } from "@/components/ui/dialog";
 import { Button, label, Notice } from "@/components/ui/primitives";
 import { goTo } from "@/components/use-action";
 import { startAuthFlow } from "@/lib/actions/flows";
-import { shipProject, unshipProject } from "../actions";
+import { checkProjectReadme, shipProject, unshipProject } from "../actions";
 import { hcaRecheckCopy, projectError, trialHoursCopy } from "../errors";
 import type { ActionDetails } from "@/lib/guarded-action-core";
 import { canUnship, type BlackoutState, type HtStats, type Project } from "../types";
@@ -51,11 +51,54 @@ export function ShipPanel({
   const [msg, setMsg] = useState<{ tone: "good" | "bad"; text: string } | null>(null);
 
   const items = checklist(form, stats, cutoffMs);
+  const [checkedReadme, setCheckedReadme] = useState<{
+    repoUrl: string;
+    status: "passed" | "too_short" | "missing" | "unavailable" | "unsupported";
+    chars: number | null;
+    minChars: number;
+  } | null>(null);
+  const readmeCheck = checkedReadme?.repoUrl === form.repoUrl.trim() ? checkedReadme : null;
 
-  function tryShip() {
+  async function runReadmeCheck(): Promise<boolean> {
+    setPending(true);
+    setMsg({ tone: "good", text: "Saving and checking your README..." });
+    try {
+      // The server only checks the authenticated owner's saved repo URL.
+      const saved = await pauseAutosave(save);
+      if (!saved) {
+        setMsg({ tone: "bad", text: "Couldn't save your project before checking its README." });
+        return false;
+      }
+      const result = await checkProjectReadme({ id: project.id });
+      if (!result.ok) {
+        setMsg({ tone: "bad", text: projectError(result.error) });
+        return false;
+      }
+      setCheckedReadme({ repoUrl: form.repoUrl.trim(), ...result.data });
+      if (result.data.status === "missing" || result.data.status === "too_short") {
+        setMsg({
+          tone: "bad",
+          text: result.data.status === "missing"
+            ? "No README found at the root of your GitHub project."
+            : `README too short: ${result.data.chars ?? 0}/${result.data.minChars} characters of explanation. Add more before shipping.`,
+        });
+        return false;
+      }
+      if (result.data.status === "unavailable" || result.data.status === "unsupported") {
+        setMsg({ tone: "bad", text: "Couldn't verify this README automatically. You can still ship; a reviewer will check it." });
+      } else {
+        setMsg({ tone: "good", text: `README passed: ${result.data.chars} explanatory characters.` });
+      }
+      return true;
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function tryShip() {
     const blockers = shipBlockers(project, form, stats, cutoffMs, eligible);
     if (blockers.length) return setMsg({ tone: "bad", text: `Can't ship yet: ${blockers.join("; ")}.` });
-    setMsg(null);
+    if (!(await runReadmeCheck())) return;
     setDialog("confirm");
   }
 
@@ -139,6 +182,28 @@ export function ShipPanel({
           <strong>Journal entries are optional, not required to ship.</strong> They&apos;re also what reviewers use to justify your
           hours, so an empty journal is the fastest way to get deflated.
         </p>
+        {!inReview ? (
+          <div className="rounded border border-ink/20 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <strong className="text-[12px]">README PRE-CHECK</strong>
+              <Button disabled={pending || !form.repoUrl.trim()} onClick={() => void runReadmeCheck()}>
+                {pending ? "CHECKING..." : "CHECK README"}
+              </Button>
+            </div>
+            <p className={hint()}>Your GitHub README needs 200+ explanatory characters. Images, badges, links, and code don't count.</p>
+            <p className={readmeCheck?.status === "passed" ? "text-sm font-bold text-good" : "text-sm text-dim"}>
+              {!readmeCheck
+                ? "Not checked yet."
+                : readmeCheck.status === "passed"
+                  ? `Passed: ${readmeCheck.chars}/${readmeCheck.minChars} characters`
+                  : readmeCheck.status === "too_short"
+                    ? `Too short: ${readmeCheck.chars}/${readmeCheck.minChars} characters`
+                    : readmeCheck.status === "missing"
+                      ? "No README found in the project root."
+                      : "Automatic check unavailable for this repo. Human review still applies."}
+            </p>
+          </div>
+        ) : null}
         <BlackoutPanel project={project} blackout={blackout} inReview={inReview} />
         <label className={checkRow}>
           <input type="checkbox" checked={eligible} disabled={inReview} onChange={(e) => setEligible(e.target.checked)} />
