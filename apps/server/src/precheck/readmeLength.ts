@@ -3,13 +3,13 @@ import { fetchRawFile, fetchRepoFiles } from "./sources.js";
 
 // A small, deterministic gate before ship. The AI pre-check still handles
 // content and quality after ship; length alone is not a quality verdict.
-export const MIN_README_CHARS = 200;
+export const MIN_README_WORDS = 200;
 
 export type ReadmeLengthStatus = "passed" | "too_short" | "missing" | "unavailable" | "unsupported";
 export interface ReadmeLengthResult {
   status: ReadmeLengthStatus;
-  chars: number | null;
-  minChars: number;
+  words: number | null;
+  minWords: number;
 }
 
 type ReadmeSources = {
@@ -17,9 +17,9 @@ type ReadmeSources = {
   raw?: (ref: RepoRef, file: string) => Promise<string | null>;
 };
 
-// Count the explanatory text, not badges, URLs, Markdown syntax or code dumps.
-// Unicode letters/numbers count, so non-English READMEs work as well.
-export function readmeProseLength(markdown: string): number {
+// Count prose words, not badges, URLs, Markdown syntax or code dumps.
+// Segment words by language-aware boundaries so non-English text counts too.
+export function readmeProseWordCount(markdown: string): number {
   const prose = markdown
     .replace(/<!--[\s\S]*?-->/g, " ")
     .replace(/<(?:script|style)\b[^>]*>[\s\S]*?<\/\s*(?:script|style)\s*>/gi, " ")
@@ -33,14 +33,15 @@ export function readmeProseLength(markdown: string): number {
     .replace(/\bhttps?:\/\/\S+/gi, " ")
     .replace(/<[^>]*>/g, " ")
     .replace(/[#*_~>|{}\[\]\\]/g, " ");
-  return [...prose].filter((c) => /[\p{L}\p{N}]/u.test(c)).length;
+  return [...new Intl.Segmenter(undefined, { granularity: "word" }).segment(prose)]
+    .filter(({ segment, isWordLike }) => isWordLike && /[\p{L}]/u.test(segment)).length;
 }
 
 export async function checkReadmeLength(repoUrl: string, sources: ReadmeSources = {}): Promise<ReadmeLengthResult> {
   const unknown = (status: ReadmeLengthStatus): ReadmeLengthResult => ({
     status,
-    chars: null,
-    minChars: MIN_README_CHARS,
+    words: null,
+    minWords: MIN_README_WORDS,
   });
   const ref = parseGithubRepo(repoUrl);
   // Do not fetch arbitrary git hosts here: their README endpoints vary and
@@ -49,13 +50,13 @@ export async function checkReadmeLength(repoUrl: string, sources: ReadmeSources 
   const files = await (sources.files ?? fetchRepoFiles)(ref);
   if (!files) return unknown("unavailable");
   const name = findReadme(files);
-  if (!name) return { status: "missing", chars: 0, minChars: MIN_README_CHARS };
+  if (!name) return { status: "missing", words: 0, minWords: MIN_README_WORDS };
   const readme = await (sources.raw ?? fetchRawFile)(ref, name);
   if (readme === null) return unknown("unavailable");
-  const chars = readmeProseLength(readme);
+  const words = readmeProseWordCount(readme);
   return {
-    status: chars >= MIN_README_CHARS ? "passed" : "too_short",
-    chars,
-    minChars: MIN_README_CHARS,
+    status: words >= MIN_README_WORDS ? "passed" : "too_short",
+    words,
+    minWords: MIN_README_WORDS,
   };
 }
