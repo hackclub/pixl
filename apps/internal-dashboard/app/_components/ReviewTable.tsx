@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { queueWaitSince } from "@/lib/queueWait";
+import { hasCurrentFirstPass } from "@/lib/reviewCycleDisplay";
 import type { ShippedProject } from "@/lib/db";
 import type { QueueLock } from "@/lib/reviewAssignment";
 import { LevelBadge, StatusBadge, FundingBadge, TypeBadge, BeaconBadge } from "@/app/_components/ProjectBadges";
@@ -63,7 +64,7 @@ export function ReviewTable({
   const claimer = (id: string) => handles.get(id) ?? "someone";
   // Only lists mixing in second_review rows have a first-pass reviewer to
   // show, so skip the column instead of rendering it always empty.
-  const showFirstPass = rows.some((p) => p.first_pass_by);
+  const showFirstPass = rows.some(hasCurrentFirstPass);
   const headers = [
     ...(selectName ? [<SelectAllBox key="select" />] : []),
     "Project",
@@ -174,14 +175,18 @@ export function ReviewTable({
             </td>
             {showFirstPass && (
               <td>
-                <span className="block max-w-[180px] truncate">{staffName(p.first_pass_by, "-")}</span>
-                {p.first_pass_at && (
-                  <Muted className="block text-xs">
-                    <span title={new Date(p.first_pass_at).toUTCString()}>
-                      {new Date(p.first_pass_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })}
-                    </span>
-                  </Muted>
-                )}
+                {hasCurrentFirstPass(p) ? (
+                  <>
+                    <span className="block max-w-[180px] truncate">{staffName(p.first_pass_by, "-")}</span>
+                    {p.first_pass_at && (
+                      <Muted className="block text-xs">
+                        <span title={new Date(p.first_pass_at).toUTCString()}>
+                          {new Date(p.first_pass_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })}
+                        </span>
+                      </Muted>
+                    )}
+                  </>
+                ) : <Muted>-</Muted>}
               </td>
             )}
             {hackatimeUserIds && (
