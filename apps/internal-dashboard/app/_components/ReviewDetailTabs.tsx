@@ -166,6 +166,7 @@ export function ReviewDetailTabs({
   contributorNames,
   reviewAudits,
   yswsShips,
+  yswsArchiveStatus,
   yswsImport,
   hackatimeReports,
   repoUrl,
@@ -183,6 +184,7 @@ export function ReviewDetailTabs({
   contributorNames: Record<string, string>;
   reviewAudits: ReviewAuditRow[];
   yswsShips: YswsShip[];
+  yswsArchiveStatus: "ready" | "loading" | "unavailable";
   yswsImport: YswsImport | null;
   /** One report per contributor with linked Hackatime projects. */
   hackatimeReports: HackatimePersonReport[];
@@ -370,7 +372,15 @@ export function ReviewDetailTabs({
             </Callout>
           </div>
         )}
-        {yswsMatches.length === 0 ? (
+        {yswsArchiveStatus !== "ready" ? (
+          <div className="p-4">
+            <Callout tone="warning" icon="important">
+              {yswsArchiveStatus === "loading"
+                ? "Other YSWS evidence is still loading. Refresh this page to check for matching ships before making a final decision."
+                : "Other YSWS evidence is unavailable. Do not treat this as a clean duplicate check; try again later."}
+            </Callout>
+          </div>
+        ) : yswsMatches.length === 0 ? (
           <EmptyState title="No other YSWS ships" icon="checkmark">
             {yswsImport
               ? "The archive doesn't match this project's current repo or demo, so the links were edited since it was imported. The import record above still applies."
