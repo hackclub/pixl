@@ -1,4 +1,5 @@
 type StepState = "done" | "current" | "upcoming";
+import { currentFirstPassAt } from "@/lib/reviewCycleDisplay";
 
 const DOT: Record<StepState, string> = {
   done: "var(--hc-green)",
@@ -32,6 +33,7 @@ export function ReviewPipelineSteps({
   status: string;
   airtableRecordId: string | null;
 }) {
+  const firstPassThisCycle = currentFirstPassAt(status, firstPassAt);
   const approved = status === "approved";
   const pastFraudReview = status === "second_review" || approved;
   const fraudReview: StepState = status === "fraud_review" ? "current" : pastFraudReview ? "done" : "upcoming";
@@ -41,7 +43,7 @@ export function ReviewPipelineSteps({
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
       <Step label="Initial submission" state={shippedAt ? "done" : "upcoming"} />
-      <Step label="First pass" state={firstPassAt ? "done" : shippedAt ? "current" : "upcoming"} />
+      <Step label="First pass" state={firstPassThisCycle ? "done" : shippedAt ? "current" : "upcoming"} />
       <Step label="Fraud review" state={fraudReview} />
       <Step label="Second pass" state={secondPass} />
       <Step label="Airtable" state={airtable} />
