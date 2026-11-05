@@ -22,6 +22,7 @@ import { z } from "zod";
 import { validate, v, optStr, optBool, optNum, params } from "../http/validate.js";
 import { countJournalImages, journalImagesNeeded, journalTextLength } from "./journalRules.js";
 import { withWritableJournalProject } from "./journalLock.js";
+import { approvedUpdateReviewResetFields } from "./projectReviewCycle.js";
 
 const router = Router();
 
@@ -942,6 +943,10 @@ router.post("/api/projects/:id/ship", validate({ query: v.noQuery, params: param
       notify_reviewer_slack_id: "",
       review_note: "",
       review_note_by: "",
+      // A fully approved project's update is a fresh review. Prior approvals
+      // remain in review_audits and approved_hours/prior_approved_hours.
+      // Needs-changes reships retain the three-day reviewer assignment.
+      ...(isUpdate ? approvedUpdateReviewResetFields() : {}),
       rejected_at: null,
       reject_reason: "",
       reject_by: "",
