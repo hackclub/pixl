@@ -216,6 +216,20 @@ export function ShipPanel({
                       ? "No README found in the project root."
                       : "Automatic check unavailable for this repo. Human review still applies."}
             </p>
+            <p className={hint()}>
+              {readmeCheck?.status === "missing" || readmeCheck?.status === "too_short"
+                ? "Need help fixing your README? "
+                : "Need help writing your README? "}
+              <Link
+                href="https://gist.github.com/FaizeenHoque/0709576cc598721df07fb62d2430e6fe"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-bold underline"
+              >
+                See the README template
+              </Link>
+              {" "}for reference. Explain your own project in your own words.
+            </p>
           </div>
         ) : null}
         <BlackoutPanel project={project} blackout={blackout} inReview={inReview} />
