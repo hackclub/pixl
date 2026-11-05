@@ -692,8 +692,8 @@ router.post("/api/projects/:id/ship", validate({ query: v.noQuery, params: param
     return res.status(400).json({
       ok: false,
       error: "readme_too_short",
-      need: readmeCheck.minChars,
-      have: readmeCheck.chars,
+      need: readmeCheck.minWords,
+      have: readmeCheck.words,
     });
   const isHardware = project.kind === "hardware";
   const demoCheck = normalizeDemoUrl(project.demo_url as string, isHardware);
