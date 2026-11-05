@@ -56,8 +56,8 @@ export function ShipPanel({
   const [checkedReadme, setCheckedReadme] = useState<{
     repoUrl: string;
     status: "passed" | "too_short" | "missing" | "unavailable" | "unsupported";
-    chars: number | null;
-    minChars: number;
+    words: number | null;
+    minWords: number;
   } | null>(null);
   const readmeCheck = checkedReadme?.repoUrl === repoUrl ? checkedReadme : null;
 
@@ -75,12 +75,12 @@ export function ShipPanel({
             repoUrl,
             ...(result.ok
               ? result.data
-              : { status: "unavailable" as const, chars: null, minChars: 200 }),
+              : { status: "unavailable" as const, words: null, minWords: 200 }),
           });
         })
         .catch(() => {
           if (active && version === checkVersion.current)
-            setCheckedReadme({ repoUrl, status: "unavailable", chars: null, minChars: 200 });
+            setCheckedReadme({ repoUrl, status: "unavailable", words: null, minWords: 200 });
         });
     }, 650);
     return () => {
@@ -111,7 +111,7 @@ export function ShipPanel({
           tone: "bad",
           text: result.data.status === "missing"
             ? "No README found at the root of your GitHub project."
-            : `README too short: ${result.data.chars ?? 0}/${result.data.minChars} characters of explanation. Add more before shipping.`,
+            : `README too short: ${result.data.words ?? 0}/${result.data.minWords} words of explanation. Add more before shipping.`,
         });
       }
     }
@@ -202,16 +202,16 @@ export function ShipPanel({
         {!inReview ? (
           <div className="rounded border border-ink/20 p-3">
             <strong className="text-[12px]">README PRE-CHECK</strong>
-            <p className={hint()}>Your GitHub README needs 200+ explanatory characters. Images, badges, links, and code don't count.</p>
+            <p className={hint()}>Your GitHub README needs 200+ explanatory words. Images, badges, links, and code don't count.</p>
             <p className={readmeCheck?.status === "passed" ? "text-sm font-bold text-good" : "text-sm text-dim"}>
               {!repoUrl
                 ? "Add your repo URL to see the README check."
                 : !readmeCheck
                   ? "Checking README automatically..."
                 : readmeCheck.status === "passed"
-                  ? `Passed: ${readmeCheck.chars}/${readmeCheck.minChars} characters`
+                  ? `Passed: ${readmeCheck.words}/${readmeCheck.minWords} words`
                   : readmeCheck.status === "too_short"
-                    ? `Too short: ${readmeCheck.chars}/${readmeCheck.minChars} characters`
+                    ? `Too short: ${readmeCheck.words}/${readmeCheck.minWords} words`
                     : readmeCheck.status === "missing"
                       ? "No README found in the project root."
                       : "Automatic check unavailable for this repo. Human review still applies."}
