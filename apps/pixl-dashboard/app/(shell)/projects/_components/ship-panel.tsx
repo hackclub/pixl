@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ConfirmDialog } from "@/components/ui/dialog";
 import { Button, label, Notice } from "@/components/ui/primitives";
 import { goTo } from "@/components/use-action";
@@ -51,54 +51,71 @@ export function ShipPanel({
   const [msg, setMsg] = useState<{ tone: "good" | "bad"; text: string } | null>(null);
 
   const items = checklist(form, stats, cutoffMs);
+  const repoUrl = form.repoUrl.trim();
+  const checkVersion = useRef(0);
   const [checkedReadme, setCheckedReadme] = useState<{
     repoUrl: string;
     status: "passed" | "too_short" | "missing" | "unavailable" | "unsupported";
     chars: number | null;
     minChars: number;
   } | null>(null);
-  const readmeCheck = checkedReadme?.repoUrl === form.repoUrl.trim() ? checkedReadme : null;
+  const readmeCheck = checkedReadme?.repoUrl === repoUrl ? checkedReadme : null;
 
-  async function runReadmeCheck(): Promise<boolean> {
+  // Show README feedback automatically. Do not save the entire project just
+  // to inspect its repo, and ignore obsolete responses when the URL changes.
+  useEffect(() => {
+    if (inReview || !repoUrl) return;
+    let active = true;
+    const version = ++checkVersion.current;
+    const timer = setTimeout(() => {
+      void checkProjectReadme({ id: project.id, repoUrl })
+        .then((result) => {
+          if (!active || version !== checkVersion.current) return;
+          setCheckedReadme({
+            repoUrl,
+            ...(result.ok
+              ? result.data
+              : { status: "unavailable" as const, chars: null, minChars: 200 }),
+          });
+        })
+        .catch(() => {
+          if (active && version === checkVersion.current)
+            setCheckedReadme({ repoUrl, status: "unavailable", chars: null, minChars: 200 });
+        });
+    }, 650);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [inReview, project.id, repoUrl]);
+
+  async function tryShip() {
+    const blockers = shipBlockers(project, form, stats, cutoffMs, eligible);
+    if (blockers.length) return setMsg({ tone: "bad", text: `Can't ship yet: ${blockers.join("; ")}.` });
+    // Re-check on submission too: the README may have changed on GitHub since
+    // the automatic preview. The API repeats the gate before accepting a ship.
+    const version = ++checkVersion.current;
     setPending(true);
-    setMsg({ tone: "good", text: "Saving and checking your README..." });
+    let result: Awaited<ReturnType<typeof checkProjectReadme>> | null = null;
     try {
-      // The server only checks the authenticated owner's saved repo URL.
-      const saved = await pauseAutosave(save);
-      if (!saved) {
-        setMsg({ tone: "bad", text: "Couldn't save your project before checking its README." });
-        return false;
-      }
-      const result = await checkProjectReadme({ id: project.id });
-      if (!result.ok) {
-        setMsg({ tone: "bad", text: projectError(result.error) });
-        return false;
-      }
-      setCheckedReadme({ repoUrl: form.repoUrl.trim(), ...result.data });
+      result = await checkProjectReadme({ id: project.id, repoUrl });
+    } catch {
+      // A temporary network failure must not prevent a human review.
+    } finally {
+      setPending(false);
+    }
+    if (result?.ok) {
+      if (version === checkVersion.current) setCheckedReadme({ repoUrl, ...result.data });
       if (result.data.status === "missing" || result.data.status === "too_short") {
-        setMsg({
+        return setMsg({
           tone: "bad",
           text: result.data.status === "missing"
             ? "No README found at the root of your GitHub project."
             : `README too short: ${result.data.chars ?? 0}/${result.data.minChars} characters of explanation. Add more before shipping.`,
         });
-        return false;
       }
-      if (result.data.status === "unavailable" || result.data.status === "unsupported") {
-        setMsg({ tone: "bad", text: "Couldn't verify this README automatically. You can still ship; a reviewer will check it." });
-      } else {
-        setMsg({ tone: "good", text: `README passed: ${result.data.chars} explanatory characters.` });
-      }
-      return true;
-    } finally {
-      setPending(false);
     }
-  }
-
-  async function tryShip() {
-    const blockers = shipBlockers(project, form, stats, cutoffMs, eligible);
-    if (blockers.length) return setMsg({ tone: "bad", text: `Can't ship yet: ${blockers.join("; ")}.` });
-    if (!(await runReadmeCheck())) return;
+    setMsg(null);
     setDialog("confirm");
   }
 
@@ -184,16 +201,13 @@ export function ShipPanel({
         </p>
         {!inReview ? (
           <div className="rounded border border-ink/20 p-3">
-            <div className="flex items-center justify-between gap-3">
-              <strong className="text-[12px]">README PRE-CHECK</strong>
-              <Button disabled={pending || !form.repoUrl.trim()} onClick={() => void runReadmeCheck()}>
-                {pending ? "CHECKING..." : "CHECK README"}
-              </Button>
-            </div>
+            <strong className="text-[12px]">README PRE-CHECK</strong>
             <p className={hint()}>Your GitHub README needs 200+ explanatory characters. Images, badges, links, and code don't count.</p>
             <p className={readmeCheck?.status === "passed" ? "text-sm font-bold text-good" : "text-sm text-dim"}>
-              {!readmeCheck
-                ? "Not checked yet."
+              {!repoUrl
+                ? "Add your repo URL to see the README check."
+                : !readmeCheck
+                  ? "Checking README automatically..."
                 : readmeCheck.status === "passed"
                   ? `Passed: ${readmeCheck.chars}/${readmeCheck.minChars} characters`
                   : readmeCheck.status === "too_short"
