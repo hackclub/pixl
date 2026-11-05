@@ -32,6 +32,7 @@ import { yswsShipsForReview } from "@/lib/ysws";
 import { renderMarkdown } from "@/lib/markdown";
 import { computeClaimedHours, round1 } from "@/lib/hours";
 import { isSafeUrl } from "@/lib/safeUrl";
+import { githubRepoOwnerProfile } from "@/lib/githubRepoOwner";
 import { db } from "@/lib/db";
 import { ReviewForm, type BountyOption } from "@/app/_components/ReviewForm";
 import { FRAUD_SCORE_THRESHOLD as ROBERT_FRAUD_THRESHOLD } from "@/lib/robertOutcome";
@@ -546,6 +547,7 @@ export default async function ReviewDetail({
   // One day before the global cutoff, for the extend-hours date input's max.
   const maxExtendDateStr = new Date((hackatimeCutoffUnix - 86_400) * 1000).toISOString().slice(0, 10);
   const repoUrl = isSafeUrl(p.repo_url) ? p.repo_url : null;
+  const githubOwnerProfile = githubRepoOwnerProfile(repoUrl);
   const demoUrl = isSafeUrl(p.demo_url) ? p.demo_url : null;
   const cartScreenshots = p.cart_screenshot_urls ?? [];
   const returnTo = `/review/${p.id}`;
@@ -569,6 +571,11 @@ export default async function ReviewDetail({
             <ButtonLink href={repoUrl} external variant="outline" icon="github">
               Repo
             </ButtonLink>
+            {githubOwnerProfile && (
+              <ButtonLink href={githubOwnerProfile} external variant="outline" icon="view">
+                GitHub profile
+              </ButtonLink>
+            )}
             <ButtonLink href={`${repoUrl.replace(/\/$/, "")}#readme`} external variant="outline" icon="docs">
               README
             </ButtonLink>
