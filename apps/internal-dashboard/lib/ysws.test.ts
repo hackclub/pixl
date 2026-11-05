@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { __resetArchiveForTests, yswsShipsFor } from "./ysws";
+import { __resetArchiveForTests, yswsShipsFor, yswsShipsForReview } from "./ysws";
 
 const realFetch = globalThis.fetch;
 
@@ -96,5 +96,31 @@ describe("yswsShipsFor", () => {
     stubArchive([], { fail: true });
     const ships = await yswsShipsFor(null, "https://github.com/someone/thing", null);
     expect(ships).toHaveLength(1);
+  });
+});
+
+describe("yswsShipsForReview", () => {
+  test("does not block on a cold archive, then serves the warmed result", async () => {
+    const archive = stubArchive([entry()], { delayMs: 70 });
+    const first = await yswsShipsForReview(null, "https://github.com/someone/thing", null, 5);
+    expect(first).toEqual({ status: "loading", ships: [] });
+    await new Promise((r) => setTimeout(r, 85));
+    const second = await yswsShipsForReview(null, "https://github.com/someone/thing", null, 5);
+    expect(second.status).toBe("ready");
+    expect(second.ships).toHaveLength(1);
+    expect(archive.calls).toBe(1);
+  });
+
+  test("reports a failed archive as unavailable, not a clean result", async () => {
+    stubArchive([], { fail: true });
+    expect(await yswsShipsForReview(null, "https://github.com/someone/thing", null, 5))
+      .toEqual({ status: "unavailable", ships: [] });
+  });
+
+  test("no repo or demo needs no archive request", async () => {
+    const archive = stubArchive([entry()]);
+    expect(await yswsShipsForReview(null, null, null))
+      .toEqual({ status: "ready", ships: [] });
+    expect(archive.calls).toBe(0);
   });
 });

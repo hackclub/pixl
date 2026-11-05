@@ -93,6 +93,16 @@ function refresh(): Promise<void> {
   return inFlight;
 }
 
+function matches(repo: string, demo: string): YswsShip[] {
+  if (!archive) return [];
+  const hits = new Set<YswsShip>();
+  for (const key of new Set([repo, demo])) {
+    if (!key) continue;
+    for (const ship of archive.byUrl.get(key) ?? []) hits.add(ship);
+  }
+  return [...hits].sort((a, b) => (b.approvedAt ?? "").localeCompare(a.approvedAt ?? ""));
+}
+
 export async function yswsShipsFor(
   _slackId: string | null | undefined,
   repoUrl: string | null,
@@ -100,22 +110,42 @@ export async function yswsShipsFor(
 ): Promise<YswsShip[]> {
   const repo = norm(repoUrl ?? "");
   const demo = norm(demoUrl ?? "");
-  if (repo === "" && demo === "") return [];
-
-  // Nothing cached yet is the one case worth waiting on: a reviewer seeing an
-  // empty double-dip panel can't tell it apart from a clean project.
+  if (!repo && !demo) return [];
   if (!archive) await refresh();
   else if (Date.now() - archive.at > FRESH_MS) void refresh();
-  if (!archive) return [];
+  return matches(repo, demo);
+}
 
-  // An entry is indexed under both its urls, so the same ship can come back
-  // from both lookups - dedupe by identity rather than listing it twice.
-  const hits = new Set<YswsShip>();
-  for (const key of new Set([repo, demo])) {
-    if (key === "") continue;
-    for (const ship of archive.byUrl.get(key) ?? []) hits.add(ship);
+export type ReviewArchiveLookup = {
+  status: "ready" | "loading" | "unavailable";
+  ships: YswsShip[];
+};
+
+export async function yswsShipsForReview(
+  _slackId: string | null | undefined,
+  repoUrl: string | null,
+  demoUrl: string | null,
+  maxWaitMs = 1500,
+): Promise<ReviewArchiveLookup> {
+  const repo = norm(repoUrl ?? "");
+  const demo = norm(demoUrl ?? "");
+  if (!repo && !demo) return { status: "ready", ships: [] };
+
+  if (!archive) {
+    const pending = refresh();
+    await new Promise<void>((resolve) => {
+      const timeout = setTimeout(resolve, Math.max(0, maxWaitMs));
+      void pending.then(
+        () => { clearTimeout(timeout); resolve(); },
+        () => { clearTimeout(timeout); resolve(); },
+      );
+    });
+  } else if (Date.now() - archive.at > FRESH_MS) {
+    void refresh();
   }
-  return [...hits].sort((a, b) => (b.approvedAt ?? "").localeCompare(a.approvedAt ?? ""));
+
+  if (archive) return { status: "ready", ships: matches(repo, demo) };
+  return { status: inFlight ? "loading" : "unavailable", ships: [] };
 }
 
 export function __resetArchiveForTests() {
