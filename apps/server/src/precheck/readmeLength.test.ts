@@ -31,7 +31,7 @@ describe("readmeProseWordCount", () => {
   });
 
   test("does not count inline code, HTML comments or bare URLs", () => {
-    expect(readmeProseWordCount("Install `" + words(200) + "` then visit https://example.com/installation")).toBe(2);
+    expect(readmeProseWordCount("Install `" + words(200) + "` then visit https://example.com/installation <!-- " + words(200) + " -->")).toBe(3);
   });
 });
 
