@@ -5,7 +5,7 @@
 # time. Locally the app runs on 4900; in the container it follows PORT so it
 # lines up with the other three services.
 
-FROM oven/bun:1.3.13 AS deps
+FROM oven/bun:1.4.2 AS deps
 WORKDIR /app
 
 COPY package.json bun.lock ./
