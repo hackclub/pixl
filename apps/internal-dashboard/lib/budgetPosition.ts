@@ -22,7 +22,7 @@ export interface BudgetPosition {
 export function reserveLines(p: BudgetPosition, pixelValueUsd: number) {
   return [
     { label: "Wallet balances", pixels: p.walletsPx },
-    { label: "Pending orders", pixels: p.pendingOrdersPx },
+    { label: "New / claimed orders", pixels: p.pendingOrdersPx },
     { label: "Ordered prizes", pixels: p.orderedPx },
     { label: "Unclaimed Trial rewards", pixels: p.heldTrialPx },
     { label: "Pending review rewards", pixels: p.pendingReviewPx },
