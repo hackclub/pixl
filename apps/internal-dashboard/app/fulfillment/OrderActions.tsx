@@ -1,4 +1,4 @@
-import { cancelOrder, clearOrderFlag, claimOrder, reserveOrder, markOrderPlaced, flagOrderOverBudget, markOrderCredited, markOrderDone, reassignOrder, shipOrder, updateOrderFulfillmentInfo } from "@/app/actions";
+import { cancelOrder, clearOrderFlag, claimOrder, markOrderPlaced, flagOrderOverBudget, markOrderCredited, markOrderDone, reassignOrder, shipOrder, updateOrderFulfillmentInfo } from "@/app/actions";
 import type { ShopOrderRow } from "@/lib/db";
 import { ActionButton, Details, Field, Input, Muted } from "@/app/_ui/ui";
 import { usdBudget } from "./shared";
@@ -159,14 +159,8 @@ export function OrderActions({
       <div className="flex flex-wrap items-end gap-2">
         <form action={claimOrder}>
           <input type="hidden" name="id" value={o.id} />
-          <ActionButton pendingLabel="Placing..." icon="bag">
-            Place order &amp; claim
-          </ActionButton>
-        </form>
-        <form action={reserveOrder}>
-          <input type="hidden" name="id" value={o.id} />
-          <ActionButton variant="outline" pendingLabel="Claiming..." icon="member-add">
-            Claim order (no purchase yet)
+          <ActionButton pendingLabel="Claiming..." icon="member-add">
+            Claim order
           </ActionButton>
         </form>
         {cancelForm}
