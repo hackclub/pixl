@@ -24,6 +24,7 @@ const ERRORS: Record<string, string> = {
   other_ysws_notes_required: "Describe what you updated since your other YSWS submission.",
   other_ysws_notes_too_short: "That description needs at least 100 characters.",
   already_shipped: "This one is already in the review queue.",
+  submissions_closed: "Submissions have closed. Only projects where a reviewer requested changes can be resubmitted, once.",
   project_banned: "This project is banned and can't be shipped.",
   cdn_not_configured: "Image uploads aren't configured on the server.",
   cdn_failed: "Image upload failed, try again.",

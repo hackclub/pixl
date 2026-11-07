@@ -5,6 +5,7 @@ export const config = {
   "tagline": "A retro 2D world where you level up by building real things",
   "launchDate": "2026-08-18T11:00:00Z",
   "hackatimeCutoff": "2026-01-01T00:00:00Z",
+  "submissionDeadline": "2026-11-20T23:59:59Z",
   "urls": {
     "site": "https://pixl.hackclub.com",
     "play": "https://play.pixl.hackclub.com",
@@ -159,6 +160,9 @@ export function projectPayoutPx(hours: number, tier: number, reBefore: number): 
 
 export const launchDate = new Date(config.launchDate);
 export const hackatimeCutoff = new Date(config.hackatimeCutoff);
+
+/** Last moment players can submit projects for review. */
+export const submissionDeadline = new Date(config.submissionDeadline);
 
 /** Seconds since epoch - the shape Hackatime's API wants. */
 export const hackatimeCutoffUnix = Math.floor(hackatimeCutoff.getTime() / 1000);

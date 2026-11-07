@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { submissionsClosedFor } from "../submissionDeadline.js";
 import { db } from "../db/client.js";
 import { runPrecheck, shouldPrecheck } from "../precheck/run.js";
 import { checkReadmeLength } from "../precheck/readmeLength.js";
@@ -645,6 +646,15 @@ router.post("/api/projects/:id/ship", validate({ query: v.noQuery, params: param
 
   if (project.banned_at)
     return res.status(400).json({ ok: false, error: "project_banned" });
+
+  // Submissions closed on config.submissionDeadline; the only ship still
+  // allowed is the one resubmit a needs_changes project earns.
+  if (submissionsClosedFor(project))
+    return res.status(403).json({
+      ok: false,
+      error: "submissions_closed",
+      message: "Submissions have closed. Only projects where a reviewer requested changes can be resubmitted, once.",
+    });
 
   const shippable = ["draft", "needs_changes", "approved"];
   if (!shippable.includes(project.status as string) && !project.rejected_at)
