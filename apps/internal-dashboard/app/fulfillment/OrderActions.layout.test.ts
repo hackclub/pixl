@@ -21,6 +21,13 @@ describe("fulfillment action layout", () => {
     }
   });
 
+  test("claiming without placing has its own form and follow-up action", () => {
+    expect(actions).toContain("<form action={reserveOrder}>");
+    expect(actions).toContain("Claim order (no purchase yet)");
+    expect(actions).toContain("<form action={markOrderPlaced}>");
+    expect(actions).toContain("Mark order placed");
+    expect(actions).toContain("<form action={claimOrder}>");
+  });
   test("actions occupy a separate full-width panel below the info grid", () => {
     const grid = detail.indexOf('<div className="fw-cols">');
     const actionsPanel = detail.indexOf('<Panel title="Actions" icon="bolt">');
