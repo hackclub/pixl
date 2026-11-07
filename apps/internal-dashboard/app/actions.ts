@@ -5435,6 +5435,41 @@ export const commitShopItemsCsv = guardedAction("commitShopItemsCsv", "owner", a
   return { added, replaced, skipped, errors };
 });
 
+// Assign a pending order to this fulfiller without claiming a purchase happened.
+// The funding ledger and ownership update are atomic, like place-and-claim.
+export const reserveOrder = guardedAction("reserveOrder", "fulfiller", async (access, formData: FormData): Promise<void> => {
+  const id = Number(formData.get("id") ?? 0);
+  if (!Number.isSafeInteger(id) || id <= 0) return;
+  const { data: order } = await db.from("shop_orders")
+    .select("user_id, item_name, status").eq("id", id).maybeSingle();
+  if (!order || order.status !== "pending") {
+    revalidatePath("/fulfillment");
+    return;
+  }
+  if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId)) {
+    throw new Error("You can't fulfill your own shop order.");
+  }
+  const outcome = await claimOrderWithFunding({
+    orderId: id,
+    by: actorName(access),
+    bySlack: access.session.slackId,
+  }, { ships: shipsProvider(), reserveOnly: true });
+  if (outcome.kind === "refused") {
+    if (outcome.code === "not_pending" || outcome.code === "not_found") {
+      revalidatePath("/fulfillment");
+      return;
+    }
+    throw new Error(outcome.message);
+  }
+  // Never fall back to a non-atomic update when the reservation RPC is missing.
+  if (outcome.kind !== "claimed") throw new Error("Claim-only RPC is not installed.");
+  if (outcome.code === "claimed") {
+    await logOrderAction(id, "order_reserved", "assigned without purchase", actorName(access), order);
+  }
+  revalidatePath("/fulfillment");
+  redirect(`/fulfillment?mine=1&order=${id}`);
+});
+
 // Claim an unclaimed (pending) order: the fulfiller has placed the real order
 // and now owns it. It moves into their queue at the 'ordered' stage (placed, not
 // yet credited by HCB) and nobody else advances it unless they reassign it.
@@ -5530,7 +5565,7 @@ export const flagOrderOverBudget = guardedAction("flagOrderOverBudget", "fulfill
       flag_note: note,
     })
     .eq("id", id)
-    .in("status", ["pending", "ordered", "credited"]);
+    .in("status", ["pending", "claimed", "ordered", "credited"]);
   if (!access.isOwner) update = update.eq("claimed_by_slack", access.session.slackId);
   const { data: changed, error } = await update.select("id").maybeSingle();
   if (error) throw new Error(error.message);
@@ -5595,6 +5630,38 @@ async function logOrderAction(
   if (!userId) return;
   await logModAction(userId, action, `order #${orderId} "${itemName}": ${detail}`, by);
 }
+
+// Claimed -> ordered: only now has the fulfiller actually purchased the item.
+// A claim-only reservation never sets ordered_at or sends an order-placed alert.
+export const markOrderPlaced = guardedAction("markOrderPlaced", "fulfiller", async (access, formData: FormData): Promise<void> => {
+  const id = Number(formData.get("id") ?? 0);
+  if (!Number.isSafeInteger(id) || id <= 0) return;
+  const { data: order } = await db.from("shop_orders")
+    .select("user_id, item_name, status, claimed_by_slack").eq("id", id).maybeSingle();
+  if (!order || order.status !== "claimed" || !ownsOrder(access, order.claimed_by_slack as string)) {
+    revalidatePath("/fulfillment");
+    return;
+  }
+  if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId)) {
+    throw new Error("You can't fulfill your own shop order.");
+  }
+  const { data: changed, error } = await db.from("shop_orders")
+    .update({ status: "ordered", ordered_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("status", "claimed")
+    .eq("claimed_by_slack", access.session.slackId)
+    .select("id").maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!changed) { revalidatePath("/fulfillment"); return; }
+  const placedBody = `Your "${order.item_name}" order has been placed and is being fulfilled. We'll let you know when it ships.`;
+  await db.from("notifications").insert({
+    user_id: order.user_id,
+    title: "Order placed! 📦",
+    body: placedBody,
+  });
+  await logOrderAction(id, "order_placed", "order placed after reservation", actorName(access), order);
+  revalidatePath("/fulfillment");
+});
 
 // HCB credited the card and the fulfiller uploaded the receipt: ordered ->
 // credited (paid, not shipped yet). Only the claiming fulfiller can advance it.
@@ -5840,7 +5907,7 @@ export const reassignOrder = guardedAction("reassignOrder", "owner", async (acce
     .from("shop_orders")
     .update({ claimed_by: actorName(access), claimed_by_slack: access.session.slackId })
     .eq("id", id)
-    .in("status", ["ordered", "credited"]);
+    .in("status", ["claimed", "ordered", "credited"]);
   if (error) throw new Error(error.message);
   await logOrderAction(id, "order_reassigned", `taken over by ${actorName(access)}`, actorName(access));
   revalidatePath("/fulfillment");
@@ -5863,7 +5930,7 @@ export const cancelOrder = guardedAction("cancelOrder", "owner", async (access, 
   // A claimed order (ordered / credited) is cancelled through its own RPC,
   // which only the dashboard calls: the player's cancel route keeps using the
   // pending-only cancel_shop_order. Shipped and done orders are not cancellable.
-  const cancellable = order?.status === "pending" || order?.status === "ordered" || order?.status === "credited";
+  const cancellable = order?.status === "pending" || order?.status === "claimed" || order?.status === "ordered" || order?.status === "credited";
   if (!order || !cancellable) {
     revalidatePath("/fulfillment");
     return;

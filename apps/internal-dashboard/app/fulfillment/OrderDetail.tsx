@@ -28,7 +28,7 @@ import { STAGE_HINT, STAGE_LABEL, STAGE_TONE, SafeLink, slackLink, usdBudget } f
 const LABEL_ELIGIBLE_ITEMS = new Set(["Random Desk Object", "Signed Org Photo"]);
 
 function stageStamp(o: ShopOrderRow, s: OrderStatus): string | null {
-  const v = { pending: o.created_at, ordered: o.ordered_at, credited: o.credited_at, shipped: o.shipped_at, done: o.done_at, cancelled: null }[s];
+  const v = { pending: o.created_at, claimed: o.claimed_at, ordered: o.ordered_at, credited: o.credited_at, shipped: o.shipped_at, done: o.done_at, cancelled: null }[s];
   return v ? formatDate(v) : null;
 }
 

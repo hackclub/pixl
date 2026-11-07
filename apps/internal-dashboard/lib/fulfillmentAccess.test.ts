@@ -78,6 +78,11 @@ describe("fulfillment tabs and the actions panel", () => {
   test("pending: claim is offered, edit is not", () => {
     expect(panel("pending", false, { mine: false })).toMatchObject({ primary: true, edit: false });
   });
+  test("claimed: belongs to the fulfiller, but is not yet placed or paid", () => {
+    expect(panel("claimed", false)).toMatchObject({ primary: true, edit: false, flag: true });
+    expect(panel("claimed", false, { mine: false, hasBuyerSlack: false }).any).toBe(false);
+    expect(panel("claimed", true, { mine: false }).primary).toBe(true);
+  });
   test("shipped: only owners can close it", () => {
     expect(panel("shipped", false).primary).toBe(false);
     expect(panel("shipped", true).primary).toBe(true);

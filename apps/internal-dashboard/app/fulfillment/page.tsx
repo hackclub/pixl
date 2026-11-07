@@ -58,7 +58,7 @@ import { OrderDetail } from "./OrderDetail";
 
 export const dynamic = "force-dynamic";
 
-const TAB_KEYS = ["pending", "ordered", "credited", "shipped", "done", "cancelled", "flagged", "all", "leaderboard", "fulfillers"] as const;
+const TAB_KEYS = ["pending", "claimed", "ordered", "credited", "shipped", "done", "cancelled", "flagged", "all", "leaderboard", "fulfillers"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
 
 // Lifetime shop P&L, fulfilled orders only. Both sides are scoped to the same
@@ -183,13 +183,13 @@ export default async function FulfillmentPage({
 
   // "My queue" is a fixed cross-stage view, not a filter on the selected tab:
   // every order this fulfiller has claimed that isn't done yet. Filtering the
-  // default New tab instead would always be empty, since nobody has claimed a
-  // pending order yet.
+  // default New tab instead would always be empty, since claimed orders
+  // move to their own stage.
   const loaded = !showingQueue ? [] : await listShopOrders(
     mineOnly ? undefined : active === "all" ? undefined : active,
     pageSize + 1,
     {
-      ...(mineOnly ? { claimedBySlack: me, stages: ["ordered", "credited", "shipped"] } : {}),
+      ...(mineOnly ? { claimedBySlack: me, stages: ["claimed", "ordered", "credited", "shipped"] } : {}),
       search: query,
       offset: pageIndex * pageSize,
       viewerSlack: me,
@@ -250,6 +250,7 @@ export default async function FulfillmentPage({
 
   const pipelineStages = counts ? [
     { key: "pending" as const, label: "New", count: counts.pending },
+    { key: "claimed" as const, label: "Claimed", count: counts.claimed },
     { key: "ordered" as const, label: "Ordered", count: counts.ordered },
     { key: "credited" as const, label: "Credited", count: counts.credited },
     { key: "shipped" as const, label: "Shipped", count: counts.shipped },
@@ -259,6 +260,7 @@ export default async function FulfillmentPage({
 
   const tabs: { key: TabKey; label: string; count?: number }[] = [
     { key: "pending", label: "New", count: counts?.pending },
+    { key: "claimed", label: "Claimed", count: counts?.claimed },
     { key: "ordered", label: "Ordered", count: counts?.ordered },
     { key: "credited", label: "Credited", count: counts?.credited },
     { key: "shipped", label: "Shipped", count: counts?.shipped },

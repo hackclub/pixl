@@ -219,7 +219,7 @@ export interface EligibilityResult {
 
 const fmt = (cents: number): string => `$${(cents / 100).toFixed(2)}`;
 
-const CLAIMED_STATES = new Set(["ordered", "credited", "shipped", "done"]);
+const CLAIMED_STATES = new Set(["claimed", "ordered", "credited", "shipped", "done"]);
 
 export const toCents = (usd: number): number => Math.round(usd * 100);
 export const fromCents = (cents: number): number => cents / 100;

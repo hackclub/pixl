@@ -22,7 +22,7 @@ export interface BudgetPosition {
 export function reserveLines(p: BudgetPosition, pixelValueUsd: number) {
   return [
     { label: "Wallet balances", pixels: p.walletsPx },
-    { label: "Pending orders", pixels: p.pendingOrdersPx },
+    { label: "New / claimed orders", pixels: p.pendingOrdersPx },
     { label: "Ordered prizes", pixels: p.orderedPx },
     { label: "Unclaimed Trial rewards", pixels: p.heldTrialPx },
     { label: "Pending review rewards", pixels: p.pendingReviewPx },
@@ -34,9 +34,9 @@ export async function getBudgetPosition(): Promise<BudgetPosition> {
   const rows = await sql`SELECT now() AS read_at,
     (SELECT coalesce(sum(greatest(pixels, 0)), 0) FROM users) AS wallets_px,
     (SELECT coalesce(sum(least(pixels, 0)), 0) FROM users) AS negative_px,
-    (SELECT coalesce(sum(price), 0) FROM shop_orders WHERE status = 'pending') AS pending_px,
+    (SELECT coalesce(sum(price), 0) FROM shop_orders WHERE status IN ('pending', 'claimed')) AS pending_px,
     (SELECT coalesce(sum(price), 0) FROM shop_orders WHERE status = 'ordered') AS ordered_px,
-    (SELECT count(*) FROM shop_orders WHERE status = 'pending') AS pending_orders,
+    (SELECT count(*) FROM shop_orders WHERE status IN ('pending', 'claimed')) AS pending_orders,
     (SELECT count(*) FROM shop_orders WHERE status = 'ordered') AS ordered_orders,
     (SELECT coalesce(sum(price), 0) FROM shop_orders WHERE status IN ('credited', 'shipped', 'done')) AS fulfilled_px,
     (SELECT count(*) FROM shop_orders WHERE status IN ('credited', 'shipped', 'done')) AS fulfilled_orders,

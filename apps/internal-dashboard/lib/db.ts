@@ -2483,7 +2483,7 @@ export async function fulfillerStatsBySlackId(): Promise<Map<string, FulfillerSt
     s.claimed += 1;
     if (r.status === "shipped" || r.status === "done") s.shipped += 1;
     if (r.status === "done") s.done += 1;
-    if (r.status === "ordered" || r.status === "credited") s.inQueue += 1;
+    if (r.status === "claimed" || r.status === "ordered" || r.status === "credited") s.inQueue += 1;
     s.pixelsEarned += Number(r.fulfillment_pixels_paid) || 0;
     if (r.claimed_at && r.shipped_at) {
       const secs = (new Date(r.shipped_at).getTime() - new Date(r.claimed_at).getTime()) / 1000;
@@ -2669,6 +2669,7 @@ export async function listPersonalShopItems(): Promise<PersonalShopItem[]> {
 
 export type OrderStatus =
   | "pending"
+  | "claimed"
   | "ordered"
   | "credited"
   | "shipped"
@@ -2676,7 +2677,7 @@ export type OrderStatus =
   | "cancelled";
 
 // The pipeline stages in order, for the stepper. 'cancelled' is off to the side.
-export const ORDER_STAGES: OrderStatus[] = ["pending", "ordered", "credited", "shipped", "done"];
+export const ORDER_STAGES: OrderStatus[] = ["pending", "claimed", "ordered", "credited", "shipped", "done"];
 
 export interface ShopOrderRow {
   id: number;

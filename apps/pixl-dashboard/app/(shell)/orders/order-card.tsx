@@ -19,6 +19,7 @@ export interface Order {
 
 const STAGES: [string, string][] = [
   ["pending", "NEW"],
+  ["claimed", "CLAIMED"],
   ["ordered", "ORDERED"],
   ["credited", "PAID"],
   ["shipped", "SHIPPED"],
@@ -29,6 +30,7 @@ type BadgeTone = "default" | "gold" | "teal" | "green" | "red";
 
 const BADGE: Record<string, [string, BadgeTone]> = {
   pending: ["AWAITING", "default"],
+  claimed: ["PREPARING", "teal"],
   ordered: ["ORDERED", "gold"],
   credited: ["PAID", "gold"],
   shipped: ["SHIPPED", "teal"],
