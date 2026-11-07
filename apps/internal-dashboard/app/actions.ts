@@ -5435,9 +5435,9 @@ export const commitShopItemsCsv = guardedAction("commitShopItemsCsv", "owner", a
   return { added, replaced, skipped, errors };
 });
 
-// Assign a pending order to this fulfiller without claiming a purchase happened.
+// Claim a pending order for this fulfiller without marking it purchased.
 // The funding ledger and ownership update are atomic, like place-and-claim.
-export const reserveOrder = guardedAction("reserveOrder", "fulfiller", async (access, formData: FormData): Promise<void> => {
+export const claimOrder = guardedAction("claimOrder", "fulfiller", async (access, formData: FormData): Promise<void> => {
   const id = Number(formData.get("id") ?? 0);
   if (!Number.isSafeInteger(id) || id <= 0) return;
   const { data: order } = await db.from("shop_orders")
@@ -5468,76 +5468,6 @@ export const reserveOrder = guardedAction("reserveOrder", "fulfiller", async (ac
   }
   revalidatePath("/fulfillment");
   redirect(`/fulfillment?mine=1&order=${id}`);
-});
-
-// Claim an unclaimed (pending) order: the fulfiller has placed the real order
-// and now owns it. It moves into their queue at the 'ordered' stage (placed, not
-// yet credited by HCB) and nobody else advances it unless they reassign it.
-export const claimOrder = guardedAction("claimOrder", "fulfiller", async (access, formData: FormData): Promise<void> => {
-  const id = Number(formData.get("id") ?? 0);
-  if (!id) return;
-  const { data: order } = await db
-    .from("shop_orders")
-    .select("user_id, item_name, status")
-    .eq("id", id)
-    .maybeSingle();
-  if (!order || order.status !== "pending") {
-    revalidatePath("/fulfillment");
-    return;
-  }
-  // Self-dealing: nobody fulfills (and earns the payout on) their own order.
-  if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId)) {
-    throw new Error("You can't fulfill your own shop order.");
-  }
-  const outcome = await claimOrderWithFunding({
-    orderId: id,
-    by: actorName(access),
-    bySlack: access.session.slackId,
-  }, { ships: shipsProvider() });
-  if (outcome.kind === "refused") {
-    if (outcome.code === "not_pending" || outcome.code === "not_found") {
-      revalidatePath("/fulfillment");
-      return;
-    }
-    throw new Error(outcome.message);
-  }
-  if (outcome.kind === "unledgered") {
-    const now = new Date().toISOString();
-    const { error } = await db
-      .from("shop_orders")
-      .update({
-        status: "ordered",
-        claimed_by: actorName(access),
-        claimed_by_slack: access.session.slackId,
-        claimed_at: now,
-        ordered_at: now,
-      })
-      .eq("id", id)
-      .eq("status", "pending");
-    if (error) throw new Error(error.message);
-  }
-  // An idempotent retry may return already_claimed: only the first claim
-  // should create a notification and audit event.
-  if (outcome.kind !== "claimed" || outcome.code === "claimed") {
-    const placedBody = `Your "${order.item_name}" order has been placed and is being fulfilled. We'll let you know when it ships.`;
-    await db.from("notifications").insert({
-      user_id: order.user_id,
-      title: "Order placed! 📦",
-      body: placedBody,
-    });
-  }
-  if (outcome.kind === "claimed" && outcome.code === "already_claimed") {
-    revalidatePath("/fulfillment");
-    return;
-  }
-  const claimNote =
-    outcome.kind === "unledgered"
-      ? "claimed and placed WITHOUT a funding ledger entry (migration 0229 not applied)"
-      : outcome.degraded
-        ? "claimed and placed; funding evidence unavailable, recorded as unverified"
-        : "claimed and placed";
-  await logOrderAction(id, "order_claimed", claimNote, actorName(access), order);
-  revalidatePath("/fulfillment");
 });
 
 // Over budget: the cheapest the fulfiller could find it for is more than the
