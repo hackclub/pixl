@@ -5,6 +5,7 @@ import type { OrderStatus } from "@/lib/db";
 
 export const STAGE_LABEL: Record<OrderStatus, string> = {
   pending: "New",
+  claimed: "Claimed",
   ordered: "Ordered",
   credited: "Credited",
   shipped: "Shipped",
@@ -14,6 +15,7 @@ export const STAGE_LABEL: Record<OrderStatus, string> = {
 
 export const STAGE_TONE: Record<OrderStatus, Tone> = {
   pending: "warning",
+  claimed: "info",
   ordered: "info",
   credited: "purple",
   shipped: "cyan",
@@ -23,6 +25,7 @@ export const STAGE_TONE: Record<OrderStatus, Tone> = {
 
 export const STAGE_HINT: Record<OrderStatus, string> = {
   pending: "Request received",
+  claimed: "Assigned to fulfiller; not purchased",
   ordered: "Item purchased",
   credited: "Receipt uploaded",
   shipped: "Tracking added",
