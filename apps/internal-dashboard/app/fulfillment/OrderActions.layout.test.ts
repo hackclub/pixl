@@ -31,7 +31,7 @@ describe("fulfillment action layout", () => {
     expect(pending).toContain("Claim order");
     expect(pending).not.toContain("Place order &amp; claim");
     expect(pending).not.toContain("reserveOrder");
-    expect(pending.match(/<form action=\\{claimOrder\\}>/g)).toHaveLength(1);
+    expect(pending.split("<form action={claimOrder}>")).toHaveLength(2);
     expect(actions).toContain("<form action={markOrderPlaced}>");
     expect(actions).toContain("Mark order placed");
 
