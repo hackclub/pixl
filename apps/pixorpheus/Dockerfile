@@ -15,7 +15,7 @@
 # the lockfile format matches), check `bun install --frozen-lockfile`, and
 # copy bun.lock back. CI verifies it stays in sync.
 
-FROM oven/bun:1.3.13
+FROM oven/bun:1.4.2
 WORKDIR /app
 
 COPY package.json bun.lock ./
