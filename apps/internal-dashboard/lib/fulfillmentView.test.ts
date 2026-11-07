@@ -73,7 +73,7 @@ describe("foldOrderCounts", () => {
       { status: "ordered", n: 3, flagged: 2 },
       { status: "cancelled", n: 1, flagged: 0 },
     ]);
-    expect(c).toEqual({ pending: 5, ordered: 3, credited: 0, shipped: 0, done: 0, cancelled: 1, flagged: 3, all: 9 });
+    expect(c).toEqual({ pending: 5, claimed: 0, ordered: 3, credited: 0, shipped: 0, done: 0, cancelled: 1, flagged: 3, all: 9 });
   });
   test("ignores unknown statuses in the per-status buckets but still counts them in all", () => {
     const c = foldOrderCounts([{ status: "weird", n: 2, flagged: 0 }]);
