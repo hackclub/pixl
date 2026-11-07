@@ -2382,7 +2382,7 @@ html[data-density="compact"] .hc-main {
 .fw-tiles dt { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
 .fw-tiles dd { margin: 2px 0 0; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
-.fw-steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; list-style: none; margin: 0; padding: 4px 0; }
+.fw-steps { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; list-style: none; margin: 0; padding: 4px 0; }
 .fw-step { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 2px; }
 .fw-step:not(:last-child)::after { content: ""; position: absolute; top: 15px; left: calc(50% + 18px); right: calc(-50% + 18px); height: 2px; background: var(--border-strong, var(--border)); }
 .fw-step[data-state="done"]:not(:last-child)::after { background: var(--hc-green); }
