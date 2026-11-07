@@ -33,7 +33,7 @@ export function BudgetView({ data, position, cash }: { data: BudgetData; positio
         <Stat icon="bank" label="In people's wallets" value={nominal(position.walletsPx)}
           hint={`${px(position.walletsPx)} unredeemed; positive balances only`} />
         <Stat icon="package" label="Orders left to fulfil" value={nominal(openPx)}
-          hint={`${px(openPx)} across ${position.pendingOrders + position.orderedOrders} pending / ordered records`} />
+          hint={`${px(openPx)} across ${position.pendingOrders + position.orderedOrders} new, claimed or ordered records`} />
         <Stat icon="payment" label="Remaining estimate" value={remainingCents === null ? "Unavailable" : money(remainingCents)}
           tone={remainingCents !== null && remainingCents < 0 ? "danger" : "neutral"}
           hint="After all reward reserves below; before unknown costs" />
