@@ -76,6 +76,6 @@ export function visibleOrderActions(c: OrderActionContext): VisibleOrderActions 
   }
   const flag = actionable && c.status !== "shipped" && (c.mine || c.canManage) && (!c.flagged || c.canManage);
   const contact = actionable && c.hasBuyerSlack;
-  const edit = c.canManage && c.status !== "pending" && c.status !== "cancelled";
+  const edit = c.canManage && c.status !== "pending" && c.status !== "claimed" && c.status !== "cancelled";
   return { primary, flag, contact, edit, any: primary || flag || contact || edit };
 }
