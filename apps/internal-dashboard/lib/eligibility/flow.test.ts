@@ -523,12 +523,18 @@ describe("authorization and existing actions", () => {
     expect(read("app/fulfillment/page.tsx")).toContain('requirePage("fulfiller")');
   });
 
-  test("claimOrder keeps self-dealing protection, notification and audit logging", () => {
-    const body = actions.slice(actions.indexOf("export const claimOrder"), actions.indexOf("export const flagOrderOverBudget"));
-    expect(body).toContain("isOwnOrder");
-    expect(body).toContain('"order_claimed"');
-    expect(body).toContain('title: "Order placed!');
-    expect(body).toContain("claimOrderWithFunding");
+  test("claimOrder reserves without purchase; placing notifies the buyer later", () => {
+    const claim = actions.slice(actions.indexOf("export const claimOrder"), actions.indexOf("export const flagOrderOverBudget"));
+    expect(claim).toContain("isOwnOrder");
+    expect(claim).toContain('"order_reserved"');
+    expect(claim).toContain("claimOrderWithFunding");
+    expect(claim).toContain("reserveOnly: true");
+    expect(claim).not.toContain('title: "Order placed!');
+    expect(claim).not.toContain('status: "ordered"');
+
+    const placed = actions.slice(actions.indexOf("export const markOrderPlaced"), actions.indexOf("export const markOrderCredited"));
+    expect(placed).toContain('title: "Order placed!');
+    expect(placed).toContain('"order_placed"');
   });
 
   test("markOrderCredited still requires an HCB link and refreshes the commitment amount", () => {
