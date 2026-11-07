@@ -173,6 +173,13 @@ describe("evidence loading", () => {
       expect(r.priorGrantCents).toBe(0);
     });
 
+    test("a reserved but not purchased grant still uses funding", async () => {
+      const grant = orderRow({ id: 5, item_name: grantName, price: 150, status: "claimed" });
+      const next = orderRow({ id: 6, price: 100 });
+      const ev = await load({ owned: [funded()], orders: [grant, next] });
+      expect(eval1(ev, next).committedCents).toBe(2000);
+    });
+
     test("a cancelled grant order frees its funds and is not re-counted as a prior grant", async () => {
       const grant = orderRow({ id: 5, item_name: grantName, price: 150, status: "cancelled" });
       const next = orderRow({ id: 6, price: 100 });
