@@ -30,10 +30,10 @@ export function lastUpdated(o: OrderStamps): string {
   return best ? best.raw : o.created_at;
 }
 
-export type OrderCounts = Record<"pending" | "ordered" | "credited" | "shipped" | "done" | "cancelled" | "flagged" | "all", number>;
+export type OrderCounts = Record<"pending" | "claimed" | "ordered" | "credited" | "shipped" | "done" | "cancelled" | "flagged" | "all", number>;
 
 export function foldOrderCounts(rows: { status: string; n: number; flagged: number }[]): OrderCounts {
-  const out: OrderCounts = { pending: 0, ordered: 0, credited: 0, shipped: 0, done: 0, cancelled: 0, flagged: 0, all: 0 };
+  const out: OrderCounts = { pending: 0, claimed: 0, ordered: 0, credited: 0, shipped: 0, done: 0, cancelled: 0, flagged: 0, all: 0 };
   for (const r of rows) {
     const n = Number(r.n) || 0;
     out.all += n;
