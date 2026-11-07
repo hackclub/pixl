@@ -42,6 +42,7 @@ const EMPTY_STATS: FulfillerStats = {
 
 const STAGE_LABEL: Record<OrderStatus, string> = {
   pending: "New",
+  claimed: "Claimed",
   ordered: "Ordered",
   credited: "Credited",
   shipped: "Shipped",
@@ -51,6 +52,7 @@ const STAGE_LABEL: Record<OrderStatus, string> = {
 
 const STAGE_TONE: Record<OrderStatus, Tone> = {
   pending: "warning",
+  claimed: "info",
   ordered: "info",
   credited: "purple",
   shipped: "cyan",
