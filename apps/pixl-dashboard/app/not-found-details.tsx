@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_GROUPS } from "./(shell)/nav-data";
+import styles from "./not-found.module.css";
 
 const ROUTES = [...NAV_GROUPS.flatMap((g) => g.items.map((i) => i.href)), "/docs"];
 
@@ -36,22 +37,16 @@ export function NotFoundDetails() {
   const pathname = usePathname() || "/";
   const suggestion = closestRoute(pathname);
   return (
-    <>
-      <p className="mt-3 max-w-prose text-sm leading-relaxed text-dim">
-        <code className="break-all border-2 border-stroke bg-panel-2 px-1.5 py-0.5 font-mono text-xs text-ink">
-          {pathname}
-        </code>{" "}
-        doesn&apos;t exist. The link may have a typo, or the page may have moved.
-      </p>
+    <div className={styles.routeHint}>
+      <span className={styles.lostPath} title={pathname}>
+        MISSING: <code>{pathname}</code>
+      </span>
       {suggestion && (
-        <p className="mt-4 text-sm">
+        <span className={styles.routeSuggestion}>
           Looking for{" "}
-          <Link href={suggestion} className="font-semibold text-accent underline underline-offset-4">
-            {suggestion}
-          </Link>
-          ?
-        </p>
+          <Link href={suggestion}>{suggestion}</Link>?
+        </span>
       )}
-    </>
+    </div>
   );
 }
