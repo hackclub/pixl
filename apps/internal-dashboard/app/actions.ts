@@ -926,51 +926,35 @@ async function creditBeneficiary(
   if (referral && !referral.rewarded_at && !referrerRidingAlong) {
     const tier = referralTierFor(creditHours);
     if (tier) {
-      // Conditioned on rewarded_at still being null, so two qualifying ships
-      // for the same referred player approved at the same instant can't both
-      // pay the referrer , only the update that still finds it unrewarded wins.
-      const { data: claimed } = await db
-        .from("referrals")
-        .update({
-          rewarded_at: new Date().toISOString(),
-          reward_tier: tier.key,
-          reward_pixels: tier.px,
-          reward_project_id: projectId,
-        })
-        .eq("id", referral.id)
-        .is("rewarded_at", null)
-        .select("id")
-        .maybeSingle();
-      if (!claimed) return { totalPx, deltaPx, pxRate, xpBefore, goalNote, referralNote, alreadyPx, projectRe, goalMult, fundingPx, baseUsdRate };
-      await db.rpc("adjust_user_pixels", {
-        p_user_id: referral.referrer_id,
-        p_amount: tier.px,
-        p_reason: "referral_reward",
+      // Migration 0236 serializes all rewards for one referrer on the users
+      // row and commits both the referral claim and wallet credits atomically.
+      // Failed wallet writes must not leave a permanently claimed referral.
+      const { data: settledCount, error: settleError } = await db.rpc("settle_referral_reward_atomic", {
+        p_referral_id: referral.id,
+        p_project_id: projectId,
+        p_reward_tier: tier.key,
+        p_pixels: tier.px,
+        p_milestone_every: REFERRAL_MILESTONE_EVERY,
+        p_milestone_pixels: REFERRAL_MILESTONE_PX,
         p_created_by: by,
       });
-      await db.from("notifications").insert({
-        user_id: referral.referrer_id,
-        title: "Referral reward!",
-        body: `Someone you referred shipped a ${creditHours}h project , you earned ${tier.px} pixels ($${(tier.px * config.economy.pixelValueUsd).toFixed(2)})!`,
-      });
-
-      const { count: rewardedCount } = await db
-        .from("referrals")
-        .select("id", { count: "exact", head: true })
-        .eq("referrer_id", referral.referrer_id)
-        .not("rewarded_at", "is", null);
-      if (rewardedCount && rewardedCount % REFERRAL_MILESTONE_EVERY === 0) {
-        await db.rpc("adjust_user_pixels", {
-          p_user_id: referral.referrer_id,
-          p_amount: REFERRAL_MILESTONE_PX,
-          p_reason: "referral_milestone",
-          p_created_by: by,
-        });
-        await db.from("notifications").insert({
-          user_id: referral.referrer_id,
-          title: "Referral milestone!",
-          body: `${rewardedCount} of your referrals have shipped , bonus ${REFERRAL_MILESTONE_PX} pixels ($${(REFERRAL_MILESTONE_PX * config.economy.pixelValueUsd).toFixed(2)})!`,
-        });
+      if (settleError) {
+        console.error("creditBeneficiary referral settlement failed", referral.id, settleError.message);
+      } else {
+        const rewardedCount = Number(settledCount) || 0;
+        if (rewardedCount > 0) {
+          await db.from("notifications").insert({
+            user_id: referral.referrer_id,
+            title: "Referral reward!",
+            body: `Someone you referred shipped a ${creditHours}h project , you earned ${tier.px} pixels ($${(tier.px * config.economy.pixelValueUsd).toFixed(2)})!`,
+          });
+          if (rewardedCount % REFERRAL_MILESTONE_EVERY === 0)
+            await db.from("notifications").insert({
+              user_id: referral.referrer_id,
+              title: "Referral milestone!",
+              body: `${rewardedCount} of your referrals have shipped , bonus ${REFERRAL_MILESTONE_PX} pixels ($${(REFERRAL_MILESTONE_PX * config.economy.pixelValueUsd).toFixed(2)})!`,
+            });
+        }
       }
     }
   }
