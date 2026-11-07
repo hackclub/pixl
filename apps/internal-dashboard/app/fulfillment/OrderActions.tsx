@@ -1,4 +1,4 @@
-import { cancelOrder, clearOrderFlag, claimOrder, flagOrderOverBudget, markOrderCredited, markOrderDone, reassignOrder, shipOrder, updateOrderFulfillmentInfo } from "@/app/actions";
+import { cancelOrder, clearOrderFlag, claimOrder, reserveOrder, markOrderPlaced, flagOrderOverBudget, markOrderCredited, markOrderDone, reassignOrder, shipOrder, updateOrderFulfillmentInfo } from "@/app/actions";
 import type { ShopOrderRow } from "@/lib/db";
 import { ActionButton, Details, Field, Input, Muted } from "@/app/_ui/ui";
 import { usdBudget } from "./shared";
@@ -93,7 +93,7 @@ export function OrderActions({
   // fulfillers can work a claimed order but not override or refund one. Cancel
   // is offered until the order ships, claimed or not (cancelOrder in
   // app/actions.ts enforces the same rule server-side).
-  const claimed = o.status === "ordered" || o.status === "credited";
+  const claimed = o.status === "claimed" || o.status === "ordered" || o.status === "credited";
   const cancelForm =
     canManage && (o.status === "pending" || claimed) ? (
       <form action={cancelOrder}>
@@ -159,8 +159,29 @@ export function OrderActions({
       <div className="flex flex-wrap items-end gap-2">
         <form action={claimOrder}>
           <input type="hidden" name="id" value={o.id} />
-          <ActionButton pendingLabel="Claiming..." icon="bag">
+          <ActionButton pendingLabel="Placing..." icon="bag">
             Place order &amp; claim
+          </ActionButton>
+        </form>
+        <form action={reserveOrder}>
+          <input type="hidden" name="id" value={o.id} />
+          <ActionButton variant="outline" pendingLabel="Claiming..." icon="member-add">
+            Claim order (no purchase yet)
+          </ActionButton>
+        </form>
+        {cancelForm}
+      </div>
+    );
+  }
+
+  if (o.status === "claimed") {
+    return (
+      <div className="fw-order-action-stack">
+        <Muted className="text-sm">Assigned to you. Nothing has been purchased yet.</Muted>
+        <form action={markOrderPlaced}>
+          <input type="hidden" name="id" value={o.id} />
+          <ActionButton pendingLabel="Marking placed..." icon="bag">
+            Mark order placed
           </ActionButton>
         </form>
         {cancelForm}
