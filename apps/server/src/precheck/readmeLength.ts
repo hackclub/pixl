@@ -3,7 +3,7 @@ import { fetchRawFile, fetchRepoFiles } from "./sources.js";
 
 // A small, deterministic gate before ship. The AI pre-check still handles
 // content and quality after ship; length alone is not a quality verdict.
-export const MIN_README_WORDS = 200;
+export const MIN_README_WORDS = 100;
 
 export type ReadmeLengthStatus = "passed" | "too_short" | "missing" | "unavailable" | "unsupported";
 export interface ReadmeLengthResult {

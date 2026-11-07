@@ -25,9 +25,9 @@ describe("readmeProseWordCount", () => {
     expect(readmeProseWordCount("Step 1: Build 123 456 now")).toBe(3);
   });
 
-  test("enforces the exact 200 word boundary", () => {
-    expect(readmeProseWordCount(words(199))).toBe(199);
-    expect(readmeProseWordCount(words(200))).toBe(200);
+  test("enforces the exact 100 word boundary", () => {
+    expect(readmeProseWordCount(words(99))).toBe(99);
+    expect(readmeProseWordCount(words(100))).toBe(100);
   });
 
   test("does not count inline code, HTML comments or bare URLs", () => {
@@ -36,20 +36,20 @@ describe("readmeProseWordCount", () => {
 });
 
 describe("checkReadmeLength", () => {
-  test("passes a README with exactly 200 prose words", async () => {
+  test("passes a README with exactly 100 prose words", async () => {
     const r = await checkReadmeLength(url, {
       files: async () => ["README.md", "index.ts"],
-      raw: async () => words(200),
+      raw: async () => words(100),
     });
-    expect(r).toEqual({ status: "passed", words: 200, minWords: MIN_README_WORDS });
+    expect(r).toEqual({ status: "passed", words: 100, minWords: MIN_README_WORDS });
   });
 
-  test("blocks 199 words even when it exceeds 200 characters", async () => {
+  test("blocks 99 words even when it exceeds 100 characters", async () => {
     const r = await checkReadmeLength(url, {
       files: async () => ["README.md"],
-      raw: async () => words(199),
+      raw: async () => words(99),
     });
-    expect(r).toEqual({ status: "too_short", words: 199, minWords: MIN_README_WORDS });
+    expect(r).toEqual({ status: "too_short", words: 99, minWords: MIN_README_WORDS });
   });
 
   test("blocks short READMEs with a word count", async () => {
@@ -83,7 +83,7 @@ describe("checkReadmeLength", () => {
       raw: async (ref, path) => {
         expect(ref.path).toBe("sub");
         expect(path).toBe("README.md");
-        return words(200);
+        return words(100);
       },
     });
     expect(r.status).toBe("passed");

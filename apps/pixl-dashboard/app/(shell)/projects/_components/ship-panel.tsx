@@ -75,12 +75,12 @@ export function ShipPanel({
             repoUrl,
             ...(result.ok
               ? result.data
-              : { status: "unavailable" as const, words: null, minWords: 200 }),
+              : { status: "unavailable" as const, words: null, minWords: 100 }),
           });
         })
         .catch(() => {
           if (active && version === checkVersion.current)
-            setCheckedReadme({ repoUrl, status: "unavailable", words: null, minWords: 200 });
+            setCheckedReadme({ repoUrl, status: "unavailable", words: null, minWords: 100 });
         });
     }, 650);
     return () => {
@@ -202,7 +202,7 @@ export function ShipPanel({
         {!inReview ? (
           <div className="rounded border border-ink/20 p-3">
             <strong className="text-[12px]">README PRE-CHECK</strong>
-            <p className={hint()}>Your GitHub README needs 200+ explanatory words. Images, badges, links, and code don't count.</p>
+            <p className={hint()}>Your GitHub README needs 100+ explanatory words. Images, badges, links, and code don't count.</p>
             <p className={readmeCheck?.status === "passed" ? "text-sm font-bold text-good" : "text-sm text-dim"}>
               {!repoUrl
                 ? "Add your repo URL to see the README check."
