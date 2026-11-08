@@ -148,6 +148,13 @@ describe("custom reviewer macros", () => {
     expect(expandMacro("/ai", 3, macros)?.value).toBe(AI.text);
   });
 
+  test("does not expand a template that would be silently truncated by the server", () => {
+    const macros = [...REVIEW_MACROS, custom];
+    const note = `${"x".repeat(995)} /nicework`;
+    expect(expandMacro(note, note.length, macros)).toBeNull();
+    expect(expandMacro("/nicework", 9, macros)?.value).toBe(custom.text);
+  });
+
   test("normalizes triggers and keeps message contents", () => {
     expect(normalizeCustomReviewMacro({ trigger: " /NICEWORK ", label: " Great ", text: " Hello! " }))
       .toEqual({ trigger: "/nicework", label: "Great", text: "Hello!" });
@@ -189,5 +196,23 @@ describe("custom reviewer macros", () => {
     ]);
     expect(parseCustomReviewMacros({ trigger: "/nicework" })).toEqual([]);
     expect(parseCustomReviewMacros(null)).toEqual([]);
+  });
+
+  test("rejects oversized raw action inputs before normalization", () => {
+    expect(parseCustomReviewMacros([{ ...custom, text: " ".repeat(500_000) + custom.text }])).toEqual([]);
+    expect(parseCustomReviewMacros([{ ...custom, trigger: " ".repeat(200) + custom.trigger }])).toEqual([]);
+    expect(parseCustomReviewMacros([{ ...custom, label: " ".repeat(200) + custom.label }])).toEqual([]);
+  });
+
+  test("never retains extra properties supplied to a Server Action", () => {
+    const input = [{ ...custom, slackId: "another-reviewer", role: "owner", injected: "__proto__" }];
+    expect(parseCustomReviewMacros(input)).toEqual([custom]);
+  });
+
+  test("HTML and script-like text is data, not executable markup", () => {
+    const text = '<img src=x onerror="alert(1)"><script>doBadThing()</script>';
+    const parsed = parseCustomReviewMacros([{ ...custom, text }]);
+    expect(parsed[0]?.text).toBe(text);
+    expect(expandMacro("/nicework", 9, [...REVIEW_MACROS, ...parsed])?.value).toBe(text);
   });
 });
