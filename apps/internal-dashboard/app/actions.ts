@@ -112,6 +112,7 @@ import {
 } from "@/lib/guard";
 import { audit } from "@/lib/audit";
 import { clampReviewPanelWidth, parseStaffSettings, type StaffSettings } from "@/lib/staffSettings";
+import { MAX_CUSTOM_REVIEW_MACROS, parseCustomReviewMacros } from "@/lib/reviewMacros";
 import { getStaffSettings, saveStaffSettingsRow } from "@/lib/db";
 import { assigneeOf, earnsChangesHold, isAssignmentOverdue, type AssignmentFields } from "@/lib/reviewAssignment";
 import { GUIDELINES_VERSION } from "@/lib/guidelines";
@@ -3489,11 +3490,26 @@ export const holdReview = guardedAction("holdReview", "reviewer", async (access,
 export const saveStaffSettings = guardedAction("saveStaffSettings", "staff", async (access, input: StaffSettings): Promise<{ ok: boolean }> => {
   // The menu doesn't own the review panel width, so keep whatever is stored.
   const current = await getStaffSettings(access.session.slackId);
-  const next = parseStaffSettings({ ...input, reviewPanelWidth: current.reviewPanelWidth });
+  // Preferences can be open in another tab; they must never overwrite saved macros.
+  const next = parseStaffSettings({ ...input, reviewPanelWidth: current.reviewPanelWidth, reviewMacros: current.reviewMacros });
   const ok = await saveStaffSettingsRow(access.session.slackId, next);
   if (ok) revalidatePath("/", "layout");
   return { ok };
 });
+
+// Only reviewers can save personal macros. Re-parse on the server so built-in
+// triggers and overly long notes can never be stored as account preferences.
+export const saveReviewerMacros = guardedAction(
+  "saveReviewerMacros",
+  "reviewer",
+  async (access, input: unknown): Promise<{ ok: boolean }> => {
+    if (!Array.isArray(input) || input.length > MAX_CUSTOM_REVIEW_MACROS) return { ok: false };
+    const macros = parseCustomReviewMacros(input);
+    if (macros.length !== input.length) return { ok: false };
+    const current = await getStaffSettings(access.session.slackId);
+    return { ok: await saveStaffSettingsRow(access.session.slackId, { ...current, reviewMacros: macros }) };
+  },
+);
 
 // The draggable divider on the review page (app/review/[id]/ReviewSplit.tsx).
 export const saveReviewPanelWidth = guardedAction("saveReviewPanelWidth", "reviewer", async (access, width: number): Promise<{ ok: boolean }> => {
