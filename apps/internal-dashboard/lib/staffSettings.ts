@@ -79,6 +79,8 @@ export interface StaffSettings {
   reviewDms: boolean;
   /** Custom shortcuts, synced to this reviewer's account. */
   reviewMacros: CustomReviewMacro[];
+  /** The optional first-time macro setup prompt was dismissed or a macro was saved. */
+  reviewMacroPromptDismissed: boolean;
 }
 
 // What the settings page shows for each theme. The colours themselves live in
@@ -123,6 +125,7 @@ export const DEFAULT_STAFF_SETTINGS: StaffSettings = {
   reviewNotifyOnResubmit: false,
   reviewDms: true,
   reviewMacros: [],
+  reviewMacroPromptDismissed: false,
 };
 
 export const REVIEW_PANEL_MIN = 360;
@@ -150,5 +153,6 @@ export function parseStaffSettings(raw: unknown): StaffSettings {
     reviewNotifyOnResubmit: r.reviewNotifyOnResubmit === true,
     reviewDms: r.reviewDms !== false,
     reviewMacros: parseCustomReviewMacros(r.reviewMacros),
+    reviewMacroPromptDismissed: r.reviewMacroPromptDismissed === true,
   };
 }

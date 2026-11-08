@@ -54,6 +54,11 @@ export const REVIEW_MACROS: readonly ReviewMacro[] = [
 // aligned with the 1000-character player-note limit and validate on the server.
 export type CustomReviewMacro = Pick<ReviewMacro, "trigger" | "label" | "text">;
 export const MAX_CUSTOM_REVIEW_MACROS = 20;
+
+/** A one-time optional onboarding prompt, not a recurring editor on every review. */
+export function showReviewMacroPrompt(macros: readonly CustomReviewMacro[], dismissed: boolean): boolean {
+  return macros.length === 0 && !dismissed;
+}
 export const MAX_REVIEW_NOTE_LENGTH = 1000;
 export const MAX_CUSTOM_MACRO_TEXT_LENGTH = MAX_REVIEW_NOTE_LENGTH;
 

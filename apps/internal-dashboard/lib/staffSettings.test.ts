@@ -38,6 +38,7 @@ describe("parseStaffSettings", () => {
       reviewNotifyOnResubmit: false,
       reviewDms: true,
       reviewMacros: [],
+      reviewMacroPromptDismissed: false,
     });
     expect(parseStaffSettings({ theme: "neon", accent: "javascript:alert(1)", extra: 1 })).toEqual(
       DEFAULT_STAFF_SETTINGS,
@@ -69,6 +70,8 @@ describe("parseStaffSettings", () => {
       { trigger: "/thanks", label: "Thank you", text: "Thanks for shipping!" },
     ]);
     expect(parseStaffSettings({ reviewMacros: "not an array" }).reviewMacros).toEqual([]);
+    expect(parseStaffSettings({ reviewMacroPromptDismissed: true }).reviewMacroPromptDismissed).toBe(true);
+    expect(parseStaffSettings({ reviewMacroPromptDismissed: "true" }).reviewMacroPromptDismissed).toBe(false);
   });
 
   test("every font has picker info", () => {

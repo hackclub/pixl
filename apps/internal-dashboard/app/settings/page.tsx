@@ -14,7 +14,7 @@ export default async function SettingsPage() {
   return (
     <div className="mx-auto max-w-5xl">
       <PageHeader title="Settings" description="Saved to your account, so they follow you to any browser." />
-      <SettingsClient initial={settings} account={{ name: access.session.name, slackId: access.session.slackId }} />
+      <SettingsClient initial={settings} account={{ name: access.session.name, slackId: access.session.slackId }} canEditReviewMacros={access.isReviewer || access.isOwner} />
     </div>
   );
 }
