@@ -1,3 +1,4 @@
+import { activeReviewClaim } from "./reviewClaimState";
 import { projectNumber } from "./projectNumber";
 import { earnedProjectHours, EARNED_PROJECT_STATUSES } from "./earnedProject";
 import { pickStyleExamples, type StyleCandidate, type StyleExample } from "./styleExamples";
@@ -721,9 +722,8 @@ async function hydrateHours(projects: ShippedProject[]): Promise<ShippedProject[
 export const REVIEW_LOCK_MS = 30 * 60 * 1000;
 
 function claimedByOther(p: ShippedProject, viewer?: string): boolean {
-  if (!p.reviewing_by || p.reviewing_by === viewer) return false;
-  if (!p.reviewing_at) return false;
-  return Date.now() - new Date(p.reviewing_at).getTime() < REVIEW_LOCK_MS;
+  const holder = activeReviewClaim(p, Date.now(), REVIEW_LOCK_MS);
+  return !!holder && holder !== viewer;
 }
 
 // Tags rows another reviewer is actively holding instead of dropping them.
@@ -816,12 +816,14 @@ export async function claimReview(
     update projects
     set reviewing_by = ${viewer}, reviewing_at = ${now}
     where id = ${projectId}
+      and status in ('shipped', 'second_review')
+      and hold_at is null and banned_at is null
       and (reviewing_by = '' or reviewing_by = ${viewer} or reviewing_at is null or reviewing_at <= ${staleBefore})
     returning id
   `;
   if (taken.length > 0) return { ok: true };
   const held = await sql`select reviewing_by from projects where id = ${projectId}`;
-  if (held.length === 0) return { ok: true };
+  if (held.length === 0) return { ok: false };
   return { ok: false, by: (held[0].reviewing_by as string) || undefined };
 }
 
