@@ -4,7 +4,8 @@ import { bearerMatches } from "@/lib/requestGuards";
 import { refreshShipsSnapshotForJob } from "@/lib/eligibility/ships";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// Allow longer for the all-history Ships archive; this route is cron-only.
+export const maxDuration = 120;
 
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;

@@ -15,7 +15,7 @@ concurrency:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 3
     steps:
       - name: Refresh the persistent PIXL Ships snapshot
         env:
@@ -25,6 +25,6 @@ jobs:
             echo "Repository secret SHIPS_SNAPSHOT_CRON_SECRET is required."
             exit 1
           fi
-          curl --fail-with-body --silent --show-error --max-time 65 \
+          curl --fail-with-body --silent --show-error --max-time 110 \
             -H "Authorization: Bearer $SHIPS_SNAPSHOT_CRON_SECRET" \
             https://dash.pixl.hackclub.com/api/cron/ships-snapshot
