@@ -158,7 +158,8 @@ describe("custom reviewer macros", () => {
     expect(customReviewMacroError({ ...custom, trigger: "/ai" }, [])).toContain("conflicts");
     expect(customReviewMacroError({ ...custom, trigger: "/a" }, [])).toContain("conflicts");
     expect(customReviewMacroError({ ...custom, trigger: "/aiextra" }, [])).toContain("conflicts");
-    expect(customReviewMacroError({ ...custom, trigger: "/nicely" }, [custom])).toContain("conflicts");
+    expect(customReviewMacroError({ ...custom, trigger: "/niceworkmore" }, [custom])).toContain("conflicts");
+    expect(customReviewMacroError({ ...custom, trigger: "/nicely" }, [custom])).toBeNull();
     expect(customReviewMacroError({ ...custom, trigger: "/nicework" }, [custom], "/nicework")).toBeNull();
   });
 
