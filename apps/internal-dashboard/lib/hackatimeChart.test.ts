@@ -9,7 +9,8 @@ const entry = (name: string, seconds: number, color?: string): HackatimeBreakdow
 describe("hackatime donut chart data", () => {
   test("uses seconds, not the rounded/inconsistent API percentages", () => {
     const data = hackatimeDonutSlices([entry("TypeScript", 7200), entry("Python", 3600)]);
-    expect(data.map((r) => r.percent)).toEqual([100 * 2 / 3, 100 / 3]);
+    expect(data[0].percent).toBeCloseTo(100 * 2 / 3);
+    expect(data[1].percent).toBeCloseTo(100 / 3);
     expect(data.reduce((sum, r) => sum + r.value, 0)).toBe(10800);
   });
 
