@@ -9,7 +9,8 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { REVIEW_MACROS, expandMacro, hasUnfilledMacroPlaceholder } from "@/lib/reviewMacros";
+import { REVIEW_MACROS, MAX_REVIEW_NOTE_LENGTH, expandMacro, hasUnfilledMacroPlaceholder, type CustomReviewMacro } from "@/lib/reviewMacros";
+import { ReviewMacroEditor } from "@/app/_components/ReviewMacroEditor";
 import {
   reviewProject,
   applySubmissionEdits,
@@ -484,6 +485,7 @@ export function ReviewForm({
   canEditSubmission = false,
   defaultRevealName = true,
   defaultNotifyOnResubmit = false,
+  initialReviewMacros = [],
   serverDraft,
 }: {
   projectId: number;
@@ -529,6 +531,8 @@ export function ReviewForm({
   defaultRevealName?: boolean;
   /** Default for the "Notify on resubmit" checkbox. */
   defaultNotifyOnResubmit?: boolean;
+  /** Personal text macros saved on this reviewer\'s account. */
+  initialReviewMacros?: CustomReviewMacro[];
   /** The shared server-side draft (saveReviewDraft). Used only when this
    * browser has no local draft of its own to restore. */
   serverDraft?: {
@@ -537,6 +541,7 @@ export function ReviewForm({
     at: string | null;
   };
 }) {
+  const [customMacros, setCustomMacros] = useState<CustomReviewMacro[]>(initialReviewMacros);
   const formRef = useRef<HTMLFormElement>(null);
   const repoOpened = useRef<HTMLInputElement>(null);
   const demoOpened = useRef<HTMLInputElement>(null);
@@ -1252,11 +1257,12 @@ export function ReviewForm({
           <p className="hc-eyebrow">Verdict</p>
           <Field
             label="Note to the player"
-            hint={`Required. Be nice and personal, show their work is good. Macros: ${REVIEW_MACROS.map((m) => `${m.trigger} = ${m.label}`).join(", ")}`}
+            hint={`Required. Be nice and personal, show their work is good. Built-in shortcuts: ${REVIEW_MACROS.map((m) => m.trigger).join(", ")}. Your custom shortcuts work here too.`}
           >
             <AuditTextarea
               name="note"
               required
+              maxLength={MAX_REVIEW_NOTE_LENGTH}
               ref={noteRef}
               onChange={(e) => {
                 // Macros (lib/reviewMacros.ts): typing /ai swaps in the canned
@@ -1264,7 +1270,7 @@ export function ReviewForm({
                 // back down to "/ai" never expands it.
                 const input = e.currentTarget;
                 if ((e.nativeEvent as InputEvent).inputType?.startsWith("insert")) {
-                  const expanded = expandMacro(input.value, input.selectionStart ?? input.value.length);
+                  const expanded = expandMacro(input.value, input.selectionStart ?? input.value.length, [...REVIEW_MACROS, ...customMacros]);
                   if (expanded) {
                     input.value = expanded.value;
                     input.setSelectionRange(expanded.caret, expanded.caret);
@@ -1278,6 +1284,7 @@ export function ReviewForm({
               rows={4}
             />
           </Field>
+          <ReviewMacroEditor macros={customMacros} onChange={setCustomMacros} />
           <Checkbox
             name="revealName"
             value="1"

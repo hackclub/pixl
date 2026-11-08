@@ -37,6 +37,7 @@ describe("parseStaffSettings", () => {
       reviewRevealName: true,
       reviewNotifyOnResubmit: false,
       reviewDms: true,
+      reviewMacros: [],
     });
     expect(parseStaffSettings({ theme: "neon", accent: "javascript:alert(1)", extra: 1 })).toEqual(
       DEFAULT_STAFF_SETTINGS,
@@ -56,6 +57,18 @@ describe("parseStaffSettings", () => {
       font: "phantom",
       monoFont: "jetbrains-mono",
     });
+  });
+
+  test("parses per-reviewer macros from account settings", () => {
+    expect(parseStaffSettings({
+      reviewMacros: [
+        { trigger: "/thanks", label: "Thank you", text: "Thanks for shipping!" },
+        { trigger: "/ai", label: "Override", text: "No" },
+      ],
+    }).reviewMacros).toEqual([
+      { trigger: "/thanks", label: "Thank you", text: "Thanks for shipping!" },
+    ]);
+    expect(parseStaffSettings({ reviewMacros: "not an array" }).reviewMacros).toEqual([]);
   });
 
   test("every font has picker info", () => {

@@ -50,6 +50,62 @@ export const REVIEW_MACROS: readonly ReviewMacro[] = [
   },
 ];
 
+// Personal reviewer shortcuts are stored in staff_settings. Keep these limits
+// aligned with the 1000-character player-note limit and validate on the server.
+export type CustomReviewMacro = Pick<ReviewMacro, "trigger" | "label" | "text">;
+export const MAX_CUSTOM_REVIEW_MACROS = 20;
+export const MAX_REVIEW_NOTE_LENGTH = 1000;
+export const MAX_CUSTOM_MACRO_TEXT_LENGTH = MAX_REVIEW_NOTE_LENGTH;
+
+export function normalizeCustomReviewMacro(macro: CustomReviewMacro): CustomReviewMacro {
+  return {
+    trigger: macro.trigger.trim().toLowerCase(),
+    label: macro.label.trim(),
+    text: macro.text.trim(),
+  };
+}
+
+/** Prefix collisions would expand too early while someone types a longer command. */
+export function customReviewMacroError(
+  input: CustomReviewMacro,
+  customMacros: readonly CustomReviewMacro[],
+  editingTrigger?: string,
+): string | null {
+  const macro = normalizeCustomReviewMacro(input);
+  if (!/^\/[a-z][a-z0-9_-]{0,23}$/.test(macro.trigger))
+    return "Use / followed by 1–24 letters, numbers, _ or - (starting with a letter).";
+  if (!macro.label || macro.label.length > 60) return "Give the macro a name (1–60 characters).";
+  if (!macro.text || macro.text.length > MAX_CUSTOM_MACRO_TEXT_LENGTH)
+    return "Macro text must be 1–1000 characters.";
+  const remaining = customMacros.filter((m) => m.trigger.toLowerCase() !== editingTrigger?.toLowerCase());
+  if (!editingTrigger && remaining.length >= MAX_CUSTOM_REVIEW_MACROS)
+    return `You can save up to ${MAX_CUSTOM_REVIEW_MACROS} custom macros.`;
+  const collision = [...REVIEW_MACROS, ...remaining].find((m) => {
+    const existing = m.trigger.toLowerCase();
+    return existing.startsWith(macro.trigger) || macro.trigger.startsWith(existing);
+  });
+  if (collision) return `/${macro.trigger.slice(1)} conflicts with ${collision.trigger}; choose a different shortcut.`;
+  return null;
+}
+
+/** Untrusted JSON from staff_settings: ignore invalid entries and never override built-ins. */
+export function parseCustomReviewMacros(raw: unknown): CustomReviewMacro[] {
+  if (!Array.isArray(raw)) return [];
+  const macros: CustomReviewMacro[] = [];
+  for (const item of raw) {
+    if (macros.length >= MAX_CUSTOM_REVIEW_MACROS) break;
+    if (!item || typeof item !== "object") continue;
+    const r = item as Record<string, unknown>;
+    if (typeof r.trigger !== "string" || typeof r.label !== "string" || typeof r.text !== "string") continue;
+    // Avoid processing multi-megabyte strings from a forged Server Action request.
+    // Allow some trim padding, but bound every field BEFORE allocating trimmed copies.
+    if (r.trigger.length > 64 || r.label.length > 128 || r.text.length > 2048) continue;
+    const macro = normalizeCustomReviewMacro({ trigger: r.trigger, label: r.label, text: r.text });
+    if (!customReviewMacroError(macro, macros)) macros.push(macro);
+  }
+  return macros;
+}
+
 /**
  * If the text right before the caret is a macro trigger (alone, not glued to
  * the end of another word or a URL like https://x.dev/ai), returns the text with
@@ -68,8 +124,12 @@ export function expandMacro(
     if (!lower.endsWith(macro.trigger.toLowerCase())) continue;
     const start = before.length - macro.trigger.length;
     if (start > 0 && !/\s/.test(before[start - 1])) continue;
+    const expanded = before.slice(0, start) + macro.text + value.slice(caret);
+    // reviewProject caps player-facing notes at 1000 chars. Never silently insert
+    // a macro whose text would be cut off when the reviewer sends the verdict.
+    if (expanded.length > MAX_REVIEW_NOTE_LENGTH) return null;
     return {
-      value: before.slice(0, start) + macro.text + value.slice(caret),
+      value: expanded,
       caret: start + (macro.caretOffset ?? macro.text.length),
     };
   }
