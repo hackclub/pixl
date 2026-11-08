@@ -9,7 +9,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { REVIEW_MACROS, expandMacro, hasUnfilledMacroPlaceholder, type CustomReviewMacro } from "@/lib/reviewMacros";
+import { REVIEW_MACROS, MAX_REVIEW_NOTE_LENGTH, expandMacro, hasUnfilledMacroPlaceholder, type CustomReviewMacro } from "@/lib/reviewMacros";
 import { ReviewMacroEditor } from "@/app/_components/ReviewMacroEditor";
 import {
   reviewProject,
@@ -1262,6 +1262,7 @@ export function ReviewForm({
             <AuditTextarea
               name="note"
               required
+              maxLength={MAX_REVIEW_NOTE_LENGTH}
               ref={noteRef}
               onChange={(e) => {
                 // Macros (lib/reviewMacros.ts): typing /ai swaps in the canned
