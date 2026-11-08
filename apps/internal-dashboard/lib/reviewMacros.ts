@@ -54,7 +54,8 @@ export const REVIEW_MACROS: readonly ReviewMacro[] = [
 // aligned with the 1000-character player-note limit and validate on the server.
 export type CustomReviewMacro = Pick<ReviewMacro, "trigger" | "label" | "text">;
 export const MAX_CUSTOM_REVIEW_MACROS = 20;
-export const MAX_CUSTOM_MACRO_TEXT_LENGTH = 1000;
+export const MAX_REVIEW_NOTE_LENGTH = 1000;
+export const MAX_CUSTOM_MACRO_TEXT_LENGTH = MAX_REVIEW_NOTE_LENGTH;
 
 export function normalizeCustomReviewMacro(macro: CustomReviewMacro): CustomReviewMacro {
   return {
@@ -96,6 +97,9 @@ export function parseCustomReviewMacros(raw: unknown): CustomReviewMacro[] {
     if (!item || typeof item !== "object") continue;
     const r = item as Record<string, unknown>;
     if (typeof r.trigger !== "string" || typeof r.label !== "string" || typeof r.text !== "string") continue;
+    // Avoid processing multi-megabyte strings from a forged Server Action request.
+    // Allow some trim padding, but bound every field BEFORE allocating trimmed copies.
+    if (r.trigger.length > 64 || r.label.length > 128 || r.text.length > 2048) continue;
     const macro = normalizeCustomReviewMacro({ trigger: r.trigger, label: r.label, text: r.text });
     if (!customReviewMacroError(macro, macros)) macros.push(macro);
   }
@@ -120,8 +124,12 @@ export function expandMacro(
     if (!lower.endsWith(macro.trigger.toLowerCase())) continue;
     const start = before.length - macro.trigger.length;
     if (start > 0 && !/\s/.test(before[start - 1])) continue;
+    const expanded = before.slice(0, start) + macro.text + value.slice(caret);
+    // reviewProject caps player-facing notes at 1000 chars. Never silently insert
+    // a macro whose text would be cut off when the reviewer sends the verdict.
+    if (expanded.length > MAX_REVIEW_NOTE_LENGTH) return null;
     return {
-      value: before.slice(0, start) + macro.text + value.slice(caret),
+      value: expanded,
       caret: start + (macro.caretOffset ?? macro.text.length),
     };
   }
