@@ -6,6 +6,7 @@ import {
   customReviewMacroError,
   normalizeCustomReviewMacro,
   parseCustomReviewMacros,
+  showReviewMacroPrompt,
 } from "./reviewMacros";
 
 const AI = REVIEW_MACROS.find((m) => m.trigger === "/ai")!;
@@ -139,6 +140,12 @@ describe("hasUnfilledMacroPlaceholder", () => {
 });
 
 describe("custom reviewer macros", () => {
+  test("only offers optional setup before a macro is saved or the prompt is dismissed", () => {
+    expect(showReviewMacroPrompt([], false)).toBe(true);
+    expect(showReviewMacroPrompt([], true)).toBe(false);
+    expect(showReviewMacroPrompt([{ trigger: "/hello", label: "Hello", text: "Hi!" }], false)).toBe(false);
+  });
+
   const custom = { trigger: "/nicework", label: "Encouragement", text: "Nice work! Keep building." };
 
   test("expands a custom macro and leaves built-ins available", () => {

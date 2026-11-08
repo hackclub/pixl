@@ -855,6 +855,7 @@ export default async function ReviewDetail({
               defaultRevealName={staffSettings.reviewRevealName}
               defaultNotifyOnResubmit={staffSettings.reviewNotifyOnResubmit}
               initialReviewMacros={staffSettings.reviewMacros}
+              initialMacroPromptDismissed={staffSettings.reviewMacroPromptDismissed}
               firstPass={
                 firstPassAudit
                   ? {

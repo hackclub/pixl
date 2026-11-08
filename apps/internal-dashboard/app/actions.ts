@@ -3491,7 +3491,7 @@ export const saveStaffSettings = guardedAction("saveStaffSettings", "staff", asy
   // The menu doesn't own the review panel width, so keep whatever is stored.
   const current = await getStaffSettings(access.session.slackId);
   // Preferences can be open in another tab; they must never overwrite saved macros.
-  const next = parseStaffSettings({ ...input, reviewPanelWidth: current.reviewPanelWidth, reviewMacros: current.reviewMacros });
+  const next = parseStaffSettings({ ...input, reviewPanelWidth: current.reviewPanelWidth, reviewMacros: current.reviewMacros, reviewMacroPromptDismissed: current.reviewMacroPromptDismissed });
   const ok = await saveStaffSettingsRow(access.session.slackId, next);
   if (ok) revalidatePath("/", "layout");
   return { ok };
@@ -3507,7 +3507,26 @@ export const saveReviewerMacros = guardedAction(
     const macros = parseCustomReviewMacros(input);
     if (macros.length !== input.length) return { ok: false };
     const current = await getStaffSettings(access.session.slackId);
-    return { ok: await saveStaffSettingsRow(access.session.slackId, { ...current, reviewMacros: macros }) };
+    return { ok: await saveStaffSettingsRow(access.session.slackId, {
+      ...current,
+      reviewMacros: macros,
+      reviewMacroPromptDismissed: current.reviewMacroPromptDismissed || macros.length > 0,
+    }) };
+  },
+);
+
+// Dismiss the optional first-time macro invitation across devices.
+// No caller-provided identity or settings are accepted.
+export const dismissReviewerMacroPrompt = guardedAction(
+  "dismissReviewerMacroPrompt",
+  "reviewer",
+  async (access): Promise<{ ok: boolean }> => {
+    const current = await getStaffSettings(access.session.slackId);
+    if (current.reviewMacroPromptDismissed) return { ok: true };
+    return { ok: await saveStaffSettingsRow(access.session.slackId, {
+      ...current,
+      reviewMacroPromptDismissed: true,
+    }) };
   },
 );
 

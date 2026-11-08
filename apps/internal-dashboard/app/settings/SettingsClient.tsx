@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition, type CSSProperties } from "react";
 import Icon from "@hackclub/icons";
 import { saveStaffSettings } from "@/app/actions";
+import { ReviewMacroEditor } from "@/app/_components/ReviewMacroEditor";
 import { Card, DescriptionList, Mono } from "@/app/_ui/ui";
 import {
   ACCENTS,
@@ -126,9 +127,11 @@ function FontCard({
 export default function SettingsClient({
   initial,
   account,
+  canEditReviewMacros,
 }: {
   initial: StaffSettings;
   account: { name: string; slackId: string };
+  canEditReviewMacros: boolean;
 }) {
   const [settings, setSettings] = useState(initial);
   const [section, setSection] = useState<Section>("appearance");
@@ -297,6 +300,23 @@ export default function SettingsClient({
                 />
               </div>
             </Card>
+
+            {canEditReviewMacros && (
+              <Card>
+                <h2 className="hc-heading text-base">Custom review macros</h2>
+                <p className="hc-caption mt-1 mb-4 text-sm">
+                  Set up your personal /shortcuts for notes to players. You can edit them here anytime.
+                </p>
+                <ReviewMacroEditor
+                  macros={settings.reviewMacros}
+                  onChange={(reviewMacros) => setSettings((current) => ({
+                    ...current,
+                    reviewMacros,
+                    reviewMacroPromptDismissed: current.reviewMacroPromptDismissed || reviewMacros.length > 0,
+                  }))}
+                />
+              </Card>
+            )}
 
             <Card>
               <h2 className="hc-heading text-base">After a review</h2>

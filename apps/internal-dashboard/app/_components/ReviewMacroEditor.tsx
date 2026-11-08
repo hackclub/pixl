@@ -9,7 +9,7 @@ import {
   normalizeCustomReviewMacro,
   type CustomReviewMacro,
 } from "@/lib/reviewMacros";
-import { Button, Callout, Details, Field, Input, Textarea } from "@/app/_ui/ui";
+import { Button, Callout, Field, Input, Textarea } from "@/app/_ui/ui";
 
 export function ReviewMacroEditor({
   macros,
@@ -75,7 +75,7 @@ export function ReviewMacroEditor({
   };
 
   return (
-    <Details summary={`Custom macros (${macros.length}) — manage shortcuts`}>
+    <div className="flex flex-col gap-3">
       <div className="flex flex-col gap-3">
         <p className="hc-muted text-sm">
           Make your own /commands for the note to the player. Type a command to insert its text.
@@ -145,6 +145,6 @@ export function ReviewMacroEditor({
           <span className="hc-muted text-xs">{macros.length}/{MAX_CUSTOM_REVIEW_MACROS} saved</span>
         </div>
       </div>
-    </Details>
+    </div>
   );
 }
