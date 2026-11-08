@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { NextRequest } from "next/server";
-import { createFixedWindowLimiter, detectLocale, proxy } from "./proxy.ts";
+import { config, createFixedWindowLimiter, detectLocale, proxy } from "./proxy.ts";
 
 describe("detectLocale", () => {
   test("country wins", () => expect(detectLocale("BR", "en-US")).toBe("pt"));
@@ -40,5 +40,13 @@ describe("OAuth callback flood guard", () => {
   test("does not throttle ordinary page requests", () => {
     const res = proxy(new NextRequest("https://pixl.hackclub.com/projects"));
     expect(res.status).toBe(200);
+  });
+});
+
+
+describe("expired-session flood guard", () => {
+  test("explicitly matches the expiry endpoint before the app route", () => {
+    expect(config.matcher.some((entry) => "source" in entry && entry.source === "/api/auth/expired")).toBe(true);
+    expect(proxy(new NextRequest("https://pixl.hackclub.com/api/auth/expired")).status).toBe(200);
   });
 });
