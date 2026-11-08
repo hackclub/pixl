@@ -10,7 +10,7 @@ import {
   getProject,
   listShippedQueueCached,
   listSecondReviewProjects,
-  claimReview,
+  REVIEW_LOCK_MS,
   firstPassAccess,
   turnedNineteenSinceShipping,
   listCollaboratorsForProject,
@@ -43,6 +43,8 @@ import { getBlackoutEntry } from "@/lib/operations";
 import { isBlackoutReviewable } from "@/lib/operationsReview";
 import {
   banProject,
+  beginReviewClaim,
+  endReviewClaim,
   setProjectLevel,
   extendHoursCutoff,
   sendBackToFirstPass,
@@ -64,6 +66,7 @@ import { ReviewSplit } from "./ReviewSplit";
 import { ReviewShortcuts } from "./ReviewShortcuts";
 import { getStaffSettings } from "@/lib/db";
 import { ReviewHeartbeat } from "@/app/_components/ReviewHeartbeat";
+import { activeReviewClaim } from "@/lib/reviewClaimState";
 import { ProjectNotes } from "@/app/_components/ProjectNotes";
 import { LevelBadge, TypeBadge, ShipBadges, StatusBadge, BeaconBadge, FundingBadge } from "@/app/_components/ProjectBadges";
 import { FraudyAiSummary } from "@/app/_components/FraudyAiSummary";
@@ -269,9 +272,12 @@ export default async function ReviewDetail({
   // never on your own project or while a hold is set.
   const unshipNote = canSecondPass && !isOwn && !isHeld ? unshipWarning(p.status) : null;
   const shippedAt = (p as { shipped_at?: string | null }).shipped_at ?? null;
+  // Viewing must never reserve a project; only an explicit POST may claim it.
+  const currentClaim = activeReviewClaim(p, Date.now(), REVIEW_LOCK_MS);
+  const hasActiveClaim = currentClaim === viewer;
+  const claimedByOther = currentClaim && currentClaim !== viewer ? currentClaim : null;
 
-  const [claim, playerReBefore, firstPassAuditNote, bountyEventsResult] = await Promise.all([
-    canReview ? claimReview(projectId, viewer) : Promise.resolve({ ok: true as const, by: undefined }),
+  const [playerReBefore, firstPassAuditNote, bountyEventsResult] = await Promise.all([
     // The RE the player already holds, excluding this project. It sets the
     // rate they'll be paid at, so the reviewer sees it before deciding.
     lifetimeRe(p.user_id, projectId),
@@ -373,8 +379,7 @@ export default async function ReviewDetail({
   const yswsPromise = yswsShipsForReview(p.users?.slack_id, p.repo_url, p.demo_url);
   const ownerHandlePromise = slackHandle(p.users?.slack_id);
   const bomPromise = p.needs_funding && p.bom_url ? fetchBomRows(p.bom_url) : null;
-  const claimByShown = !claim.ok && !!claim.by;
-  const claimHandlePromise = claimByShown ? slackHandle(claim.by) : null;
+  const claimHandlePromise = claimedByOther ? slackHandle(claimedByOther) : null;
   // includeClaimed so prev/next and the "Submission N of M" counter walk the
   // same queue the list page shows. nextReviewId (the auto-advance after a
   // verdict) deliberately keeps excluding them, since it picks work for you.
@@ -554,7 +559,7 @@ export default async function ReviewDetail({
 
   const claimCallout = (handle: string | null) => (
     <Callout tone="warning" icon="private">
-      Heads up: {handle ?? (claimByShown ? claim.by : "another reviewer")} is already reviewing this submission.
+      Heads up: <span className="break-all">{handle ?? claimedByOther ?? "another reviewer"}</span> is already reviewing this submission.
       Avoid double-grading it.
     </Callout>
   );
@@ -830,7 +835,14 @@ export default async function ReviewDetail({
                   ? "The real final verdict, after Robert's fraud review. Approving credits pixels at the player's level rate ($4-6/hr in px) and ships it. Every verdict needs a note. You can only lower the credited hours."
                   : "Every verdict needs a note. Approving sends this to Robert for fraud review before pixels are credited, so even with final-reviewer rights your first look is still a proposal. You can only lower the credited hours."}
             </p>
-            <ReviewForm
+            {hasActiveClaim ? (
+              <>
+                <form action={endReviewClaim} className="mb-3 flex items-center justify-between gap-2 border-b border-[var(--border)] pb-3">
+                  <input type="hidden" name="projectId" value={p.id} />
+                  <p className="hc-caption text-xs">Review claimed by you · saved notes are retained if you stop.</p>
+                  <ActionButton variant="outline" size="sm" pendingLabel="Releasing...">Stop reviewing</ActionButton>
+                </form>
+                <ReviewForm
               projectId={p.id}
               repoUrl={p.repo_url}
               demoUrl={p.demo_url}
@@ -870,7 +882,24 @@ export default async function ReviewDetail({
               serverDraft={
                 p.review_draft ? { draft: p.review_draft, by: p.review_draft_by, at: p.review_draft_at } : undefined
               }
-            />
+                />
+              </>
+            ) : (
+              <div className="flex flex-col items-start gap-3 rounded-lg border border-[var(--border)] bg-[var(--sunken)] p-4">
+                <p className="font-bold text-sm">Preview mode — you're not reviewing this yet</p>
+                <p className="hc-caption text-sm">
+                  You can inspect the project and its evidence without claiming it. Start reviewing only when you're ready
+                  to write a verdict; that reserves this project for 30 minutes and keeps the claim alive while you work.
+                </p>
+                <form action={beginReviewClaim}>
+                  <input type="hidden" name="projectId" value={p.id} />
+                  <ActionButton icon="view" pendingLabel="Claiming...">Start reviewing</ActionButton>
+                </form>
+                {claimedByOther && (
+                  <p className="hc-caption text-xs">Another reviewer currently has the claim. You'll be able to claim it when they finish or it expires.</p>
+                )}
+              </div>
+            )}
           </Card>
         </>
       ) : p.banned_at ? (
@@ -1240,7 +1269,7 @@ export default async function ReviewDetail({
 
   return (
     <div className="hc-review flex flex-col gap-6">
-      {claim.ok && canReview && <ReviewHeartbeat projectId={projectId} />}
+      {hasActiveClaim && canReview && <ReviewHeartbeat projectId={projectId} />}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ButtonLink href="/review" variant="ghost" size="sm" icon="view-back">
@@ -1253,10 +1282,10 @@ export default async function ReviewDetail({
         </div>
       </div>
 
-      {(error || !claim.ok) && (
+      {(error || claimedByOther) && (
         <div className="flex flex-col gap-3">
           <Flash error={error} />
-          {!claim.ok &&
+          {claimedByOther &&
             (claimHandlePromise ? (
               <Suspense fallback={claimCallout(null)}>
                 <Await promise={claimHandlePromise}>{(handle) => claimCallout(handle)}</Await>

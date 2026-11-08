@@ -51,6 +51,8 @@ import {
   decideBanProposal,
   nextReviewId,
   firstPassAccess,
+  claimReview,
+  REVIEW_LOCK_MS,
   EVENT_TYPES,
   REFERRAL_BOOST_PX_PER_HOUR,
   REFERRAL_BOOST_SHIP_CAP,
@@ -63,6 +65,7 @@ import {
   ensureJournalShareToken,
 } from "@/lib/db";
 import { buildAuditNote, parseAuditNote, TECHNICAL_FEATURES_MIN } from "@/lib/auditNote";
+import { activeReviewClaim } from "@/lib/reviewClaimState";
 import { computeClaimedHours, round1 } from "@/lib/hours";
 import { decryptPII } from "@/lib/crypto";
 import { buildAirtableFields, duplicateOverrideNote, newHoursOnly, pushProjectRecord } from "@/lib/airtable";
@@ -1020,7 +1023,7 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
   const { data: current } = await db
     .from("projects")
     .select(
-      "status, banned_at, user_id, kind, name, description, image_url, first_pass_by, first_pass_hours, first_pass_verdict, second_pass_hours, second_pass_verdict, shipped_at, sidequest_id, trial_reward_choice, needs_funding, funding_usd, robert_project_id, robert_state, assigned_reviewer_slack_id, assigned_at",
+      "status, banned_at, user_id, kind, name, description, image_url, first_pass_by, first_pass_hours, first_pass_verdict, second_pass_hours, second_pass_verdict, shipped_at, sidequest_id, trial_reward_choice, needs_funding, funding_usd, robert_project_id, robert_state, assigned_reviewer_slack_id, assigned_at, reviewing_by, reviewing_at",
     )
     .eq("id", projectId)
     .single();
@@ -1078,6 +1081,10 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
   // reviewer every time.
   if (current.banned_at)
     redirect(`${back}?error=${encodeURIComponent("This project is already banned.")}`);
+  // The UI only mounts a form after an explicit claim, but enforce the same
+  // rule at the action boundary so stale tabs/manual requests cannot bypass it.
+  if (activeReviewClaim(current, Date.now(), REVIEW_LOCK_MS) !== access.session.slackId)
+    redirect(`${back}?error=${encodeURIComponent("Start reviewing first, or reclaim this project if your lock expired.")}`);
   // A first-pass reviewer proposing a ban is a separate, older flow the fraud
   // triage redesign doesn't touch - it skips fraud triage entirely and goes
   // straight to a different canSecondPass reviewer confirming or overturning
@@ -3748,6 +3755,50 @@ export const saveFormConfig = guardedAction("saveFormConfig", "owner", async (ac
 // component. Only ever refreshes a claim the caller already holds (the
 // reviewing_by match), so it can neither steal someone else's claim nor
 // resurrect one that already expired and was picked up by someone else.
+// A project page is read-only until a reviewer explicitly chooses to claim it.
+export const beginReviewClaim = guardedAction("beginReviewClaim", "reviewer", async (access, formData: FormData): Promise<void> => {
+  const projectId = Number(formData.get("projectId"));
+  if (!Number.isSafeInteger(projectId) || projectId <= 0) return;
+  const back = `/review/${projectId}`;
+  const { data: project } = await db
+    .from("projects")
+    .select("user_id, kind, status, banned_at, hold_at")
+    .eq("id", projectId)
+    .maybeSingle();
+  if (!project) denyProjectAction(back, "Project not found.");
+  if (!queueAllows(access.reviewQueues, project.kind))
+    denyProjectAction(back, "This project isn't in your review queue.");
+  if (await isOwnProject(access, project.user_id, projectId))
+    denyProjectAction(back, "You can't review a project you own or collaborate on.");
+  if (project.banned_at || project.hold_at)
+    denyProjectAction(back, "This project can't be reviewed while it is banned or on hold.");
+  if (project.status === "shipped") {
+    const gate = await firstPassAccess(projectId, access.session.slackId, access.canOpenFullQueue);
+    if (!gate.ok) denyProjectAction(back, gate.message);
+  } else if (project.status !== "second_review" || !access.canSecondPass) {
+    denyProjectAction(back, "This project isn't awaiting a review you can perform.");
+  }
+  const claim = await claimReview(projectId, access.session.slackId);
+  if (!claim.ok)
+    denyProjectAction(back, "Another reviewer is already working on this project, or it is no longer reviewable.");
+  revalidatePath(back);
+  revalidatePath("/review");
+  redirect(back);
+});
+
+// A reviewer can release their claim without touching anyone else's.
+export const endReviewClaim = guardedAction("endReviewClaim", "reviewer", async (access, formData: FormData): Promise<void> => {
+  const projectId = Number(formData.get("projectId"));
+  if (!Number.isSafeInteger(projectId) || projectId <= 0) return;
+  await db.from("projects")
+    .update({ reviewing_by: "", reviewing_at: null })
+    .eq("id", projectId)
+    .eq("reviewing_by", access.session.slackId);
+  revalidatePath(`/review/${projectId}`);
+  revalidatePath("/review");
+  redirect(`/review/${projectId}`);
+});
+
 export const heartbeatReview = guardedAction("heartbeatReview", "reviewer", async (access, projectId: number): Promise<void> => {
   if (!projectId) return;
   await db
