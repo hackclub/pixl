@@ -1,7 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useReducedMotion } from "motion/react";
 import type { HackatimeReport, HackatimeBreakdown, LapseTimelapse } from "@/lib/hackatime";
+import { hackatimeDonutSlices } from "@/lib/hackatimeChart";
+import { PieChart } from "@/components/charts/pie-chart";
+import { PieSlice } from "@/components/charts/pie-slice";
+import { PieCenter } from "@/components/charts/pie-center";
+import { BKLIT_THEME } from "@/app/_components/bklitTheme";
 import { Badge, Button, EmptyState, formatDate, Muted, Stat, StatGrid } from "@/app/_ui/ui";
 
 function fmtDate(unix: number | null): string {
@@ -14,14 +20,6 @@ function fmtSecs(s: number): string {
   const m = Math.floor((s % 3600) / 60);
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
-
-import { useEffect } from "react";
-import { useReducedMotion } from "motion/react";
-import { hackatimeDonutSlices } from "@/lib/hackatimeChart";
-import { PieChart } from "@/components/charts/pie-chart";
-import { PieSlice } from "@/components/charts/pie-slice";
-import { PieCenter } from "@/components/charts/pie-center";
-import { BKLIT_THEME } from "@/app/_components/bklitTheme";
 
 type BreakdownKey = "languages" | "editors" | "operatingSystems" | "machines";
 
@@ -38,7 +36,7 @@ function BreakdownExplorer({ report }: { report: HackatimeReport }) {
     { key: "operatingSystems", label: "Operating systems", scope: "All Hackatime projects", items: report.operatingSystems },
     { key: "machines", label: "Machines", scope: "All Hackatime projects", items: report.machines },
   ];
-  const available = groups.filter((g) => g.items.some((i) => Number.isFinite(i.seconds) && i.seconds > 0));
+  const available = groups.filter((g) => g.items.some((i) => Number.isFinite(i.seconds) && i.seconds > 0 && i.name.trim().length > 0));
   const active = available.find((g) => g.key === selected) ?? available[0];
   if (!active) return <p className="hc-caption text-sm">No Hackatime breakdown available for this maker.</p>;
 
@@ -90,7 +88,7 @@ function BreakdownExplorer({ report }: { report: HackatimeReport }) {
         </div>
         <div className="min-w-0">
           <p className="hc-caption mb-2 text-xs">
-            <strong className="text-[var(--text)]">{fmtSecs(totalSeconds)}</strong> across {active.items.filter((r) => Number.isFinite(r.seconds) && r.seconds > 0).length} categories
+            <strong className="text-[var(--text)]">{fmtSecs(totalSeconds)}</strong> across {active.items.filter((r) => Number.isFinite(r.seconds) && r.seconds > 0 && r.name.trim().length > 0).length} categories
           </p>
           <ul className="flex flex-col gap-1" aria-label={`${active.label} time share`}>
             {slices.map((slice, i) => (
