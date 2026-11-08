@@ -52,6 +52,7 @@ import {
   nextReviewId,
   firstPassAccess,
   claimReview,
+  REVIEW_LOCK_MS,
   EVENT_TYPES,
   REFERRAL_BOOST_PX_PER_HOUR,
   REFERRAL_BOOST_SHIP_CAP,
@@ -64,6 +65,7 @@ import {
   ensureJournalShareToken,
 } from "@/lib/db";
 import { buildAuditNote, parseAuditNote, TECHNICAL_FEATURES_MIN } from "@/lib/auditNote";
+import { activeReviewClaim } from "@/lib/reviewClaimState";
 import { computeClaimedHours, round1 } from "@/lib/hours";
 import { decryptPII } from "@/lib/crypto";
 import { buildAirtableFields, duplicateOverrideNote, newHoursOnly, pushProjectRecord } from "@/lib/airtable";
@@ -1021,7 +1023,7 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
   const { data: current } = await db
     .from("projects")
     .select(
-      "status, banned_at, user_id, kind, name, description, image_url, first_pass_by, first_pass_hours, first_pass_verdict, second_pass_hours, second_pass_verdict, shipped_at, sidequest_id, trial_reward_choice, needs_funding, funding_usd, robert_project_id, robert_state, assigned_reviewer_slack_id, assigned_at",
+      "status, banned_at, user_id, kind, name, description, image_url, first_pass_by, first_pass_hours, first_pass_verdict, second_pass_hours, second_pass_verdict, shipped_at, sidequest_id, trial_reward_choice, needs_funding, funding_usd, robert_project_id, robert_state, assigned_reviewer_slack_id, assigned_at, reviewing_by, reviewing_at",
     )
     .eq("id", projectId)
     .single();
@@ -1079,6 +1081,10 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
   // reviewer every time.
   if (current.banned_at)
     redirect(`${back}?error=${encodeURIComponent("This project is already banned.")}`);
+  // The UI only mounts a form after an explicit claim, but enforce the same
+  // rule at the action boundary so stale tabs/manual requests cannot bypass it.
+  if (activeReviewClaim(current, Date.now(), REVIEW_LOCK_MS) !== access.session.slackId)
+    redirect(`${back}?error=${encodeURIComponent("Start reviewing first, or reclaim this project if your lock expired.")}`);
   // A first-pass reviewer proposing a ban is a separate, older flow the fraud
   // triage redesign doesn't touch - it skips fraud triage entirely and goes
   // straight to a different canSecondPass reviewer confirming or overturning

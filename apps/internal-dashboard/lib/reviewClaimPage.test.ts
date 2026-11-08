@@ -19,6 +19,13 @@ describe("review detail claim behavior", () => {
     expect(page).toContain("hasActiveClaim && canReview && <ReviewHeartbeat");
   });
 
+  test("verdict submissions also enforce the active claim on the server", () => {
+    const actions = source("actions.ts");
+    const part = actions.slice(actions.indexOf("export const reviewProject"), actions.indexOf("export const ", actions.indexOf("export const reviewProject") + 20));
+    expect(part).toContain("activeReviewClaim(current, Date.now(), REVIEW_LOCK_MS)");
+    expect(part).toContain("reviewing_by, reviewing_at");
+  });
+
   test("new review action enforces scope, stage, ownership and assignment", () => {
     const actions = source("actions.ts");
     const part = actions.slice(actions.indexOf("export const beginReviewClaim"), actions.indexOf("export const endReviewClaim"));

@@ -379,7 +379,6 @@ export default async function ReviewDetail({
   const yswsPromise = yswsShipsForReview(p.users?.slack_id, p.repo_url, p.demo_url);
   const ownerHandlePromise = slackHandle(p.users?.slack_id);
   const bomPromise = p.needs_funding && p.bom_url ? fetchBomRows(p.bom_url) : null;
-  const claimByShown = !!claimedByOther;
   const claimHandlePromise = claimedByOther ? slackHandle(claimedByOther) : null;
   // includeClaimed so prev/next and the "Submission N of M" counter walk the
   // same queue the list page shows. nextReviewId (the auto-advance after a
