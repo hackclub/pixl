@@ -83,7 +83,40 @@ function localeRedirect(req: NextRequest): NextResponse | null {
   return res;
 }
 
+// Emergency protection for the OAuth callback: Next.js still receives the
+// request, but requests above this per-process ceiling never hit the token
+// exchange handler. This is an availability guard, NOT an edge/WAF limit.
+// Deploy an edge rate limit too; replicas each have their own counter.
+export function createFixedWindowLimiter(limit: number, windowMs: number) {
+  let window = -1;
+  let count = 0;
+  return (now: number = Date.now()): boolean => {
+    const nextWindow = Math.floor(now / windowMs);
+    if (nextWindow !== window) {
+      window = nextWindow;
+      count = 0;
+    }
+    if (count >= limit) return false;
+    count += 1;
+    return true;
+  };
+}
+
+const allowAuthCallback = createFixedWindowLimiter(60, 1000);
+
 export function proxy(req: NextRequest) {
+  // Under a callback flood, return a cheap, uncached 429 *before* CSP
+  // generation and before the callback route can call /auth/exchange.
+  if (req.nextUrl.pathname === "/api/auth/callback" && !allowAuthCallback()) {
+    return new NextResponse(null, {
+      status: 429,
+      headers: {
+        "cache-control": "no-store",
+        "retry-after": "2",
+      },
+    });
+  }
+
   const redirect = localeRedirect(req);
   if (redirect) return redirect;
 
@@ -120,5 +153,6 @@ export const config = {
         { type: "header", key: "purpose", value: "prefetch" },
       ],
     },
+    { source: "/api/auth/callback" },
   ],
 };
