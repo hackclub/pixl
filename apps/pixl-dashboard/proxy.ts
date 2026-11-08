@@ -145,7 +145,6 @@ export function proxy(req: NextRequest) {
 // fallback CSP. Must stay a literal (statically analyzed at build time).
 export const config = {
   matcher: [
-    "/api/auth/callback",
     {
       source:
         "/((?!api/|_next/static/|_next/image|img/|fonts/|favicon\\.ico$|icon\\.png$|robots\\.txt$|sitemap\\.xml$).*)",
@@ -154,5 +153,6 @@ export const config = {
         { type: "header", key: "purpose", value: "prefetch" },
       ],
     },
+    { source: "/api/auth/callback" },
   ],
 };
