@@ -1,5 +1,6 @@
 // Per-staff dashboard preferences. This file is plain data and parsing so the
 // client settings menu can import it; the DB read/write is in lib/db.ts.
+import { parseCustomReviewMacros, type CustomReviewMacro } from "./reviewMacros";
 
 export const THEMES = [
   "system",
@@ -76,6 +77,8 @@ export interface StaffSettings {
   reviewNotifyOnResubmit: boolean;
   /** Pixo DMs you after each review you submit (what you earned, or that your pixel is held). On unless turned off. */
   reviewDms: boolean;
+  /** Custom shortcuts, synced to this reviewer's account. */
+  reviewMacros: CustomReviewMacro[];
 }
 
 // What the settings page shows for each theme. The colours themselves live in
@@ -119,6 +122,7 @@ export const DEFAULT_STAFF_SETTINGS: StaffSettings = {
   reviewRevealName: true,
   reviewNotifyOnResubmit: false,
   reviewDms: true,
+  reviewMacros: [],
 };
 
 export const REVIEW_PANEL_MIN = 360;
@@ -145,5 +149,6 @@ export function parseStaffSettings(raw: unknown): StaffSettings {
     reviewRevealName: r.reviewRevealName !== false,
     reviewNotifyOnResubmit: r.reviewNotifyOnResubmit === true,
     reviewDms: r.reviewDms !== false,
+    reviewMacros: parseCustomReviewMacros(r.reviewMacros),
   };
 }
