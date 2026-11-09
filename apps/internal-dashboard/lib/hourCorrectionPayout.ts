@@ -8,8 +8,8 @@
  * Do not re-run referral eligibility, community goals or today's RE rate:
  * those may differ from the bonuses/rate actually paid on this project.
  *
- * Taking the current ledger total as the baseline makes repeated adjustments
- * work in either direction. A previously paid bonus remains on retained hours.
+ * Taking the current ledger total as the baseline makes repeated reductions
+ * stable. Hour increases stay on the original separate repricing path.
  */
 export function correctedPayoutPixels({
   paidPx,
