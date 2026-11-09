@@ -33,3 +33,20 @@ export function mustPreserveApprovedProjectTerms(
 ): boolean {
   return status === "approved" || isUpdate === true;
 }
+
+/**
+ * A collaborator only banks their OWN approved hours; owner hours or raw
+ * Hackatime time awaiting review must never be counted on their behalf.
+ */
+export function earnedCollaboratorHours(
+  project: Pick<EarnedProjectRow, "status" | "is_update">,
+  collaboration: Pick<EarnedProjectRow, "approved_hours" | "prior_approved_hours">,
+): number | null {
+  return earnedProjectHours({
+    status: project.status,
+    is_update: project.is_update,
+    approved_hours: collaboration.approved_hours,
+    prior_approved_hours: collaboration.prior_approved_hours,
+    hackatime_seconds: 0,
+  });
+}
