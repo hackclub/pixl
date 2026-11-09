@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { approvedUpdateReviewResetFields } from "./projectReviewCycle.js";
+import { approvedUpdateReviewResetFields, approvedUpdateShipState } from "./projectReviewCycle.js";
 
 describe("approved project update review cycle", () => {
   test("erases the old reviewer's visible first pass and the old second pass", () => {
@@ -65,8 +65,22 @@ describe("approved project update review cycle", () => {
 
   test("only fully approved updates use this reset, not requested-changes reships", () => {
     const source = readFileSync(new URL("./projects.ts", import.meta.url), "utf8");
-    expect(source).toContain('const isUpdate = project.status === "approved" && !project.rejected_at;');
-    expect(source).toContain("...(isUpdate ? approvedUpdateReviewResetFields() : {}),");
+    expect(source).toContain("const { startsUpdate, isUpdate } = approvedUpdateShipState(project");
+    expect(source).toContain("...(startsUpdate ? approvedUpdateReviewResetFields() : {}),");
     expect(source).toContain('if (project.status === "needs_changes" && project.notify_reviewer_slack_id)');
+  });
+  test("preserves update status and previously banked RE on needs_changes reship", () => {
+    expect(approvedUpdateShipState({ status: "approved", is_update: false })).toEqual({ startsUpdate: true, isUpdate: true });
+    expect(approvedUpdateShipState({ status: "needs_changes", is_update: true })).toEqual({ startsUpdate: false, isUpdate: true });
+    expect(approvedUpdateShipState({ status: "needs_changes", is_update: false })).toEqual({ startsUpdate: false, isUpdate: false });
+    expect(approvedUpdateShipState({ status: "draft", is_update: false })).toEqual({ startsUpdate: false, isUpdate: false });
+  });
+
+  test("reshipping an update does not reset its originally banked hours, collaborator baselines or review claim", () => {
+    const source = readFileSync(new URL("./projects.ts", import.meta.url), "utf8");
+    expect(source).toContain("...(startsUpdate ? { prior_approved_hours:");
+    expect(source).toContain("...(startsUpdate ? { airtable_record_id: null } : {}),");
+    expect(source).toContain("if (startsUpdate) {\\n    const { error: collabResetError }");
+    expect(source).toContain("sidequest_id: isUpdate ? project.sidequest_id : sidequestId,");
   });
 });
