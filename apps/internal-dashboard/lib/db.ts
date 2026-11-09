@@ -1,6 +1,7 @@
 import { activeReviewClaim } from "./reviewClaimState";
 import { projectNumber } from "./projectNumber";
 import { earnedProjectHours, earnedCollaboratorHours, EARNED_PROJECT_STATUSES } from "./earnedProject";
+import { retryProjectPixelCredit } from "./pixelCreditRetry";
 import { pickStyleExamples, type StyleCandidate, type StyleExample } from "./styleExamples";
 import { queueWaitStartMs, type QueueWaitInput } from "./queueWait";
 import { DEFAULT_STAFF_SETTINGS, parseStaffSettings, type StaffSettings } from "./staffSettings";
@@ -996,14 +997,21 @@ export async function creditProjectPixels(
   hours: number,
   by: string,
 ): Promise<void> {
-  const { error } = await db.rpc("credit_project_pixels", {
-    p_user_id: userId,
-    p_project_id: projectId,
-    p_amount: amount,
-    p_hours: hours,
-    p_created_by: by,
-  });
-  if (error) console.error("creditProjectPixels", error.message);
+  try {
+    await retryProjectPixelCredit(() => db.rpc("credit_project_pixels", {
+      p_user_id: userId,
+      p_project_id: projectId,
+      p_amount: amount,
+      p_hours: hours,
+      p_created_by: by,
+    }));
+  } catch (e) {
+    // A failed credit must never be silently treated as a paid approval.
+    // This does not make review state + payout transactional; the approval
+    // reconciliation workflow must still handle any persistent failure.
+    console.error("creditProjectPixels", { projectId, error: (e as Error).message });
+    throw e;
+  }
 }
 
 // Claw back everything a project was credited (verdict reverted). Returns the
