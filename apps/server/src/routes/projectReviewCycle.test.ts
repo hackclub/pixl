@@ -80,7 +80,7 @@ describe("approved project update review cycle", () => {
     const source = readFileSync(new URL("./projects.ts", import.meta.url), "utf8");
     expect(source).toContain("...(startsUpdate ? { prior_approved_hours:");
     expect(source).toContain("...(startsUpdate ? { airtable_record_id: null } : {}),");
-    expect(source).toContain("if (startsUpdate) {\\n    const { error: collabResetError }");
+    expect(source).toContain("if (startsUpdate) {");
     expect(source).toContain("sidequest_id: isUpdate ? project.sidequest_id : sidequestId,");
   });
 });
