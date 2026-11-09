@@ -25,6 +25,7 @@ import { validate, v, optStr, optBool, optNum, params } from "../http/validate.j
 import { countJournalImages, journalImagesNeeded, journalTextLength } from "./journalRules.js";
 import { withWritableJournalProject } from "./journalLock.js";
 import { approvedUpdateReviewResetFields } from "./projectReviewCycle.js";
+import { mustPreserveApprovedProjectTerms } from "../earnedProject.js";
 
 const router = Router();
 
@@ -560,7 +561,7 @@ router.put("/api/projects/:id", validate({ query: v.noQuery, params: params({ id
   // their RE). Keep the existing level on approved projects; the reviewer owns it.
   const { data: cur } = await db
     .from("projects")
-    .select("status, level, sidequest_id, bom_url, banned_at")
+    .select("status, is_update, level, sidequest_id, bom_url, banned_at")
     .eq("id", id)
     .eq("user_id", session.userId)
     .maybeSingle();
@@ -579,9 +580,11 @@ router.put("/api/projects/:id", validate({ query: v.noQuery, params: params({ id
   if ("error" in trial) return res.status(400).json({ ok: false, error: trial.error });
   fields.sidequest_id = trial.id;
 
-  // On an approved project, neither the tier nor the Trial link may change (both
-  // feed payout/RE that already settled) , keep whatever the reviewer approved.
-  if ((cur as { status?: string } | null)?.status === "approved") {
+  // Previously approved hours are still counted toward the player's RE during
+  // an update review (including needs_changes). Freeze the tier AND Trial
+  // link for that old work until an explicit separately modelled regrade exists.
+  // New submissions in needs_changes can still edit their proposed tier.
+  if (mustPreserveApprovedProjectTerms(cur.status, cur.is_update)) {
     fields.level = (cur as { level?: number }).level ?? 1;
     fields.sidequest_id = (cur as { sidequest_id?: number | null }).sidequest_id ?? null;
   }
@@ -592,7 +595,8 @@ router.put("/api/projects/:id", validate({ query: v.noQuery, params: params({ id
     .eq("id", id)
     .eq("user_id", session.userId)
     // Recheck at write time: a concurrent ship/review may have locked it.
-    .in("status", ["draft", "needs_changes", "approved"])
+    .eq("status", cur.status)
+    .eq("is_update", cur.is_update)
     .is("banned_at", null)
     .select()
     .maybeSingle();
