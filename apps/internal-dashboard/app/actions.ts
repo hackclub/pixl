@@ -9,6 +9,7 @@ import { afterResponse } from "@/lib/afterResponse";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { unshipResetFields, UNSHIPPABLE_STATUSES } from "@/lib/unship";
+import { correctedPayoutPixels } from "@/lib/hourCorrectionPayout";
 import {
   config,
   levelForRe,
@@ -3021,14 +3022,9 @@ export const sendMissingToAirtable = guardedAction("sendMissingToAirtable", "own
   redirect(failed.length ? `/projects?error=${encodeURIComponent(summary)}` : `/projects?ok=${encodeURIComponent(summary)}`);
 });
 
-// A beneficiary's pixel payout for `hours` on this project, as if `hours` had
-// been the true credited figure all along - same rate formula creditBeneficiary
-// uses for a fresh approval (their own lifetime RE from every OTHER approved
-// project, averaged up through this project's own marginal RE window at its
-// tier), just run for a correction instead of a new ship. Deliberately never
-// re-triggers the one-time referral/community-goal bonuses a fresh approval
-// can add - those already paid out once and aren't part of the hourly rate
-// this recomputes.
+// For hour increases, keep the existing unbonused repricing behavior. The
+// correction below is specifically for excessive bonus clawbacks when
+// previously approved hours are REDUCED.
 async function repriceForHours(
   userId: string,
   projectId: number,
@@ -3041,18 +3037,31 @@ async function repriceForHours(
   return Math.round(hours * rate);
 }
 
-// Lowers an already-approved project's credited hours after the fact - e.g.
-// Hack Club HQ flags an over-claim in the Unified YSWS Airtable base days
-// after approval, and Pixl risks a fine if the hours/pixels on our side don't
-// come back down to match. Recomputes the owner's (and every accepted
-// collaborator's, scaled by the same ratio as the owner's hours) pixel total
-// as if newHours had been the true figure from the start; creditProjectPixels
-// then does the actual clawback, which already auto-cancels pending orders
-// (newest first, refunding any leftover) if the corrected balance can't cover
-// them - see 0164_clawback_pending_orders.sql. Works in both directions: a
-// higher figure credits the difference (creditProjectPixels sets the total and
-// pays the delta), and the pending-order note is left out since nothing was
-// clawed back.
+// Read the actual payout ledger, not a newly calculated hourly rate. A
+// project may have been paid with a one-time referral boost or a community goal
+// multiplier. The hours-correction path must preserve that original rate on
+// hours the builder keeps, and must not re-trigger either bonus.
+// Fail closed if the ledger cannot be read: treating a query error as zero
+// could claw back an entire legitimate payout.
+async function creditedPixelsForHoursCorrection(projectId: number, userId: string): Promise<number> {
+  const { data, error } = await db
+    .from("pixel_transactions")
+    .select("amount")
+    .eq("project_id", projectId)
+    .eq("user_id", userId)
+    .in("reason", ["project_approved", "review_reverted"]);
+  if (error) throw new Error(`Could not read payout history for project #${projectId}: ${error.message}`);
+  return (data ?? []).reduce((total, row) => total + (Number(row.amount) || 0), 0);
+}
+
+// Adjusts the approved hours on a project after review, e.g. if HQ flags an
+// over-claim. Preserve each beneficiary's originally paid effective rate
+// (including referral boosts, community-goal bonuses and their RE rate) by
+// scaling the actual ledger payout for HOUR REDUCTIONS, NOT recalculating
+// an unbonused rate. Repeated deflations stay consistent without re-awarding
+// either bonus; hour increases retain the earlier base-rate calculation.
+// creditProjectPixels adjusts only the delta; pending orders may be clawed
+// back by 0164_clawback_pending_orders.sql when there is a shortfall.
 // Owners/super-admins only: this DMs the player(s) and can cancel their
 // orders, a bigger blast radius than the "pixels" permission's manual
 // grant/deduct tool.
@@ -3119,24 +3128,58 @@ export const deflateProjectHours = guardedAction("deflateProjectHours", "owner",
     );
 
   const tier = Number(project.level) || 1;
+  // Pre-read ledgers for HOUR REDUCTIONS before touching balances or hours:
+  // an invalid lookup must not leave a partially corrected project.
+  const correctedPayouts = new Map(
+    await Promise.all(
+      [
+        ...(deflateOwner && (ownerNewHours as number) < oldHours
+          ? [{
+              userId: project.user_id as string,
+              before: oldHours,
+              after: ownerNewHours as number,
+              fundingPx: Number(project.funding_deducted_px) || 0,
+            }]
+          : []),
+        ...collabTargets.filter((c) => c.cNewHours < c.cOldHours).map((c) => ({
+          userId: c.user_id,
+          before: c.cOldHours,
+          after: c.cNewHours,
+          fundingPx: 0,
+        })),
+      ].map(async (person) => {
+        const paidPx = await creditedPixelsForHoursCorrection(projectId, person.userId);
+        return [
+          person.userId,
+          correctedPayoutPixels({
+            paidPx,
+            previousHours: person.before,
+            correctedHours: person.after,
+            fundingDeductedPx: person.fundingPx,
+          }),
+        ] as const;
+      }),
+    ),
+  );
+
   const orderNote =
     "If this left you without enough pixels to cover an order you'd already placed, that order was automatically cancelled and any leftover pixels refunded.";
 
   if (deflateOwner) {
-    // Hardware funding grants dock a flat pixel amount off the owner's payout
-    // (see creditBeneficiary's fundingPx) - repriceForHours only rebuilds the
-    // GROSS per-hour figure, so that same deduction has to come back off here
-    // too, or a funded project's "corrected" total comes out too high and
-    // creditProjectPixels ends up crediting MORE pixels instead of clawing
-    // back (funding_deducted_px is owner-only, never applies to collaborators).
-    const fundingDeductedPx = Number(project.funding_deducted_px) || 0;
-    const grossOwnerPx = await repriceForHours(project.user_id, projectId, ownerNewHours, tier);
-    const newOwnerPx = Math.max(grossOwnerPx - fundingDeductedPx, 0);
+    const newOwnerPx = ownerNewHours < oldHours
+      ? correctedPayouts.get(project.user_id)!
+      : Math.max(
+          (await repriceForHours(project.user_id, projectId, ownerNewHours, tier)) -
+            (Number(project.funding_deducted_px) || 0),
+          0,
+        );
     await creditProjectPixels(project.user_id, projectId, newOwnerPx, ownerNewHours, by);
   }
 
   for (const c of collabTargets) {
-    const cNewPx = await repriceForHours(c.user_id, projectId, c.cNewHours, tier);
+    const cNewPx = c.cNewHours < c.cOldHours
+      ? correctedPayouts.get(c.user_id)!
+      : await repriceForHours(c.user_id, projectId, c.cNewHours, tier);
     await creditProjectPixels(c.user_id, projectId, cNewPx, c.cNewHours, by);
     await db.from("project_collaborators").update({ approved_hours: c.cNewHours }).eq("id", c.id);
 
