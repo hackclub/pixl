@@ -168,6 +168,35 @@ if (!adminUrl) {
       expect(res.body.ok).toBe(true);
     });
 
+    test("Nothing purchases remain pending for the regular fulfillment queue", async () => {
+      for (const itemName of ["Nothing", "nOtHiNg"]) {
+        const user = await createUser({ country: "US" });
+        const itemId = await createItem(itemName, "US");
+        const res = await buy(user, itemId);
+        expect(res.status).toBe(200);
+        expect(res.body.ok).toBe(true);
+
+        const [order] = await db<{
+          status: string;
+          fulfilled_at: Date | null;
+          done_at: Date | null;
+          fulfilled_by: string;
+          actual_cost_usd: string | null;
+          fulfillment_pixels_paid: number;
+        }[]>`
+          select status, fulfilled_at, done_at, fulfilled_by, actual_cost_usd,
+                 fulfillment_pixels_paid
+          from shop_orders where user_id = ${user}
+        `;
+        expect(order?.status).toBe("pending");
+        expect(order?.fulfilled_at).toBeNull();
+        expect(order?.done_at).toBeNull();
+        expect(order?.fulfilled_by).toBe("");
+        expect(order?.actual_cost_usd).toBeNull();
+        expect(order?.fulfillment_pixels_paid).toBe(0);
+      }
+    });
+
     test("trying every item id against a US address only ever buys the US item", async () => {
       const user = await createUser({ country: "US", region: "BANGLADESH", regionAuto: false });
       const results: Record<string, number> = {};
