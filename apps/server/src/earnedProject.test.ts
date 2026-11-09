@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { earnedProjectHours, mustPreserveApprovedProjectTerms } from "./earnedProject";
+import { earnedProjectHours, earnedCollaboratorHours, mustPreserveApprovedProjectTerms } from "./earnedProject";
 
 const row = (over: Partial<Parameters<typeof earnedProjectHours>[0]> = {}) => ({
   status: "approved", is_update: false, prior_approved_hours: null,
@@ -42,5 +42,28 @@ describe("lock previously approved project payout terms", () => {
     const pending = row({ status: "needs_changes", is_update: true, prior_approved_hours: 20, approved_hours: 20 });
     expect(earnedProjectHours(pending)).toBe(20);
     expect(mustPreserveApprovedProjectTerms(pending.status, pending.is_update)).toBe(true);
+  });
+});
+
+describe("approved collaborator hour banking", () => {
+  const collab = (approved_hours: number | null, prior_approved_hours: number | null = null) =>
+    ({ approved_hours, prior_approved_hours });
+
+  test("approved collaborator earns their own hours, not owner hours", () => {
+    expect(earnedCollaboratorHours({ status: "approved", is_update: false }, collab(6))).toBe(6);
+    expect(earnedCollaboratorHours({ status: "approved", is_update: false }, collab(null))).toBe(0);
+  });
+
+  test("reship and needs_changes retain only the collaborator's previous approved hours", () => {
+    for (const status of ["shipped", "needs_changes", "fraud_review", "second_review"]) {
+      expect(earnedCollaboratorHours({ status, is_update: true }, collab(15, 6))).toBe(6);
+    }
+  });
+
+  test("unapproved first ships and updates without a baseline earn nothing", () => {
+    for (const status of ["draft", "shipped", "needs_changes", "fraud_review", "second_review"]) {
+      expect(earnedCollaboratorHours({ status, is_update: false }, collab(15))).toBeNull();
+    }
+    expect(earnedCollaboratorHours({ status: "shipped", is_update: true }, collab(15))).toBeNull();
   });
 });

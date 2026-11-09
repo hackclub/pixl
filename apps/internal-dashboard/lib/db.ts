@@ -1,13 +1,13 @@
 import { activeReviewClaim } from "./reviewClaimState";
 import { projectNumber } from "./projectNumber";
-import { earnedProjectHours, EARNED_PROJECT_STATUSES } from "./earnedProject";
+import { earnedProjectHours, earnedCollaboratorHours, EARNED_PROJECT_STATUSES } from "./earnedProject";
 import { pickStyleExamples, type StyleCandidate, type StyleExample } from "./styleExamples";
 import { queueWaitStartMs, type QueueWaitInput } from "./queueWait";
 import { DEFAULT_STAFF_SETTINGS, parseStaffSettings, type StaffSettings } from "./staffSettings";
 import { cache } from "react";
 import { randomBytes } from "node:crypto";
 import { decryptPII } from "./crypto";
-import { reForProject } from "@/app/_generated/config";
+import { reForHours, reForProject } from "@/app/_generated/config";
 import { parseAuditNote } from "./auditNote";
 import { foldOrderCounts, type OrderCounts } from "./fulfillmentView";
 import { slackIdFromActorName } from "./reviewAccess";
@@ -3747,6 +3747,62 @@ export async function getShopSalesSeries(days = 30): Promise<ShopSalesPoint[]> {
  * The DB column is `projects.level` but holds the tier (1-4); it predates the
  * player-facing 1-100 level and isn't worth a rename migration.
  */
+
+/** Mirrors the server's approved collaborator RE calculation. Project owner
+ * hours are separate; banked collaborators must still count after removal.
+ * Fetch parent projects separately (pgCompat doesn't support nested joins).
+ */
+async function dashboardBankedCollaborations(
+  userId: string,
+  excludeProjectId?: number,
+): Promise<Array<{ hours: number; tier: number }>> {
+  const { data: collaborations, error: collabError } = await db
+    .from("project_collaborators")
+    .select("project_id, user_id, approved_hours, prior_approved_hours")
+    .eq("user_id", userId)
+    .in("status", ["accepted", "removed"]);
+  if (collabError) throw new Error(`Failed reading approved collaborations: ${collabError.message}`);
+  const rows = (collaborations ?? []).filter((c) =>
+    !excludeProjectId || Number(c.project_id) !== excludeProjectId
+  );
+  if (rows.length === 0) return [];
+
+  const { data: projects, error: projectError } = await db
+    .from("projects")
+    .select("id, user_id, status, is_update, level")
+    .in("id", [...new Set(rows.map((c) => Number(c.project_id)))])
+    .in("status", EARNED_PROJECT_STATUSES)
+    .is("banned_at", null);
+  if (projectError) throw new Error(`Failed reading collaborator projects: ${projectError.message}`);
+  const byId = new Map((projects ?? []).map((p) => [Number(p.id), p]));
+  const banked: Array<{ hours: number; tier: number }> = [];
+  for (const c of rows) {
+    const p = byId.get(Number(c.project_id));
+    if (!p || p.user_id === c.user_id) continue;
+    const hours = earnedCollaboratorHours(
+      { status: String(p.status), is_update: p.is_update === true },
+      {
+        approved_hours: c.approved_hours == null ? null : Number(c.approved_hours),
+        prior_approved_hours: c.prior_approved_hours == null ? null : Number(c.prior_approved_hours),
+      },
+    );
+    if (hours !== null && hours > 0) banked.push({ hours, tier: Number(p.level) || 1 });
+  }
+  return banked;
+}
+
+/** Reviewer-side lifetime RE must include flat Vault awards just like the
+ * game wallet; otherwise the approval payout can use a lower hourly rate.
+ */
+async function dashboardBonusReFor(userId: string): Promise<number> {
+  const { data, error } = await db
+    .from("vault_chapter_awards")
+    .select("re_awarded")
+    .eq("user_id", userId);
+  if (error) throw new Error(`Failed reading Vault RE: ${error.message}`);
+  return (data ?? []).reduce((sum, award) => sum + (Number(award.re_awarded) || 0), 0);
+}
+
 export async function lifetimeRe(userId: string, excludeProjectId?: number): Promise<number> {
   let q = db
     .from("projects")
@@ -3755,15 +3811,18 @@ export async function lifetimeRe(userId: string, excludeProjectId?: number): Pro
     .in("status", EARNED_PROJECT_STATUSES)
     .is("banned_at", null);
   if (excludeProjectId) q = q.neq("id", excludeProjectId);
-  const { data } = await q;
-  return (
-    Math.round(
-      (data ?? []).reduce((s, p) => {
-        const h = earnedProjectHours(p);
-        return s + (h === null ? 0 : reForProject(h, Number(p.level) || 1, p.sidequest_id != null));
-      }, 0) * 10,
-    ) / 10
-  );
+  const [{ data, error }, collaborations, vaultBonusRe] = await Promise.all([
+    q,
+    dashboardBankedCollaborations(userId, excludeProjectId),
+    dashboardBonusReFor(userId),
+  ]);
+  if (error) throw new Error(`Failed reading owned approved projects: ${error.message}`);
+  const ownedRe = (data ?? []).reduce((s, p) => {
+    const h = earnedProjectHours(p);
+    return s + (h === null ? 0 : reForProject(h, Number(p.level) || 1, p.sidequest_id != null));
+  }, 0);
+  const collaboratorRe = collaborations.reduce((s, c) => s + reForHours(c.hours, c.tier), 0);
+  return Math.round((ownedRe + collaboratorRe + vaultBonusRe) * 10) / 10;
 }
 
 export interface ShowNTellRound {
