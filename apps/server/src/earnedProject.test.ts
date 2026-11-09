@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { earnedProjectHours } from "./earnedProject";
+import { earnedProjectHours, mustPreserveApprovedProjectTerms } from "./earnedProject";
 
 const row = (over: Partial<Parameters<typeof earnedProjectHours>[0]> = {}) => ({
   status: "approved", is_update: false, prior_approved_hours: null,
@@ -21,5 +21,26 @@ describe("banked project hours", () => {
   });
   test("a banned project is excluded by the caller's banned_at filter", () => {
     expect(earnedProjectHours(row({ status: "shipped", is_update: true, prior_approved_hours: null }))).toBeNull();
+  });
+});
+
+describe("lock previously approved project payout terms", () => {
+  test("new projects can still choose a tier and a Trial", () => {
+    for (const status of ["draft", "needs_changes", "shipped"]) {
+      expect(mustPreserveApprovedProjectTerms(status, false)).toBe(false);
+    }
+  });
+
+  test("all update review states retain the original tier and Trial link", () => {
+    expect(mustPreserveApprovedProjectTerms("approved", false)).toBe(true);
+    for (const status of ["shipped", "needs_changes", "second_review", "fraud_review", "approved", "draft"]) {
+      expect(mustPreserveApprovedProjectTerms(status, true)).toBe(true);
+    }
+  });
+
+  test("banked hours in needs_changes must not be regraded before reapproval", () => {
+    const pending = row({ status: "needs_changes", is_update: true, prior_approved_hours: 20, approved_hours: 20 });
+    expect(earnedProjectHours(pending)).toBe(20);
+    expect(mustPreserveApprovedProjectTerms(pending.status, pending.is_update)).toBe(true);
   });
 });

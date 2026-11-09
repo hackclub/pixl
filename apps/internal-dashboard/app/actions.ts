@@ -66,6 +66,7 @@ import {
 } from "@/lib/db";
 import { buildAuditNote, parseAuditNote, TECHNICAL_FEATURES_MIN } from "@/lib/auditNote";
 import { activeReviewClaim } from "@/lib/reviewClaimState";
+import { mustPreserveApprovedProjectTerms } from "@/lib/earnedProject";
 import { computeClaimedHours, round1 } from "@/lib/hours";
 import { decryptPII } from "@/lib/crypto";
 import { buildAirtableFields, duplicateOverrideNote, newHoursOnly, pushProjectRecord } from "@/lib/airtable";
@@ -1023,7 +1024,7 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
   const { data: current } = await db
     .from("projects")
     .select(
-      "status, banned_at, user_id, kind, name, description, image_url, first_pass_by, first_pass_hours, first_pass_verdict, second_pass_hours, second_pass_verdict, shipped_at, sidequest_id, trial_reward_choice, needs_funding, funding_usd, robert_project_id, robert_state, assigned_reviewer_slack_id, assigned_at, reviewing_by, reviewing_at",
+      "status, banned_at, user_id, kind, name, description, image_url, first_pass_by, first_pass_hours, first_pass_verdict, second_pass_hours, second_pass_verdict, shipped_at, sidequest_id, is_update, trial_reward_choice, needs_funding, funding_usd, robert_project_id, robert_state, assigned_reviewer_slack_id, assigned_at, reviewing_by, reviewing_at",
     )
     .eq("id", projectId)
     .single();
@@ -1138,15 +1139,26 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
       redirect(`${back}?error=${encodeURIComponent("Tier must be between 1 and 4.")}`);
     const { data: cur } = await db
       .from("projects")
-      .select("user_id, level")
+      .select("user_id, level, status, is_update")
       .eq("id", projectId)
       .maybeSingle();
     if (cur && Number(cur.level) !== t) {
+      if (mustPreserveApprovedProjectTerms(cur.status, cur.is_update))
+        redirect(`${back}?error=${encodeURIComponent("Cannot regrade previously approved work during an update review.")}`);
       if (await isOwnProject(access, cur.user_id as string, projectId))
         redirect(
           `${back}?error=${encodeURIComponent("You can't change the tier of your own project.")}`,
         );
-      await db.from("projects").update({ level: t }).eq("id", projectId);
+      const { data: graded, error: gradeError } = await db
+        .from("projects")
+        .update({ level: t })
+        .eq("id", projectId)
+        .eq("status", cur.status)
+        .eq("is_update", cur.is_update)
+        .select("id")
+        .maybeSingle();
+      if (gradeError || !graded)
+        redirect(`${back}?error=${encodeURIComponent("Project review state changed. Please reopen the review.")}`);
       await logModAction(
         cur.user_id as string,
         "project_level_changed",
@@ -1897,11 +1909,13 @@ export const setProjectLevel = guardedAction("setProjectLevel", "reviewer", asyn
 
   const { data: current } = await db
     .from("projects")
-    .select("user_id, name, level")
+    .select("user_id, name, level, status, is_update")
     .eq("id", projectId)
     .single();
   if (!current) return;
   await authorizeProjectAction(access, projectId, back, { allowOwn: true });
+  if (mustPreserveApprovedProjectTerms(current.status, current.is_update))
+    redirect(`${back}?error=${encodeURIComponent("Cannot regrade previously approved work during an update review.")}`);
   if (await isOwnProject(access, current.user_id, projectId))
     redirect(`${back}?error=${encodeURIComponent("You can't change the level of a project you own or collaborate on.")}`);
   if (Number(current.level) === level) {
@@ -1909,9 +1923,16 @@ export const setProjectLevel = guardedAction("setProjectLevel", "reviewer", asyn
     redirect(back);
   }
 
-  const { error } = await db.from("projects").update({ level }).eq("id", projectId);
-  if (error) {
-    console.error("setProjectLevel failed", error.message);
+  const { data: graded, error } = await db
+    .from("projects")
+    .update({ level })
+    .eq("id", projectId)
+    .eq("status", current.status)
+    .eq("is_update", current.is_update)
+    .select("id")
+    .maybeSingle();
+  if (error || !graded) {
+    console.error("setProjectLevel failed", error?.message ?? "project state changed");
     return;
   }
   await logModAction(

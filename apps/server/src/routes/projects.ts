@@ -24,7 +24,8 @@ import { z } from "zod";
 import { validate, v, optStr, optBool, optNum, params } from "../http/validate.js";
 import { countJournalImages, journalImagesNeeded, journalTextLength } from "./journalRules.js";
 import { withWritableJournalProject } from "./journalLock.js";
-import { approvedUpdateReviewResetFields } from "./projectReviewCycle.js";
+import { approvedUpdateReviewResetFields, approvedUpdateShipState } from "./projectReviewCycle.js";
+import { mustPreserveApprovedProjectTerms } from "../earnedProject.js";
 
 const router = Router();
 
@@ -560,7 +561,7 @@ router.put("/api/projects/:id", validate({ query: v.noQuery, params: params({ id
   // their RE). Keep the existing level on approved projects; the reviewer owns it.
   const { data: cur } = await db
     .from("projects")
-    .select("status, level, sidequest_id, bom_url, banned_at")
+    .select("status, is_update, level, sidequest_id, bom_url, banned_at")
     .eq("id", id)
     .eq("user_id", session.userId)
     .maybeSingle();
@@ -579,9 +580,11 @@ router.put("/api/projects/:id", validate({ query: v.noQuery, params: params({ id
   if ("error" in trial) return res.status(400).json({ ok: false, error: trial.error });
   fields.sidequest_id = trial.id;
 
-  // On an approved project, neither the tier nor the Trial link may change (both
-  // feed payout/RE that already settled) , keep whatever the reviewer approved.
-  if ((cur as { status?: string } | null)?.status === "approved") {
+  // Previously approved hours are still counted toward the player's RE during
+  // an update review (including needs_changes). Freeze the tier AND Trial
+  // link for that old work until an explicit separately modelled regrade exists.
+  // New submissions in needs_changes can still edit their proposed tier.
+  if (mustPreserveApprovedProjectTerms(cur.status, cur.is_update)) {
     fields.level = (cur as { level?: number }).level ?? 1;
     fields.sidequest_id = (cur as { sidequest_id?: number | null }).sidequest_id ?? null;
   }
@@ -592,7 +595,8 @@ router.put("/api/projects/:id", validate({ query: v.noQuery, params: params({ id
     .eq("id", id)
     .eq("user_id", session.userId)
     // Recheck at write time: a concurrent ship/review may have locked it.
-    .in("status", ["draft", "needs_changes", "approved"])
+    .eq("status", cur.status)
+    .eq("is_update", cur.is_update)
     .is("banned_at", null)
     .select()
     .maybeSingle();
@@ -877,12 +881,12 @@ router.post("/api/projects/:id/ship", validate({ query: v.noQuery, params: param
     );
   }
 
-  const isUpdate = project.status === "approved" && !project.rejected_at;
+  const { startsUpdate, isUpdate } = approvedUpdateShipState(project as { status: string; is_update?: boolean | null; rejected_at?: string | null });
   const updateNotes = String(req.body?.updateNotes ?? "").trim().slice(0, 8000);
   const shipNote = String(req.body?.shipNote ?? "").trim().slice(0, 2000);
-  if (isUpdate && !updateNotes)
+  if (startsUpdate && !updateNotes)
     return res.status(400).json({ ok: false, error: "update_notes_required" });
-  if (isUpdate && updateNotes.length < 100)
+  if (startsUpdate && updateNotes.length < 100)
     return res.status(400).json({ ok: false, error: "update_notes_too_short" });
   const userDisclosedOtherYsws = req.body?.otherYsws === true;
   const otherYsws = userDisclosedOtherYsws || !!project.imported_ysws_entry_id;
@@ -990,31 +994,32 @@ router.post("/api/projects/:id/ship", validate({ query: v.noQuery, params: param
       // A fully approved project's update is a fresh review. Prior approvals
       // remain in review_audits and approved_hours/prior_approved_hours.
       // Needs-changes reships retain the three-day reviewer assignment.
-      ...(isUpdate ? approvedUpdateReviewResetFields() : {}),
+      ...(startsUpdate ? approvedUpdateReviewResetFields() : {}),
       rejected_at: null,
       reject_reason: "",
       reject_by: "",
       hackatime_seconds: trackedSeconds,
       is_update: isUpdate,
-      update_notes: isUpdate ? updateNotes : "",
+      update_notes: isUpdate ? (startsUpdate ? updateNotes : String(project.update_notes ?? "")) : "",
       ship_note: shipNote,
       other_ysws: otherYsws,
       other_ysws_notes: userDisclosedOtherYsws ? otherYswsNotes : "",
       system_note: systemNote,
-      sidequest_id: sidequestId,
+      // The historical Trial link must stay tied to already-paid RE on updates.
+      sidequest_id: isUpdate ? project.sidequest_id : sidequestId,
       eligibility_attested: true,
       // airtable_record_id points at the row from this project's LAST
       // approval. Left alone, the dashboard's Airtable push (actions.ts:
       // pushProjectToAirtable) reuses that id forever and an update ship's
       // eventual re-approval overwrites the original ship's row instead of
       // getting its own - clear it here so a genuine update starts fresh.
-      ...(isUpdate ? { airtable_record_id: null } : {}),
+      ...(startsUpdate ? { airtable_record_id: null } : {}),
       // approved_hours is the cumulative credited total and a re-approval
       // overwrites it, so freeze what was already approved at the moment of the
       // update: the update's Airtable row and the review page both need "new
       // hours = total - this" (internal-dashboard newHoursOnly). Only touched on
       // an update, so a needs_changes reship keeps the baseline.
-      ...(isUpdate ? { prior_approved_hours: Number(project.approved_hours) || 0 } : {}),
+      ...(startsUpdate ? { prior_approved_hours: Number(project.approved_hours) || 0 } : {}),
     })
     .eq("id", id)
     .eq("user_id", session.userId)
@@ -1031,7 +1036,7 @@ router.post("/api/projects/:id/ship", validate({ query: v.noQuery, params: param
   if (!data) return res.status(409).json({ ok: false, error: "project_state_changed" });
   // Collaborators get their own Airtable row per approval, same rule as the
   // owner's airtable_record_id above: an update ship starts fresh rows.
-  if (isUpdate) {
+  if (startsUpdate) {
     const { error: collabResetError } = await db
       .from("project_collaborators")
       .update({ airtable_record_id: null })

@@ -21,3 +21,15 @@ export function earnedProjectHours(p: EarnedProjectRow): number | null {
   const h = Number(p.prior_approved_hours);
   return Number.isFinite(h) && h >= 0 ? h : null;
 }
+
+/**
+ * Approved hours must keep the tier and Trial link that originally banked RE.
+ * An update keeps its old hours in RE calculations while awaiting approval,
+ * including during needs_changes, so its payout terms must stay frozen.
+ */
+export function mustPreserveApprovedProjectTerms(
+  status: string | null | undefined,
+  isUpdate: boolean | null | undefined,
+): boolean {
+  return status === "approved" || isUpdate === true;
+}
