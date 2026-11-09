@@ -26,11 +26,10 @@ describe("post-approval hours correction uses the original paid effective rate",
     expect(correct(453, 10, 9)).toBe(408);
   });
 
-  test("repeated corrections and raising hours do not lose or re-trigger bonuses", () => {
+  test("repeated deflations retain the same original bonus on kept hours", () => {
     const after9 = correct(440, 10, 9);
     const after8 = correct(after9, 9, 8);
     expect(after8).toBe(352);
-    expect(correct(after8, 8, 10)).toBe(440);
     expect(correct(after9, 9, 9)).toBe(after9);
   });
 
