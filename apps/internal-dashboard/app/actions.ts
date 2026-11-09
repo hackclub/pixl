@@ -3001,6 +3001,21 @@ export const sendMissingToAirtable = guardedAction("sendMissingToAirtable", "own
   redirect(failed.length ? `/projects?error=${encodeURIComponent(summary)}` : `/projects?ok=${encodeURIComponent(summary)}`);
 });
 
+// For hour increases, keep the existing unbonused repricing behavior. The
+// correction below is specifically for excessive bonus clawbacks when
+// previously approved hours are REDUCED.
+async function repriceForHours(
+  userId: string,
+  projectId: number,
+  hours: number,
+  tier: number,
+): Promise<number> {
+  const xpBefore = await lifetimeRe(userId, projectId);
+  const projectRe = reForHours(hours, tier);
+  const rate = pxPerHourOver(xpBefore, xpBefore + projectRe);
+  return Math.round(hours * rate);
+}
+
 // Read the actual payout ledger, not a newly calculated hourly rate. A
 // project may have been paid with a one-time referral boost or a community goal
 // multiplier. The hours-correction path must preserve that original rate on
@@ -3021,8 +3036,9 @@ async function creditedPixelsForHoursCorrection(projectId: number, userId: strin
 // Adjusts the approved hours on a project after review, e.g. if HQ flags an
 // over-claim. Preserve each beneficiary's originally paid effective rate
 // (including referral boosts, community-goal bonuses and their RE rate) by
-// scaling the actual ledger payout, NOT recalculating an unbonused rate. This
-// also makes repeated corrections consistent, without re-awarding bonuses.
+// scaling the actual ledger payout for HOUR REDUCTIONS, NOT recalculating
+// an unbonused rate. Repeated deflations stay consistent without re-awarding
+// either bonus; hour increases retain the earlier base-rate calculation.
 // creditProjectPixels adjusts only the delta; pending orders may be clawed
 // back by 0164_clawback_pending_orders.sql when there is a shortfall.
 // Owners/super-admins only: this DMs the player(s) and can cancel their
@@ -3040,7 +3056,7 @@ export const deflateProjectHours = guardedAction("deflateProjectHours", "owner",
 
   const { data: project } = await db
     .from("projects")
-    .select("id, name, user_id, status, banned_at, rejected_at, approved_hours, funding_deducted_px")
+    .select("id, name, user_id, status, banned_at, rejected_at, approved_hours, level, funding_deducted_px")
     .eq("id", projectId)
     .maybeSingle();
   if (!project) redirect(`${back}?error=${encodeURIComponent("Project not found.")}`);
@@ -3090,12 +3106,13 @@ export const deflateProjectHours = guardedAction("deflateProjectHours", "owner",
       `${back}?error=${encodeURIComponent("Fill in the new hours for at least one person, each a number of 0 or more that differs from their current hours.")}`,
     );
 
-  // Pre-read every beneficiary's ledger before touching balances or hours:
-  // a lookup failure must not leave a partially corrected project.
+  const tier = Number(project.level) || 1;
+  // Pre-read ledgers for HOUR REDUCTIONS before touching balances or hours:
+  // an invalid lookup must not leave a partially corrected project.
   const correctedPayouts = new Map(
     await Promise.all(
       [
-        ...(deflateOwner
+        ...(deflateOwner && (ownerNewHours as number) < oldHours
           ? [{
               userId: project.user_id as string,
               before: oldHours,
@@ -3103,7 +3120,7 @@ export const deflateProjectHours = guardedAction("deflateProjectHours", "owner",
               fundingPx: Number(project.funding_deducted_px) || 0,
             }]
           : []),
-        ...collabTargets.map((c) => ({
+        ...collabTargets.filter((c) => c.cNewHours < c.cOldHours).map((c) => ({
           userId: c.user_id,
           before: c.cOldHours,
           after: c.cNewHours,
@@ -3128,17 +3145,21 @@ export const deflateProjectHours = guardedAction("deflateProjectHours", "owner",
     "If this left you without enough pixels to cover an order you'd already placed, that order was automatically cancelled and any leftover pixels refunded.";
 
   if (deflateOwner) {
-    await creditProjectPixels(
-      project.user_id,
-      projectId,
-      correctedPayouts.get(project.user_id)!,
-      ownerNewHours,
-      by,
-    );
+    const newOwnerPx = ownerNewHours < oldHours
+      ? correctedPayouts.get(project.user_id)!
+      : Math.max(
+          (await repriceForHours(project.user_id, projectId, ownerNewHours, tier)) -
+            (Number(project.funding_deducted_px) || 0),
+          0,
+        );
+    await creditProjectPixels(project.user_id, projectId, newOwnerPx, ownerNewHours, by);
   }
 
   for (const c of collabTargets) {
-    await creditProjectPixels(c.user_id, projectId, correctedPayouts.get(c.user_id)!, c.cNewHours, by);
+    const cNewPx = c.cNewHours < c.cOldHours
+      ? correctedPayouts.get(c.user_id)!
+      : await repriceForHours(c.user_id, projectId, c.cNewHours, tier);
+    await creditProjectPixels(c.user_id, projectId, cNewPx, c.cNewHours, by);
     await db.from("project_collaborators").update({ approved_hours: c.cNewHours }).eq("id", c.id);
 
     const cRaised = c.cNewHours > c.cOldHours;
