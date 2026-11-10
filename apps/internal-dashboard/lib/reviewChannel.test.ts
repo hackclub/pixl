@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { buildReviewMessage, ccReply, escapeMrkdwn, reviewerToTag } from "./reviewChannel";
+import { buildReviewMessage, ccReply, escapeMrkdwn, reviewerToTag, shouldPostReviewAnnouncement } from "./reviewChannel";
 
 const base = {
   playerSlackIds: ["U0AAAAAAAA"],
@@ -53,4 +53,10 @@ test("the final approval names the tier only when it is given", () => {
   const base = { kind: "final" as const, playerSlackIds: ["U0AAAAAAAA"], projectName: "P", projectUrl: null, note: "n", reviewerSlackId: null, pixels: 10 };
   expect(buildReviewMessage({ ...base, tier: 3 })).toContain("approved at *tier 3*");
   expect(buildReviewMessage(base)).not.toContain("tier");
+});
+
+test("only non-final review verdicts post publicly to Pixorpheus", () => {
+  expect(shouldPostReviewAnnouncement("changes")).toBe(true);
+  expect(shouldPostReviewAnnouncement("first_pass")).toBe(true);
+  expect(shouldPostReviewAnnouncement("final")).toBe(false);
 });

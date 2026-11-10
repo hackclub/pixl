@@ -5,8 +5,9 @@ import { pixorpheusUrl } from "@/lib/pixo";
 import { callPixo } from "@/lib/pixoCall";
 import { config } from "@/app/_generated/config";
 
-// Review verdicts (approved / changes requested) are announced publicly in the
-// review channel by Pixo instead of being DMed. Bans still use DMs.
+// Review verdicts other than a final approval are announced publicly in the
+// review channel by Pixo instead of being DMed. Final approvals are kept as
+// direct player DMs/emails only. Bans still use DMs.
 // The post is made by Pixorpheus (POST /api/external/review-post), which only
 // ever posts to the one fixed review channel.
 
@@ -16,6 +17,10 @@ const PROJECT_PAGE_URL = `${config.urls.site}/projects`;
 const SLACK_ID_RE = /^[UW][A-Z0-9]{5,20}$/;
 
 export type ReviewAnnouncementKind = "changes" | "first_pass" | "final";
+
+export function shouldPostReviewAnnouncement(kind: ReviewAnnouncementKind): boolean {
+  return kind !== "final";
+}
 
 export interface ReviewMessageInput {
   kind: ReviewAnnouncementKind;
@@ -153,6 +158,10 @@ export async function announceReview(a: ReviewAnnouncement): Promise<boolean> {
         creditNote: a.creditNote,
         tier: a.tier,
       });
+      if (!shouldPostReviewAnnouncement(a.kind)) {
+        for (const f of a.fallback) await dmOrEmail(f.userId, f.title, f.body);
+        return false;
+      }
       if (await postToReviewChannel(message, ccReply(reviewer))) return true;
       failure = "Pixorpheus could not post it";
     }
