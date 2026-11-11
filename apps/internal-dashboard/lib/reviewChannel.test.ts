@@ -55,8 +55,8 @@ test("the final approval names the tier only when it is given", () => {
   expect(buildReviewMessage(base)).not.toContain("tier");
 });
 
-test("only non-final review verdicts post publicly to Pixorpheus", () => {
+test("every review verdict posts publicly to Pixorpheus", () => {
   expect(shouldPostReviewAnnouncement("changes")).toBe(true);
   expect(shouldPostReviewAnnouncement("first_pass")).toBe(true);
-  expect(shouldPostReviewAnnouncement("final")).toBe(false);
+  expect(shouldPostReviewAnnouncement("final")).toBe(true);
 });
