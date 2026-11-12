@@ -199,6 +199,25 @@ async function isOwnProject(access: AdminAccess, ownerUserId: string, projectId:
   return isOwnOrCollaborator(myIds, ownerUserId, collaborators);
 }
 
+async function isCollaboratorProject(access: AdminAccess, ownerUserId: string, projectId: number): Promise<boolean> {
+  const { data: me } = await db.from("users").select("id").eq("slack_id", access.session.slackId);
+  const myIds = ((me ?? []) as { id: string }[]).map((r) => r.id).filter(Boolean);
+  if (myIds.length === 0) return false;
+  const { data: collabs } = await db
+    .from("project_collaborators")
+    .select("user_id")
+    .eq("project_id", projectId)
+    .in("status", ["pending", "accepted"]);
+  const collaborators = (collabs ?? []).map((r) => r.user_id as string);
+  return collaborators.some((id) => myIds.includes(id)) && !myIds.includes(ownerUserId);
+}
+
+async function isProjectOwner(access: AdminAccess, ownerUserId: string): Promise<boolean> {
+  const { data: me } = await db.from("users").select("id").eq("slack_id", access.session.slackId);
+  const myIds = ((me ?? []) as { id: string }[]).map((r) => r.id).filter(Boolean);
+  return myIds.includes(ownerUserId);
+}
+
 function denyProjectAction(back: string | null, message: string): never {
   if (back) redirect(`${back}${back.includes("?") ? "&" : "?"}error=${encodeURIComponent(message)}`);
   throw new Error(message);
@@ -229,6 +248,8 @@ async function authorizeProjectAction(
     denyProjectAction(back, "This project isn't in your review queue.");
   if (!opts.allowOwn && (await isOwnProject(access, row.user_id, projectId)))
     denyProjectAction(back, opts.ownMessage ?? "You can't review a project you own or collaborate on.");
+  if (opts.allowOwn && (await isCollaboratorProject(access, row.user_id, projectId)))
+    denyProjectAction(back, opts.ownMessage ?? "You can't review a project you collaborate on.");
   return row;
 }
 
@@ -366,7 +387,7 @@ function payoutVerdictKey(verdict: string): "approved" | "needs_changes" | "bann
 
 // A confirmed ban pays the reviewer a flat rate, not admin-configurable like
 // the other verdicts , banning is still a full review of the project.
-const BAN_PAYOUT_PIXELS = 2;
+const BAN_PAYOUT_PIXELS = 4;
 
 // During a Review Blitz event every review's base payout is multiplied, so
 // full_pixels is locked in at review time and settlement math uses the row.
@@ -1064,18 +1085,19 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
     if (!gate.ok) redirect(`${back}?error=${encodeURIComponent(gate.message)}`);
   }
   const own = await isOwnProject(access, current.user_id, projectId);
-  // Self-review is denied for everyone, owners included. The only carve-out is
-  // a self_review_exceptions row, and only at first pass (see
-  // hasSelfReviewException); a spot check / final verdict on your own project
-  // is never allowed.
+  const owner = await isProjectOwner(access, current.user_id);
+  const collaborator = own && !owner;
+  // Project owners may review their own work; collaborators still cannot.
+  // The historical first-pass exception still applies only to a reviewer who
+  // has a temporary carve-out and is not the project owner.
   if (
     stage === "shipped" &&
-    own &&
+    collaborator &&
     !(await hasSelfReviewException(access.session.slackId))
   )
     redirect(`${back}?error=${encodeURIComponent("You can't first-pass your own project , another reviewer has to take it.")}`);
-  if (stage === "second_review" && own)
-    redirect(`${back}?error=${encodeURIComponent("You can't give the final verdict on a project you own or collaborate on.")}`);
+  if (stage === "second_review" && collaborator)
+    redirect(`${back}?error=${encodeURIComponent("You can't give the final verdict on a project you collaborate on.")}`);
   if (stage !== "shipped" && stage !== "second_review")
     redirect(`${back}?error=${encodeURIComponent("This project isn't awaiting review anymore.")}`);
   // A ban leaves the status where it was (only banned_at is set), so without
@@ -1100,6 +1122,7 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
   if (isProposedBan) {
     const decision = proposedBanDecision(access, verdict, {
       own,
+      owner,
       proposedBy: String(current.first_pass_by ?? ""),
       actor: by,
     });
@@ -3832,8 +3855,8 @@ export const beginReviewClaim = guardedAction("beginReviewClaim", "reviewer", as
   if (!project) denyProjectAction(back, "Project not found.");
   if (!queueAllows(access.reviewQueues, project.kind))
     denyProjectAction(back, "This project isn't in your review queue.");
-  if (await isOwnProject(access, project.user_id, projectId))
-    denyProjectAction(back, "You can't review a project you own or collaborate on.");
+  if (await isCollaboratorProject(access, project.user_id, projectId))
+    denyProjectAction(back, "You can't review a project you collaborate on.");
   if (project.banned_at || project.hold_at)
     denyProjectAction(back, "This project can't be reviewed while it is banned or on hold.");
   if (project.status === "shipped") {
