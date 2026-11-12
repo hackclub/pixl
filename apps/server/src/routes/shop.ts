@@ -8,6 +8,7 @@ import { callPixo } from "../pixoCall.js";
 import { pixorpheusUrl } from "../pixoUrl.js";
 import { decryptPII, encryptPII } from "../crypto.js";
 import { beaconUnlocks } from "../beacons.js";
+import { audit } from "../audit.js";
 import { z } from "zod";
 import { validate, v, optStr, optNum, params } from "../http/validate.js";
 
@@ -914,11 +915,26 @@ router.post("/api/shop/buy/:id", validate({ query: v.noQuery, params: params({ i
   // Best effort and deliberately not awaited: Pixo being offline must never
   // delay or fail a player's successful purchase.
   const orderId = Number(result.order_id);
-  // Every purchase, including the nonphysical "Nothing" item, remains
-  // pending for the internal fulfillment team to process. Do not fabricate
-  // an automatic shipment or silently close the order here.
+  // "Nothing" ships nothing: it costs us $0, so it is marked done on the spot
+  // and never enters the fulfillment flow (no queue, no fulfiller alert).
+  // Owner decision 2026-11-12, reversing #193.
   const isNothing = String(result.item_name ?? "").trim().toLowerCase() === "nothing";
-  if (Number.isSafeInteger(orderId) && orderId > 0) {
+  let skipFulfillment = false;
+  if (isNothing && Number.isSafeInteger(orderId) && orderId > 0) {
+    const now = new Date().toISOString();
+    const { data: closed, error: autoErr } = await db
+      .from("shop_orders")
+      .update({ status: "done", fulfilled_at: now, fulfilled_by: "auto", done_at: now, actual_cost_usd: 0 })
+      .eq("id", orderId)
+      .eq("status", "pending")
+      .select("id");
+    if (autoErr) console.error("[shop] auto-fulfil failed:", autoErr.message);
+    else if ((closed ?? []).length > 0) {
+      skipFulfillment = true;
+      audit({ actorType: "service", actorId: "shop-auto-fulfil", action: "shop.auto_fulfil", target: String(orderId), result: "ok" });
+    }
+  }
+  if (!skipFulfillment && Number.isSafeInteger(orderId) && orderId > 0) {
     void callPixo(
       "shop-order-alert",
       `${pixorpheusUrl()}/api/external/shop-order-alert`,
@@ -937,8 +953,8 @@ router.post("/api/shop/buy/:id", validate({ query: v.noQuery, params: params({ i
   void addNotification(
     session.userId,
     "Order placed! 🛍️",
-    isNothing
-      ? `You bought ${qtyPrefix}"${result.item_name}". Your order is in the fulfillment queue for manual processing.`
+    skipFulfillment
+      ? `You bought ${qtyPrefix}"${result.item_name}". Nothing to ship, it's all yours.`
       : `You bought ${qtyPrefix}"${result.item_name}"${option ? ` (${option})` : ""}. The team will reach out about getting it to you.`,
   );
   res.json({ ok: true, balance: result.balance });

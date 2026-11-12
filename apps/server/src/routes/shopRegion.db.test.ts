@@ -168,7 +168,7 @@ if (!adminUrl) {
       expect(res.body.ok).toBe(true);
     });
 
-    test("Nothing purchases remain pending for the regular fulfillment queue", async () => {
+    test("Nothing purchases are closed on the spot and never reach the fulfillment queue", async () => {
       for (const itemName of ["Nothing", "nOtHiNg"]) {
         const user = await createUser({ country: "US" });
         const itemId = await createItem(itemName, "US");
@@ -188,11 +188,11 @@ if (!adminUrl) {
                  fulfillment_pixels_paid
           from shop_orders where user_id = ${user}
         `;
-        expect(order?.status).toBe("pending");
-        expect(order?.fulfilled_at).toBeNull();
-        expect(order?.done_at).toBeNull();
-        expect(order?.fulfilled_by).toBe("");
-        expect(order?.actual_cost_usd).toBeNull();
+        expect(order?.status).toBe("done");
+        expect(order?.fulfilled_at).not.toBeNull();
+        expect(order?.done_at).not.toBeNull();
+        expect(order?.fulfilled_by).toBe("auto");
+        expect(Number(order?.actual_cost_usd)).toBe(0);
         expect(order?.fulfillment_pixels_paid).toBe(0);
       }
     });
