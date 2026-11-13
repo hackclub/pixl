@@ -249,14 +249,13 @@ export default async function ReviewDetail({
   // carrying second_pass_verdict "not_fraud" with it (see robertSync.ts), so
   // the spot check is the only thing isFinalStage can mean besides a proposed ban.
   const spotCheckStage = isFinalStage && p.second_pass_verdict === "not_fraud";
-  // Owner of the project, or a collaborator on it, pending invites included
-  // (all are paid on approval, so none may review it, owners included).
-  // Mirrors isOwnProject in app/actions.ts.
-  const isOwn =
-    (!!p.users?.slack_id && p.users.slack_id === viewer) ||
-    allCollaborators.some(
-      (c) => (c.status === "accepted" || c.status === "pending") && !!c.users?.slack_id && c.users.slack_id === viewer,
-    );
+  // The project owner may review their own work; collaborators still cannot.
+  // Mirrors isOwnProject / isCollaboratorProject in app/actions.ts.
+  const isProjectOwner = !!p.users?.slack_id && p.users.slack_id === viewer;
+  const isCollaborator = !isProjectOwner && allCollaborators.some(
+    (c) => (c.status === "accepted" || c.status === "pending") && !!c.users?.slack_id && c.users.slack_id === viewer,
+  );
+  const isOwn = isProjectOwner || isCollaborator;
   const isHeld = !!p.hold_at;
   // hold_by is stored as "Name (SlackID)" (see holdReview in app/actions.ts).
   // Only the reviewer who set it (or an owner) may release it.
@@ -264,13 +263,13 @@ export default async function ReviewDetail({
   const canReview =
     !isHeld &&
     !p.banned_at &&
-    ((p.status === "shipped" && !isOwn) ||
-      (isProposedBan && canSecondPass && !isOwn) ||
-      (spotCheckStage && (access.isOwner || canSecondPass) && !isOwn));
+    ((p.status === "shipped" && !isCollaborator) ||
+      (isProposedBan && canSecondPass && !isCollaborator) ||
+      (spotCheckStage && (access.isOwner || canSecondPass) && !isCollaborator));
   // Reviewer-side unship (see unshipProject): available to final reviewers at
   // second pass or fraud review regardless of who could submit a verdict, and
   // never on your own project or while a hold is set.
-  const unshipNote = canSecondPass && !isOwn && !isHeld ? unshipWarning(p.status) : null;
+  const unshipNote = canSecondPass && !isCollaborator && !isHeld ? unshipWarning(p.status) : null;
   const shippedAt = (p as { shipped_at?: string | null }).shipped_at ?? null;
   // Viewing must never reserve a project; only an explicit POST may claim it.
   const currentClaim = activeReviewClaim(p, Date.now(), REVIEW_LOCK_MS);
@@ -1614,12 +1613,12 @@ export default async function ReviewDetail({
             </Callout>
           )}
 
-          {isOwn && p.status === "shipped" && (
+          {isCollaborator && p.status === "shipped" && (
             <Callout tone="warning" icon="private">
               This is your own submission. Another reviewer has to do the first pass.
             </Callout>
           )}
-          {isOwn && isFinalStage && (
+          {isCollaborator && isFinalStage && (
             <Callout tone="warning" icon="private">
               Your own submission. Another owner has to give the final verdict.
             </Callout>

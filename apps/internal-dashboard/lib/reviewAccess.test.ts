@@ -67,10 +67,11 @@ describe("M1: decisions on a first-pass ban proposal", () => {
     expect(slackIdFromActorName(null)).toBe("");
   });
 
-  test("own or collaborator project is refused for everyone, owners included", () => {
-    for (const v of [viewer({ canSecondPass: true }), viewer({ isOwner: true, canSecondPass: true })])
-      for (const verdict of ["approved", "ban", "needs_changes"])
-        expect(proposedBanDecision(v, verdict, { ...opts, own: true }).kind).toBe("deny");
+  test("project owners may decide on their own project, but collaborators still can't", () => {
+    const owner = viewer({ isOwner: true, canSecondPass: true });
+    for (const verdict of ["approved", "ban", "needs_changes"])
+      expect(proposedBanDecision(owner, verdict, { ...opts, own: true, owner: true }).kind).not.toBe("deny");
+    expect(proposedBanDecision(viewer({ canSecondPass: true }), "approved", { ...opts, own: true, owner: false }).kind).toBe("deny");
   });
 });
 
