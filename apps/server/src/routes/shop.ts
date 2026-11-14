@@ -693,7 +693,7 @@ router.delete("/api/shop/save/:id", validate({ query: v.noQuery, params: params(
 // the fulfillment-pipeline columns (status/tracking/stage stamps) but falls back
 // to the base columns so it keeps working before migration 0052 is applied.
 const ORDER_COLUMNS =
-  "id, item_name, option, price, quantity, status, note, buyer_note, created_at, ordered_at, credited_at, shipped_at, done_at, tracking";
+  "id, item_id, item_name, option, price, quantity, status, note, buyer_note, created_at, ordered_at, credited_at, shipped_at, done_at, tracking, is_grant";
 const ORDER_COLUMNS_FALLBACK =
   "id, item_name, option, price, status, note, created_at, fulfilled_at";
 
@@ -715,7 +715,24 @@ router.get("/api/shop/orders", async (req, res) => {
     console.error("[shop] orders failed", error);
     return res.status(500).json({ ok: false });
   }
-  const orders = (data ?? []) as { id: number; status: string }[];
+  const orders = (data ?? []) as { id: number; status: string; item_id?: number | null; is_grant?: boolean }[];
+
+  // A grant is sent by email as an HCB grant, not shipped, so the Orders tab
+  // shows a grant timeline for it. An order is a grant when it was converted
+  // (is_grant) or its item is in the grants category. Both are absent on the
+  // pre-migration fallback columns, which just yields is_grant: false.
+  const itemIds = [...new Set(orders.map((o) => o.item_id).filter((x): x is number => typeof x === "number"))];
+  const grantItemIds = new Set<number>();
+  if (itemIds.length > 0) {
+    const { data: items, error: itemsError } = await db.from("shop_items").select("id, category").in("id", itemIds);
+    if (itemsError) console.error("[shop] orders grant lookup failed", itemsError);
+    for (const it of (items ?? []) as { id: number; category: string | null }[])
+      if (it.category === "grants") grantItemIds.add(it.id);
+  }
+  for (const o of orders) {
+    o.is_grant = o.is_grant === true || (typeof o.item_id === "number" && grantItemIds.has(o.item_id));
+    delete o.item_id;
+  }
 
   // Queue position for any still-pending order: FIFO by created_at across
   // EVERY player's pending orders, same "New" queue fulfillers work off in

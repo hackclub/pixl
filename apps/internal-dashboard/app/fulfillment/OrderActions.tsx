@@ -1,5 +1,6 @@
-import { cancelOrder, clearOrderFlag, claimOrder, markOrderPlaced, flagOrderOverBudget, markOrderCredited, markOrderDone, reassignOrder, shipOrder, updateOrderFulfillmentInfo } from "@/app/actions";
+import { cancelOrder, clearOrderFlag, claimOrder, convertOrderToGrant, markOrderPlaced, flagOrderOverBudget, markOrderCredited, markOrderDone, reassignOrder, sendGrant, shipOrder, updateOrderFulfillmentInfo } from "@/app/actions";
 import type { ShopOrderRow } from "@/lib/db";
+import { isGrantOrder } from "@/lib/fulfillmentGrant";
 import { ActionButton, Details, Field, Input, Muted } from "@/app/_ui/ui";
 import { usdBudget } from "./shared";
 
@@ -75,6 +76,25 @@ export function FlagControls({ order: o, canManage, budget }: { order: ShopOrder
         </ActionButton>
       </form>
     </Details>
+  );
+}
+
+// Switches one order to the short grant flow. Only offered while nothing has
+// been bought yet, for grant-shaped orders on items that aren't tagged grants.
+function ConvertToGrant({ order: o }: { order: ShopOrderRow }) {
+  return (
+    <form action={convertOrderToGrant}>
+      <input type="hidden" name="id" value={o.id} />
+      <ActionButton
+        variant="outline"
+        size="sm"
+        pendingLabel="Converting..."
+        icon="send"
+        confirm="Switch this order to the grant flow? It skips the purchase, receipt and tracking steps: you just send the HCB grant to the buyer's email."
+      >
+        Convert to grant
+      </ActionButton>
+    </form>
   );
 }
 
@@ -160,8 +180,38 @@ export function OrderActions({
         <form action={claimOrder}>
           <input type="hidden" name="id" value={o.id} />
           <ActionButton pendingLabel="Claiming..." icon="member-add">
-            Claim order
+            {isGrantOrder(o) ? "Claim grant" : "Claim order"}
           </ActionButton>
+        </form>
+        {!isGrantOrder(o) && <ConvertToGrant order={o} />}
+        {cancelForm}
+      </div>
+    );
+  }
+
+  // Grant flow: one form, then the order is done. No purchase, receipt or
+  // tracking number, the buyer gets an HCB grant invite by email.
+  if (o.status === "claimed" && isGrantOrder(o)) {
+    return (
+      <div className="fw-order-action-stack">
+        <Muted className="text-sm">
+          Send the HCB grant to the buyer&apos;s email, then paste the grant link here. The buyer is DM&apos;d to check their email.
+        </Muted>
+        <form action={sendGrant} className="fw-order-action-form">
+          <input type="hidden" name="id" value={o.id} />
+          <div className="fw-order-action-fields">
+            <Field label="HCB grant link" hint="The grant you just sent" className="fw-order-action-field-wide">
+              <Input name="grantLink" type="url" maxLength={300} required placeholder="https://hcb.hackclub.com/grants/..." />
+            </Field>
+            <Field label="Amount ($)">
+              <Input name="actualCostUsd" type="number" min="0" step="0.01" required defaultValue={usdBudget(o.price)} />
+            </Field>
+          </div>
+          <div className="fw-order-action-buttons">
+            <ActionButton pendingLabel="Sending..." icon="send">
+              Grant sent
+            </ActionButton>
+          </div>
         </form>
         {cancelForm}
       </div>
@@ -178,6 +228,7 @@ export function OrderActions({
             Mark order placed
           </ActionButton>
         </form>
+        <ConvertToGrant order={o} />
         {cancelForm}
       </div>
     );

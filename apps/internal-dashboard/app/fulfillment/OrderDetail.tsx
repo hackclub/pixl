@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { BuyerDetails, OrderStatus, ShopOrderRow } from "@/lib/db";
 import { ORDER_STAGES } from "@/lib/db";
 import { visibleOrderActions } from "@/lib/fulfillmentAccess";
+import { GRANT_STAGES, GRANT_STAGE_HINT, GRANT_STAGE_LABEL, isGrantOrder, usesGrantFlow } from "@/lib/fulfillmentGrant";
 import {
   Badge,
   ButtonLink,
@@ -38,6 +39,27 @@ function Stepper({ order: o }: { order: ShopOrderRow }) {
       <Callout tone="danger" icon="important">
         <strong>Cancelled.</strong> {o.note || "This order was cancelled and the pixels refunded."}
       </Callout>
+    );
+  }
+  // Grants: New -> Claimed -> Grant sent (no ordered/credited/shipped steps).
+  if (usesGrantFlow(o)) {
+    const gIdx = GRANT_STAGES.indexOf(o.status as (typeof GRANT_STAGES)[number]);
+    return (
+      <ol className="fw-steps" aria-label="Grant progress">
+        {GRANT_STAGES.map((s, i) => (
+          <li
+            key={s}
+            className="fw-step"
+            data-state={i < gIdx ? "done" : i === gIdx ? "current" : "todo"}
+            aria-current={i === gIdx ? "step" : undefined}
+          >
+            <span className="fw-step-dot">{i + 1}</span>
+            <span className="fw-step-label">{GRANT_STAGE_LABEL[s]}</span>
+            <span className="fw-step-hint">{GRANT_STAGE_HINT[s]}</span>
+            {i <= gIdx && stageStamp(o, s) && <span className="fw-step-hint">{stageStamp(o, s)}</span>}
+          </li>
+        ))}
+      </ol>
     );
   }
   const idx = ORDER_STAGES.indexOf(o.status);
@@ -80,6 +102,25 @@ function OnFile({ value }: { value: ReactNode }) {
 }
 
 function ShippingPanel({ order: o, buyer, country }: { order: ShopOrderRow; buyer?: BuyerDetails; country?: string }) {
+  // A grant is an HCB grant invite sent by email: only the recipient's name and
+  // email matter, so no address, phone or shipping label.
+  if (isGrantOrder(o)) {
+    if (!buyer) {
+      return (
+        <p className="text-sm">
+          <Muted>The buyer&apos;s email appears once you claim the grant.</Muted>
+        </p>
+      );
+    }
+    return (
+      <DescriptionList
+        items={[
+          ["Name", <OnFile key="n" value={buyer.name} />],
+          ["Email", <OnFile key="e" value={buyer.email && <TextLink href={`mailto:${buyer.email}`} external>{buyer.email}</TextLink>} />],
+        ]}
+      />
+    );
+  }
   if (!buyer) {
     return (
       <p className="text-sm">
@@ -162,10 +203,13 @@ export function OrderDetail({
   if (o.actual_cost_usd !== null) {
     facts.push(["Actual cost", <Badge key="c" tone={overBudget ? "danger" : "success"} outline>${Number(o.actual_cost_usd).toFixed(2)}</Badge>]);
   }
-  if ((o.status === "shipped" || o.status === "done") && o.tracking) {
+  const grant = isGrantOrder(o);
+  if (!grant && (o.status === "shipped" || o.status === "done") && o.tracking) {
     facts.push(["Tracking", <><Mono>{o.tracking}</Mono> <Muted>· DM&apos;d to buyer</Muted></>]);
   }
-  if (o.status !== "pending" && o.status !== "cancelled" && o.hcb_link) facts.push(["HCB", <SafeLink key="hcb" url={o.hcb_link} />]);
+  if (o.status !== "pending" && o.status !== "cancelled" && o.hcb_link) {
+    facts.push([grant && o.status === "done" ? "HCB grant" : "HCB", <SafeLink key="hcb" url={o.hcb_link} />]);
+  }
   if (o.status === "cancelled" && o.note) facts.push(["Note", o.note]);
 
   return (
@@ -195,6 +239,7 @@ export function OrderDetail({
           <div className="mt-1 flex flex-wrap gap-1.5">
             <Badge tone={STAGE_TONE[o.status] ?? "neutral"}>{STAGE_LABEL[o.status] ?? o.status}</Badge>
             {o.option && <Badge>{o.option}</Badge>}
+            {o.is_grant && o.item_category !== "grants" && <Badge tone="cyan" outline>Converted to grant</Badge>}
             {o.item_beacon_locked && (
               <Badge tone="yellow" icon="rep">
                 Beacon reward
@@ -221,6 +266,13 @@ export function OrderDetail({
         </div>
       )}
 
+      {grant && actionable && (
+        <Callout tone="info" icon="send">
+          <strong>Grant order.</strong> Nothing to buy or ship: claim it, send the HCB grant to the buyer&apos;s email,
+          then paste the grant link and mark it sent.
+        </Callout>
+      )}
+
       {o.flagged_at && (
         <Callout tone="danger" icon="important">
           <strong>Over budget:</strong> {o.flag_note}{" "}
@@ -238,7 +290,7 @@ export function OrderDetail({
 
       <div className="fw-cols">
         <div className="fw-col">
-          <Panel title="Shipping info" icon="pin">
+          <Panel title={grant ? "Grant recipient" : "Shipping info"} icon={grant ? "person" : "pin"}>
             <ShippingPanel order={o} buyer={buyer} country={country} />
           </Panel>
           {o.buyer_note && (
@@ -272,7 +324,7 @@ export function OrderDetail({
               ]}
             />
           </Panel>
-          <Panel title="Previous source / vendor" icon="link">
+          {!grant && <Panel title="Previous source / vendor" icon="link">
             {o.item_source_url ? (
               <>
                 <p className="hc-caption text-xs">Last bought from</p>
@@ -292,7 +344,7 @@ export function OrderDetail({
                 </p>
               </>
             )}
-          </Panel>
+          </Panel>}
           {facts.length > 0 && (
             <Panel title="Fulfillment" icon="bolt">
               <DescriptionList items={facts} />

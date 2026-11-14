@@ -2752,6 +2752,10 @@ export interface ShopOrderRow {
   // Beacon unlocks. Fulfilment treats it like any other order; the badge is
   // just context for why the player could claim it.
   item_beacon_locked?: boolean | null;
+  // A fulfiller converted this one order to the grant flow (migration 0240).
+  // An order is a grant if this is set OR its item category is "grants": use
+  // isGrantOrder in lib/fulfillmentGrant.ts, never read this alone.
+  is_grant?: boolean | null;
 }
 
 // Shop orders players placed with pixels, newest first. Player name + Slack are

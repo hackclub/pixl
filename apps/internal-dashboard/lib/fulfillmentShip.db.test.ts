@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomBytes } from "node:crypto";
 import postgres from "postgres";
-import { settleShipment } from "./fulfillmentShip";
+import { settleGrant, settleShipment } from "./fulfillmentShip";
 
 const adminUrl = process.env.PIXL_TEST_DATABASE_URL;
 const suite = adminUrl ? describe : describe.skip;
@@ -26,8 +26,12 @@ suite("atomic fulfillment shipment", () => {
         id bigint primary key, user_id uuid not null references users(id),
         item_name text not null, status text not null, claimed_by_slack text,
         shipped_at timestamptz, fulfilled_at timestamptz, fulfilled_by text,
-        tracking text, fulfillment_pixels_paid integer not null default 0
+        tracking text, fulfillment_pixels_paid integer not null default 0,
+        item_id bigint, is_grant boolean not null default false,
+        ordered_at timestamptz, credited_at timestamptz, done_at timestamptz,
+        hcb_link text, actual_cost_usd numeric
       );
+      create table shop_items (id bigint primary key, category text);
       create table pixel_transactions (
         id bigserial primary key, user_id uuid references users(id),
         project_id bigint, amount bigint, hours numeric, reason text, created_by text
@@ -89,6 +93,65 @@ suite("atomic fulfillment shipment", () => {
     expect(Number(rows[0]!.fulfillment_pixels_paid)).toBe(2);
     const after = await db`select pixels from users where id = ${fulfiller}`;
     expect(Number(after[0]!.pixels) - Number(before[0]!.pixels)).toBe(2);
+  });
+
+  describe("grants", () => {
+    test("two simultaneous sends close the grant and pay exactly once", async () => {
+      await db`insert into shop_items (id, category) values (100, 'grants')`;
+      await db`insert into shop_orders (id, user_id, item_name, status, claimed_by_slack, item_id)
+        values (10, ${buyer}, 'Hosting Grant', 'claimed', 'UFULFILLER', 100)`;
+      const before = await db`select pixels from users where id = ${fulfiller}`;
+      const attempts = await Promise.all([
+        settleGrant(10, "https://hcb.example/grants/A", 10, "UFULFILLER", "Staff", 2, db),
+        settleGrant(10, "https://hcb.example/grants/B", 10, "UFULFILLER", "Staff", 2, db),
+      ]);
+      expect(attempts.filter(Boolean)).toHaveLength(1);
+      const [row] = await db`select status, tracking, hcb_link, actual_cost_usd, fulfillment_pixels_paid,
+        ordered_at, credited_at, shipped_at, done_at from shop_orders where id = 10`;
+      expect(row!.status).toBe("done");
+      expect(Number(row!.actual_cost_usd)).toBe(10);
+      expect(Number(row!.fulfillment_pixels_paid)).toBe(2);
+      expect(row!.tracking).toBe(row!.hcb_link);
+      expect(row!.ordered_at).not.toBeNull();
+      expect(row!.credited_at).not.toBeNull();
+      expect(row!.shipped_at).not.toBeNull();
+      expect(row!.done_at).not.toBeNull();
+      const after = await db`select pixels from users where id = ${fulfiller}`;
+      expect(Number(after[0]!.pixels) - Number(before[0]!.pixels)).toBe(2);
+    });
+
+    test("an order converted with is_grant takes the grant flow too", async () => {
+      await db`insert into shop_items (id, category) values (101, 'other')`;
+      await db`insert into shop_orders (id, user_id, item_name, status, claimed_by_slack, item_id, is_grant)
+        values (11, ${buyer}, 'Custom request', 'claimed', 'UFULFILLER', 101, true)`;
+      expect(await settleGrant(11, "https://hcb.example/grants/C", 25, "UFULFILLER", "Staff", 2, db)).not.toBeNull();
+    });
+
+    test("refuses a non-grant item order without paying", async () => {
+      await db`insert into shop_orders (id, user_id, item_name, status, claimed_by_slack, item_id)
+        values (12, ${buyer}, 'Pin', 'claimed', 'UFULFILLER', 101)`;
+      const before = await db`select pixels from users where id = ${fulfiller}`;
+      expect(await settleGrant(12, "https://hcb.example/grants/D", 5, "UFULFILLER", "Staff", 2, db)).toBeNull();
+      const [row] = await db`select status from shop_orders where id = 12`;
+      expect(row!.status).toBe("claimed");
+      const after = await db`select pixels from users where id = ${fulfiller}`;
+      expect(Number(after[0]!.pixels)).toBe(Number(before[0]!.pixels));
+    });
+
+    test("refuses a grant that is not claimed by this fulfiller", async () => {
+      await db`insert into shop_orders (id, user_id, item_name, status, claimed_by_slack, item_id)
+        values (13, ${buyer}, 'Hosting Grant', 'claimed', 'UOTHER', 100),
+               (14, ${buyer}, 'Hosting Grant', 'pending', '', 100)`;
+      expect(await settleGrant(13, "https://hcb.example/grants/E", 10, "UFULFILLER", "Staff", 2, db)).toBeNull();
+      expect(await settleGrant(14, "https://hcb.example/grants/F", 10, "UFULFILLER", "Staff", 2, db)).toBeNull();
+    });
+
+    test("refuses sending your own grant, unless the sender is an owner", async () => {
+      await db`insert into shop_orders (id, user_id, item_name, status, claimed_by_slack, item_id)
+        values (15, ${fulfiller}, 'Hosting Grant', 'claimed', 'UFULFILLER', 100)`;
+      expect(await settleGrant(15, "https://hcb.example/grants/G", 10, "UFULFILLER", "Staff", 2, db)).toBeNull();
+      expect(await settleGrant(15, "https://hcb.example/grants/G", 10, "UFULFILLER", "Staff", 2, db, true)).not.toBeNull();
+    });
   });
 
   test("a missing fulfiller account cannot consume the shipment transition", async () => {

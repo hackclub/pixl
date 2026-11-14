@@ -1,7 +1,8 @@
 "use server";
 
 import { claimOrderWithFunding, refreshCommitmentAmount } from "@/lib/eligibility/commit";
-import { settleShipment } from "@/lib/fulfillmentShip";
+import { settleGrant, settleShipment } from "@/lib/fulfillmentShip";
+import { fulfillmentPayoutPixels, isGrantOrder, GRANT_FULFILLMENT_PAYOUT_PIXELS } from "@/lib/fulfillmentGrant";
 import { manualShipsRefresh, shipsProvider } from "@/lib/eligibility/ships";
 import { FUNDING_ORDER_PREFIX } from "@/lib/eligibility/policy";
 import { revalidatePath } from "next/cache";
@@ -5842,11 +5843,18 @@ export const markOrderCredited = guardedAction("markOrderCredited", "fulfiller",
   revalidatePath("/fulfillment");
 });
 
-// Flat pixel payout to whoever ships an order - see shipOrder below and
-// creditFulfillerPixels in lib/db.ts. Was 3px ($0.21) at the old $0.07/px
-// rate; rescaled to keep the same $0.20ish intent after the $0.10 rescale
-// (see 0188_pixel_value_rescale.sql).
-const FULFILLMENT_PAYOUT_PIXELS = 2;
+// Flat pixel payout to whoever fulfils an order: 6 pixels for an item, 2 for a
+// grant (fulfillmentPayoutPixels in lib/fulfillmentGrant.ts). Credited by
+// settleShipment / settleGrant in lib/fulfillmentShip.ts.
+
+// Whether an order uses the grant flow and payout: its item is in the grants
+// category, or a fulfiller converted this one order (shop_orders.is_grant).
+async function orderIsGrant(order: { item_id?: number | null; is_grant?: boolean | null }): Promise<boolean> {
+  if (order.is_grant === true) return true;
+  if (order.item_id == null) return false;
+  const { data } = await db.from("shop_items").select("category").eq("id", order.item_id).maybeSingle();
+  return isGrantOrder({ item_category: (data?.category as string | null | undefined) ?? null });
+}
 
 // The order shipped: credited -> shipped with a tracking number. The number is
 // DM'd to the buyer by Pixo and also lands as an in-game notification. Only the
@@ -5861,7 +5869,7 @@ export const shipOrder = guardedAction("shipOrder", "fulfiller", async (access, 
   }
   const { data: order } = await db
     .from("shop_orders")
-    .select("user_id, item_name, status, claimed_by_slack")
+    .select("user_id, item_name, status, claimed_by_slack, item_id, is_grant")
     .eq("id", id)
     .maybeSingle();
   if (!order || order.status !== "credited" || !ownsOrder(access, order.claimed_by_slack)) {
@@ -5873,10 +5881,13 @@ export const shipOrder = guardedAction("shipOrder", "fulfiller", async (access, 
   if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId, access.isOwner)) {
     throw new Error("You can't fulfill your own shop order.");
   }
+  // 6 pixels for an item, 2 for a grant that was already past "claimed" when
+  // the grant flow shipped (see fulfillmentPayoutPixels).
+  const payoutPixels = fulfillmentPayoutPixels({ is_grant: await orderIsGrant(order) });
   // Database transaction rechecks ownership and credits the fulfiller
   // atomically with the shipment status transition.
   const settled = await settleShipment(
-    id, tracking, access.session.slackId, actorName(access), FULFILLMENT_PAYOUT_PIXELS,
+    id, tracking, access.session.slackId, actorName(access), payoutPixels,
     undefined, access.isOwner,
   );
   if (!settled) { revalidatePath("/fulfillment"); return; }
@@ -5912,11 +5923,119 @@ export const shipOrder = guardedAction("shipOrder", "fulfiller", async (access, 
   try {
     await dmUser(
       access.session.slackId,
-      `You earned ${FULFILLMENT_PAYOUT_PIXELS} pixels for fulfilling "${settled.itemName}". Thanks for keeping orders moving!`,
+      `You earned ${payoutPixels} pixels for fulfilling "${settled.itemName}". Thanks for keeping orders moving!`,
     );
   } catch (err) {
     console.error("shipOrder (fulfillment payout DM)", err instanceof Error ? err.message : err);
   }
+  revalidatePath("/fulfillment");
+});
+
+// Grant flow: claimed -> done in one step. A grant is sent by email as an HCB
+// grant invite, so there is no purchase, receipt or tracking number to collect.
+// The fulfiller pastes the HCB grant link and the amount; settleGrant (one
+// transaction) closes the order and pays the grant payout (2 pixels). The
+// buyer gets an in-app notification and a Pixo DM saying to check their email.
+export const sendGrant = guardedAction("sendGrant", "fulfiller", async (access, formData: FormData): Promise<void> => {
+  const id = Number(formData.get("id") ?? 0);
+  if (!Number.isSafeInteger(id) || id <= 0) return;
+  const grantLink = String(formData.get("grantLink") ?? "").trim().slice(0, 300);
+  const actualCostUsd = Math.round(Number(formData.get("actualCostUsd") ?? NaN) * 100) / 100;
+  if (!grantLink || !isSafeUrl(grantLink) || !Number.isFinite(actualCostUsd) || actualCostUsd < 0) {
+    revalidatePath("/fulfillment");
+    return;
+  }
+  const { data: order } = await db
+    .from("shop_orders")
+    .select("user_id, item_name, status, claimed_by_slack, item_id, is_grant")
+    .eq("id", id)
+    .maybeSingle();
+  if (!order || order.status !== "claimed" || !ownsOrder(access, order.claimed_by_slack as string)) {
+    revalidatePath("/fulfillment");
+    return;
+  }
+  if (!(await orderIsGrant(order))) {
+    throw new Error("This order isn't a grant. Convert it to a grant first, or use the item flow.");
+  }
+  if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId, access.isOwner)) {
+    throw new Error("You can't fulfill your own shop order.");
+  }
+  const settled = await settleGrant(
+    id, grantLink, actualCostUsd, access.session.slackId, actorName(access), GRANT_FULFILLMENT_PAYOUT_PIXELS,
+    undefined, access.isOwner,
+  );
+  if (!settled) { revalidatePath("/fulfillment"); return; }
+
+  if ((await refreshCommitmentAmount(id, { ships: shipsProvider() })) === "failed") {
+    await logOrderAction(id, "ledger_refresh_failed", "funding ledger amount could not be updated", actorName(access));
+  }
+  await db.from("notifications").insert({
+    user_id: order.user_id,
+    title: "Grant sent! 🎁",
+    body: `Your "${order.item_name}" grant was sent. Check your email for the HCB grant invite.\n\nGrant: ${grantLink}`,
+  });
+  const { data: buyer } = await db.from("users").select("slack_id").eq("id", order.user_id).maybeSingle();
+  if (buyer?.slack_id) {
+    try {
+      await dmUser(
+        buyer.slack_id,
+        `🎁 Your "${order.item_name}" grant was sent! Check your email for the HCB grant invite.\n\nGrant: ${grantLink}`,
+      );
+    } catch (err) {
+      console.error("sendGrant DM", err instanceof Error ? err.message : err);
+    }
+  }
+  await logOrderAction(id, "grant_sent", `grant ${grantLink} , cost $${actualCostUsd}`, actorName(access), order);
+
+  try {
+    await dmUser(
+      access.session.slackId,
+      `You earned ${GRANT_FULFILLMENT_PAYOUT_PIXELS} pixels for sending the "${settled.itemName}" grant. Thanks for keeping orders moving!`,
+    );
+  } catch (err) {
+    console.error("sendGrant (fulfillment payout DM)", err instanceof Error ? err.message : err);
+  }
+  revalidatePath("/fulfillment");
+});
+
+// Turns one order into a grant order (shop_orders.is_grant) so it uses the
+// short grant flow: for grant-shaped orders on items that aren't tagged as
+// grants (e.g. a custom-amount request). Only while nothing has been bought
+// yet (pending or claimed); the claiming fulfiller or an owner can do it, and
+// anyone with fulfiller access can convert a pending order.
+export const convertOrderToGrant = guardedAction("convertOrderToGrant", "fulfiller", async (access, formData: FormData): Promise<void> => {
+  const id = Number(formData.get("id") ?? 0);
+  if (!Number.isSafeInteger(id) || id <= 0) return;
+  const { data: order } = await db
+    .from("shop_orders")
+    .select("user_id, item_name, status, claimed_by_slack, item_id, is_grant")
+    .eq("id", id)
+    .maybeSingle();
+  if (!order || (order.status !== "pending" && order.status !== "claimed")) {
+    revalidatePath("/fulfillment");
+    return;
+  }
+  if (order.status === "claimed" && !access.isOwner && !ownsOrder(access, order.claimed_by_slack as string)) {
+    throw new Error("Only the fulfiller who claimed this order can convert it.");
+  }
+  if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId, access.isOwner)) {
+    throw new Error("You can't fulfill your own shop order.");
+  }
+  if (await orderIsGrant(order)) {
+    revalidatePath("/fulfillment");
+    return;
+  }
+  const { data: changed, error } = await db
+    .from("shop_orders")
+    .update({ is_grant: true })
+    .eq("id", id)
+    .in("status", ["pending", "claimed"])
+    .eq("is_grant", false)
+    .select("id")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!changed) { revalidatePath("/fulfillment"); return; }
+  await logOrderAction(id, "order_converted_to_grant", "now uses the grant flow", actorName(access), order);
   revalidatePath("/fulfillment");
 });
 
