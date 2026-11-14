@@ -1,7 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useReducedMotion } from "motion/react";
 import type { HackatimeReport, HackatimeBreakdown, LapseTimelapse } from "@/lib/hackatime";
+import { hackatimeDonutSlices } from "@/lib/hackatimeChart";
+import { PieChart } from "@/components/charts/pie-chart";
+import { PieSlice } from "@/components/charts/pie-slice";
+import { PieCenter } from "@/components/charts/pie-center";
+import { BKLIT_THEME } from "@/app/_components/bklitTheme";
 import { Badge, Button, EmptyState, formatDate, Muted, Stat, StatGrid } from "@/app/_ui/ui";
 
 function fmtDate(unix: number | null): string {
@@ -15,48 +21,102 @@ function fmtSecs(s: number): string {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-// One pie per breakdown, colored with Hackatime's own language colors. The
-// slices are a conic-gradient; whatever the top 10 don't cover stays sunken.
-function Breakdown({ title, items }: { title: string; items: HackatimeBreakdown[] }) {
-  const top = items.filter((i) => i.seconds > 0).slice(0, 10);
-  if (top.length === 0) return null;
-  const color = (i: HackatimeBreakdown) => i.color || "var(--hc-blue)";
+type BreakdownKey = "languages" | "editors" | "operatingSystems" | "machines";
 
-  let from = 0;
-  const stops = top.map((i) => {
-    const to = Math.min(from + i.percent, 100);
-    const stop = `${color(i)} ${from}% ${to}%`;
-    from = to;
-    return stop;
-  });
-  if (from < 100) stops.push(`var(--sunken) ${from}% 100%`);
+function BreakdownExplorer({ report }: { report: HackatimeReport }) {
+  const reduced = useReducedMotion();
+  const [mounted, setMounted] = useState(false);
+  const [selected, setSelected] = useState<BreakdownKey>("languages");
+  const [hovered, setHovered] = useState<number | null>(null);
+  useEffect(() => setMounted(true), []);
 
+  const groups: { key: BreakdownKey; label: string; scope: string; items: HackatimeBreakdown[] }[] = [
+    { key: "languages", label: "Languages", scope: report.languagesScoped ? "This submission's linked projects" : "All Hackatime projects", items: report.languages },
+    { key: "editors", label: "Editors", scope: "All Hackatime projects", items: report.editors },
+    { key: "operatingSystems", label: "Operating systems", scope: "All Hackatime projects", items: report.operatingSystems },
+    { key: "machines", label: "Machines", scope: "All Hackatime projects", items: report.machines },
+  ];
+  const available = groups.filter((g) => g.items.some((i) => Number.isFinite(i.seconds) && i.seconds > 0 && i.name.trim().length > 0));
+  const active = available.find((g) => g.key === selected) ?? available[0];
+  if (!active) return <p className="hc-caption text-sm">No Hackatime breakdown available for this maker.</p>;
+
+  const slices = hackatimeDonutSlices(active.items);
+  const totalSeconds = slices.reduce((sum, slice) => sum + slice.value, 0);
   return (
-    <div className="flex flex-col gap-2">
-      <p className="hc-eyebrow">{title}</p>
-      <div className="flex flex-wrap items-center gap-5">
-        <div
-          role="img"
-          aria-label={top.map((i) => `${i.name} ${i.percent}%`).join(", ")}
-          className="h-28 w-28 shrink-0 rounded-full"
-          style={{ background: `conic-gradient(${stops.join(", ")})` }}
-        />
-        <div className="flex flex-col gap-1">
-          {top.map((i, n) => (
-            <span key={n} className="flex items-center gap-1.5 text-xs">
-              <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: color(i) }} />
-              <span>{i.name}</span>
-              <Muted className="tabular-nums">
-                {i.text} · {i.percent}%
-              </Muted>
-            </span>
+    <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4" style={BKLIT_THEME}
+      aria-label="Hackatime time breakdown">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 className="hc-heading text-sm">Time breakdown</h3>
+          <p className="hc-caption text-xs">Explore where the tracked time went.</p>
+        </div>
+        <span className="hc-caption rounded-md bg-[var(--sunken)] px-2 py-1 text-xs">{active.scope}</span>
+      </div>
+      {available.length > 1 && (
+        <div className="mb-4 flex flex-wrap gap-1.5" role="group" aria-label="Select a Hackatime breakdown">
+          {available.map((g) => (
+            <button key={g.key} type="button" aria-pressed={active.key === g.key}
+              onClick={() => { setSelected(g.key); setHovered(null); }}
+              className={`rounded-md border px-2.5 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 ${active.key === g.key
+                ? "border-[var(--primary)] bg-[var(--sunken)] text-[var(--text)]"
+                : "border-[var(--border)] text-[var(--secondary)] hover:bg-[var(--sunken)]"}`}>
+              {g.label}
+            </button>
           ))}
         </div>
+      )}
+      <div className="grid items-center gap-4 sm:grid-cols-[184px_minmax(0,1fr)]">
+        <div className="mx-auto h-[184px] w-[184px] shrink-0" aria-hidden="true">
+          {mounted && (
+            <PieChart key={active.key} data={slices} size={184} innerRadius={57} padAngle={0.026}
+              cornerRadius={4} hoveredIndex={hovered} onHoverChange={setHovered}
+              enterTransition={{ duration: reduced ? 0 : 0.5 }}>
+              {slices.map((slice, i) => (
+                <PieSlice key={slice.label} index={i} animate={!reduced}
+                  hoverEffect={reduced ? "none" : "grow"} />
+              ))}
+              <PieCenter defaultLabel="Tracked time">
+                {({ value, label }) => (
+                  <div className="max-w-[95px] text-center">
+                    <div className="text-lg font-bold leading-tight tabular-nums">{fmtSecs(value)}</div>
+                    <div className="hc-caption mt-1 line-clamp-2 break-words text-[10px] leading-tight">{label}</div>
+                  </div>
+                )}
+              </PieCenter>
+            </PieChart>
+          )}
+        </div>
+        <div className="min-w-0">
+          <p className="hc-caption mb-2 text-xs">
+            <strong className="text-[var(--text)]">{fmtSecs(totalSeconds)}</strong> across {active.items.filter((r) => Number.isFinite(r.seconds) && r.seconds > 0 && r.name.trim().length > 0).length} categories
+          </p>
+          <ul className="flex flex-col gap-1" aria-label={`${active.label} time share`}>
+            {slices.map((slice, i) => (
+              <li key={slice.label}>
+                <button type="button"
+                  className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left text-xs hover:bg-[var(--sunken)] focus-visible:outline-2 focus-visible:outline-offset-2"
+                  onMouseEnter={() => setHovered(i)} onMouseLeave={() => setHovered(null)}
+                  onFocus={() => setHovered(i)} onBlur={() => setHovered(null)}
+                  aria-label={`${slice.label}: ${fmtSecs(slice.value)}, ${slice.percent.toFixed(1)} percent`}>
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} aria-hidden="true" />
+                    <span className="break-words">{slice.label}</span>
+                  </span>
+                  <span className="shrink-0 whitespace-nowrap font-semibold tabular-nums">
+                    {fmtSecs(slice.value)} <span className="hc-muted font-normal">· {slice.percent.toFixed(1)}%</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
-    </div>
+      <p className="hc-caption mt-3 text-[11px]">Shows reported Hackatime data, not approved hours or a fraud determination.
+        {active.key !== "languages" || !report.languagesScoped ? " This breakdown is account-wide." : ""}
+      </p>
+    </section>
   );
 }
-
 // Plays inline under the chip, so the reviewer stays on the review page.
 function LapseChip({ lapse }: { lapse: LapseTimelapse }) {
   const [open, setOpen] = useState(false);
@@ -109,18 +169,8 @@ export function HackatimePanel({ report }: { report: HackatimeReport }) {
         </StatGrid>
       </div>
 
-      <div className="flex flex-col gap-4 border-b border-[var(--border)] p-4">
-        {report.languages.length > 0 ? (
-          <Breakdown
-            title={report.languagesScoped ? "Languages (this project)" : "Languages (all projects)"}
-            items={report.languages}
-          />
-        ) : (
-          <p className="hc-caption text-sm">No language breakdown available for this maker.</p>
-        )}
-        {report.editors.length > 0 && <Breakdown title="Editors" items={report.editors} />}
-        {report.operatingSystems.length > 0 && <Breakdown title="Operating systems" items={report.operatingSystems} />}
-        {report.machines.length > 0 && <Breakdown title="Machines" items={report.machines} />}
+      <div className="border-b border-[var(--border)] p-4">
+        <BreakdownExplorer report={report} />
       </div>
 
       <p className="hc-eyebrow px-4 pt-4">Projects linked to this submission</p>
