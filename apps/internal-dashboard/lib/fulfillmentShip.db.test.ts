@@ -78,6 +78,19 @@ suite("atomic fulfillment shipment", () => {
     expect(rows[0]!.status).toBe("credited");
   });
 
+  test("an owner may ship their own order and is paid as usual", async () => {
+    await db`insert into shop_orders (id, user_id, item_name, status, claimed_by_slack)
+      values (5, ${fulfiller}, 'Owner reward', 'credited', 'UFULFILLER')`;
+    const before = await db`select pixels from users where id = ${fulfiller}`;
+    const result = await settleShipment(5, "TRACK", "UFULFILLER", "Staff", 2, db, true);
+    expect(result).not.toBeNull();
+    const rows = await db`select status, fulfillment_pixels_paid from shop_orders where id = 5`;
+    expect(rows[0]!.status).toBe("shipped");
+    expect(Number(rows[0]!.fulfillment_pixels_paid)).toBe(2);
+    const after = await db`select pixels from users where id = ${fulfiller}`;
+    expect(Number(after[0]!.pixels) - Number(before[0]!.pixels)).toBe(2);
+  });
+
   test("a missing fulfiller account cannot consume the shipment transition", async () => {
     await db`insert into shop_orders (id, user_id, item_name, status, claimed_by_slack)
       values (4, ${buyer}, 'Kit', 'credited', 'UMISSING')`;

@@ -31,10 +31,12 @@ export function canSeeBuyerDetails(order: OrderOwnership, viewer: FulfillmentVie
 // The printable address label: same rule (it's the address in large print).
 export const canViewLabel = canSeeBuyerDetails;
 
-// A fulfiller must never claim/ship their own shop order (they'd be sourcing
-// and approving their own purchase and earning the fulfillment payout on it).
-// Owners are not exempt: an owner's own order goes to someone else too.
-export function isOwnOrder(order: OrderOwnership, slackId: string): boolean {
+// A regular fulfiller must never claim/ship their own shop order (they'd be
+// sourcing and approving their own purchase and earning the fulfillment payout
+// on it). Owners (ADMIN_SLACK_IDS) are exempt since 2026-11-14 and may fulfil
+// their own orders, paid as usual; pass the viewer's isOwner as the third arg.
+export function isOwnOrder(order: OrderOwnership, slackId: string, viewerIsOwner = false): boolean {
+  if (viewerIsOwner) return false;
   const buyer = (order.player_slack ?? "").trim();
   return buyer !== "" && buyer === slackId.trim();
 }

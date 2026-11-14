@@ -33,6 +33,11 @@ describe("fulfiller self-dealing", () => {
     expect(isOwnOrder({ player_slack: null }, "UF1")).toBe(false);
     expect(isOwnOrder({ player_slack: "" }, "")).toBe(false);
   });
+  test("owners may fulfil their own order, regular fulfillers still may not", () => {
+    expect(isOwnOrder({ player_slack: "UO" }, "UO", true)).toBe(false);
+    expect(isOwnOrder({ player_slack: "UF1" }, "UF1", false)).toBe(true);
+    expect(isOwnOrder({ player_slack: "UF1" }, "UF1")).toBe(true);
+  });
   test("flagging only by the claimer or an owner", () => {
     expect(canFlagOrder({ claimed_by_slack: "" }, fulfiller("UF1"))).toBe(false);
     expect(canFlagOrder({ claimed_by_slack: "UF2" }, fulfiller("UF1"))).toBe(false);

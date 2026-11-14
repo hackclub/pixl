@@ -5619,7 +5619,7 @@ export const claimOrder = guardedAction("claimOrder", "fulfiller", async (access
     revalidatePath("/fulfillment");
     return;
   }
-  if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId)) {
+  if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId, access.isOwner)) {
     throw new Error("You can't fulfill your own shop order.");
   }
   const outcome = await claimOrderWithFunding({
@@ -5745,7 +5745,7 @@ export const markOrderPlaced = guardedAction("markOrderPlaced", "fulfiller", asy
     revalidatePath("/fulfillment");
     return;
   }
-  if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId)) {
+  if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId, access.isOwner)) {
     throw new Error("You can't fulfill your own shop order.");
   }
   const { data: changed, error } = await db.from("shop_orders")
@@ -5810,7 +5810,7 @@ export const markOrderCredited = guardedAction("markOrderCredited", "fulfiller",
   // Self-dealing, same as claimOrder/shipOrder/reassignOrder: checked on every
   // step, not just the claim, so no path (an old claim, a direct form post)
   // lets someone credit their own order.
-  if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId)) {
+  if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId, access.isOwner)) {
     throw new Error("You can't fulfill your own shop order.");
   }
   const { data: changed, error } = await db
@@ -5870,13 +5870,14 @@ export const shipOrder = guardedAction("shipOrder", "fulfiller", async (access, 
   }
   // Self-dealing: shipping your own order would also pay you the fulfillment
   // pixels on it. Refused even if it somehow got claimed/reassigned to you.
-  if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId)) {
+  if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId, access.isOwner)) {
     throw new Error("You can't fulfill your own shop order.");
   }
   // Database transaction rechecks ownership and credits the fulfiller
   // atomically with the shipment status transition.
   const settled = await settleShipment(
     id, tracking, access.session.slackId, actorName(access), FULFILLMENT_PAYOUT_PIXELS,
+    undefined, access.isOwner,
   );
   if (!settled) { revalidatePath("/fulfillment"); return; }
 
@@ -6003,7 +6004,7 @@ export const reassignOrder = guardedAction("reassignOrder", "owner", async (acce
   if (!id) return;
   const { data: target } = await db.from("shop_orders").select("user_id").eq("id", id).maybeSingle();
   if (!target) return;
-  if (isOwnOrder({ player_slack: await buyerSlackFor(target.user_id as string) }, access.session.slackId)) {
+  if (isOwnOrder({ player_slack: await buyerSlackFor(target.user_id as string) }, access.session.slackId, access.isOwner)) {
     throw new Error("You can't take over your own shop order.");
   }
   const { error } = await db

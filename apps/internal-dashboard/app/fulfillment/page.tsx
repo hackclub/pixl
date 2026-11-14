@@ -577,7 +577,7 @@ export default async function FulfillmentPage({
                 buyer={selectedCanSee ? buyerDetails.get(selected.user_id) : undefined}
                 country={selectedCanSee ? undefined : (buyerCountries.get(selected.user_id) ?? "")}
                 requesterName={nameFor(selected)}
-                ownOrder={isOwnOrder(selected, me)}
+                ownOrder={isOwnOrder(selected, me, access.isOwner)}
                 mine={selected.claimed_by_slack === me}
                 canManage={access.isOwner}
                 eligibility={eligibility.get(Number(selected.id)) ?? null}

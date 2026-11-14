@@ -14,6 +14,8 @@ export async function settleShipment(
   fulfillerName: string,
   pixels: number,
   client: typeof sql = sql,
+  // Owners may ship their own order; everyone else is refused below.
+  allowOwnOrder = false,
 ): Promise<ShipmentResult | null> {
   if (!Number.isSafeInteger(orderId) || orderId <= 0 ||
       !Number.isSafeInteger(pixels) || pixels <= 0 ||
@@ -36,7 +38,7 @@ export async function settleShipment(
         and o.status = 'credited'
         and o.claimed_by_slack = ${fulfillerSlackId}
         and buyer.id = o.user_id
-        and buyer.slack_id is distinct from ${fulfillerSlackId}
+        and (${allowOwnOrder} or buyer.slack_id is distinct from ${fulfillerSlackId})
       returning o.user_id, o.item_name`;
     if (!shipped.length) return null;
 
