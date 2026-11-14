@@ -1,0 +1,344 @@
+.page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 36px 18px;
+  background: var(--panel-deep);
+  color: #17141e;
+}
+
+.gameWindow {
+  width: min(100%, 1020px);
+  border: 4px solid #17141e;
+  background: #faf4de;
+  box-shadow: 8px 8px 0 #17141e;
+}
+
+.windowBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 16px;
+  background: #faf4de;
+  border-bottom: 4px solid #17141e;
+}
+
+.wordmark {
+  font-family: var(--pixel);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.windowStatus {
+  color: #bc2942;
+  font: 700 12px var(--mono);
+  letter-spacing: 0.04em;
+}
+
+.world {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  aspect-ratio: 975 / 465;
+  background: #54b5b8 url("/404/village.png") center / 100% 100% no-repeat;
+  image-rendering: pixelated;
+  overflow: visible;
+}
+
+.mapLabel,
+.errorLabel {
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  padding: 7px 10px;
+  border: 2px solid #17141e;
+  box-shadow: 3px 3px 0 #17141e;
+  font: 700 12px var(--mono);
+  line-height: 1.2;
+}
+
+.mapLabel {
+  left: 13px;
+  background: #faf4de;
+}
+
+.errorLabel {
+  right: 13px;
+  background: #ec3750;
+  color: #fff;
+}
+
+.missingTile {
+  position: absolute;
+  z-index: 1;
+  top: 75%;
+  left: 57%;
+  display: block;
+  width: 42px;
+  height: 42px;
+  border: 3px solid #17141e;
+  background: #faf4de;
+  box-shadow: 0 0 0 4px #faf4de;
+  transform: translate(-50%, -50%);
+  animation: tileDrop 0.45s steps(5) both;
+}
+
+.missingTile svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  fill: #ec3750;
+}
+
+.worldPixo {
+  position: absolute;
+  z-index: 1;
+  top: 75%;
+  left: 49%;
+  width: 32px;
+  height: 32px;
+  transform: translate(-50%, -50%) scale(2);
+}
+
+.worldSprite,
+.portraitSprite {
+  display: block;
+  width: 32px;
+  height: 32px;
+  background: url("/404/pixo_char.png") 0 -64px no-repeat;
+  image-rendering: pixelated;
+}
+
+.questionEmote {
+  position: absolute;
+  top: -16px;
+  left: 24px;
+  display: block;
+  width: 16px;
+  height: 16px;
+  background: url("/404/emote_question.png") center / contain no-repeat;
+  image-rendering: pixelated;
+  animation: questionBob 1.5s steps(3, end) infinite;
+}
+
+.dialogue {
+  position: absolute;
+  z-index: 3;
+  top: 17%;
+  left: 7%;
+  right: 7%;
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  gap: 8px 20px;
+  align-items: center;
+  min-height: 215px;
+  padding: 18px 22px 16px;
+  border: 20px solid transparent;
+  border-image: url("/404/hud_panel.png") 5 fill / 20px / 0 stretch;
+  background: #2b1c12;
+  color: #f4e3c2;
+  filter: drop-shadow(5px 7px 0 #17141eb0);
+}
+
+.speaker {
+  position: absolute;
+  top: -30px;
+  left: 132px;
+  min-width: 150px;
+  padding: 5px 18px 6px;
+  border: 10px solid transparent;
+  border-image: url("/404/hud_panel.png") 5 fill / 10px / 0 stretch;
+  background: #2b1c12;
+  color: #ffdc87;
+  font: 700 21px/1 var(--pixel);
+  text-align: left;
+}
+
+.portrait {
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  width: 100px;
+  height: 100px;
+  overflow: hidden;
+  border: 10px solid transparent;
+  border-image: url("/404/hud_panel.png") 5 fill / 10px / 0 stretch;
+  background: #24170e;
+}
+
+.portraitSprite {
+  transform: scale(2.5);
+}
+
+.dialogueCopy {
+  min-width: 0;
+  align-self: end;
+}
+
+.dialogueCopy h1 {
+  font: 700 clamp(22px, 3vw, 34px)/1.15 var(--pixel);
+  letter-spacing: 0.005em;
+}
+
+.dialogueCopy p {
+  margin-top: 6px;
+  color: #f4e3c2;
+  font: 500 clamp(15px, 1.8vw, 20px)/1.3 var(--pixel);
+}
+
+.actions {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-self: start;
+}
+
+.actions a {
+  display: inline-block;
+  padding: 8px 13px;
+  border: 3px solid #170f0a;
+  border-bottom-width: 6px;
+  font: 700 17px/1.2 var(--pixel);
+  text-align: center;
+  text-decoration: none;
+  transition: transform 0.12s steps(2), border-bottom-width 0.12s steps(2);
+}
+
+.primaryAction {
+  background: #ffcf66;
+  color: #2b1b11;
+}
+
+.secondaryAction {
+  background: #725942;
+  color: #fff0cf;
+}
+
+.actions a:hover {
+  transform: translateY(-2px);
+}
+
+.actions a:active {
+  transform: translateY(3px);
+  border-bottom-width: 3px;
+}
+
+.actions a:focus-visible,
+.routeHint a:focus-visible {
+  outline: 3px solid #ec3750;
+  outline-offset: 4px;
+}
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  flex-wrap: wrap;
+  padding: 13px 17px;
+  background: #faf4de;
+  font: 700 11px/1.5 var(--mono);
+}
+
+.coords {
+  flex: none;
+  color: #4a4550;
+}
+
+.routeHint {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 5px 16px;
+  min-width: 0;
+  color: #4a4550;
+}
+
+.lostPath {
+  overflow-wrap: anywhere;
+}
+
+.lostPath code {
+  font: inherit;
+  color: #17141e;
+}
+
+.routeSuggestion a {
+  color: #bb2841;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+@keyframes questionBob {
+  50% { transform: translateY(-3px); }
+}
+
+@keyframes tileDrop {
+  from { opacity: 0; transform: translate(-50%, -80%); }
+  to { opacity: 1; transform: translate(-50%, -50%); }
+}
+
+@media (max-width: 720px) {
+  .page { padding: 20px 10px; }
+  .gameWindow { box-shadow: 5px 5px 0 #17141e; }
+  .world {
+    aspect-ratio: auto;
+    min-height: 580px;
+    background-size: auto 100%;
+    background-position: center;
+    overflow: hidden;
+  }
+  .dialogue {
+    top: 80px;
+    left: 9px;
+    right: 9px;
+    min-height: 230px;
+    padding: 14px 12px 12px;
+    border-width: 14px;
+    border-image-width: 14px;
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 8px 12px;
+  }
+  .speaker {
+    top: -25px;
+    left: 84px;
+    min-width: 100px;
+    font-size: 18px;
+  }
+  .portrait { width: 72px; height: 72px; grid-row: auto; }
+  .portraitSprite { transform: scale(1.8); }
+  .dialogueCopy h1 { font-size: clamp(18px, 5vw, 27px); }
+  .dialogueCopy p { font-size: clamp(13px, 3.8vw, 18px); }
+  .actions { grid-column: 1 / -1; }
+  .actions a { font-size: 15px; }
+  .worldPixo { top: 76%; left: 41%; }
+  .missingTile { top: 77%; left: 60%; }
+}
+
+@media (max-width: 410px) {
+  .windowBar { padding: 7px 10px; }
+  .wordmark { font-size: 25px; }
+  .windowStatus { font-size: 10px; }
+  .world { min-height: 560px; }
+  .mapLabel, .errorLabel { font-size: 9px; padding: 5px 7px; top: 10px; }
+  .mapLabel { left: 7px; }
+  .errorLabel { right: 7px; }
+  .dialogue { grid-template-columns: 58px minmax(0, 1fr); padding: 11px 9px; gap: 8px; }
+  .speaker { left: 68px; }
+  .portrait { width: 58px; height: 58px; }
+  .portraitSprite { transform: scale(1.5); }
+  .actions { flex-direction: column; gap: 6px; }
+  .actions a { padding: 8px 10px; }
+  .footer { padding: 10px; font-size: 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .worldPixo, .questionEmote, .missingTile, .actions a {
+    animation: none;
+    transition: none;
+  }
+}
