@@ -33,7 +33,6 @@ export function NpsForm() {
   const [reason, setReason] = useState("");
   const [ratings, setRatings] = useState<Partial<Record<Area, number>>>({});
   const [fixText, setFixText] = useState("");
-  const [contactOk, setContactOk] = useState(false);
   const [done, setDone] = useState(false);
   const submit = useAction(submitNps);
 
@@ -44,7 +43,6 @@ export function NpsForm() {
       reason: reason.trim() || undefined,
       ratings: Object.keys(ratings).length ? ratings : undefined,
       fixText: fixText.trim() || undefined,
-      contactOk,
     });
     if (res.ok) setDone(true);
   }
@@ -98,14 +96,9 @@ export function NpsForm() {
       </fieldset>
 
       <div>
-        <Label htmlFor="nps-fix">If we could change one thing this week, what should it be? (optional)</Label>
+        <Label htmlFor="nps-fix">If we could change one thing for our next program, what should it be? (optional)</Label>
         <Textarea id="nps-fix" rows={2} maxLength={500} value={fixText} onChange={(e) => setFixText(e.target.value)} />
       </div>
-
-      <label className="flex items-start gap-2.5 text-sm leading-normal">
-        <input type="checkbox" className="mt-1" checked={contactOk} onChange={(e) => setContactOk(e.target.checked)} />
-        <span>It&apos;s OK to DM me on Slack about my answer.</span>
-      </label>
 
       {submit.error ? <Notice tone="bad">{submit.error}</Notice> : null}
 
