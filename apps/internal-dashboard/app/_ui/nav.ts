@@ -75,6 +75,7 @@ export function buildNav(access: AdminAccess): NavModel {
         [owner, { href: "/story", label: "Story", glyph: "docs" }],
         [owner, { href: "/community-goals", label: "Community goals", glyph: "rep" }],
         [owner, { href: "/show-n-tell", label: "Show & Tell", glyph: "photo" }],
+        [owner, { href: "/nps", label: "NPS", glyph: "message" }],
       ]),
     },
     {
