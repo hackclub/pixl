@@ -54,6 +54,8 @@ export async function GET(req: Request) {
   const saved: number[] = [];
   const skipped: number[] = [];
   const failed: { id: number; error: string }[] = [];
+  // Projects whose own text looks aimed at an AI (see lib/aiPromptSafety.ts).
+  const suspicious: number[] = [];
 
   const work = async (id: number) => {
     try {
@@ -67,6 +69,23 @@ export async function GET(req: Request) {
         return;
       }
       const draft = await generateAiReviewDraft(await buildAiReviewInput(id));
+      // Never pre-fill a write-up the model may have been steered into: it would
+      // sit in the reviewer's box without the flag. The reviewer can still press
+      // "Generate AI draft", which shows the flag first.
+      if (draft.injectionSignals.length > 0) {
+        suspicious.push(id);
+        await audit(
+          {
+            action: "cron.ai-drafts.suspicious",
+            result: "ok",
+            actorType: "service",
+            actorId: "cron",
+            meta: { projectId: id, signals: draft.injectionSignals.length },
+          },
+          req,
+        );
+        return;
+      }
       const text = draft.technicalFeatures.trim();
       if (text.length < MIN_TEXT) throw new Error(`draft too short (${text.length})`);
       // Guarded on the draft owner still being the one we read, so a reviewer
@@ -95,5 +114,5 @@ export async function GET(req: Request) {
     }),
   );
 
-  return NextResponse.json({ ok: true, processed: queue.length, saved, skipped, failed });
+  return NextResponse.json({ ok: true, processed: queue.length, saved, skipped, suspicious, failed });
 }
