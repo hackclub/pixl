@@ -2741,6 +2741,80 @@ export const adjustPixels = guardedAction("adjustPixels", "owner", async (access
   redirect("/pixels?adjusted=1");
 });
 
+// One-click "that first-pass review was bad": takes back what the first-pass
+// reviewer was paid for approving this project (8 px at the current rate),
+// voids that payout row and leaves everything else alone (project status,
+// hours, the maker's pixels). Final reviewers only, while the project awaits a
+// final pass. The row update is guarded on still being paid, so a double click
+// can never debit twice.
+export const removeFirstPassPayout = guardedAction("removeFirstPassPayout", "reviewer", async (access, formData: FormData): Promise<void> => {
+  const by = actorName(access);
+  const projectId = Number(formData.get("projectId") ?? 0);
+  const back = `/review/${projectId}`;
+  if (!projectId) return;
+  if (!access.canSecondPass)
+    redirect(`${back}?error=${encodeURIComponent("Only a final reviewer can remove a first-pass payout.")}`);
+  await authorizeProjectAction(access, projectId, back);
+
+  const { data: project } = await db.from("projects").select("status, name").eq("id", projectId).single();
+  if (!project || project.status !== "second_review")
+    redirect(`${back}?error=${encodeURIComponent("This project isn't awaiting a final pass.")}`);
+
+  const { data: row } = await db
+    .from("review_payouts")
+    .select("id, reviewer, reviewer_slack_id, paid_pixels, credited")
+    .eq("project_id", projectId)
+    .eq("verdict", "first_pass_approved")
+    .eq("status", "paid")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!row) redirect(`${back}?error=${encodeURIComponent("No paid first-pass payout to remove on this project.")}`);
+
+  const amount = Number(row.paid_pixels) || 0;
+  const { data: claimed } = await db
+    .from("review_payouts")
+    .update({
+      status: "voided",
+      paid_pixels: 0,
+      cut_pct: 100,
+      cut_reason: `bad first-pass review, removed by ${by}`,
+      settled_at: new Date().toISOString(),
+    })
+    .eq("id", row.id)
+    .eq("status", "paid")
+    .select("id");
+  if (!claimed || claimed.length === 0)
+    redirect(`${back}?error=${encodeURIComponent("That payout was already removed.")}`);
+
+  let debited = false;
+  if (row.credited && amount > 0) {
+    debited = await debitReviewerPixels(row.reviewer_slack_id, amount);
+    if (!debited) console.error("removeFirstPassPayout: could not debit", row.id, row.reviewer_slack_id, amount);
+  }
+
+  const { data: reviewer } = await db
+    .from("users")
+    .select("id")
+    .eq("slack_id", row.reviewer_slack_id)
+    .limit(1)
+    .maybeSingle();
+  if (reviewer?.id)
+    await logModAction(
+      reviewer.id as string,
+      "review_payout_removed",
+      `${project.name} (#${projectId}): -${debited ? amount : 0} pixels, first-pass review judged bad by the final reviewer`,
+      by,
+    );
+  if (await reviewerWantsDm(row.reviewer_slack_id))
+    await dmUser(
+      row.reviewer_slack_id,
+      `Your first-pass review of "${project.name}" was judged not good enough by the final reviewer, so the ${amount} pixels it paid were taken back. Check the justification and note on your next reviews.`,
+    );
+  revalidatePath(back);
+  redirect(back);
+});
+
 export const archiveProject = guardedAction("archiveProject", "owner", async (access, formData: FormData): Promise<void> => {
   const by = actorName(access);
   const projectId = Number(formData.get("projectId") ?? 0);

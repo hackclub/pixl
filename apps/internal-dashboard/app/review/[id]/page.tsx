@@ -48,6 +48,7 @@ import {
   setProjectLevel,
   extendHoursCutoff,
   sendBackToFirstPass,
+  removeFirstPassPayout,
   unshipProject,
   toggleProjectPeak,
   holdReview,
@@ -276,13 +277,26 @@ export default async function ReviewDetail({
   const hasActiveClaim = currentClaim === viewer;
   const claimedByOther = currentClaim && currentClaim !== viewer ? currentClaim : null;
 
-  const [playerReBefore, firstPassAuditNote, bountyEventsResult] = await Promise.all([
+  const [playerReBefore, firstPassAuditNote, firstPassPayoutResult, bountyEventsResult] = await Promise.all([
     // The RE the player already holds, excluding this project. It sets the
     // rate they'll be paid at, so the reviewer sees it before deciding.
     lifetimeRe(p.user_id, projectId),
     // So the final reviewer starts from what the first reviewer already wrote
     // instead of a blank form. They can still edit or overturn any of it.
     isFinalStage && p.first_pass_by ? getFirstPassAuditNote(projectId) : Promise.resolve(null),
+    // The paid first-pass payout, if any, so the final reviewer can take it
+    // back with one click when the first review was bad.
+    isFinalStage && canSecondPass
+      ? db
+          .from("review_payouts")
+          .select("paid_pixels")
+          .eq("project_id", projectId)
+          .eq("verdict", "first_pass_approved")
+          .eq("status", "paid")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
     shippedAt
       ? db
           .from("events")
@@ -293,6 +307,8 @@ export default async function ReviewDetail({
           .gt("ends_at", shippedAt)
       : Promise.resolve({ data: [] as { id: number; name: string; config: Record<string, unknown> }[] }),
   ]);
+
+  const firstPassPayoutPx = Number(firstPassPayoutResult.data?.paid_pixels) || 0;
 
   // ---- Slow external lookups. Started here, never awaited by the page itself:
   // each one streams into its own <Suspense> boundary below, so GitHub,
@@ -1219,6 +1235,18 @@ export default async function ReviewDetail({
               <p className="hc-eyebrow mb-1">Their note</p>
               <p className="whitespace-pre-wrap break-words text-sm">{p.first_pass_note}</p>
             </div>
+          )}
+          {firstPassPayoutPx > 0 && (
+            <form action={removeFirstPassPayout} className="mt-3">
+              <input type="hidden" name="projectId" value={p.id} />
+              <ActionButton
+                variant="cream"
+                pendingLabel="Removing..."
+                confirm={`Take ${firstPassPayoutPx} pixels back from the first-pass reviewer?`}
+              >
+                Bad review, remove {firstPassPayoutPx} px
+              </ActionButton>
+            </form>
           )}
         </Card>
       )}
