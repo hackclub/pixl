@@ -25,6 +25,7 @@ const VERDICT_BADGE: Record<string, { label: string; tone: Tone }> = {
   needs_changes: { label: "sent back", tone: "danger" },
   banned: { label: "banned", tone: "danger" },
   first_pass_banned: { label: "ban proposed", tone: "danger" },
+  first_pass_removed: { label: "1st pass removed", tone: "warning" },
 };
 
 export default async function ReviewLogPage() {

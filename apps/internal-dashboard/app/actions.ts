@@ -2793,6 +2793,17 @@ export const removeFirstPassPayout = guardedAction("removeFirstPassPayout", "rev
     if (!debited) console.error("removeFirstPassPayout: could not debit", row.id, row.reviewer_slack_id, amount);
   }
 
+  // Also takes the review off the leaderboards and the ending score: those
+  // count review_audits by verdict, and "first_pass_removed" is in none of
+  // them. The row, its note and its time stay as the record of what happened.
+  const { error: auditError } = await db
+    .from("review_audits")
+    .update({ verdict: "first_pass_removed" })
+    .eq("project_id", projectId)
+    .eq("verdict", "first_pass_approved")
+    .eq("reviewer", row.reviewer);
+  if (auditError) console.error("removeFirstPassPayout: audit update failed", auditError.message);
+
   const { data: reviewer } = await db
     .from("users")
     .select("id")
@@ -2809,7 +2820,7 @@ export const removeFirstPassPayout = guardedAction("removeFirstPassPayout", "rev
   if (await reviewerWantsDm(row.reviewer_slack_id))
     await dmUser(
       row.reviewer_slack_id,
-      `Your first-pass review of "${project.name}" was judged not good enough by the final reviewer, so the ${amount} pixels it paid were taken back. Check the justification and note on your next reviews.`,
+      `Your first-pass review of "${project.name}" was judged not good enough by the final reviewer, so the ${amount} pixels it paid were taken back and it no longer counts in the leaderboard. Check the justification and note on your next reviews.`,
     );
   revalidatePath(back);
   redirect(back);

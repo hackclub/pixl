@@ -1242,7 +1242,7 @@ export default async function ReviewDetail({
               <ActionButton
                 variant="cream"
                 pendingLabel="Removing..."
-                confirm={`Take ${firstPassPayoutPx} pixels back from the first-pass reviewer?`}
+                confirm={`Take ${firstPassPayoutPx} pixels back from the first-pass reviewer and remove the review from the leaderboard?`}
               >
                 Bad review, remove {firstPassPayoutPx} px
               </ActionButton>
