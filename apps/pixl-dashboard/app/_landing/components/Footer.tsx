@@ -71,6 +71,11 @@ export function Footer() {
           .
         </p>
         <p className="mt-4 text-black/70">{t.hackClubMotto}</p>
+        {/* Legal line, kept in English in every locale. */}
+        <p className="mt-4 max-w-2xl text-sm text-black/60">
+          YSWS - Pixl is fiscally sponsored by The Hack Foundation (d.b.a. Hack Club), a 501(c)(3) nonprofit (EIN:
+          81-2908499).
+        </p>
       </motion.div>
 
       <motion.div
