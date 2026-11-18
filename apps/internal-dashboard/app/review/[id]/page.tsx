@@ -58,9 +58,7 @@ import {
   submitHardwareToRobert,
   resendToRobert,
 } from "@/app/actions";
-import { DoubleDipBanner } from "@/app/_components/DoubleDipBanner";
-import { FileTimeCard } from "@/app/_components/FileTimeCard";
-import { ReviewPipelineSteps } from "@/app/_components/ReviewPipelineSteps";
+import { DoubleDipBanner } from "@/app/_components/DoubleDipBanner";import { ReviewPipelineSteps } from "@/app/_components/ReviewPipelineSteps";
 import { SecondPassChecklist } from "@/app/_components/SecondPassChecklist";
 import { hackatimeCutoffUnix, hackatimeCutoffLabel } from "@/app/_generated/config";
 import { ReviewDetailTabs } from "@/app/_components/ReviewDetailTabs";
@@ -1170,8 +1168,6 @@ export default async function ReviewDetail({
           </p>
         )}
       </Card>
-
-      <FileTimeCard projectId={p.id} hasHackatime={hackatimeProjects.length > 0} />
 
       <Suspense fallback={null}>
         <Await promise={trustPromise}>

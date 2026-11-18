@@ -1039,7 +1039,9 @@ export type ProjectFileTime =
   | { ok: true; people: { name: string; report: FileTimeReport }[] }
   | { ok: false; error: string };
 
-export const loadProjectFileTime = guardedAction("loadProjectFileTime", "reviewer", async (access, projectId: number): Promise<ProjectFileTime> => {
+export const loadProjectFileTime = guardedAction("loadProjectFileTime", "reviewer", async (access, rawProjectId: number | string): Promise<ProjectFileTime> => {
+  // bigint ids reach the client as strings, so normalize before checking.
+  const projectId = Number(rawProjectId);
   if (!Number.isInteger(projectId) || projectId <= 0) return { ok: false, error: "Missing project id." };
   const project = await authorizeProjectAction(access, projectId, null, { allowOwn: true });
   const { data: row } = await db.from("projects").select("hackatime_projects").eq("id", projectId).maybeSingle();
