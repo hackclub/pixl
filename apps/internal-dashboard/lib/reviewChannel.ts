@@ -3,6 +3,7 @@ import { dmOrEmail } from "@/lib/notify";
 import { dmUser } from "@/lib/slack";
 import { pixorpheusUrl } from "@/lib/pixo";
 import { callPixo } from "@/lib/pixoCall";
+import { SLACK_TS_RE } from "@/lib/reviewThread";
 import { config } from "@/app/_generated/config";
 
 // Every review verdict (changes requested, first pass and final approval) is
@@ -96,16 +97,49 @@ export function ccReply(reviewerSlackId: string | null): string | null {
   return reviewerSlackId ? null : `cc <@${GABIN_SLACK_ID}>`;
 }
 
-async function postToReviewChannel(message: string, reply: string | null): Promise<boolean> {
+/** The review_audits verdict a posted announcement belongs to. */
+const AUDIT_VERDICT_FOR_KIND: Record<ReviewAnnouncementKind, string> = {
+  changes: "needs_changes",
+  first_pass: "first_pass_approved",
+  final: "approved",
+};
+
+/** Returns the Slack ts of the post, "" when it posted but the ts is unknown, null when it failed. */
+async function postToReviewChannel(message: string, reply: string | null): Promise<string | null> {
   const key = process.env.EXTERNAL_API_KEY;
-  if (!key) return false;
+  if (!key) return null;
   // Never throws; when Pixo is offline the caller falls back to DMs/email.
   const r = await callPixo("review-post", `${pixorpheusUrl()}/api/external/review-post`, {
     method: "POST",
     headers: { "x-api-key": key, "Content-Type": "application/json" },
     body: JSON.stringify(reply ? { message, reply } : { message }),
   });
-  return r.ok;
+  if (!r.ok) return null;
+  try {
+    const body = (await r.res?.json()) as { ts?: unknown } | undefined;
+    return typeof body?.ts === "string" ? body.ts : "";
+  } catch {
+    return "";
+  }
+}
+
+/** Remembers the post on the newest matching audit row so the review page can link to its thread. Best effort. */
+async function saveThreadTs(projectId: number, kind: ReviewAnnouncementKind, ts: string): Promise<void> {
+  if (!SLACK_TS_RE.test(ts)) return;
+  try {
+    const { data } = await db
+      .from("review_audits")
+      .select("id")
+      .eq("project_id", projectId)
+      .eq("verdict", AUDIT_VERDICT_FOR_KIND[kind])
+      .is("slack_thread_ts", null)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    const id = (data as { id: number }[] | null)?.[0]?.id;
+    if (id !== undefined) await db.from("review_audits").update({ slack_thread_ts: ts }).eq("id", id);
+  } catch (e) {
+    console.error("announceReview: could not save the thread link", (e as Error).message);
+  }
 }
 
 export interface ReviewAnnouncement {
@@ -162,7 +196,11 @@ export async function announceReview(a: ReviewAnnouncement): Promise<boolean> {
         for (const f of a.fallback) await dmOrEmail(f.userId, f.title, f.body);
         return false;
       }
-      if (await postToReviewChannel(message, ccReply(reviewer))) return true;
+      const postedTs = await postToReviewChannel(message, ccReply(reviewer));
+      if (postedTs !== null) {
+        if (postedTs) await saveThreadTs(a.projectId, a.kind, postedTs);
+        return true;
+      }
       failure = "Pixorpheus could not post it";
     }
   } catch (e) {

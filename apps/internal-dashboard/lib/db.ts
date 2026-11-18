@@ -1343,6 +1343,8 @@ export interface ReviewAuditRow {
   demo_seconds: number;
   total_seconds: number;
   created_at: string;
+  /** Slack ts of the #pixl-checkpoint post that announced this verdict, when there is one. */
+  slack_thread_ts?: string | null;
   player_name: string;
   project_name: string;
 }
