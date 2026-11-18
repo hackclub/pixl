@@ -79,6 +79,7 @@ import { slackHandle, dmUser, slackAvatars, DM_EXCLUDED_SLACK_IDS } from "@/lib/
 import { fetchHackatimeReport, fetchTrackedSecondsSince } from "@/lib/hackatime";
 import { AiProviderError, aiProviderMessage, generateAiReviewDraft, type AiReviewDraft } from "@/lib/aiReview";
 import { buildAiReviewInput } from "@/lib/aiReviewRun";
+import { fetchFileTime, type FileTimeReport } from "@/lib/hackatimeFiles";
 import { serializeGroups } from "@/lib/shopOptions";
 import { SHOP_REGIONS, type ShopRegion } from "@/lib/shopRegions";
 import { SHOP_CATEGORIES, type ShopCategory } from "@/lib/shopCategories";
@@ -1028,6 +1029,53 @@ export const generateAiReviewDraftAction = guardedAction("generateAiReviewDraftA
     console.error("generateAiReviewDraftAction:", e.message);
     return { ok: false, error: aiProviderMessage(e.status) };
   }
+});
+
+// Time per file for a project's linked Hackatime projects (lib/hackatimeFiles.ts),
+// for the "Time by file" card on the review page. On demand only: one request
+// per coding day, so it is never loaded with the page. Read-only; the maker's
+// Hackatime token stays on the server and only repo-relative paths come back.
+export type ProjectFileTime =
+  | { ok: true; people: { name: string; report: FileTimeReport }[] }
+  | { ok: false; error: string };
+
+export const loadProjectFileTime = guardedAction("loadProjectFileTime", "reviewer", async (access, projectId: number): Promise<ProjectFileTime> => {
+  if (!Number.isInteger(projectId) || projectId <= 0) return { ok: false, error: "Missing project id." };
+  const project = await authorizeProjectAction(access, projectId, null, { allowOwn: true });
+  const { data: row } = await db.from("projects").select("hackatime_projects").eq("id", projectId).maybeSingle();
+  const { data: collabs } = await db
+    .from("project_collaborators")
+    .select("user_id, hackatime_projects")
+    .eq("project_id", projectId)
+    .eq("status", "accepted");
+  const sources = [
+    { userId: project.user_id, projects: ((row?.hackatime_projects as string[] | null) ?? []) },
+    ...((collabs ?? []) as { user_id: string; hackatime_projects: string[] | null }[]).map((c) => ({
+      userId: c.user_id,
+      projects: c.hackatime_projects ?? [],
+    })),
+  ].filter((s) => s.projects.length > 0);
+  if (sources.length === 0) return { ok: false, error: "No Hackatime project is linked." };
+
+  const { data: users } = await db
+    .from("users")
+    .select("id, display_name, slack_id, hackatime_token")
+    .in("id", sources.map((s) => s.userId));
+  const byId = new Map(
+    ((users ?? []) as { id: string; display_name: string | null; slack_id: string | null; hackatime_token: string | null }[]).map(
+      (u) => [u.id, u] as const,
+    ),
+  );
+  const people: { name: string; report: FileTimeReport }[] = [];
+  let lastError = "";
+  for (const s of sources) {
+    const u = byId.get(s.userId);
+    const result = await fetchFileTime(u?.slack_id, u?.hackatime_token ?? null, s.projects);
+    if (result.ok) people.push({ name: u?.display_name ?? "Player", report: result.report });
+    else lastError = result.error;
+  }
+  if (people.length === 0) return { ok: false, error: lastError || "No data." };
+  return { ok: true, people };
 });
 
 // Two-pass review. A shipped project always gets a first pass from *some*
