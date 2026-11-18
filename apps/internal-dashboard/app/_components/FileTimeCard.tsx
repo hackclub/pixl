@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { loadProjectFileTime, type ProjectFileTime } from "@/app/actions";
 import { actionErrorMessage } from "@/app/_ui/actionError";
 import { Button, Card, CardHeader, Muted } from "@/app/_ui/ui";
@@ -16,7 +16,30 @@ function fmt(seconds: number): string {
   return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
 }
 
-export function FileTimeCard({ projectId, hasHackatime }: { projectId: number; hasHackatime: boolean }) {
+function Wrap({ embedded, children }: { embedded: boolean; children: ReactNode }) {
+  return embedded ? (
+    <div className="p-4">
+      <p className="hc-eyebrow mb-3">Time by file</p>
+      {children}
+    </div>
+  ) : (
+    <Card>
+      <CardHeader title="Time by file" icon="code" />
+      {children}
+    </Card>
+  );
+}
+
+export function FileTimeCard({
+  projectId,
+  hasHackatime,
+  embedded = false,
+}: {
+  projectId: number;
+  hasHackatime: boolean;
+  /** Inside the Hackatime tab: plain padded block instead of its own card. */
+  embedded?: boolean;
+}) {
   const [pending, start] = useTransition();
   const [data, setData] = useState<ProjectFileTime | null>(null);
   const [error, setError] = useState("");
@@ -33,8 +56,7 @@ export function FileTimeCard({ projectId, hasHackatime }: { projectId: number; h
   };
 
   return (
-    <Card>
-      <CardHeader title="Time by file" icon="code" />
+    <Wrap embedded={embedded}>
       {!hasHackatime ? (
         <Muted className="text-sm">No Hackatime project is linked.</Muted>
       ) : (
@@ -105,6 +127,6 @@ export function FileTimeCard({ projectId, hasHackatime }: { projectId: number; h
             })}
         </>
       )}
-    </Card>
+    </Wrap>
   );
 }

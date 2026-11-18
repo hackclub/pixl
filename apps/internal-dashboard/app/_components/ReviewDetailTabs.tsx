@@ -11,6 +11,7 @@ import type { YswsShip } from "@/lib/ysws";
 import { CommitList } from "@/app/_components/CommitList";
 import { renderMarkdown } from "@/lib/markdown";
 import { HackatimePanel } from "@/app/_components/HackatimePanel";
+import { FileTimeCard } from "@/app/_components/FileTimeCard";
 import { setJournalHours } from "@/app/actions";
 import { staffName } from "@/lib/staffName";
 import { parseAuditNote, type AuditHeader } from "@/lib/auditNote";
@@ -312,6 +313,9 @@ export function ReviewDetailTabs({
               <HackatimePanel report={report} />
             </div>
           ))}
+          <div className="border-t border-[var(--border)]">
+            <FileTimeCard projectId={projectId} hasHackatime embedded />
+          </div>
         </div>
       )}
 
