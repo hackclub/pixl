@@ -26,7 +26,7 @@ import { STAGE_HINT, STAGE_LABEL, STAGE_TONE, SafeLink, slackLink, usdBudget } f
 // These two ship in a plain envelope with no carrier tracking of their own,
 // so a printable address label (app/fulfillment/label/[id]) is how the
 // fulfiller actually gets it to the right mailbox.
-const LABEL_ELIGIBLE_ITEMS = new Set(["Random Desk Object", "Signed Org Photo"]);
+const LABEL_ELIGIBLE_ITEMS = new Set(["Random Desk Object", "Signed Org Photo", "Community Meme Pack (5-Pack)"]);
 
 function stageStamp(o: ShopOrderRow, s: OrderStatus): string | null {
   const v = { pending: o.created_at, claimed: o.claimed_at, ordered: o.ordered_at, credited: o.credited_at, shipped: o.shipped_at, done: o.done_at, cancelled: null }[s];
