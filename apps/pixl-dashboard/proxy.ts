@@ -103,11 +103,13 @@ export function createFixedWindowLimiter(limit: number, windowMs: number) {
 }
 
 const allowAuthCallback = createFixedWindowLimiter(60, 1000);
+const allowExpiredSession = createFixedWindowLimiter(20, 1000);
 
 export function proxy(req: NextRequest) {
   // Under a callback flood, return a cheap, uncached 429 *before* CSP
   // generation and before the callback route can call /auth/exchange.
-  if (req.nextUrl.pathname === "/api/auth/callback" && !allowAuthCallback()) {
+  if ((req.nextUrl.pathname === "/api/auth/callback" && !allowAuthCallback()) ||
+      (req.nextUrl.pathname === "/api/auth/expired" && !allowExpiredSession())) {
     return new NextResponse(null, {
       status: 429,
       headers: {
@@ -154,5 +156,6 @@ export const config = {
       ],
     },
     { source: "/api/auth/callback" },
+    { source: "/api/auth/expired" },
   ],
 };
