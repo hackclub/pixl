@@ -30,6 +30,17 @@
     "enterGame": "entrer dans le jeu",
     "openDash": "ouvrir le tableau de bord"
   },
+  "results": {
+    "eyebrow": "C'est dans la boîte",
+    "title": "Les résultats finaux",
+    "subtitle": "Merci à toutes celles et ceux qui ont construit quelque chose. Voici ce que vous avez accompli ensemble.",
+    "users": "joueurs inscrits",
+    "projectsCreated": "projets créés",
+    "projectsShipped": "projets livrés",
+    "hoursShipped": "heures livrées",
+    "rewards": "de récompenses boutique",
+    "unavailable": "Les chiffres arrivent, repasse dans un instant."
+  },
   "description": {
     "title": "C'est quoi Pixl ?",
     "body": "Il y a des siècles, Origin était la plus grande civilisation numérique jamais construite, jusqu'à ce que le Grand Static la brise en îles perdues dans le Néant. Son peuple a traversé les univers et a trouvé les Hack Clubbers, qui l'ont aidé à la reconstruire sous un nouveau nom : Pixl. Un YSWS sur le thème du pixel où chaque vrai projet que tu livres répare le monde et débloque de vraies récompenses.",

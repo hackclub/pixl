@@ -30,6 +30,17 @@
     "enterGame": "enter the game",
     "openDash": "open dashboard"
   },
+  "results": {
+    "eyebrow": "That's a wrap",
+    "title": "The final results",
+    "subtitle": "Thank you to everyone who built something. Here is what you made together.",
+    "users": "players signed up",
+    "projectsCreated": "projects created",
+    "projectsShipped": "projects shipped",
+    "hoursShipped": "hours shipped",
+    "rewards": "in shop rewards",
+    "unavailable": "The numbers are loading, check back in a moment."
+  },
   "description": {
     "title": "What is Pixl?",
     "body": "Centuries ago, Origin was the greatest digital civilization ever built, until the Great Static shattered it into islands lost in the Void. Its people crossed universes and found Hack Clubbers, who helped rebuild it under a new name: Pixl. A pixel-themed YSWS where every real project you ship repairs the world and unlocks real-world rewards.",

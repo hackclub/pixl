@@ -11,6 +11,8 @@ import { Menu } from "./components/Menu";
 import { LanguageSwitcher } from "./components/LanguageSwitcher";
 import { FontSwitcher } from "./components/FontSwitcher";
 import { Hero } from "./components/Hero";
+import { ResultsHero } from "./components/ResultsHero";
+import { DeadlineSwitch } from "./components/DeadlineSwitch";
 import { WTFISTHIS } from "./components/Description";
 import { Story } from "./components/Story";
 import { MainContent } from "./components/MainContent";
@@ -69,7 +71,7 @@ export async function LandingPage({ locale }: { locale: Locale }) {
           <Menu />
           <LanguageSwitcher />
           <FontSwitcher />
-          <Hero />
+          <DeadlineSwitch before={<Hero />} after={<ResultsHero />} />
           <WTFISTHIS />
           <Story />
           <MainContent />
