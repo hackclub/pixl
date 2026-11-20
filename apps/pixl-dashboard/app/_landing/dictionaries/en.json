@@ -30,16 +30,19 @@
     "enterGame": "enter the game",
     "openDash": "open dashboard"
   },
-  "results": {
-    "eyebrow": "That's a wrap",
-    "title": "The final results",
-    "subtitle": "Thank you to everyone who built something. Here is what you made together.",
-    "users": "players signed up",
-    "projectsCreated": "projects created",
-    "projectsShipped": "projects shipped",
-    "hoursShipped": "hours shipped",
-    "rewards": "in shop rewards",
-    "unavailable": "The numbers are loading, check back in a moment."
+  "ended": {
+    "heroTitle": "Pixl ended on November 20th, 2026",
+    "heroBody": "Thank you to everyone who built something.",
+    "bandTitle": "Pixl by the numbers",
+    "labels": {
+      "users": "players signed up",
+      "projectsCreated": "projects created",
+      "projectsShipped": "projects shipped",
+      "hoursShipped": "hours shipped",
+      "rewardsUsd": "in shop rewards"
+    },
+    "shopLine": "{rewardsUsd} in rewards ordered by our players",
+    "questLine": "{projectsShipped} projects shipped, {hoursShipped} hours of building"
   },
   "description": {
     "title": "What is Pixl?",

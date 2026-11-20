@@ -30,16 +30,19 @@
     "enterGame": "entrar no jogo",
     "openDash": "abrir painel"
   },
-  "results": {
-    "eyebrow": "Fim de jogo",
-    "title": "Os resultados finais",
-    "subtitle": "Obrigado a todos que construíram algo. Veja o que vocês conquistaram juntos.",
-    "users": "jogadores inscritos",
-    "projectsCreated": "projetos criados",
-    "projectsShipped": "projetos enviados",
-    "hoursShipped": "horas enviadas",
-    "rewards": "em recompensas da loja",
-    "unavailable": "Os números estão carregando, volte em instantes."
+  "ended": {
+    "heroTitle": "O Pixl terminou em 20 de novembro de 2026",
+    "heroBody": "Obrigado a todos que construíram algo.",
+    "bandTitle": "Pixl em números",
+    "labels": {
+      "users": "jogadores inscritos",
+      "projectsCreated": "projetos criados",
+      "projectsShipped": "projetos enviados",
+      "hoursShipped": "horas enviadas",
+      "rewardsUsd": "em recompensas da loja"
+    },
+    "shopLine": "{rewardsUsd} em recompensas pedidas pelos nossos jogadores",
+    "questLine": "{projectsShipped} projetos enviados, {hoursShipped} horas de construção"
   },
   "description": {
     "title": "O que é Pixl?",

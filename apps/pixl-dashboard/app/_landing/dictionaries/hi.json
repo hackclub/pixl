@@ -30,16 +30,19 @@
     "enterGame": "गेम में एंटर करो",
     "openDash": "डैशबोर्ड खोलो"
   },
-  "results": {
-    "eyebrow": "समाप्त",
-    "title": "अंतिम नतीजे",
-    "subtitle": "कुछ बनाने वाले सभी का धन्यवाद। देखिए आप सबने मिलकर क्या किया।",
-    "users": "साइन अप करने वाले खिलाड़ी",
-    "projectsCreated": "बनाए गए प्रोजेक्ट",
-    "projectsShipped": "शिप हुए प्रोजेक्ट",
-    "hoursShipped": "शिप किए गए घंटे",
-    "rewards": "शॉप रिवॉर्ड्स में",
-    "unavailable": "आँकड़े लोड हो रहे हैं, थोड़ी देर में फिर देखें।"
+  "ended": {
+    "heroTitle": "Pixl 20 नवंबर 2026 को खत्म हुआ",
+    "heroBody": "कुछ बनाने वाले सभी का धन्यवाद।",
+    "bandTitle": "Pixl आँकड़ों में",
+    "labels": {
+      "users": "साइन अप करने वाले खिलाड़ी",
+      "projectsCreated": "बनाए गए प्रोजेक्ट",
+      "projectsShipped": "शिप हुए प्रोजेक्ट",
+      "hoursShipped": "शिप किए गए घंटे",
+      "rewardsUsd": "शॉप रिवॉर्ड्स में"
+    },
+    "shopLine": "हमारे खिलाड़ियों ने {rewardsUsd} के रिवॉर्ड्स ऑर्डर किए",
+    "questLine": "{projectsShipped} प्रोजेक्ट शिप हुए, {hoursShipped} घंटे की बिल्डिंग"
   },
   "description": {
     "title": "Pixl क्या है?",

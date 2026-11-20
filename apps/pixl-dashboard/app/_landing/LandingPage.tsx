@@ -11,8 +11,8 @@ import { Menu } from "./components/Menu";
 import { LanguageSwitcher } from "./components/LanguageSwitcher";
 import { FontSwitcher } from "./components/FontSwitcher";
 import { Hero } from "./components/Hero";
-import { ResultsHero } from "./components/ResultsHero";
-import { DeadlineSwitch } from "./components/DeadlineSwitch";
+import { EndedProvider } from "./components/EndedProvider";
+import { StatsBand } from "./components/StatsBand";
 import { WTFISTHIS } from "./components/Description";
 import { Story } from "./components/Story";
 import { MainContent } from "./components/MainContent";
@@ -59,11 +59,13 @@ const landingRoot = [
   "[html:has(&)]:[--scroll-thumb:#16161e]",
 ].join(" ");
 
-export async function LandingPage({ locale }: { locale: Locale }) {
+// `previewEnded` forces the post-deadline state, for /results-preview only.
+export async function LandingPage({ locale, previewEnded = false }: { locale: Locale; previewEnded?: boolean }) {
   const dict = await getDictionary(locale);
   return (
     <LocaleProvider dict={dict} lang={locale}>
       <SmoothScroll>
+        <EndedProvider forceEnded={previewEnded}>
         <div
           lang={locale}
           className={`pixl-landing min-h-screen overflow-x-clip bg-[#F5EED2] font-pixel text-black antialiased ${landingRoot}`}
@@ -71,13 +73,15 @@ export async function LandingPage({ locale }: { locale: Locale }) {
           <Menu />
           <LanguageSwitcher />
           <FontSwitcher />
-          <DeadlineSwitch before={<Hero />} after={<ResultsHero />} />
+          <Hero />
+          <StatsBand />
           <WTFISTHIS />
           <Story />
           <MainContent />
           <FAQ />
           <Footer />
         </div>
+        </EndedProvider>
       </SmoothScroll>
       <EasterEgg />
     </LocaleProvider>
