@@ -26,10 +26,10 @@ describe("review detail claim behavior", () => {
     expect(part).toContain("reviewing_by, reviewing_at");
   });
 
-  test("new review action enforces scope, stage, ownership and assignment", () => {
+  test("new review action enforces scope, stage, collaboration and assignment", () => {
     const actions = source("actions.ts");
     const part = actions.slice(actions.indexOf("export const beginReviewClaim"), actions.indexOf("export const endReviewClaim"));
-    for (const key of ["guardedAction", "queueAllows(", "isOwnProject(", "firstPassAccess(", "claimReview("]) {
+    for (const key of ["guardedAction", "queueAllows(", "isCollaboratorProject(", "firstPassAccess(", "claimReview("]) {
       expect(part).toContain(key);
     }
   });
