@@ -17,6 +17,7 @@ import {
 } from "@/app/_ui/ui";
 import type { EligibilityResult } from "@/lib/eligibility/engine";
 import { SlackHandle } from "./SlackHandle";
+import { CopyEmail } from "./CopyEmail";
 import { FundingDisclosure } from "./Funding";
 import { ELIGIBILITY_HINT } from "@/lib/eligibility/format";
 import { EditFulfillmentInfo, FlagControls, OrderActions } from "./OrderActions";
@@ -116,7 +117,7 @@ function ShippingPanel({ order: o, buyer, country }: { order: ShopOrderRow; buye
       <DescriptionList
         items={[
           ["Name", <OnFile key="n" value={buyer.name} />],
-          ["Email", <OnFile key="e" value={buyer.email && <TextLink href={`mailto:${buyer.email}`} external>{buyer.email}</TextLink>} />],
+          ["Email", <OnFile key="e" value={buyer.email && <CopyEmail email={buyer.email} />} />],
         ]}
       />
     );
@@ -134,7 +135,7 @@ function ShippingPanel({ order: o, buyer, country }: { order: ShopOrderRow; buye
       <DescriptionList
         items={[
           ["Name", <OnFile key="n" value={buyer.name} />],
-          ["Email", <OnFile key="e" value={buyer.email && <TextLink href={`mailto:${buyer.email}`} external>{buyer.email}</TextLink>} />],
+          ["Email", <OnFile key="e" value={buyer.email && <CopyEmail email={buyer.email} />} />],
           ["Phone", <OnFile key="p" value={buyer.phone} />],
           [
             "Address",
