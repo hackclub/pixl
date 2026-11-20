@@ -58,8 +58,19 @@ import { OrderDetail } from "./OrderDetail";
 
 export const dynamic = "force-dynamic";
 
-const TAB_KEYS = ["pending", "claimed", "ordered", "credited", "shipped", "done", "cancelled", "flagged", "all", "leaderboard", "fulfillers"] as const;
+const TAB_KEYS = ["pending", "claimed", "fulfilled", "cancelled", "flagged", "all", "leaderboard", "fulfillers"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
+
+// The visible item pipeline is New -> Claimed -> Fulfilled. Legacy URLs from the
+// old six-stage pipeline (and legacy row statuses) fold into those groups.
+function normalizeTab(status: string | undefined): TabKey {
+  if (status === "ordered" || status === "credited") return "claimed";
+  if (status === "shipped" || status === "done") return "fulfilled";
+  return TAB_KEYS.includes(status as TabKey) ? (status as TabKey) : "pending";
+}
+
+const CLAIMED_STAGES = ["claimed", "ordered", "credited"];
+const FULFILLED_STAGES = ["done", "shipped"];
 
 // Lifetime shop P&L, fulfilled orders only. Both sides are scoped to the same
 // cohort (orders with an actual_cost_usd on file, i.e. credited or later), so
@@ -172,7 +183,7 @@ export default async function FulfillmentPage({
   const eligFilter = parseEligibilityFilter(elig);
   const verifyFilter = parseVerificationFilter(verify);
   const sortKey = parseSort(sort);
-  const active: TabKey = TAB_KEYS.includes(status as TabKey) ? (status as TabKey) : "pending";
+  const active: TabKey = normalizeTab(status);
   if (!canOpenFulfillmentTab(active, access)) redirect("/fulfillment");
   const keepMine = mine === "1";
   const query = (q ?? "").trim().slice(0, 100);
@@ -186,10 +197,16 @@ export default async function FulfillmentPage({
   // default New tab instead would always be empty, since claimed orders
   // move to their own stage.
   const loaded = !showingQueue ? [] : await listShopOrders(
-    mineOnly ? undefined : active === "all" ? undefined : active,
+    mineOnly ? undefined : active === "all" ? undefined : active === "claimed" || active === "fulfilled" ? undefined : active,
     pageSize + 1,
     {
-      ...(mineOnly ? { claimedBySlack: me, stages: ["claimed", "ordered", "credited", "shipped"] } : {}),
+      ...(mineOnly
+        ? { claimedBySlack: me, stages: CLAIMED_STAGES }
+        : active === "claimed"
+          ? { stages: CLAIMED_STAGES }
+          : active === "fulfilled"
+            ? { stages: FULFILLED_STAGES }
+            : {}),
       search: query,
       offset: pageIndex * pageSize,
       viewerSlack: me,
@@ -250,21 +267,15 @@ export default async function FulfillmentPage({
 
   const pipelineStages = counts ? [
     { key: "pending" as const, label: "New", count: counts.pending },
-    { key: "claimed" as const, label: "Claimed", count: counts.claimed },
-    { key: "ordered" as const, label: "Ordered", count: counts.ordered },
-    { key: "credited" as const, label: "Credited", count: counts.credited },
-    { key: "shipped" as const, label: "Shipped", count: counts.shipped },
-    { key: "done" as const, label: "Done", count: counts.done },
+    { key: "claimed" as const, label: "Claimed", count: counts.claimed + counts.ordered + counts.credited },
+    { key: "fulfilled" as const, label: "Fulfilled", count: counts.done + counts.shipped },
     { key: "cancelled" as const, label: "Cancelled", count: counts.cancelled },
   ] : [];
 
   const tabs: { key: TabKey; label: string; count?: number }[] = [
     { key: "pending", label: "New", count: counts?.pending },
-    { key: "claimed", label: "Claimed", count: counts?.claimed },
-    { key: "ordered", label: "Ordered", count: counts?.ordered },
-    { key: "credited", label: "Credited", count: counts?.credited },
-    { key: "shipped", label: "Shipped", count: counts?.shipped },
-    { key: "done", label: "Done", count: counts?.done },
+    { key: "claimed", label: "Claimed", count: counts ? counts.claimed + counts.ordered + counts.credited : undefined },
+    { key: "fulfilled", label: "Fulfilled", count: counts ? counts.done + counts.shipped : undefined },
     { key: "cancelled", label: "Cancelled", count: counts?.cancelled },
     { key: "flagged", label: "Over budget", count: counts?.flagged },
     { key: "all", label: "All", count: counts?.all },
@@ -309,9 +320,13 @@ export default async function FulfillmentPage({
       ? "Nothing in your queue"
       : active === "pending"
         ? "No orders waiting to be claimed"
-        : active === "flagged"
-          ? "Nothing over budget right now"
-          : "Nothing here yet";
+        : active === "claimed"
+          ? "Nothing claimed right now"
+          : active === "fulfilled"
+            ? "No fulfilled orders yet"
+            : active === "flagged"
+              ? "Nothing over budget right now"
+              : "Nothing here yet";
 
   return (
     <div className="flex flex-col gap-5">
@@ -337,6 +352,11 @@ export default async function FulfillmentPage({
             <ButtonLink href="/fulfillment/airbridge-preview" variant="outline" size="sm" icon="analytics">
               Airbridge preview
             </ButtonLink>
+            {access.isOwner && !showingFulfillers && (
+              <ButtonLink href="/fulfillment/grants" variant="outline" size="sm" icon="cloud-download">
+                Grant CSV
+              </ButtonLink>
+            )}
             {access.isOwner && !showingFulfillers && (
               <ButtonLink href={hrefFor({ status: "fulfillers" })} variant="outline" size="sm" icon="person">
                 Fulfillers

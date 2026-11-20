@@ -5,7 +5,7 @@ import { isSafeImageUrl } from "@/lib/safeUrl";
 import { Badge, Icon, type Tone } from "@/app/_ui/ui";
 import type { EligibilityResult } from "@/lib/eligibility/engine";
 import { ELIGIBILITY_HINT, ELIGIBILITY_SHORT } from "@/lib/eligibility/format";
-import { STAGE_LABEL, STAGE_TONE, ageLabel, lastUpdated, usdBudget } from "./shared";
+import { STAGE_LABEL, STAGE_TONE, ageLabel, lastUpdated, orderBudgetUsd } from "./shared";
 
 export function ItemThumb({ src, size = 40 }: { src: string | null | undefined; size?: number }) {
   const style = { width: size, height: size };
@@ -95,7 +95,7 @@ export function OrderList({
               </span>
             </span>
             <span className="fw-request-amount">
-              <strong className="tabular-nums">${usdBudget(o.price)}</strong>
+              <strong className="tabular-nums">${orderBudgetUsd(o)}</strong>
               <span className="tabular-nums">{o.price.toLocaleString()} px</span>
             </span>
             <span className="fw-request-meta">

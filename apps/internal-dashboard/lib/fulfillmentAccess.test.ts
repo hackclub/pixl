@@ -88,10 +88,9 @@ describe("fulfillment tabs and the actions panel", () => {
     expect(panel("claimed", false, { mine: false, hasBuyerSlack: false }).any).toBe(false);
     expect(panel("claimed", true, { mine: false }).primary).toBe(true);
   });
-  test("shipped: only owners can close it", () => {
-    expect(panel("shipped", false).primary).toBe(false);
-    expect(panel("shipped", true).primary).toBe(true);
-    expect(panel("shipped", false).flag).toBe(false);
+  test("shipped is terminal: no primary action, owners can still edit", () => {
+    expect(panel("shipped", false)).toMatchObject({ primary: false, any: false });
+    expect(panel("shipped", true)).toMatchObject({ primary: false, edit: true });
   });
   test("someone else's claimed order is read-only for a fulfiller", () => {
     const p = panel("ordered", false, { mine: false, hasBuyerSlack: false });

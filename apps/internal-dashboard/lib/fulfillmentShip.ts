@@ -55,6 +55,66 @@ export async function settleShipment(
   }) as Promise<ShipmentResult | null>;
 }
 
+// The single item fulfillment step: claimed/ordered/credited -> done, with the
+// HCB transaction, real cost and (optional) tracking recorded. Tracking is not
+// a separate stage: grants, software and hand-delivered items simply have none.
+// Same atomic guarantees as settleShipment: the status transition, wallet
+// credit, ledger row and payout stamp commit together or not at all.
+export async function settleItemFulfillment(
+  orderId: number,
+  fields: { tracking: string; hcbLink: string; actualCostUsd: number },
+  fulfillerSlackId: string,
+  fulfillerName: string,
+  pixels: number,
+  client: typeof sql = sql,
+  // Owners may fulfil their own order; everyone else is refused below.
+  allowOwnOrder = false,
+): Promise<ShipmentResult | null> {
+  const { tracking, hcbLink, actualCostUsd } = fields;
+  if (!Number.isSafeInteger(orderId) || orderId <= 0 ||
+      !Number.isSafeInteger(pixels) || pixels <= 0 ||
+      !Number.isFinite(actualCostUsd) || actualCostUsd < 0 ||
+      !fulfillerSlackId || !hcbLink) throw new Error("Invalid item fulfillment");
+
+  return client.begin(async (tx) => {
+    const fulfillers = await tx`select id from users where slack_id = ${fulfillerSlackId} for update`;
+    if (fulfillers.length !== 1) throw new Error("Fulfiller must have a Pixl player account before fulfilling");
+
+    const fulfilled = await tx`
+      update shop_orders as o
+      set status = 'done',
+          ordered_at = coalesce(o.ordered_at, now()),
+          credited_at = coalesce(o.credited_at, now()),
+          shipped_at = case when ${tracking} <> '' then now() else o.shipped_at end,
+          done_at = now(),
+          fulfilled_at = now(),
+          fulfilled_by = ${fulfillerName},
+          hcb_link = ${hcbLink},
+          actual_cost_usd = ${actualCostUsd},
+          tracking = ${tracking},
+          fulfillment_pixels_paid = ${pixels}
+      from users as buyer
+      where o.id = ${orderId}
+        and o.status in ('claimed', 'ordered', 'credited')
+        and o.claimed_by_slack = ${fulfillerSlackId}
+        and buyer.id = o.user_id
+        and (${allowOwnOrder} or buyer.slack_id is distinct from ${fulfillerSlackId})
+      returning o.user_id, o.item_name`;
+    if (!fulfilled.length) return null;
+
+    const credited = await tx`
+      update users set pixels = pixels + ${pixels}
+      where id = ${fulfillers[0]!.id}
+      returning id`;
+    if (credited.length !== 1) throw new Error("Fulfiller wallet unavailable");
+
+    await tx`insert into pixel_transactions (user_id, project_id, amount, hours, reason, created_by)
+      values (${fulfillers[0]!.id}, null, ${pixels}, 0, 'fulfillment_payout', 'payout system')`;
+
+    return { userId: String(fulfilled[0]!.user_id), itemName: String(fulfilled[0]!.item_name) };
+  }) as Promise<ShipmentResult | null>;
+}
+
 // Grants skip ordered/credited/shipped: one transaction takes a claimed grant
 // order straight to done, stamps every stage at the same instant (so the
 // timeline and reports that read ordered_at/credited_at/shipped_at stay

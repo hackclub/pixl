@@ -69,14 +69,16 @@ export interface VisibleOrderActions {
 }
 
 export function visibleOrderActions(c: OrderActionContext): VisibleOrderActions {
-  const actionable = c.status !== "done" && c.status !== "cancelled";
+  // shipped is a legacy terminal state (tracking sent, payout paid) and done is
+  // terminal: neither has a queue action left. Only pending, claimed and legacy
+  // ordered/credited orders can still be worked.
+  const actionable = c.status !== "shipped" && c.status !== "done" && c.status !== "cancelled";
   let primary = false;
   if (actionable) {
-    if (c.status === "shipped") primary = c.canManage;
-    else if (!c.mine && c.status !== "pending") primary = c.canManage;
+    if (!c.mine && c.status !== "pending") primary = c.canManage;
     else primary = true;
   }
-  const flag = actionable && c.status !== "shipped" && (c.mine || c.canManage) && (!c.flagged || c.canManage);
+  const flag = actionable && (c.mine || c.canManage) && (!c.flagged || c.canManage);
   const contact = actionable && c.hasBuyerSlack;
   const edit = c.canManage && c.status !== "pending" && c.status !== "claimed" && c.status !== "cancelled";
   return { primary, flag, contact, edit, any: primary || flag || contact || edit };

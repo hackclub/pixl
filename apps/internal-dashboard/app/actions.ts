@@ -1,7 +1,7 @@
 "use server";
 
 import { claimOrderWithFunding, refreshCommitmentAmount } from "@/lib/eligibility/commit";
-import { settleGrant, settleShipment } from "@/lib/fulfillmentShip";
+import { settleGrant, settleItemFulfillment } from "@/lib/fulfillmentShip";
 import { fulfillmentPayoutPixels, isGrantOrder, GRANT_FULFILLMENT_PAYOUT_PIXELS } from "@/lib/fulfillmentGrant";
 import { manualShipsRefresh, shipsProvider } from "@/lib/eligibility/ships";
 import { FUNDING_ORDER_PREFIX } from "@/lib/eligibility/policy";
@@ -5888,60 +5888,38 @@ async function logOrderAction(
   await logModAction(userId, action, `order #${orderId} "${itemName}": ${detail}`, by);
 }
 
-// Claimed -> ordered: only now has the fulfiller actually purchased the item.
-// A claim-only reservation never sets ordered_at or sends an order-placed alert.
-export const markOrderPlaced = guardedAction("markOrderPlaced", "fulfiller", async (access, formData: FormData): Promise<void> => {
+// Flat pixel payout to whoever fulfils an order: 6 pixels for an item, 2 for a
+// grant (fulfillmentPayoutPixels in lib/fulfillmentGrant.ts). Credited by
+// settleItemFulfillment / settleGrant in lib/fulfillmentShip.ts.
+
+// Whether an order uses the grant flow and payout: its item is in the grants
+// category, or a fulfiller converted this one order (shop_orders.is_grant).
+async function orderIsGrant(order: { item_id?: number | null; is_grant?: boolean | null }): Promise<boolean> {
+  if (order.is_grant === true) return true;
+  if (order.item_id == null) return false;
+  const { data } = await db.from("shop_items").select("category").eq("id", order.item_id).maybeSingle();
+  return isGrantOrder({ item_category: (data?.category as string | null | undefined) ?? null });
+}
+
+// One terminal step for an item: the fulfiller bought it, recorded the HCB
+// transaction and real cost, and optionally the tracking number. Claimed (or
+// a legacy ordered/credited order) goes straight to done - there is no separate
+// placed/credited/shipped/done ceremony and no "mark delivered" click.
+// settleItemFulfillment closes the order and pays the fulfiller atomically.
+export const fulfillOrder = guardedAction("fulfillOrder", "fulfiller", async (access, formData: FormData): Promise<void> => {
   const id = Number(formData.get("id") ?? 0);
   if (!Number.isSafeInteger(id) || id <= 0) return;
-  const { data: order } = await db.from("shop_orders")
-    .select("user_id, item_name, status, claimed_by_slack").eq("id", id).maybeSingle();
-  if (!order || order.status !== "claimed" || !ownsOrder(access, order.claimed_by_slack as string)) {
-    revalidatePath("/fulfillment");
-    return;
-  }
-  if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId, access.isOwner)) {
-    throw new Error("You can't fulfill your own shop order.");
-  }
-  const { data: changed, error } = await db.from("shop_orders")
-    .update({ status: "ordered", ordered_at: new Date().toISOString() })
-    .eq("id", id)
-    .eq("status", "claimed")
-    .eq("claimed_by_slack", access.session.slackId)
-    .select("id").maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!changed) { revalidatePath("/fulfillment"); return; }
-  const placedBody = `Your "${order.item_name}" order has been placed and is being fulfilled. We'll let you know when it ships.`;
-  await db.from("notifications").insert({
-    user_id: order.user_id,
-    title: "Order placed! 📦",
-    body: placedBody,
-  });
-  await logOrderAction(id, "order_placed", "order placed after reservation", actorName(access), order);
-  revalidatePath("/fulfillment");
-});
-
-// HCB credited the card and the fulfiller uploaded the receipt: ordered ->
-// credited (paid, not shipped yet). Only the claiming fulfiller can advance it.
-// The HCB link and actual cost are required here, not at claim time - the
-// transaction doesn't exist yet when an order is merely claimed, it exists
-// once HCB has actually credited the card.
-export const markOrderCredited = guardedAction("markOrderCredited", "fulfiller", async (access, formData: FormData): Promise<void> => {
-  const id = Number(formData.get("id") ?? 0);
-  if (!id) return;
   // The transaction or grant this order was actually paid from - required so
-  // every fulfilled order has a paper trail back to real HCB spend. Same
-  // http(s)-only check the rest of the dashboard uses for a
-  // database-controlled URL it's about to render as a link (see isSafeUrl).
+  // every fulfilled order has a paper trail back to real HCB spend.
   const hcbLink = String(formData.get("hcbLink") ?? "").trim().slice(0, 300);
-  // What it actually cost, in real dollars - not just the pixel price /
-  // derived budget ceiling.
+  // What it actually cost, in real dollars - not just the pixel price / budget.
   const actualCostUsd = Math.round(Number(formData.get("actualCostUsd") ?? NaN) * 100) / 100;
-  // Optional: where this was actually bought from. Kept on the item itself
-  // (shop_items.price_source_url, via item_id) rather than just this order,
-  // so the next fulfiller sourcing the same item/region sees a link that's
-  // known to actually work instead of a stale one - see the fulfillment
-  // page's "keep replacing the URLs as we fulfil" note.
+  // Optional: where this was actually bought from. Kept on the item itself so
+  // the next fulfiller sourcing the same item/region sees a known-working link.
   const sourceUrl = String(formData.get("sourceUrl") ?? "").trim().slice(0, 500);
+  // Optional: shipping is not a separate stage. If there is a number, record
+  // and DM it; grants, software and hand-delivered items simply have none.
+  const tracking = String(formData.get("tracking") ?? "").trim().slice(0, 120);
   if (
     !hcbLink ||
     !isSafeUrl(hcbLink) ||
@@ -5954,34 +5932,34 @@ export const markOrderCredited = guardedAction("markOrderCredited", "fulfiller",
   }
   const { data: order } = await db
     .from("shop_orders")
-    .select("status, claimed_by_slack, item_id, user_id")
+    .select("user_id, item_name, status, claimed_by_slack, item_id, is_grant")
     .eq("id", id)
     .maybeSingle();
-  if (!order || order.status !== "ordered" || !ownsOrder(access, order.claimed_by_slack)) {
+  const open = order?.status === "claimed" || order?.status === "ordered" || order?.status === "credited";
+  if (!order || !open || !ownsOrder(access, order.claimed_by_slack as string)) {
     revalidatePath("/fulfillment");
     return;
   }
-  // Self-dealing, same as claimOrder/shipOrder/reassignOrder: checked on every
-  // step, not just the claim, so no path (an old claim, a direct form post)
-  // lets someone credit their own order.
+  // A claimed grant has its own one-step form (send the HCB invite); a direct
+  // post must not silently treat it as an item purchase.
+  if (order.status === "claimed" && (await orderIsGrant(order))) {
+    throw new Error("This order is a grant. Send the HCB grant instead.");
+  }
+  // Owners may fulfil their own order (upstream policy); everyone else cannot.
   if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId, access.isOwner)) {
     throw new Error("You can't fulfill your own shop order.");
   }
-  const { data: changed, error } = await db
-    .from("shop_orders")
-    .update({
-      status: "credited",
-      credited_at: new Date().toISOString(),
-      hcb_link: hcbLink,
-      actual_cost_usd: actualCostUsd,
-    })
-    .eq("id", id)
-    .eq("status", "ordered")
-    .eq("claimed_by_slack", access.session.slackId)
-    .select("id")
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!changed) { revalidatePath("/fulfillment"); return; }
+  const payoutPixels = fulfillmentPayoutPixels({ is_grant: await orderIsGrant(order) });
+  const settled = await settleItemFulfillment(
+    id,
+    { tracking, hcbLink, actualCostUsd },
+    access.session.slackId,
+    actorName(access),
+    payoutPixels,
+    undefined,
+    access.isOwner,
+  );
+  if (!settled) { revalidatePath("/fulfillment"); return; }
   if ((await refreshCommitmentAmount(id, { ships: shipsProvider() })) === "failed") {
     await logOrderAction(id, "ledger_refresh_failed", "funding ledger amount could not be updated", actorName(access));
   }
@@ -5990,88 +5968,36 @@ export const markOrderCredited = guardedAction("markOrderCredited", "fulfiller",
       .from("shop_items")
       .update({ price_source_url: sourceUrl })
       .eq("id", order.item_id);
-    if (sourceErr) console.error("markOrderCredited (source url)", sourceErr.message);
+    if (sourceErr) console.error("fulfillOrder (source url)", sourceErr.message);
   }
-  await logOrderAction(id, "order_credited", "HCB credited the card", actorName(access));
-  revalidatePath("/fulfillment");
-});
 
-// Flat pixel payout to whoever fulfils an order: 6 pixels for an item, 2 for a
-// grant (fulfillmentPayoutPixels in lib/fulfillmentGrant.ts). Credited by
-// settleShipment / settleGrant in lib/fulfillmentShip.ts.
-
-// Whether an order uses the grant flow and payout: its item is in the grants
-// category, or a fulfiller converted this one order (shop_orders.is_grant).
-async function orderIsGrant(order: { item_id?: number | null; is_grant?: boolean | null }): Promise<boolean> {
-  if (order.is_grant === true) return true;
-  if (order.item_id == null) return false;
-  const { data } = await db.from("shop_items").select("category").eq("id", order.item_id).maybeSingle();
-  return isGrantOrder({ item_category: (data?.category as string | null | undefined) ?? null });
-}
-
-// The order shipped: credited -> shipped with a tracking number. The number is
-// DM'd to the buyer by Pixo and also lands as an in-game notification. Only the
-// claiming fulfiller can ship it, and tracking is required.
-export const shipOrder = guardedAction("shipOrder", "fulfiller", async (access, formData: FormData): Promise<void> => {
-  const id = Number(formData.get("id") ?? 0);
-  const tracking = String(formData.get("tracking") ?? "").trim().slice(0, 120);
-  if (!id) return;
-  if (!tracking) {
-    revalidatePath("/fulfillment");
-    return;
-  }
-  const { data: order } = await db
-    .from("shop_orders")
-    .select("user_id, item_name, status, claimed_by_slack, item_id, is_grant")
-    .eq("id", id)
-    .maybeSingle();
-  if (!order || order.status !== "credited" || !ownsOrder(access, order.claimed_by_slack)) {
-    revalidatePath("/fulfillment");
-    return;
-  }
-  // Self-dealing: shipping your own order would also pay you the fulfillment
-  // pixels on it. Refused even if it somehow got claimed/reassigned to you.
-  if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId, access.isOwner)) {
-    throw new Error("You can't fulfill your own shop order.");
-  }
-  // 6 pixels for an item, 2 for a grant that was already past "claimed" when
-  // the grant flow shipped (see fulfillmentPayoutPixels).
-  const payoutPixels = fulfillmentPayoutPixels({ is_grant: await orderIsGrant(order) });
-  // Database transaction rechecks ownership and credits the fulfiller
-  // atomically with the shipment status transition.
-  const settled = await settleShipment(
-    id, tracking, access.session.slackId, actorName(access), payoutPixels,
-    undefined, access.isOwner,
-  );
-  if (!settled) { revalidatePath("/fulfillment"); return; }
-
-  // Slack renders <#ID> as a channel link in the DM, but the in-app
-  // notification is plain text, so it names the channel instead.
   const showOffLine = "Show it off in <#C07UMRYJ1LH> when it arrives, we'd love to see it! 🎉";
   const showOffLineInApp = "Show it off in #treasure-cove when it arrives, we'd love to see it! 🎉";
   await db.from("notifications").insert({
     user_id: order.user_id,
-    title: "Order shipped! 📦",
-    body: `Your "${order.item_name}" order shipped. Tracking: ${tracking}\n\n${showOffLineInApp}`,
+    title: tracking ? "Order shipped! 📦" : "Order fulfilled! 📦",
+    body: tracking
+      ? `Your "${order.item_name}" order shipped. Tracking: ${tracking}\n\n${showOffLineInApp}`
+      : `Your "${order.item_name}" order is fulfilled.`,
   });
-  // DM the tracking number to the buyer through Pixo. Best-effort , a missing
-  // Slack link shouldn't block shipping, and the in-game notification still lands.
-  const { data: buyer } = await db
-    .from("users")
-    .select("slack_id")
-    .eq("id", order.user_id)
-    .maybeSingle();
-  if (buyer?.slack_id) {
-    try {
-      await dmUser(
-        buyer.slack_id,
-        `📦 Your "${order.item_name}" order shipped! Tracking number: ${tracking}\n\n${showOffLine}`,
-      );
-    } catch (err) {
-      console.error("shipOrder DM", err instanceof Error ? err.message : err);
+  if (tracking) {
+    const { data: buyer } = await db
+      .from("users")
+      .select("slack_id")
+      .eq("id", order.user_id)
+      .maybeSingle();
+    if (buyer?.slack_id) {
+      try {
+        await dmUser(
+          buyer.slack_id,
+          `📦 Your "${order.item_name}" order shipped! Tracking number: ${tracking}\n\n${showOffLine}`,
+        );
+      } catch (err) {
+        console.error("fulfillOrder DM", err instanceof Error ? err.message : err);
+      }
     }
   }
-  await logOrderAction(id, "order_shipped", `tracking ${tracking}`, actorName(access), order);
+  await logOrderAction(id, "order_fulfilled", tracking ? `tracking ${tracking}` : "fulfilled without tracking", actorName(access), order);
 
   try {
     await dmUser(
@@ -6079,7 +6005,7 @@ export const shipOrder = guardedAction("shipOrder", "fulfiller", async (access, 
       `You earned ${payoutPixels} pixels for fulfilling "${settled.itemName}". Thanks for keeping orders moving!`,
     );
   } catch (err) {
-    console.error("shipOrder (fulfillment payout DM)", err instanceof Error ? err.message : err);
+    console.error("fulfillOrder (fulfillment payout DM)", err instanceof Error ? err.message : err);
   }
   revalidatePath("/fulfillment");
 });
@@ -6192,29 +6118,13 @@ export const convertOrderToGrant = guardedAction("convertOrderToGrant", "fulfill
   revalidatePath("/fulfillment");
 });
 
-// Close a shipped order out: shipped -> done, once the buyer has it in hand.
-// Any super can mark it done (it's the final administrative close, not a queue
-// advance), and it's a no-op on anything that isn't shipped.
-export const markOrderDone = guardedAction("markOrderDone", "owner", async (access, formData: FormData): Promise<void> => {
-  const id = Number(formData.get("id") ?? 0);
-  if (!id) return;
-  const { error } = await db
-    .from("shop_orders")
-    .update({ status: "done", done_at: new Date().toISOString() })
-    .eq("id", id)
-    .eq("status", "shipped");
-  if (error) throw new Error(error.message);
-  await logOrderAction(id, "order_done", "closed out as delivered", actorName(access));
-  revalidatePath("/fulfillment");
-});
-
 // Corrects an already-claimed order's fulfillment paper trail - the HCB link,
 // actual cost, and tracking number - after the fact. Every other action here
 // only ever writes these once, at the stage they're first collected, and
 // stops being reachable once an order is done/cancelled; this is the one
 // escape hatch for fixing a typo'd link or a wrong cost after the fact,
 // deliberately not gated by status (works on ordered/credited/shipped/done
-// alike). Owner-level, same as reassign/cancel/mark done above - this rewrites
+// alike). Owner-level, same as reassign/cancel above - this rewrites
 // financial records, not just queue state.
 export const updateOrderFulfillmentInfo = guardedAction("updateOrderFulfillmentInfo", "owner", async (access, formData: FormData): Promise<void> => {
   const id = Number(formData.get("id") ?? 0);
@@ -6222,7 +6132,7 @@ export const updateOrderFulfillmentInfo = guardedAction("updateOrderFulfillmentI
   const hcbLink = String(formData.get("hcbLink") ?? "").trim().slice(0, 300);
   const actualCostUsd = Math.round(Number(formData.get("actualCostUsd") ?? NaN) * 100) / 100;
   const tracking = String(formData.get("tracking") ?? "").trim().slice(0, 120);
-  // Same optional item-source-url handling as markOrderCredited above - this
+  // Same optional item-source-url handling as fulfillOrder above - this
   // is the escape hatch for fixing/updating it after the fact too.
   const sourceUrl = String(formData.get("sourceUrl") ?? "").trim().slice(0, 500);
   if (
