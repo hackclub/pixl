@@ -19,6 +19,7 @@ import {
   projectPayoutPx,
   hackatimeCutoffUnix,
   hackatimeCutoffLabel,
+  submissionDeadline,
 } from "./_generated/config";
 import { orValue } from "@/lib/pgCompat";
 import {
@@ -1454,10 +1455,17 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
     const notifySlack = takesAssignment
       ? access.session.slackId
       : activeAssignee || (formData.get("notifyOnResubmit") === "1" ? access.session.slackId : "");
+    // A project shipped after the deadline is the one post-deadline resubmit
+    // (the server refuses any other ship), so another request for changes on it
+    // is final: the project is rejected for good instead of bounced back.
+    const finalRejection = !!current.shipped_at && new Date(current.shipped_at as string) > submissionDeadline;
     const { data: project, error } = await db
       .from("projects")
       .update({
         status: "needs_changes",
+        ...(finalRejection
+          ? { rejected_at: new Date().toISOString(), reject_reason: `Still needed changes after the final resubmit: ${note}`.slice(0, 1000), reject_by: reviewer }
+          : {}),
         review_note: note,
         review_note_by: reviewer,
         reviewing_by: "",
@@ -1519,8 +1527,12 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
         await dmChangesHeld(access.session.slackId, project.name, 0);
       }
     }
-    const changesOwnerBody = `"${project.name}" needs changes before it can be approved , ${playerFacingReviewer}:\n\n${note}\n\nUpdate your project and ship it again.`;
-    const changesCollabBody = `"${project.name}" needs changes before it can be approved , ${playerFacingReviewer}:\n\n${note}`;
+    const changesOwnerBody = finalRejection
+      ? `"${project.name}" still doesn't meet the standards after your final resubmit, so it was permanently rejected , ${playerFacingReviewer}:\n\n${note}\n\nSubmissions are closed, so it can't be shipped again.`
+      : `"${project.name}" needs changes before it can be approved , ${playerFacingReviewer}:\n\n${note}\n\nUpdate your project and ship it again.`;
+    const changesCollabBody = finalRejection
+      ? `"${project.name}" still doesn't meet the standards after the final resubmit, so it was permanently rejected , ${playerFacingReviewer}:\n\n${note}`
+      : `"${project.name}" needs changes before it can be approved , ${playerFacingReviewer}:\n\n${note}`;
     const changesCollaboratorIds = await acceptedCollaboratorUserIds(projectId);
     await notifyInApp(project.user_id, "Changes requested", changesOwnerBody);
     for (const collaboratorId of changesCollaboratorIds)

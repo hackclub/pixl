@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { submissionsClosedFor } from "../submissionDeadline.js";
+import { resubmitWindowOpen, submissionsClosedFor } from "../submissionDeadline.js";
+import { submissionDeadline } from "../config.generated.js";
 import { db } from "../db/client.js";
 import { runPrecheck, shouldPrecheck } from "../precheck/run.js";
 import { checkReadmeLength } from "../precheck/readmeLength.js";
@@ -652,12 +653,30 @@ router.post("/api/projects/:id/ship", validate({ query: v.noQuery, params: param
     return res.status(400).json({ ok: false, error: "project_banned" });
 
   // Submissions closed on config.submissionDeadline; the only ship still
-  // allowed is the one resubmit a needs_changes project earns.
-  if (submissionsClosedFor(project))
+  // allowed is the one resubmit a project earns when changes were requested in
+  // the 24h before the deadline, up to 48h after it. The request time is the
+  // newest needs_changes review_audits row, looked up only when it can matter.
+  let changesRequestedAt: string | null = null;
+  if (new Date() > submissionDeadline && project.status === "needs_changes" && resubmitWindowOpen()) {
+    const { data: audit, error: auditLookupError } = await db
+      .from("review_audits")
+      .select("created_at")
+      .eq("project_id", id)
+      .eq("verdict", "needs_changes")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (auditLookupError) {
+      console.error("[projects] changes-requested lookup failed", auditLookupError.message);
+      return res.status(500).json({ ok: false });
+    }
+    changesRequestedAt = (audit?.created_at as string | undefined) ?? null;
+  }
+  if (submissionsClosedFor(project, new Date(), submissionDeadline, changesRequestedAt))
     return res.status(403).json({
       ok: false,
       error: "submissions_closed",
-      message: "Submissions have closed. Only projects where a reviewer requested changes can be resubmitted, once.",
+      message: "Submissions have closed. Only projects where a reviewer requested changes in the last 24 hours before the deadline can be resubmitted, once, within 48 hours after it.",
     });
 
   const shippable = ["draft", "needs_changes", "approved"];
