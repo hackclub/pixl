@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { submissionsClosedFor } from "../submissionDeadline.js";
+import { projectCreationClosed, submissionsClosedFor } from "../submissionDeadline.js";
 import { submissionDeadline } from "../config.generated.js";
 import { db } from "../db/client.js";
 import { runPrecheck, shouldPrecheck } from "../precheck/run.js";
@@ -517,6 +517,7 @@ router.post("/api/projects", validate({ query: v.noQuery, body: projectBody }), 
   const session = req.session;
   if (!session) return res.status(401).json({ ok: false });
 
+  if (projectCreationClosed()) return res.status(403).json({ ok: false, error: "project_creation_closed" });
   const parsed = parseProjectBody(req.body);
   if (parsed.error !== undefined)
     return res.status(400).json({ ok: false, error: parsed.error });

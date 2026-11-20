@@ -9,6 +9,11 @@ export const RESUBMIT_WINDOW_HOURS = 48;
 /** Changes requested after the deadline: the resubmit window closes this long after the request. */
 export const LATE_RESUBMIT_WINDOW_HOURS = 24;
 
+/** Once submissions close, no new project can be created (manually or by import). */
+export function projectCreationClosed(now: Date = new Date(), deadline: Date = submissionDeadline): boolean {
+  return now > deadline;
+}
+
 type ShipState = {
   status?: unknown;
   rejected_at?: unknown;

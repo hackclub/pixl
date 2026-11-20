@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { submissionsClosedFor } from "./submissionDeadline.js";
+import { projectCreationClosed, submissionsClosedFor } from "./submissionDeadline.js";
 
 const deadline = new Date("2026-11-20T23:59:59Z");
 const before = new Date("2026-11-20T12:00:00Z");
@@ -67,5 +67,13 @@ describe("submissionsClosedFor", () => {
   test("refuses a rejected project even if it looks like needs_changes", () => {
     const p = { ...needsChanges, rejected_at: "2026-11-15T00:00:00Z" };
     expect(submissionsClosedFor(p, after, deadline, lastDay)).toBe(true);
+  });
+});
+
+describe("projectCreationClosed", () => {
+  test("new projects are allowed up to the deadline and refused after", () => {
+    expect(projectCreationClosed(before, deadline)).toBe(false);
+    expect(projectCreationClosed(deadline, deadline)).toBe(false);
+    expect(projectCreationClosed(after, deadline)).toBe(true);
   });
 });

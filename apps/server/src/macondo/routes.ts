@@ -4,6 +4,7 @@ import { addNotification } from "../routes/notifications.js";
 import { parseProjectBody, toPlayerProject } from "../routes/projects.js";
 import { allowedImageUrl, demoteDisallowedMarkdownImages } from "../http/imageUrls.js";
 import { macondoProjectForSlackId, macondoProjectsForSlackId } from "./client.js";
+import { projectCreationClosed } from "../submissionDeadline.js";
 import { z } from "zod";
 import { validate, v } from "../http/validate.js";
 
@@ -77,6 +78,7 @@ router.get("/api/projects/macondo-available", async (req, res) => {
 router.post("/api/projects/import-macondo", validate({ query: v.noQuery, body: z.object({ ref: v.num }) }), async (req, res) => {
   const session = req.session;
   if (!session) return res.status(401).json({ ok: false });
+  if (projectCreationClosed()) return res.status(403).json({ ok: false, error: "project_creation_closed" });
 
   const projectId = Number(req.body?.ref);
   if (!Number.isSafeInteger(projectId) || projectId <= 0)

@@ -5,6 +5,7 @@ import { yswsShipForSlackId, yswsShipsForSlackId } from "./archive.js";
 import { availableShips, collectTaken, nameFromShip } from "./imports.js";
 import { parseProjectBody, toPlayerProject } from "../routes/projects.js";
 import { allowedImageUrl } from "../http/imageUrls.js";
+import { projectCreationClosed } from "../submissionDeadline.js";
 import { z } from "zod";
 import { validate, v } from "../http/validate.js";
 
@@ -67,6 +68,7 @@ router.post("/api/projects/import-ysws", validate({ query: v.noQuery, body: z.ob
   const session = req.session;
   if (!session) return res.status(401).json({ ok: false });
 
+  if (projectCreationClosed()) return res.status(403).json({ ok: false, error: "project_creation_closed" });
   const entryId = String(req.body?.entryId ?? "").trim();
   if (entryId === "") return res.status(400).json({ ok: false, error: "entry_required" });
 
