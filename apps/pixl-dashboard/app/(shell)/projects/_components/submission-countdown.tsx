@@ -22,9 +22,10 @@ export function SubmissionCountdown({ deadline, label, className }: { deadline: 
   if (now && !left) {
     return (
       <Notice tone="bad" className={className}>
-        <strong>Submissions closed.</strong> The deadline was {label}. If a reviewer requested changes on a project you
-        submitted in the 24 hours before the deadline, you can resubmit it once, up to 48 hours after the deadline. If it still doesn&apos;t meet the standards after
-        that, it is permanently rejected.
+        <strong>Submissions closed.</strong> The deadline was {label}. If a reviewer requested changes in the 24 hours
+        before the deadline, you can resubmit once, up to 48 hours after the deadline. If they request changes after the
+        deadline, you have 24 hours from that request. If it still doesn&apos;t meet the standards after your
+        resubmit, it is permanently rejected.
       </Notice>
     );
   }
@@ -33,8 +34,8 @@ export function SubmissionCountdown({ deadline, label, className }: { deadline: 
       <strong>You can&apos;t submit projects after {label}.</strong>{" "}
       {left ? <>Time left: <span className="tabular-nums">{formatCountdown(left)}</span>. </> : null}
       Projects submitted in time are still reviewed. If changes are requested in the 24 hours before the deadline, you
-      can resubmit once, up to 48 hours after it. If it still doesn&apos;t meet the standards after that, it is
-      permanently rejected.
+      can resubmit once, up to 48 hours after it. If they are requested after the deadline, you have 24 hours from the
+      request. If it still doesn&apos;t meet the standards after your resubmit, it is permanently rejected.
     </Notice>
   );
 }

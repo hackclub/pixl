@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { resubmitWindowOpen, submissionsClosedFor } from "../submissionDeadline.js";
+import { submissionsClosedFor } from "../submissionDeadline.js";
 import { submissionDeadline } from "../config.generated.js";
 import { db } from "../db/client.js";
 import { runPrecheck, shouldPrecheck } from "../precheck/run.js";
@@ -653,11 +653,12 @@ router.post("/api/projects/:id/ship", validate({ query: v.noQuery, params: param
     return res.status(400).json({ ok: false, error: "project_banned" });
 
   // Submissions closed on config.submissionDeadline; the only ship still
-  // allowed is the one resubmit a project earns when changes were requested in
-  // the 24h before the deadline, up to 48h after it. The request time is the
-  // newest needs_changes review_audits row, looked up only when it can matter.
+  // allowed is the one resubmit a project earns from a request for changes:
+  // made in the 24h before the deadline -> until deadline + 48h; made after
+  // the deadline -> within 24h of the request. The request time is the newest
+  // needs_changes review_audits row, looked up only when it can matter.
   let changesRequestedAt: string | null = null;
-  if (new Date() > submissionDeadline && project.status === "needs_changes" && resubmitWindowOpen()) {
+  if (new Date() > submissionDeadline && project.status === "needs_changes") {
     const { data: audit, error: auditLookupError } = await db
       .from("review_audits")
       .select("created_at")
@@ -676,7 +677,7 @@ router.post("/api/projects/:id/ship", validate({ query: v.noQuery, params: param
     return res.status(403).json({
       ok: false,
       error: "submissions_closed",
-      message: "Submissions have closed. Only projects where a reviewer requested changes in the last 24 hours before the deadline can be resubmitted, once, within 48 hours after it.",
+      message: "Submissions have closed. A project where a reviewer requested changes can be resubmitted once: until 48 hours after the deadline if the changes were requested in the last 24 hours before it, or within 24 hours of the request if they were requested after the deadline.",
     });
 
   const shippable = ["draft", "needs_changes", "approved"];

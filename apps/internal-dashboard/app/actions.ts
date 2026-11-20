@@ -22,6 +22,7 @@ import {
   submissionDeadline,
 } from "./_generated/config";
 import { orValue } from "@/lib/pgCompat";
+import { resubmitNotice } from "@/lib/resubmitNotice";
 import {
   notifyShopInsert,
   notifyShopDelete,
@@ -1459,6 +1460,9 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
     // (the server refuses any other ship), so another request for changes on it
     // is final: the project is rejected for good instead of bounced back.
     const finalRejection = !!current.shipped_at && new Date(current.shipped_at as string) > submissionDeadline;
+    // When the player can resubmit (48h after the deadline if asked in the last
+    // 24h before it, 24h from now if asked after it); nothing on a final rejection.
+    const resubmitNote = finalRejection ? null : resubmitNotice(new Date(), submissionDeadline);
     const { data: project, error } = await db
       .from("projects")
       .update({
@@ -1529,10 +1533,10 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
     }
     const changesOwnerBody = finalRejection
       ? `"${project.name}" still doesn't meet the standards after your final resubmit, so it was permanently rejected , ${playerFacingReviewer}:\n\n${note}\n\nSubmissions are closed, so it can't be shipped again.`
-      : `"${project.name}" needs changes before it can be approved , ${playerFacingReviewer}:\n\n${note}\n\nUpdate your project and ship it again.`;
+      : `"${project.name}" needs changes before it can be approved , ${playerFacingReviewer}:\n\n${note}\n\nUpdate your project and ship it again.${resubmitNote ? `\n\n${resubmitNote}` : ""}`;
     const changesCollabBody = finalRejection
       ? `"${project.name}" still doesn't meet the standards after the final resubmit, so it was permanently rejected , ${playerFacingReviewer}:\n\n${note}`
-      : `"${project.name}" needs changes before it can be approved , ${playerFacingReviewer}:\n\n${note}`;
+      : `"${project.name}" needs changes before it can be approved , ${playerFacingReviewer}:\n\n${note}${resubmitNote ? `\n\n${resubmitNote}` : ""}`;
     const changesCollaboratorIds = await acceptedCollaboratorUserIds(projectId);
     await notifyInApp(project.user_id, "Changes requested", changesOwnerBody);
     for (const collaboratorId of changesCollaboratorIds)
@@ -1546,6 +1550,8 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
       note,
       reviewerSlackId: access.session.slackId,
       revealName,
+      resubmitNote,
+      finalRejection,
       fallback: [
         { userId: project.user_id, title: "Changes requested", body: changesOwnerBody },
         ...changesCollaboratorIds.map((userId) => ({ userId, title: "Changes requested", body: changesCollabBody })),

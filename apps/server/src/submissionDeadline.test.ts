@@ -8,6 +8,7 @@ const lateInWindow = new Date("2026-11-22T23:00:00Z"); // deadline + ~47h
 const afterWindow = new Date("2026-11-23T00:00:01Z"); // deadline + 48h + 2s
 const lastDay = "2026-11-20T10:00:00Z"; // inside the 24h before the deadline
 const tooEarly = "2026-11-19T20:00:00Z"; // more than 24h before the deadline
+const lateRequest = "2026-11-21T10:00:00Z"; // after the deadline
 
 const needsChanges = { status: "needs_changes", first_shipped_at: "2026-11-01T00:00:00Z", shipped_at: "2026-11-10T00:00:00Z" };
 
@@ -26,9 +27,10 @@ describe("submissionsClosedFor", () => {
     expect(submissionsClosedFor({ status: "draft", first_shipped_at: "2026-10-01T00:00:00Z", shipped_at: null }, after, deadline, lastDay)).toBe(true);
   });
 
-  test("allows one resubmit when changes were requested in the last 24h", () => {
+  test("changes requested in the last 24h: resubmit until deadline + 48h", () => {
     expect(submissionsClosedFor(needsChanges, after, deadline, lastDay)).toBe(false);
     expect(submissionsClosedFor(needsChanges, lateInWindow, deadline, lastDay)).toBe(false);
+    expect(submissionsClosedFor(needsChanges, afterWindow, deadline, lastDay)).toBe(true);
   });
 
   test("includes both edges of the 24h range", () => {
@@ -41,8 +43,14 @@ describe("submissionsClosedFor", () => {
     expect(submissionsClosedFor(needsChanges, after, deadline, "2026-11-19T23:59:58Z")).toBe(true);
   });
 
-  test("refuses changes requested after the deadline", () => {
-    expect(submissionsClosedFor(needsChanges, after, deadline, "2026-11-21T05:00:00Z")).toBe(true);
+  test("changes requested after the deadline: 24h from the request", () => {
+    expect(submissionsClosedFor(needsChanges, new Date("2026-11-21T10:30:00Z"), deadline, lateRequest)).toBe(false);
+    expect(submissionsClosedFor(needsChanges, new Date("2026-11-22T09:59:59Z"), deadline, lateRequest)).toBe(false);
+    expect(submissionsClosedFor(needsChanges, new Date("2026-11-22T10:00:01Z"), deadline, lateRequest)).toBe(true);
+  });
+
+  test("a late request can run past deadline + 48h, measured from the request", () => {
+    expect(submissionsClosedFor(needsChanges, new Date("2026-11-23T05:00:00Z"), deadline, "2026-11-22T20:00:00Z")).toBe(false);
   });
 
   test("refuses when no changes-requested time is known", () => {
@@ -50,13 +58,10 @@ describe("submissionsClosedFor", () => {
     expect(submissionsClosedFor(needsChanges, after, deadline, null)).toBe(true);
   });
 
-  test("closes the resubmit window 48h after the deadline", () => {
-    expect(submissionsClosedFor(needsChanges, afterWindow, deadline, lastDay)).toBe(true);
-  });
-
   test("refuses a second post-deadline resubmit", () => {
     const p = { ...needsChanges, shipped_at: "2026-11-22T00:00:00Z" };
     expect(submissionsClosedFor(p, lateInWindow, deadline, lastDay)).toBe(true);
+    expect(submissionsClosedFor(p, lateInWindow, deadline, "2026-11-22T20:00:00Z")).toBe(true);
   });
 
   test("refuses a rejected project even if it looks like needs_changes", () => {

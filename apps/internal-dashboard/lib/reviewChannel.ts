@@ -39,6 +39,10 @@ export interface ReviewMessageInput {
   creditNote?: string;
   /** Project tier (1-4) the final approval was credited at, named in the post when set. */
   tier?: number;
+  /** Changes only: when the player can resubmit, around the submission deadline (see resubmitNotice). */
+  resubmitNote?: string | null;
+  /** Changes only: this was the final resubmit, so the project is rejected for good. */
+  finalRejection?: boolean;
 }
 
 export function escapeMrkdwn(text: string): string {
@@ -59,10 +63,18 @@ export function buildReviewMessage(input: ReviewMessageInput): string {
   const reviewer = input.reviewerSlackId ? `<@${input.reviewerSlackId}>` : "a reviewer";
   const thread = "please discuss in this thread for any questions/feedback and keep in mind an answer could take a few hours.";
 
+  if (input.kind === "changes" && input.finalRejection) {
+    return (
+      `${hello} The Pixl village council took a look at your final resubmit of ${project} but it still doesn't meet the standards, so it was permanently rejected:\n\n` +
+      `${quote(input.note)}\n\n` +
+      `This was decided by ${reviewer}, ${thread}`
+    );
+  }
   if (input.kind === "changes") {
+    const resubmit = input.resubmitNote ? `\n\n*${escapeMrkdwn(input.resubmitNote)}*` : "";
     return (
       `${hello} The Pixl village council had fun taking a look at your amazing project ${project} but it needs a few changes before we give you your pixels:\n\n` +
-      `${quote(input.note)}\n\n` +
+      `${quote(input.note)}${resubmit}\n\n` +
       `The changes were especially requested by ${reviewer}, ${thread}`
     );
   }
@@ -154,6 +166,8 @@ export interface ReviewAnnouncement {
   pixels?: number;
   creditNote?: string;
   tier?: number;
+  resubmitNote?: string | null;
+  finalRejection?: boolean;
   /** What each player used to get by DM, sent only if the public post fails. */
   fallback: { userId: string; title: string; body: string }[];
 }
@@ -191,6 +205,8 @@ export async function announceReview(a: ReviewAnnouncement): Promise<boolean> {
         pixels: a.pixels,
         creditNote: a.creditNote,
         tier: a.tier,
+        resubmitNote: a.resubmitNote,
+        finalRejection: a.finalRejection,
       });
       if (!shouldPostReviewAnnouncement(a.kind)) {
         for (const f of a.fallback) await dmOrEmail(f.userId, f.title, f.body);
