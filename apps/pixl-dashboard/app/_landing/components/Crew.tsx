@@ -7,9 +7,7 @@ import { motion } from "framer-motion";
 // name clickable.
 type Person = { name: string; link: string };
 const ORGS: Person[] = [
-  { name: "Ridit", link: "https://hackclub.enterprise.slack.com/team/U0ARC79GEAV" },
   { name: "Gabin", link: "https://hackclub.enterprise.slack.com/team/U0A2SJ7B739" },
-  { name: "Ricky", link: "https://hackclub.enterprise.slack.com/team/U0A1VPETCR3" },
 ];
 const SPONSORS: Person[] = [
   { name: "barnav", link: "https://hackclub.enterprise.slack.com/team/U08RVF1BAN4" },
