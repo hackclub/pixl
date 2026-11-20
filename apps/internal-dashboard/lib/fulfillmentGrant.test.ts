@@ -61,9 +61,10 @@ describe("grant actions wiring", () => {
     expect(b).toContain("isOwnOrder(");
   });
 
-  test("shipOrder pays by order kind instead of a fixed amount", () => {
-    const b = body("shipOrder");
+  test("fulfillOrder settles items atomically and pays by order kind", () => {
+    const b = body("fulfillOrder");
     expect(b).toContain("fulfillmentPayoutPixels(");
-    expect(b).not.toContain("FULFILLMENT_PAYOUT_PIXELS,");
+    expect(b).toContain("settleItemFulfillment(");
+    expect(b).toContain("isOwnOrder(");
   });
 });

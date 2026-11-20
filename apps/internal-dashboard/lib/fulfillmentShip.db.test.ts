@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomBytes } from "node:crypto";
 import postgres from "postgres";
-import { settleGrant, settleShipment } from "./fulfillmentShip";
+import { settleGrant, settleItemFulfillment, settleShipment } from "./fulfillmentShip";
 
 const adminUrl = process.env.PIXL_TEST_DATABASE_URL;
 const suite = adminUrl ? describe : describe.skip;
@@ -151,6 +151,55 @@ suite("atomic fulfillment shipment", () => {
         values (15, ${fulfiller}, 'Hosting Grant', 'claimed', 'UFULFILLER', 100)`;
       expect(await settleGrant(15, "https://hcb.example/grants/G", 10, "UFULFILLER", "Staff", 2, db)).toBeNull();
       expect(await settleGrant(15, "https://hcb.example/grants/G", 10, "UFULFILLER", "Staff", 2, db, true)).not.toBeNull();
+    });
+  });
+
+  describe("single-step item fulfillment", () => {
+    test("claimed goes straight to done with link and cost; tracking is optional", async () => {
+      await db`insert into shop_orders (id, user_id, item_name, status, claimed_by_slack)
+        values (20, ${buyer}, 'Keyboard', 'claimed', 'UFULFILLER')`;
+      const before = await db`select pixels from users where id = ${fulfiller}`;
+      const result = await settleItemFulfillment(
+        20,
+        { tracking: "", hcbLink: "https://hcb.example/tx/1", actualCostUsd: 45 },
+        "UFULFILLER",
+        "Staff",
+        6,
+        db,
+      );
+      expect(result).not.toBeNull();
+      const [row] = await db`select status, hcb_link, actual_cost_usd, tracking, fulfillment_pixels_paid,
+        ordered_at, credited_at, shipped_at, done_at from shop_orders where id = 20`;
+      expect(row!.status).toBe("done");
+      expect(Number(row!.actual_cost_usd)).toBe(45);
+      expect(row!.tracking).toBe("");
+      expect(Number(row!.fulfillment_pixels_paid)).toBe(6);
+      expect(row!.ordered_at).not.toBeNull();
+      expect(row!.credited_at).not.toBeNull();
+      expect(row!.done_at).not.toBeNull();
+      const after = await db`select pixels from users where id = ${fulfiller}`;
+      expect(Number(after[0]!.pixels) - Number(before[0]!.pixels)).toBe(6);
+    });
+
+    test("two simultaneous fulfillments transition and pay exactly once", async () => {
+      await db`insert into shop_orders (id, user_id, item_name, status, claimed_by_slack)
+        values (21, ${buyer}, 'Sticker', 'claimed', 'UFULFILLER')`;
+      const attempts = await Promise.all([
+        settleItemFulfillment(21, { tracking: "T-1", hcbLink: "https://hcb.example/tx/2", actualCostUsd: 3 }, "UFULFILLER", "Staff", 6, db),
+        settleItemFulfillment(21, { tracking: "T-2", hcbLink: "https://hcb.example/tx/3", actualCostUsd: 4 }, "UFULFILLER", "Staff", 6, db),
+      ]);
+      expect(attempts.filter(Boolean)).toHaveLength(1);
+      const [row] = await db`select status, tracking, fulfillment_pixels_paid from shop_orders where id = 21`;
+      expect(row!.status).toBe("done");
+      expect(["T-1", "T-2"]).toContain(row!.tracking);
+    });
+
+    test("a legacy credited order can finish, but shipped already did", async () => {
+      await db`insert into shop_orders (id, user_id, item_name, status, claimed_by_slack)
+        values (22, ${buyer}, 'Legacy', 'credited', 'UFULFILLER'),
+               (23, ${buyer}, 'Already shipped', 'shipped', 'UFULFILLER')`;
+      expect(await settleItemFulfillment(22, { tracking: "", hcbLink: "https://hcb.example/tx/4", actualCostUsd: 9 }, "UFULFILLER", "Staff", 6, db)).not.toBeNull();
+      expect(await settleItemFulfillment(23, { tracking: "", hcbLink: "https://hcb.example/tx/5", actualCostUsd: 9 }, "UFULFILLER", "Staff", 6, db)).toBeNull();
     });
   });
 

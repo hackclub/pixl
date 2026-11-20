@@ -41,8 +41,7 @@ describe("H2 fulfillment", () => {
   });
   test("order actions refuse self-dealing and foreign flags", () => {
     expect(fnBody("app/actions.ts", "export const claimOrder")).toContain("isOwnOrder");
-    expect(fnBody("app/actions.ts", "export const shipOrder")).toContain("isOwnOrder");
-    expect(fnBody("app/actions.ts", "export const markOrderCredited")).toContain("isOwnOrder");
+    expect(fnBody("app/actions.ts", "export const fulfillOrder")).toContain("isOwnOrder");
     expect(fnBody("app/actions.ts", "export const flagOrderOverBudget")).toContain("canFlagOrder");
   });
 });

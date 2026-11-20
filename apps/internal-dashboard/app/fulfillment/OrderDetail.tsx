@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import type { BuyerDetails, OrderStatus, ShopOrderRow } from "@/lib/db";
-import { ORDER_STAGES } from "@/lib/db";
 import { visibleOrderActions } from "@/lib/fulfillmentAccess";
 import { GRANT_STAGES, GRANT_STAGE_HINT, GRANT_STAGE_LABEL, isGrantOrder, usesGrantFlow } from "@/lib/fulfillmentGrant";
 import {
@@ -21,7 +20,7 @@ import { FundingDisclosure } from "./Funding";
 import { ELIGIBILITY_HINT } from "@/lib/eligibility/format";
 import { EditFulfillmentInfo, FlagControls, OrderActions } from "./OrderActions";
 import { ItemThumb, TypeBadge } from "./OrderList";
-import { STAGE_HINT, STAGE_LABEL, STAGE_TONE, SafeLink, slackLink, usdBudget } from "./shared";
+import { ORDER_STEPS, STAGE_HINT, STAGE_LABEL, STAGE_TONE, SafeLink, slackLink, orderBudgetUsd, stageIndex } from "./shared";
 
 // These two ship in a plain envelope with no carrier tracking of their own,
 // so a printable address label (app/fulfillment/label/[id]) is how the
@@ -29,7 +28,12 @@ import { STAGE_HINT, STAGE_LABEL, STAGE_TONE, SafeLink, slackLink, usdBudget } f
 const LABEL_ELIGIBLE_ITEMS = new Set(["Random Desk Object", "Signed Org Photo", "Community Meme Pack (5-Pack)"]);
 
 function stageStamp(o: ShopOrderRow, s: OrderStatus): string | null {
-  const v = { pending: o.created_at, claimed: o.claimed_at, ordered: o.ordered_at, credited: o.credited_at, shipped: o.shipped_at, done: o.done_at, cancelled: null }[s];
+  const v =
+    s === "pending"
+      ? o.created_at
+      : s === "claimed"
+        ? (o.claimed_at ?? o.ordered_at ?? o.credited_at)
+        : (o.done_at ?? o.shipped_at ?? o.fulfilled_at);
   return v ? formatDate(v) : null;
 }
 
@@ -62,10 +66,10 @@ function Stepper({ order: o }: { order: ShopOrderRow }) {
       </ol>
     );
   }
-  const idx = ORDER_STAGES.indexOf(o.status);
+  const idx = stageIndex(o.status);
   return (
     <ol className="fw-steps" aria-label="Order progress">
-      {ORDER_STAGES.map((s, i) => (
+      {ORDER_STEPS.map((s, i) => (
         <li
           key={s}
           className="fw-step"
@@ -175,8 +179,8 @@ export function OrderDetail({
   canManage: boolean;
   eligibility: EligibilityResult | null;
 }) {
-  const actionable = o.status !== "done" && o.status !== "cancelled";
-  const budget = usdBudget(o.price);
+  const actionable = o.status !== "done" && o.status !== "shipped" && o.status !== "cancelled";
+  const budget = orderBudgetUsd(o);
   const visible = visibleOrderActions({
     status: o.status,
     flagged: Boolean(o.flagged_at),

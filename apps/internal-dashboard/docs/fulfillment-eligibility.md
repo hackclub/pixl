@@ -78,13 +78,15 @@ A project row is excluded (and the reason is shown) when it is a second row for 
 
 Defined in `orderAmount()`, in this order:
 
-1. **Face value**, if the item matches an `itemValueRules` entry. The HCB grant face value times quantity is what actually leaves the account. A 2x $10 Hardware Grant counts $20 even though the shop budget is $22.40 and even if a different `actual_cost_usd` was typed in.
+1. **Face value**, for catalog items in the `grants` category and for `itemValueRules` matches. The grant's round dollar face value (read from the shop item description, e.g. "A $10 grant", times quantity) is what actually leaves the account. 2x AI Credits counts $20 even though its pixel price is 222 px ≈ $22.20 internal budget, and even if a different `actual_cost_usd` was typed in. Project funding grants use the dollar figure written on the funding order. If a grant description has no single readable `$N`, the engine falls back to the pixel budget.
 2. **Recorded supplier cost** (`actual_cost_usd`), once a fulfiller has entered it.
 3. **Shop budget** (`price * pixelValueUsd`), a ceiling used before the real cost is known.
 
+The fulfillment queue shows the same face-value budget for a grant order, so the number a fulfiller sees and the number the funding check commits cannot disagree.
+
 Pixels paid by the player never change the counted amount. They fund the player's wallet, not Hack Club's grant budget. Cancelled orders count 0.
 
-Supplier cost more than one cent above the shop budget forces `Review required`.
+Supplier cost more than one cent above the budget forces `Review required`. Grant orders count at face value, so a recorded supplier cost above or below the grant does not change the counted amount (the difference is still listed as a reason).
 
 ## Statuses
 

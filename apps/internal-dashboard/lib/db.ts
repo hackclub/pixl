@@ -10,6 +10,8 @@ import { randomBytes } from "node:crypto";
 import { decryptPII } from "./crypto";
 import { reForHours, reForProject } from "@/app/_generated/config";
 import { parseAuditNote } from "./auditNote";
+import { FUNDING_ORDER_PREFIX } from "./eligibility/policy";
+import { isGrantOrder } from "./fulfillmentGrant";
 import { foldOrderCounts, type OrderCounts } from "./fulfillmentView";
 import { slackIdFromActorName } from "./reviewAccess";
 import { PRECHECK_HIDE_MS, isPrecheckRunning } from "./precheck";
@@ -1675,7 +1677,7 @@ export async function debitReviewerPixels(slackId: string, amount: number): Prom
 }
 
 // Same shape as creditReviewerPixels above, for the flat fulfillment payout
-// (see shipOrder in app/actions.ts) - a separate function (not a shared one
+// (see fulfillOrder in app/actions.ts) - a separate function (not a shared one
 // with a reason param) matches how creditProjectPixels/creditReviewerPixels
 // are already kept distinct in this file, one per payout kind.
 export async function creditFulfillerPixels(
@@ -2417,7 +2419,7 @@ export interface FulfillerStats {
   avgShipSeconds: number;
   lastActivity: string | null;
   // Lifetime fulfillment_pixels_paid actually paid (see creditFulfillerPixels
-  // and shipOrder in app/actions.ts) - the leaderboard tab on /fulfillment
+  // and fulfillOrder in app/actions.ts) - the leaderboard tab on /fulfillment
   // sorts by this.
   pixelsEarned: number;
 }
@@ -2430,7 +2432,7 @@ export interface ShopEconomySummary {
   totalPx: number;
   // Real dollars actually spent fulfilling those same orders - only orders
   // that have reached "credited" or later carry an actual_cost_usd (see
-  // markOrderCredited in app/actions.ts), which is what defines the cohort.
+  // fulfillOrder in app/actions.ts), which is what defines the cohort.
   totalActualCostUsd: number;
   // How many orders both totals above are drawn from.
   ordersWithCost: number;
@@ -2679,6 +2681,8 @@ export async function listPersonalShopItems(): Promise<PersonalShopItem[]> {
   }));
 }
 
+// The visible item pipeline is three steps (New -> Claimed -> Fulfilled); the
+// stored statuses still include the legacy ordered/credited/shipped states.
 export type OrderStatus =
   | "pending"
   | "claimed"
@@ -2687,9 +2691,6 @@ export type OrderStatus =
   | "shipped"
   | "done"
   | "cancelled";
-
-// The pipeline stages in order, for the stepper. 'cancelled' is off to the side.
-export const ORDER_STAGES: OrderStatus[] = ["pending", "claimed", "ordered", "credited", "shipped", "done"];
 
 export interface ShopOrderRow {
   id: number;
@@ -2720,8 +2721,8 @@ export interface ShopOrderRow {
   // paid from - required to claim an order (see claimOrder in
   // app/actions.ts), so every fulfilled order has a paper trail.
   hcb_link: string;
-  // Flat pixel payout to the fulfiller for actually shipping this order (see
-  // creditFulfillerPixels below and shipOrder in app/actions.ts). 0 = not yet
+  // Flat pixel payout to the fulfiller for actually fulfilling this order (see
+  // settleItemFulfillment in lib/fulfillmentShip.ts). 0 = not yet
   // paid - stores the exact amount, not just a boolean, so a future rate
   // change never makes an already-paid order's history ambiguous.
   fulfillment_pixels_paid: number;
@@ -2742,13 +2743,16 @@ export interface ShopOrderRow {
   player_slack: string | null;
   // The item's own price_source_url (see shop_items, resolved via item_id) at
   // the time this order was listed - the last URL a fulfiller actually bought
-  // this item/region from, kept fresh by markOrderCredited/
+  // this item/region from, kept fresh by fulfillOrder/
   // updateOrderFulfillmentInfo in app/actions.ts so the next fulfiller has a
   // known-working link instead of hunting for one. Only populated by
   // listShopOrders (the fulfillment page's query); null elsewhere.
   item_source_url: string | null;
   item_alt_source_url?: string | null;
   item_image_url?: string | null;
+  // The shop item's description, used to read a grant's round dollar face
+  // value ("A stackable $10 grant..."). Only populated by listShopOrders.
+  item_description?: string | null;
   item_category?: ShopCategory | null;
   // The shop item is a Beacon reward, so this order spent one of the player's
   // Beacon unlocks. Fulfilment treats it like any other order; the badge is
@@ -2800,7 +2804,7 @@ export async function listShopOrders(
   const items = itemIds.length
     ? await db
         .from("shop_items")
-        .select("id, price_source_url, alt_source_url, image_url, category, beacon_locked")
+        .select("id, price_source_url, alt_source_url, image_url, category, beacon_locked, description")
         .in("id", itemIds)
     : { data: [] };
   const itemInfo = new Map(
@@ -2812,6 +2816,7 @@ export async function listShopOrders(
         image: (i.image_url as string | null) || null,
         category: (i.category as ShopCategory | null) ?? null,
         beaconLocked: Boolean(i.beacon_locked),
+        description: (i.description as string | null) ?? null,
       },
     ]),
   );
@@ -2825,8 +2830,20 @@ export async function listShopOrders(
     r.item_image_url = info?.image ?? null;
     r.item_category = info?.category ?? null;
     r.item_beacon_locked = info?.beaconLocked ?? false;
+    r.item_description = info?.description ?? null;
   }
   return rows;
+}
+
+// Orders that still need a real HCB card grant: grant-category or converted
+// grant orders, plus project hardware funding orders (item_id null, named with
+// FUNDING_ORDER_PREFIX). Used by /fulfillment/grants and its CSV download.
+// Buyer emails are NOT included here; they are decrypted separately, owner-only.
+export async function listGrantOrdersForExport(statuses: string[]): Promise<ShopOrderRow[]> {
+  const rows = await listShopOrders(undefined, 1000, { stages: statuses });
+  return rows
+    .filter((o) => isGrantOrder(o) || o.item_name.startsWith(FUNDING_ORDER_PREFIX))
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 }
 
 // A single order by id, for the shipping-label print page - same row shape

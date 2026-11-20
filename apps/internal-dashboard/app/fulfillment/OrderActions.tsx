@@ -1,8 +1,8 @@
-import { cancelOrder, clearOrderFlag, claimOrder, convertOrderToGrant, markOrderPlaced, flagOrderOverBudget, markOrderCredited, markOrderDone, reassignOrder, sendGrant, shipOrder, updateOrderFulfillmentInfo } from "@/app/actions";
+import { cancelOrder, clearOrderFlag, claimOrder, convertOrderToGrant, flagOrderOverBudget, fulfillOrder, reassignOrder, sendGrant, updateOrderFulfillmentInfo } from "@/app/actions";
 import type { ShopOrderRow } from "@/lib/db";
 import { isGrantOrder } from "@/lib/fulfillmentGrant";
 import { ActionButton, Details, Field, Input, Muted } from "@/app/_ui/ui";
-import { usdBudget } from "./shared";
+import { orderBudgetUsd } from "./shared";
 
 // Corrects the HCB link / actual cost / tracking after the fact. Deliberately
 // not gated by `actionable`: a typo'd link or a wrong cost still needs fixing
@@ -132,18 +132,10 @@ export function OrderActions({
       </form>
     ) : null;
 
-  // Shipped: the only thing left is the final close.
-  if (o.status === "shipped") {
-    if (!canManage) return null;
-    return (
-      <form action={markOrderDone}>
-        <input type="hidden" name="id" value={o.id} />
-        <ActionButton variant="success" pendingLabel="Closing..." icon="checkmark">
-          Mark done
-        </ActionButton>
-      </form>
-    );
-  }
+  // Fulfilled is terminal. shipped is a legacy terminal state from the old
+  // item pipeline (tracking already sent, payout already paid): nothing left
+  // here, though owners can correct the record from the edit panel.
+  if (o.status === "done" || o.status === "shipped") return null;
 
   // Claimed by someone else: offer to take it over rather than acting on their queue.
   if (!mine && o.status !== "pending") {
@@ -204,7 +196,7 @@ export function OrderActions({
               <Input name="grantLink" type="url" maxLength={300} required placeholder="https://hcb.hackclub.com/grants/..." />
             </Field>
             <Field label="Amount ($)">
-              <Input name="actualCostUsd" type="number" min="0" step="0.01" required defaultValue={usdBudget(o.price)} />
+              <Input name="actualCostUsd" type="number" min="0" step="0.01" required defaultValue={orderBudgetUsd(o)} />
             </Field>
           </div>
           <div className="fw-order-action-buttons">
@@ -218,70 +210,51 @@ export function OrderActions({
     );
   }
 
-  if (o.status === "claimed") {
-    return (
-      <div className="fw-order-action-stack">
-        <Muted className="text-sm">Assigned to you. Nothing has been purchased yet.</Muted>
-        <form action={markOrderPlaced}>
-          <input type="hidden" name="id" value={o.id} />
-          <ActionButton pendingLabel="Marking placed..." icon="bag">
-            Mark order placed
-          </ActionButton>
-        </form>
-        <ConvertToGrant order={o} />
-        {cancelForm}
-      </div>
-    );
-  }
-
-  // Ordered -> credited needs the HCB link and actual cost: the transaction
-  // only exists once HCB has actually charged the card.
-  if (o.status === "ordered") {
-    return (
-      <div className="fw-order-action-stack">
-        <form action={markOrderCredited} className="fw-order-action-form">
-          <input type="hidden" name="id" value={o.id} />
-          <div className="fw-order-action-fields">
-            <Field label="HCB link" hint="The transaction or grant this was paid from">
-              <Input name="hcbLink" type="url" maxLength={300} required placeholder="https://hcb.hackclub.com/..." />
-            </Field>
-            <Field label="Actual cost ($)">
-              <Input name="actualCostUsd" type="number" min="0" step="0.01" required placeholder={usdBudget(o.price)} />
-            </Field>
-            <Field label="Bought from" hint="Optional, saved onto the item" className="fw-order-action-field-wide">
-              <Input
-                name="sourceUrl"
-                type="url"
-                maxLength={500}
-                defaultValue={o.item_source_url ?? ""}
-                placeholder="https://..."
-              />
-            </Field>
-          </div>
-          <div className="fw-order-action-buttons">
-            <ActionButton pendingLabel="Saving..." icon="checkmark">
-              Mark credited (receipt uploaded)
-            </ActionButton>
-          </div>
-        </form>
-        {cancelForm}
-      </div>
-    );
-  }
-
-  // Credited -> shipped: keep tracking and confirmation controls separate.
+  // Claimed items, and legacy ordered/credited orders, use the one terminal
+  // fulfillment form: HCB transaction + real cost, tracking optional. Saving it
+  // closes the order and pays the fulfiller; there is no separate done click.
   return (
     <div className="fw-order-action-stack">
-      <form action={shipOrder} className="fw-order-action-form">
+      <form action={fulfillOrder} className="fw-order-action-form">
         <input type="hidden" name="id" value={o.id} />
         <div className="fw-order-action-fields">
-          <Field label="Tracking number" hint="DM'd to the buyer" className="fw-order-action-field-wide">
-            <Input name="tracking" maxLength={120} required placeholder="1Z..." />
+          <Field label="HCB link" hint="The transaction or grant this was paid from">
+            <Input
+              name="hcbLink"
+              type="url"
+              maxLength={300}
+              required
+              defaultValue={o.hcb_link}
+              placeholder="https://hcb.hackclub.com/..."
+            />
+          </Field>
+          <Field label="Actual cost ($)">
+            <Input
+              name="actualCostUsd"
+              type="number"
+              min="0"
+              step="0.01"
+              required
+              defaultValue={o.actual_cost_usd !== null ? Number(o.actual_cost_usd) : undefined}
+              placeholder={orderBudgetUsd(o)}
+            />
+          </Field>
+          <Field label="Tracking number" hint="Optional; DM'd to the buyer when provided" className="fw-order-action-field-wide">
+            <Input name="tracking" maxLength={120} defaultValue={o.tracking} placeholder="1Z... (or leave blank)" />
+          </Field>
+          <Field label="Bought from" hint="Optional, saved onto the item" className="fw-order-action-field-wide">
+            <Input
+              name="sourceUrl"
+              type="url"
+              maxLength={500}
+              defaultValue={o.item_source_url ?? ""}
+              placeholder="https://..."
+            />
           </Field>
         </div>
         <div className="fw-order-action-buttons">
-          <ActionButton pendingLabel="Shipping..." icon="send">
-            Mark shipped
+          <ActionButton pendingLabel="Fulfilling..." icon="checkmark">
+            Fulfill order
           </ActionButton>
         </div>
       </form>
