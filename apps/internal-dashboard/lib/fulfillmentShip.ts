@@ -178,3 +178,37 @@ export async function settleGrant(
     return { userId: String(sent[0]!.user_id), itemName: String(sent[0]!.item_name) };
   }) as Promise<ShipmentResult | null>;
 }
+
+// Releases a claimed order that has not been purchased or fulfilled yet.
+// The claimer or an owner can release it; the order goes back to `pending` and
+// its funding commitment is deleted in the same transaction, so the reservation
+// stops counting against the player's next order. A second click (or a release
+// after the order moved on) is a no-op.
+export async function releaseOrderClaim(
+  orderId: number,
+  bySlack: string,
+  allowAnyClaim: boolean,
+  client: typeof sql = sql,
+): Promise<boolean> {
+  if (!Number.isSafeInteger(orderId) || orderId <= 0 || !bySlack) {
+    throw new Error("Invalid claim release");
+  }
+
+  return client.begin(async (tx) => {
+    const released = await tx`
+      update shop_orders
+      set status = 'pending',
+          claimed_by = '',
+          claimed_by_slack = '',
+          claimed_at = null,
+          ordered_at = null
+      where id = ${orderId}
+        and status = 'claimed'
+        and (${allowAnyClaim} or claimed_by_slack = ${bySlack})
+      returning id`;
+    if (!released.length) return false;
+
+    await tx`delete from fulfillment_commitments where order_id = ${orderId}`;
+    return true;
+  }) as Promise<boolean>;
+}

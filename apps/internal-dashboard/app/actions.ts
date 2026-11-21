@@ -1,7 +1,7 @@
 "use server";
 
 import { claimOrderWithFunding, refreshCommitmentAmount } from "@/lib/eligibility/commit";
-import { settleGrant, settleItemFulfillment } from "@/lib/fulfillmentShip";
+import { releaseOrderClaim, settleGrant, settleItemFulfillment } from "@/lib/fulfillmentShip";
 import { fulfillmentPayoutPixels, isGrantOrder, GRANT_FULFILLMENT_PAYOUT_PIXELS } from "@/lib/fulfillmentGrant";
 import { manualShipsRefresh, shipsProvider } from "@/lib/eligibility/ships";
 import { FUNDING_ORDER_PREFIX } from "@/lib/eligibility/policy";
@@ -5827,6 +5827,42 @@ export const claimOrder = guardedAction("claimOrder", "fulfiller", async (access
   }
   revalidatePath("/fulfillment");
   redirect(`/fulfillment?mine=1&order=${id}`);
+});
+
+// Undo a claim before anything was bought. The claimer or an owner can release
+// the order; releaseOrderClaim also deletes the fulfillment commitment in the
+// same transaction, so the player's funding is available for another order.
+export const unclaimOrder = guardedAction("unclaimOrder", "fulfiller", async (access, formData: FormData): Promise<void> => {
+  const id = Number(formData.get("id") ?? 0);
+  if (!Number.isSafeInteger(id) || id <= 0) return;
+  const { data: order } = await db
+    .from("shop_orders")
+    .select("user_id, item_name, status, claimed_by, claimed_by_slack")
+    .eq("id", id)
+    .maybeSingle();
+  if (!order || order.status !== "claimed") {
+    revalidatePath("/fulfillment");
+    revalidatePath("/fulfillment/grants");
+    return;
+  }
+  if (!access.isOwner && order.claimed_by_slack !== access.session.slackId) {
+    throw new Error("Only the fulfiller who claimed this order can unclaim it.");
+  }
+  const released = await releaseOrderClaim(id, access.session.slackId, access.isOwner);
+  if (!released) {
+    revalidatePath("/fulfillment");
+    revalidatePath("/fulfillment/grants");
+    return;
+  }
+  await logOrderAction(
+    id,
+    "order_unclaimed",
+    `released by ${actorName(access)}${order.claimed_by ? ` (was ${order.claimed_by})` : ""}`,
+    actorName(access),
+    order,
+  );
+  revalidatePath("/fulfillment");
+  revalidatePath("/fulfillment/grants");
 });
 
 // Over budget: the cheapest the fulfiller could find it for is more than the

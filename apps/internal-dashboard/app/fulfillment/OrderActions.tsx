@@ -1,4 +1,4 @@
-import { cancelOrder, clearOrderFlag, claimOrder, convertOrderToGrant, flagOrderOverBudget, fulfillOrder, reassignOrder, sendGrant, updateOrderFulfillmentInfo } from "@/app/actions";
+import { cancelOrder, clearOrderFlag, claimOrder, convertOrderToGrant, flagOrderOverBudget, fulfillOrder, reassignOrder, sendGrant, unclaimOrder, updateOrderFulfillmentInfo } from "@/app/actions";
 import type { ShopOrderRow } from "@/lib/db";
 import { isGrantOrder } from "@/lib/fulfillmentGrant";
 import { ActionButton, Details, Field, Input, Muted } from "@/app/_ui/ui";
@@ -98,6 +98,25 @@ function ConvertToGrant({ order: o }: { order: ShopOrderRow }) {
   );
 }
 
+// Puts a claimed order back in the New queue. Only shown before anything was
+// bought: ordered/credited/shipped orders use cancel & refund or fulfillment.
+function UnclaimButton({ order: o }: { order: ShopOrderRow }) {
+  return (
+    <form action={unclaimOrder}>
+      <input type="hidden" name="id" value={o.id} />
+      <ActionButton
+        variant="outline"
+        size="sm"
+        pendingLabel="Unclaiming..."
+        icon="member-remove"
+        confirm={`Release order #${o.id} back to the unclaimed queue?${o.claimed_by ? ` It is currently claimed by ${o.claimed_by}.` : ""}`}
+      >
+        Unclaim
+      </ActionButton>
+    </form>
+  );
+}
+
 export function OrderActions({
   order: o,
   mine,
@@ -152,6 +171,7 @@ export function OrderActions({
             Reassign to me
           </ActionButton>
         </form>
+        {o.status === "claimed" && <UnclaimButton order={o} />}
         {cancelForm}
       </div>
     );
@@ -205,7 +225,10 @@ export function OrderActions({
             </ActionButton>
           </div>
         </form>
-        {cancelForm}
+        <div className="flex flex-wrap items-center gap-2">
+          <UnclaimButton order={o} />
+          {cancelForm}
+        </div>
       </div>
     );
   }
@@ -258,7 +281,10 @@ export function OrderActions({
           </ActionButton>
         </div>
       </form>
-      {cancelForm}
+      <div className="flex flex-wrap items-center gap-2">
+        {o.status === "claimed" && <UnclaimButton order={o} />}
+        {cancelForm}
+      </div>
     </div>
   );
 }

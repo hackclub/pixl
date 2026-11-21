@@ -1,4 +1,4 @@
-import { markGrantSent } from "@/app/actions";
+import { markGrantSent, unclaimOrder } from "@/app/actions";
 import { requirePage } from "@/lib/guard";
 import { GRANT_SCOPE_LABEL, loadGrantExportPage, parseGrantScope } from "@/lib/grantExportData";
 import { GRANT_STAGE_LABEL } from "@/lib/fulfillmentGrant";
@@ -220,9 +220,25 @@ export default async function GrantExportPage({
                     </td>
                     <td>
                       <div className="flex flex-col items-start gap-1.5">
-                        <Badge tone={row.status === "pending" ? "neutral" : "info"} outline>
-                          {GRANT_STAGE_LABEL[row.status as keyof typeof GRANT_STAGE_LABEL] ?? row.status}
-                        </Badge>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge tone={row.status === "pending" ? "neutral" : "info"} outline>
+                            {GRANT_STAGE_LABEL[row.status as keyof typeof GRANT_STAGE_LABEL] ?? row.status}
+                          </Badge>
+                          {row.status === "claimed" && (
+                            <form action={unclaimOrder}>
+                              <input type="hidden" name="id" value={row.orderId} />
+                              <ActionButton
+                                variant="outline"
+                                size="sm"
+                                pendingLabel="Unclaiming..."
+                                icon="member-remove"
+                                confirm={`Release order #${row.orderId} back to the unclaimed queue?`}
+                              >
+                                Unclaim
+                              </ActionButton>
+                            </form>
+                          )}
+                        </div>
                         {claimedBySomeoneElse ? (
                           <Muted className="text-xs">
                             Claimed by {row.claimedBy || "another fulfiller"}
