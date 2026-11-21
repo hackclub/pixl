@@ -25,6 +25,8 @@ describe("grant face value", () => {
     expect(grantFaceValueCents("A grant for hardware.", "Hardware Grant")).toBe(1000);
     expect(grantFaceValueCents("A $12 grant.", "Hardware Grant")).toBe(1000);
     expect(grantFaceValueCents("A stackable $50 grant for CPU upgrades only.", "CPU Grant")).toBe(5000);
+    expect(grantFaceValueCents("A grant with no price.", "CPU/GPU Grant")).toBe(5000);
+    expect(grantFaceValueCents("A grant with no price.", "Smolhaj")).toBe(1500);
     // The old description said $12; the current grant is $10.
     expect(grantFaceValueCents("A stackable $12 grant to register a domain for your project.", "Domain Grant")).toBe(1000);
   });
@@ -38,7 +40,7 @@ describe("grant face value", () => {
     expect(grantFaceValueCents("A grant with no price.", "15$ HQ shipping grant")).toBe(1500);
     expect(grantFaceValueCents("A grant with no price.", "100$ laptop grant")).toBe(10000);
     expect(grantFaceValueCents("A grant with no price.", "10$ Storage grant")).toBe(1000);
-    expect(grantFaceValueCents("A grant with no price.", "CPU/GPU Grant")).toBeNull();
+    expect(grantFaceValueCents("A grant with no price.", "Mystery Grant")).toBeNull();
   });
 });
 
