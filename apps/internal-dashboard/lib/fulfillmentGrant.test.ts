@@ -51,8 +51,10 @@ describe("grant actions wiring", () => {
     expect(b).toContain("ownsOrder(access, order.claimed_by_slack");
     expect(b).toContain("orderIsGrant(order)");
     expect(b).toContain("isOwnOrder(");
-    expect(b).toContain("settleGrant(");
-    expect(b).toContain("GRANT_FULFILLMENT_PAYOUT_PIXELS");
+    expect(b).toContain("completeGrant(");
+    const helper = src.slice(src.indexOf("async function completeGrant"), src.indexOf("// Grant flow: claimed"));
+    expect(helper).toContain("settleGrant(");
+    expect(helper).toContain("GRANT_FULFILLMENT_PAYOUT_PIXELS");
   });
 
   test("convertOrderToGrant only touches orders nothing has been bought for, and keeps the self-dealing guard", () => {

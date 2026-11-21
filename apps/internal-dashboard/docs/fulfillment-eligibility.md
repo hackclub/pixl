@@ -78,7 +78,7 @@ A project row is excluded (and the reason is shown) when it is a second row for 
 
 Defined in `orderAmount()`, in this order:
 
-1. **Face value**, for catalog items in the `grants` category and for `itemValueRules` matches. The grant's round dollar face value (read from the shop item description, e.g. "A $10 grant", times quantity) is what actually leaves the account. 2x AI Credits counts $20 even though its pixel price is 222 px ≈ $22.20 internal budget, and even if a different `actual_cost_usd` was typed in. Project funding grants use the dollar figure written on the funding order. If a grant description has no single readable `$N`, the engine falls back to the pixel budget.
+1. **Face value**, for catalog items in the `grants` category and for `itemValueRules` matches. The grant's round dollar face value (read from the shop item description, e.g. "A $10 grant", times quantity) is what actually leaves the account. 2x AI Credits counts $20 even though its pixel price is 222 px ≈ $22.20 internal budget, and even if a different `actual_cost_usd` was typed in. Project funding grants use the dollar figure written on the funding order. `Hardware Grant`, `AI subscription/credits` and `AI Credits` have an explicit $10 face value in `lib/grantValue.ts`, so a description with no dollar figure (or several) does not change what they cost. If a grant's item name and description are both unreadable, the engine falls back to the pixel budget.
 2. **Recorded supplier cost** (`actual_cost_usd`), once a fulfiller has entered it.
 3. **Shop budget** (`price * pixelValueUsd`), a ceiling used before the real cost is known.
 

@@ -42,6 +42,31 @@ describe("buildGrantExport", () => {
     expect(rows[0].instructions).toContain("2x Hardware Grant");
   });
 
+  test("uses the $10 face value for AI subscriptions with no amount in the description", () => {
+    const { rows, problems } = buildGrantExport(
+      [
+        order({
+          id: 411,
+          item_name: "AI subscription/credits",
+          quantity: 1,
+          item_description: "Pick an AI subscription or credits from the provider of your choice.",
+        }),
+        order({
+          id: 412,
+          item_name: "AI subscription/credits",
+          quantity: 2,
+          item_description: "A $20 plan or $10 a month.",
+        }),
+      ],
+      buyers,
+    );
+    expect(problems).toEqual([]);
+    expect(rows.map((r) => [r.orderId, r.amountCents])).toEqual([
+      [411, 1000],
+      [412, 2000],
+    ]);
+  });
+
   test("uses the funding note and the project name for project grants", () => {
     const { rows } = buildGrantExport(
       [
@@ -62,8 +87,8 @@ describe("buildGrantExport", () => {
     const { rows, problems } = buildGrantExport(
       [
         order({ id: 1, user_id: "unknown" }),
-        order({ id: 2, item_description: "A grant with no price." }),
-        order({ id: 3, item_description: "A $9999 grant" }),
+        order({ id: 2, item_name: "Mystery Grant", item_description: "A grant with no price." }),
+        order({ id: 3, item_name: "Mystery Grant", item_description: "A $9999 grant" }),
       ],
       buyers,
     );

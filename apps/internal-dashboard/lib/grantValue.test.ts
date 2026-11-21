@@ -19,6 +19,12 @@ describe("grant face value", () => {
   test("repeated mentions of the same amount are fine", () => {
     expect(grantFaceValueCents("A $10 grant. Yes, $10.")).toBe(1000);
   });
+  test("known catalog items use their explicit $10 face value", () => {
+    expect(grantFaceValueCents("A subscription for the AI provider of your choice.", "AI subscription/credits")).toBe(1000);
+    expect(grantFaceValueCents("A $20 plan, or $10 a month.", "AI subscription/credits")).toBe(1000);
+    expect(grantFaceValueCents("A grant for hardware.", "Hardware Grant")).toBe(1000);
+    expect(grantFaceValueCents("A $12 grant.", "Hardware Grant")).toBe(1000);
+  });
 });
 
 describe("grant order face value", () => {
@@ -40,6 +46,16 @@ describe("grant order face value", () => {
   test("returns null when the description cannot be read, so callers keep the pixel budget", () => {
     expect(grantOrderFaceCents({ quantity: 1, item_category: "grants", item_description: "A grant." })).toBeNull();
     expect(grantOrderFaceCents({ quantity: 1, item_category: "grants", item_description: null })).toBeNull();
+  });
+  test("uses the known item name when the description cannot be read", () => {
+    expect(
+      grantOrderFaceCents({
+        quantity: 2,
+        item_name: "AI subscription/credits",
+        item_category: "grants",
+        item_description: "Pick any AI provider.",
+      }),
+    ).toBe(2000);
   });
   test("treats a missing or zero quantity as one", () => {
     expect(grantOrderFaceCents({ item_category: "grants", item_description: "A $20 grant." })).toBe(2000);

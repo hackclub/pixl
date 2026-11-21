@@ -595,6 +595,7 @@ export async function loadPlayerEvidence(
     // grants have no item row and get their face value in grantsByUser below.
     const faceCents = grantOrderFaceCents({
       quantity: Number(o.quantity) || 1,
+      item_name: o.item_name,
       item_category: o.item_category,
       item_description: o.item_description,
     });
