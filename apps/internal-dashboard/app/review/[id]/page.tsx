@@ -60,7 +60,7 @@ import {
 } from "@/app/actions";
 import { DoubleDipBanner } from "@/app/_components/DoubleDipBanner";import { ReviewPipelineSteps } from "@/app/_components/ReviewPipelineSteps";
 import { SecondPassChecklist } from "@/app/_components/SecondPassChecklist";
-import { hackatimeCutoffUnix, hackatimeCutoffLabel } from "@/app/_generated/config";
+import { hackatimeCutoffUnix, hackatimeCutoffLabel, submissionDeadline } from "@/app/_generated/config";
 import { ReviewDetailTabs } from "@/app/_components/ReviewDetailTabs";
 import { ReviewSplit } from "./ReviewSplit";
 import { ReviewShortcuts } from "./ReviewShortcuts";
@@ -271,6 +271,12 @@ export default async function ReviewDetail({
   // never on your own project or while a hold is set.
   const unshipNote = canSecondPass && !isCollaborator && !isHeld ? unshipWarning(p.status) : null;
   const shippedAt = (p as { shipped_at?: string | null }).shipped_at ?? null;
+  // Shipped again after the deadline: this is the one resubmit a post-deadline
+  // "changes requested" earns (same test as reviewProject's final rejection).
+  const isFinalResubmit =
+    !!(p as { first_shipped_at?: string | null }).first_shipped_at &&
+    !!shippedAt &&
+    new Date(shippedAt) > submissionDeadline;
   // Viewing must never reserve a project; only an explicit POST may claim it.
   const currentClaim = activeReviewClaim(p, Date.now(), REVIEW_LOCK_MS);
   const hasActiveClaim = currentClaim === viewer;
@@ -685,6 +691,13 @@ export default async function ReviewDetail({
                 </Muted>
               )}
             </div>
+            {isFinalResubmit && (
+              <div className="mt-1">
+                <Badge tone="danger">
+                  Final resubmit: approve it or ban it. Requesting changes again rejects it for good.
+                </Badge>
+              </div>
+            )}
             <p className="hc-caption mt-1 text-sm">
               Submitted {ago(p.shipped_at)} · {fmtHM(hours)} logged
               {hackatimeSources.length > 0 && (
