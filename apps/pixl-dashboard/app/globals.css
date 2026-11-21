@@ -131,9 +131,46 @@
   src:url("/fonts/phantom-sans/Bold.woff2") format("woff2");
   font-weight:bold;font-style:normal;font-display:swap;
 }
+/* Phantom's display face, used only by the PHANTOM promo wordmark. Self-hosted
+   so font-src 'self' in the CSP still covers it. */
+@font-face{
+  font-family:"Instrument Serif";
+  src:url("/fonts/instrument-serif-italic.woff2") format("woff2");
+  font-weight:400;font-style:italic;font-display:swap;
+}
 html[data-font="phantom"] body,
-html[data-font="phantom"] body *:not(code,pre,kbd,samp,code *,pre *){
+html[data-font="phantom"] body *:not(code,pre,kbd,samp,code *,pre *,.phantom-wordmark){
   font-family:"Phantom Sans",system-ui,sans-serif !important;
+}
+
+/* ── PHANTOM promo banner ── */
+.phantom-wordmark{
+  font-family:"Instrument Serif",ui-serif,Georgia,serif;
+  font-style:italic;
+  letter-spacing:-.015em;
+  background-image:linear-gradient(105deg,#efeee9 0%,#efeee9 42%,#ffffff 50%,#efeee9 58%,#efeee9 100%);
+  background-size:260% 100%;
+  background-position:100% 0;
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+  animation:phantom-sheen 9s ease-in-out infinite;
+}
+@keyframes phantom-sheen{
+  0%,62%{background-position:100% 0}
+  100%{background-position:0 0}
+}
+.phantom-flag{
+  animation:phantom-flag-sway 8s ease-in-out infinite;
+  transform-origin:18% 82%;
+}
+@keyframes phantom-flag-sway{
+  0%,100%{transform:rotate(-2.5deg)}
+  50%{transform:rotate(1.5deg)}
+}
+@media (prefers-reduced-motion: reduce){
+  .phantom-wordmark{animation:none;background-image:none;color:#efeee9}
+  .phantom-flag{animation:none}
 }
 
 /* ── Tailwind 4 theme bridge: LEDGER tokens as utilities (bg-panel, text-ink,
