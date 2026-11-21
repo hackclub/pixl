@@ -19,11 +19,24 @@ describe("grant face value", () => {
   test("repeated mentions of the same amount are fine", () => {
     expect(grantFaceValueCents("A $10 grant. Yes, $10.")).toBe(1000);
   });
-  test("known catalog items use their explicit $10 face value", () => {
+  test("known catalog items use their explicit face value", () => {
     expect(grantFaceValueCents("A subscription for the AI provider of your choice.", "AI subscription/credits")).toBe(1000);
     expect(grantFaceValueCents("A $20 plan, or $10 a month.", "AI subscription/credits")).toBe(1000);
     expect(grantFaceValueCents("A grant for hardware.", "Hardware Grant")).toBe(1000);
     expect(grantFaceValueCents("A $12 grant.", "Hardware Grant")).toBe(1000);
+    expect(grantFaceValueCents("A stackable $50 grant for CPU upgrades only.", "CPU Grant")).toBe(5000);
+  });
+  test("reads a dollar sign after the number, as in Food Grant's description", () => {
+    expect(grantFaceValueCents("One-time 20$ grant, get it with a chapter 3 Pixl Cafe trial", "Food Grant")).toBe(2000);
+    expect(grantFaceValueCents("A grant worth 12$ or 12$", "Mystery Grant")).toBe(1200);
+    expect(grantFaceValueCents("A 10$ grant, or 20$ if you need more", "Mystery Grant")).toBeNull();
+  });
+  test("falls back to an amount embedded in the item name", () => {
+    expect(grantFaceValueCents("A grant with no price.", "10$ printing grant")).toBe(1000);
+    expect(grantFaceValueCents("A grant with no price.", "15$ HQ shipping grant")).toBe(1500);
+    expect(grantFaceValueCents("A grant with no price.", "100$ laptop grant")).toBe(10000);
+    expect(grantFaceValueCents("A grant with no price.", "10$ Storage grant")).toBe(1000);
+    expect(grantFaceValueCents("A grant with no price.", "CPU/GPU Grant")).toBeNull();
   });
 });
 
@@ -54,6 +67,14 @@ describe("grant order face value", () => {
         item_name: "AI subscription/credits",
         item_category: "grants",
         item_description: "Pick any AI provider.",
+      }),
+    ).toBe(2000);
+    expect(
+      grantOrderFaceCents({
+        quantity: 1,
+        item_name: "Food Grant",
+        item_category: "grants",
+        item_description: "One-time 20$ grant, get it with a chapter 3 Pixl Cafe trial",
       }),
     ).toBe(2000);
   });
