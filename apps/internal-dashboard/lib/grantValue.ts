@@ -21,7 +21,7 @@ const usdToCents = (raw: string): number | null => {
 // funding check, so the CSV and the eligibility engine cannot disagree.
 export const KNOWN_ITEM_FACE_VALUES: { match: RegExp; faceValueUsd: number }[] = [
   { match: /^hardware grant$/i, faceValueUsd: 10 },
-  { match: /^domain grant$/i, faceValueUsd: 12 },
+  { match: /^domain grant$/i, faceValueUsd: 10 },
   { match: /^hosting grant$/i, faceValueUsd: 10 },
   { match: /^cpu grant$/i, faceValueUsd: 50 },
   { match: /^gpu grant$/i, faceValueUsd: 50 },

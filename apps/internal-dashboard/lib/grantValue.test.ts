@@ -25,6 +25,8 @@ describe("grant face value", () => {
     expect(grantFaceValueCents("A grant for hardware.", "Hardware Grant")).toBe(1000);
     expect(grantFaceValueCents("A $12 grant.", "Hardware Grant")).toBe(1000);
     expect(grantFaceValueCents("A stackable $50 grant for CPU upgrades only.", "CPU Grant")).toBe(5000);
+    // The old description said $12; the current grant is $10.
+    expect(grantFaceValueCents("A stackable $12 grant to register a domain for your project.", "Domain Grant")).toBe(1000);
   });
   test("reads a dollar sign after the number, as in Food Grant's description", () => {
     expect(grantFaceValueCents("One-time 20$ grant, get it with a chapter 3 Pixl Cafe trial", "Food Grant")).toBe(2000);
