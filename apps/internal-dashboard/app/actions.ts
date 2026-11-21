@@ -3586,6 +3586,38 @@ export const rejectProject = guardedAction("rejectProject", "owner", async (acce
   revalidatePath("/", "layout");
 });
 
+export const extendProjectSubmission = guardedAction("extendProjectSubmission", "owner", async (access, formData: FormData): Promise<void> => {
+  const by = actorName(access);
+  const projectId = Number(formData.get("projectId") ?? 0);
+  if (!projectId) return;
+  const { data: target } = await db.from("projects").select("user_id").eq("id", projectId).single();
+  if (target && (await isOwnProject(access, target.user_id, projectId))) return;
+
+  // 24 hours from now, once. The server lets the project ship until then even though submissions closed.
+  const until = new Date(Date.now() + 24 * 3_600_000).toISOString();
+  const { data: project, error } = await db
+    .from("projects")
+    .update({ submission_extended_until: until })
+    .eq("id", projectId)
+    .is("rejected_at", null)
+    .select("id, name, user_id")
+    .single();
+  if (error || !project) {
+    console.error("extendProjectSubmission failed", error?.message);
+    return;
+  }
+  await logModAction(project.user_id, "project_submission_extended", `${project.name}: until ${until}`, by);
+
+  const body = `Your project "${project.name}" got a 24 hour extension: you can ship it again until ${new Date(until).toLocaleString("en-GB", { timeZone: "UTC", dateStyle: "medium", timeStyle: "short" })} UTC, even though submissions have closed.`;
+  const { error: notifyError } = await db.from("notifications").insert({
+    user_id: project.user_id,
+    title: "Submission extended",
+    body,
+  });
+  if (notifyError) console.error("extension notification failed", notifyError.message);
+  revalidatePath("/", "layout");
+});
+
 export const unrejectProject = guardedAction("unrejectProject", "owner", async (access, formData: FormData): Promise<void> => {
   const by = actorName(access);
   const projectId = Number(formData.get("projectId") ?? 0);

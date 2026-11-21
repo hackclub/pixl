@@ -77,3 +77,17 @@ describe("projectCreationClosed", () => {
     expect(projectCreationClosed(after, deadline)).toBe(true);
   });
 });
+
+describe("per-project extension", () => {
+  const approved = { status: "approved", first_shipped_at: "2026-10-06T09:29:28Z", shipped_at: "2026-10-25T06:25:36Z" };
+  test("an approved project can ship until its extension ends", () => {
+    expect(submissionsClosedFor(approved, after, deadline)).toBe(true);
+    const ext = { ...approved, submission_extended_until: "2026-11-22T12:00:00Z" };
+    expect(submissionsClosedFor(ext, after, deadline)).toBe(false);
+    expect(submissionsClosedFor(ext, new Date("2026-11-22T12:00:01Z"), deadline)).toBe(true);
+  });
+  test("an extension never reopens a rejected project", () => {
+    const ext = { ...approved, rejected_at: "2026-11-21T00:00:00Z", submission_extended_until: "2026-11-30T00:00:00Z" };
+    expect(submissionsClosedFor(ext, after, deadline)).toBe(true);
+  });
+});

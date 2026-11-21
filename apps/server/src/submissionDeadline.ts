@@ -19,6 +19,7 @@ type ShipState = {
   rejected_at?: unknown;
   first_shipped_at?: unknown;
   shipped_at?: unknown;
+  submission_extended_until?: unknown;
 };
 
 /**
@@ -35,7 +36,8 @@ type ShipState = {
  * deadline, and must not already have been shipped since (shipped_at restarts
  * on every ship, so a post-deadline shipped_at means the one chance is spent).
  * First submissions, drafts, rejected projects and updates to approved projects
- * are all refused.
+ * are all refused, unless the project has an owner-granted
+ * `submission_extended_until` that has not passed (never for rejected ones).
  */
 export function submissionsClosedFor(
   project: ShipState,
@@ -44,7 +46,13 @@ export function submissionsClosedFor(
   changesRequestedAt: Date | string | null = null,
 ): boolean {
   if (now <= deadline) return false;
-  if (project.status !== "needs_changes" || project.rejected_at) return true;
+  if (project.rejected_at) return true;
+  // An owner-granted extension lets this one project ship until the given time.
+  if (project.submission_extended_until) {
+    const until = new Date(String(project.submission_extended_until)).getTime();
+    if (Number.isFinite(until) && now.getTime() <= until) return false;
+  }
+  if (project.status !== "needs_changes") return true;
   if (!project.first_shipped_at) return true;
   if (!changesRequestedAt) return true;
   const requested = new Date(changesRequestedAt).getTime();
