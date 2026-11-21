@@ -8,6 +8,8 @@ import { motion } from "framer-motion";
 type Person = { name: string; link: string };
 const ORGS: Person[] = [
   { name: "Gabin", link: "https://hackclub.enterprise.slack.com/team/U0A2SJ7B739" },
+  { name: "Ridit", link: "" },
+  { name: "Ricky", link: "" },
 ];
 const SPONSORS: Person[] = [
   { name: "barnav", link: "https://hackclub.enterprise.slack.com/team/U08RVF1BAN4" },
@@ -50,7 +52,7 @@ export function Crew() {
       transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1], delay: 1 }}
     >
       <p>
-        made by <NameList people={ORGS} />
+        organized by <NameList people={ORGS} />
       </p>
       <p>
         Sponsored by <NameList people={SPONSORS} />
