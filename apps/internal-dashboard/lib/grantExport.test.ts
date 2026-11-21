@@ -99,6 +99,20 @@ describe("buildGrantExport", () => {
     expect(problems[2].reason).toContain("over");
   });
 
+  test("normalizes Postgres bigint ids to numbers", () => {
+    const { rows, problems } = buildGrantExport(
+      [
+        order({ id: "225" as unknown as number }),
+        order({ id: "402" as unknown as number, user_id: "unknown" }),
+      ],
+      buyers,
+    );
+    expect(rows[0]!.orderId).toBe(225);
+    expect(typeof rows[0]!.orderId).toBe("number");
+    expect(problems[0]!.orderId).toBe(402);
+    expect(typeof problems[0]!.orderId).toBe("number");
+  });
+
   test("trims purpose to HCB's 30-character limit", () => {
     const { rows } = buildGrantExport(
       [order({ item_name: "Monitor Grant (Stackable)" })],
