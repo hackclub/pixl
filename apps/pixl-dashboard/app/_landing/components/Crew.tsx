@@ -8,6 +8,10 @@ import { motion } from "framer-motion";
 type Person = { name: string; link: string };
 const ORGS: Person[] = [
   { name: "Gabin", link: "https://hackclub.enterprise.slack.com/team/U0A2SJ7B739" },
+];
+// Everyone who built it (organized by the first one only, see ORGS).
+const BUILDERS: Person[] = [
+  ORGS[0],
   { name: "Ridit", link: "" },
   { name: "Ricky", link: "" },
 ];
@@ -53,6 +57,9 @@ export function Crew() {
     >
       <p>
         organized by <NameList people={ORGS} />
+      </p>
+      <p>
+        built by <NameList people={BUILDERS} />
       </p>
       <p>
         Sponsored by <NameList people={SPONSORS} />
