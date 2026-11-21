@@ -27,7 +27,7 @@ async function computeStats(): Promise<ResultsStats> {
       (select count(*) from users)::int as users,
       (select count(*) from projects where banned_at is null)::int as projects_created,
       (select count(*) from projects where status in ('approved', 'shipped', 'fraud_review', 'second_review') and banned_at is null)::int as projects_shipped,
-      (select coalesce(sum(approved_hours), 0) from projects where status = 'approved' and banned_at is null)::float8 as hours_shipped,
+      (select coalesce(sum(approved_hours), 0) from projects where status in ('approved', 'shipped', 'fraud_review', 'second_review') and banned_at is null)::float8 as hours_shipped,
       (select coalesce(sum(price), 0) from shop_orders where status <> 'cancelled')::float8 as order_px`;
   const r = rows[0] as Record<string, number>;
   return {
