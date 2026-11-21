@@ -38,6 +38,8 @@ export interface GrantOrderLike {
   note: string;
   status?: string;
   item_description?: string | null;
+  claimed_by?: string;
+  claimed_by_slack?: string;
 }
 
 export interface GrantBuyer {
@@ -56,6 +58,8 @@ export interface GrantExportRow {
   amountCents: number;
   purpose: string;
   instructions: string;
+  claimedBy: string;
+  claimedBySlack: string;
 }
 
 export interface GrantExportProblem {
@@ -106,7 +110,9 @@ export function buildGrantExport(
     const funding = order.item_name.startsWith(FUNDING_ORDER_PREFIX);
     const status = order.status || "pending";
     const quantity = Math.max(1, Number(order.quantity) || 1);
-    const unitCents = funding ? fundingGrantCents(order.note) : grantFaceValueCents(order.item_description);
+    const unitCents = funding
+      ? fundingGrantCents(order.note)
+      : grantFaceValueCents(order.item_description, order.item_name);
     const itemName = order.item_name || "(item removed)";
 
     if (unitCents === null) {
@@ -163,6 +169,8 @@ export function buildGrantExport(
       amountCents,
       purpose,
       instructions: clip(instructions, 300),
+      claimedBy: (order.claimed_by ?? "").trim(),
+      claimedBySlack: (order.claimed_by_slack ?? "").trim(),
     });
     totalCents += amountCents;
   }

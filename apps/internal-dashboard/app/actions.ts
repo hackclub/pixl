@@ -1,7 +1,7 @@
 "use server";
 
 import { claimOrderWithFunding, refreshCommitmentAmount } from "@/lib/eligibility/commit";
-import { settleGrant, settleItemFulfillment } from "@/lib/fulfillmentShip";
+import { releaseOrderClaim, settleGrant, settleItemFulfillment } from "@/lib/fulfillmentShip";
 import { fulfillmentPayoutPixels, isGrantOrder, GRANT_FULFILLMENT_PAYOUT_PIXELS } from "@/lib/fulfillmentGrant";
 import { manualShipsRefresh, shipsProvider } from "@/lib/eligibility/ships";
 import { FUNDING_ORDER_PREFIX } from "@/lib/eligibility/policy";
@@ -5829,6 +5829,42 @@ export const claimOrder = guardedAction("claimOrder", "fulfiller", async (access
   redirect(`/fulfillment?mine=1&order=${id}`);
 });
 
+// Undo a claim before anything was bought. The claimer or an owner can release
+// the order; releaseOrderClaim also deletes the fulfillment commitment in the
+// same transaction, so the player's funding is available for another order.
+export const unclaimOrder = guardedAction("unclaimOrder", "fulfiller", async (access, formData: FormData): Promise<void> => {
+  const id = Number(formData.get("id") ?? 0);
+  if (!Number.isSafeInteger(id) || id <= 0) return;
+  const { data: order } = await db
+    .from("shop_orders")
+    .select("user_id, item_name, status, claimed_by, claimed_by_slack")
+    .eq("id", id)
+    .maybeSingle();
+  if (!order || order.status !== "claimed") {
+    revalidatePath("/fulfillment");
+    revalidatePath("/fulfillment/grants");
+    return;
+  }
+  if (!access.isOwner && order.claimed_by_slack !== access.session.slackId) {
+    throw new Error("Only the fulfiller who claimed this order can unclaim it.");
+  }
+  const released = await releaseOrderClaim(id, access.session.slackId, access.isOwner);
+  if (!released) {
+    revalidatePath("/fulfillment");
+    revalidatePath("/fulfillment/grants");
+    return;
+  }
+  await logOrderAction(
+    id,
+    "order_unclaimed",
+    `released by ${actorName(access)}${order.claimed_by ? ` (was ${order.claimed_by})` : ""}`,
+    actorName(access),
+    order,
+  );
+  revalidatePath("/fulfillment");
+  revalidatePath("/fulfillment/grants");
+});
+
 // Over budget: the cheapest the fulfiller could find it for is more than the
 // player's pixels are worth. Nothing gets ordered , the flag parks it for an
 // owner to decide (source it anyway, talk to the player, or cancel & refund).
@@ -6042,6 +6078,65 @@ export const fulfillOrder = guardedAction("fulfillOrder", "fulfiller", async (ac
   revalidatePath("/fulfillment");
 });
 
+interface GrantOrderForSettlement {
+  id: number;
+  user_id: string;
+  item_name: string;
+}
+
+// Shared finish line for both the order page and the Grant CSV. settleGrant
+// closes the order and pays the grant payout (2 pixels) atomically; then the
+// buyer is told to check their email and the payout DM goes to the fulfiller.
+async function completeGrant(
+  access: AdminAccess,
+  order: GrantOrderForSettlement,
+  grantLink: string,
+  actualCostUsd: number,
+): Promise<boolean> {
+  const settled = await settleGrant(
+    order.id, grantLink, actualCostUsd, access.session.slackId, actorName(access), GRANT_FULFILLMENT_PAYOUT_PIXELS,
+    undefined, access.isOwner,
+  );
+  if (!settled) {
+    revalidatePath("/fulfillment");
+    revalidatePath("/fulfillment/grants");
+    return false;
+  }
+
+  if ((await refreshCommitmentAmount(order.id, { ships: shipsProvider() })) === "failed") {
+    await logOrderAction(order.id, "ledger_refresh_failed", "funding ledger amount could not be updated", actorName(access));
+  }
+  await db.from("notifications").insert({
+    user_id: order.user_id,
+    title: "Grant sent! 🎁",
+    body: `Your "${order.item_name}" grant was sent. Check your email for the HCB grant invite.\n\nGrant: ${grantLink}`,
+  });
+  const { data: buyer } = await db.from("users").select("slack_id").eq("id", order.user_id).maybeSingle();
+  if (buyer?.slack_id) {
+    try {
+      await dmUser(
+        buyer.slack_id,
+        `🎁 Your "${order.item_name}" grant was sent! Check your email for the HCB grant invite.\n\nGrant: ${grantLink}`,
+      );
+    } catch (err) {
+      console.error("sendGrant DM", err instanceof Error ? err.message : err);
+    }
+  }
+  await logOrderAction(order.id, "grant_sent", `grant ${grantLink} , cost $${actualCostUsd}`, actorName(access), order);
+
+  try {
+    await dmUser(
+      access.session.slackId,
+      `You earned ${GRANT_FULFILLMENT_PAYOUT_PIXELS} pixels for sending the "${settled.itemName}" grant. Thanks for keeping orders moving!`,
+    );
+  } catch (err) {
+    console.error("sendGrant (fulfillment payout DM)", err instanceof Error ? err.message : err);
+  }
+  revalidatePath("/fulfillment");
+  revalidatePath("/fulfillment/grants");
+  return true;
+}
+
 // Grant flow: claimed -> done in one step. A grant is sent by email as an HCB
 // grant invite, so there is no purchase, receipt or tracking number to collect.
 // The fulfiller pastes the HCB grant link and the amount; settleGrant (one
@@ -6071,42 +6166,67 @@ export const sendGrant = guardedAction("sendGrant", "fulfiller", async (access, 
   if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId, access.isOwner)) {
     throw new Error("You can't fulfill your own shop order.");
   }
-  const settled = await settleGrant(
-    id, grantLink, actualCostUsd, access.session.slackId, actorName(access), GRANT_FULFILLMENT_PAYOUT_PIXELS,
-    undefined, access.isOwner,
+  await completeGrant(
+    access,
+    { id, user_id: order.user_id as string, item_name: order.item_name as string },
+    grantLink,
+    actualCostUsd,
   );
-  if (!settled) { revalidatePath("/fulfillment"); return; }
+});
 
-  if ((await refreshCommitmentAmount(id, { ships: shipsProvider() })) === "failed") {
-    await logOrderAction(id, "ledger_refresh_failed", "funding ledger amount could not be updated", actorName(access));
+// Owner follow-up to the Grant CSV: after uploading the file in HCB, paste the
+// grant link on that row and close the order here. A pending order is first
+// reserved for the owner through the same funding ledger as a normal claim,
+// then settled exactly like the order page's "Grant sent" form.
+export const markGrantSent = guardedAction("markGrantSent", "owner", async (access, formData: FormData): Promise<void> => {
+  const id = Number(formData.get("id") ?? 0);
+  if (!Number.isSafeInteger(id) || id <= 0) return;
+  const grantLink = String(formData.get("grantLink") ?? "").trim().slice(0, 300);
+  const actualCostUsd = Math.round(Number(formData.get("actualCostUsd") ?? NaN) * 100) / 100;
+  if (!grantLink || !isSafeUrl(grantLink) || !Number.isFinite(actualCostUsd) || actualCostUsd < 0) {
+    revalidatePath("/fulfillment/grants");
+    return;
   }
-  await db.from("notifications").insert({
-    user_id: order.user_id,
-    title: "Grant sent! 🎁",
-    body: `Your "${order.item_name}" grant was sent. Check your email for the HCB grant invite.\n\nGrant: ${grantLink}`,
-  });
-  const { data: buyer } = await db.from("users").select("slack_id").eq("id", order.user_id).maybeSingle();
-  if (buyer?.slack_id) {
-    try {
-      await dmUser(
-        buyer.slack_id,
-        `🎁 Your "${order.item_name}" grant was sent! Check your email for the HCB grant invite.\n\nGrant: ${grantLink}`,
-      );
-    } catch (err) {
-      console.error("sendGrant DM", err instanceof Error ? err.message : err);
+  const { data: order } = await db
+    .from("shop_orders")
+    .select("user_id, item_name, status, claimed_by_slack, item_id, is_grant")
+    .eq("id", id)
+    .maybeSingle();
+  if (!order || (order.status !== "pending" && order.status !== "claimed")) {
+    revalidatePath("/fulfillment/grants");
+    return;
+  }
+  if (!(await orderIsGrant(order))) {
+    throw new Error("This order isn't a grant. Convert it to a grant first, or use the item flow.");
+  }
+  if (order.status === "claimed" && order.claimed_by_slack !== access.session.slackId) {
+    throw new Error("This grant is already claimed by someone else. Reassign it on the order page first.");
+  }
+
+  if (order.status === "pending") {
+    const outcome = await claimOrderWithFunding(
+      { orderId: id, by: actorName(access), bySlack: access.session.slackId },
+      { ships: shipsProvider(), reserveOnly: true },
+    );
+    if (outcome.kind === "refused") {
+      if (outcome.code === "not_pending" || outcome.code === "not_found") {
+        revalidatePath("/fulfillment/grants");
+        return;
+      }
+      throw new Error(outcome.message);
+    }
+    if (outcome.kind !== "claimed") throw new Error("Claim-only RPC is not installed.");
+    if (outcome.code === "claimed") {
+      await logOrderAction(id, "order_reserved", "assigned from the grant CSV", actorName(access), order);
     }
   }
-  await logOrderAction(id, "grant_sent", `grant ${grantLink} , cost $${actualCostUsd}`, actorName(access), order);
 
-  try {
-    await dmUser(
-      access.session.slackId,
-      `You earned ${GRANT_FULFILLMENT_PAYOUT_PIXELS} pixels for sending the "${settled.itemName}" grant. Thanks for keeping orders moving!`,
-    );
-  } catch (err) {
-    console.error("sendGrant (fulfillment payout DM)", err instanceof Error ? err.message : err);
-  }
-  revalidatePath("/fulfillment");
+  await completeGrant(
+    access,
+    { id, user_id: order.user_id as string, item_name: order.item_name as string },
+    grantLink,
+    actualCostUsd,
+  );
 });
 
 // Turns one order into a grant order (shop_orders.is_grant) so it uses the

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomBytes } from "node:crypto";
 import postgres from "postgres";
-import { settleGrant, settleItemFulfillment, settleShipment } from "./fulfillmentShip";
+import { releaseOrderClaim, settleGrant, settleItemFulfillment, settleShipment } from "./fulfillmentShip";
 
 const adminUrl = process.env.PIXL_TEST_DATABASE_URL;
 const suite = adminUrl ? describe : describe.skip;
@@ -24,12 +24,27 @@ suite("atomic fulfillment shipment", () => {
       );
       create table shop_orders (
         id bigint primary key, user_id uuid not null references users(id),
-        item_name text not null, status text not null, claimed_by_slack text,
+        item_name text not null, status text not null, claimed_by text,
+        claimed_by_slack text, claimed_at timestamptz,
         shipped_at timestamptz, fulfilled_at timestamptz, fulfilled_by text,
         tracking text, fulfillment_pixels_paid integer not null default 0,
         item_id bigint, is_grant boolean not null default false,
         ordered_at timestamptz, credited_at timestamptz, done_at timestamptz,
         hcb_link text, actual_cost_usd numeric
+      );
+      create table fulfillment_commitments (
+        order_id bigint primary key references shop_orders(id),
+        user_id uuid not null references users(id),
+        amount_cents integer not null,
+        basis text not null,
+        verified_funding_cents integer not null,
+        verdict text not null,
+        policy_version text not null,
+        authorized_by text not null,
+        authorized_by_slack text not null,
+        evidence jsonb not null default '{}'::jsonb,
+        authorized_at timestamptz not null default now(),
+        amount_updated_at timestamptz
       );
       create table shop_items (id bigint primary key, category text);
       create table pixel_transactions (
@@ -151,6 +166,61 @@ suite("atomic fulfillment shipment", () => {
         values (15, ${fulfiller}, 'Hosting Grant', 'claimed', 'UFULFILLER', 100)`;
       expect(await settleGrant(15, "https://hcb.example/grants/G", 10, "UFULFILLER", "Staff", 2, db)).toBeNull();
       expect(await settleGrant(15, "https://hcb.example/grants/G", 10, "UFULFILLER", "Staff", 2, db, true)).not.toBeNull();
+    });
+  });
+
+  describe("claim release", () => {
+    const commitment = (id: number, slack: string) =>
+      db`insert into fulfillment_commitments (
+        order_id, user_id, amount_cents, basis, verified_funding_cents,
+        verdict, policy_version, authorized_by, authorized_by_slack
+      ) values (${id}, ${buyer}, 1000, 'face', 5000, 'covered', 'test', 'Staff', ${slack})`;
+
+    test("the claimer releases the order and its funding commitment", async () => {
+      await db`insert into shop_orders (id, user_id, item_name, status, claimed_by, claimed_by_slack, claimed_at, ordered_at)
+        values (30, ${buyer}, 'Hosting Grant', 'claimed', 'Staff', 'UFULFILLER', now(), now())`;
+      await commitment(30, "UFULFILLER");
+
+      expect(await releaseOrderClaim(30, "UFULFILLER", false, db)).toBe(true);
+      const [row] = await db`select status, claimed_by, claimed_by_slack, claimed_at, ordered_at
+        from shop_orders where id = 30`;
+      expect(row!.status).toBe("pending");
+      expect(row!.claimed_by).toBe("");
+      expect(row!.claimed_by_slack).toBe("");
+      expect(row!.claimed_at).toBeNull();
+      expect(row!.ordered_at).toBeNull();
+      expect(await db`select order_id from fulfillment_commitments where order_id = 30`).toHaveLength(0);
+    });
+
+    test("another fulfiller cannot release it", async () => {
+      await db`insert into shop_orders (id, user_id, item_name, status, claimed_by, claimed_by_slack, claimed_at)
+        values (31, ${buyer}, 'Hosting Grant', 'claimed', 'Staff', 'UFULFILLER', now())`;
+      await commitment(31, "UFULFILLER");
+
+      expect(await releaseOrderClaim(31, "UOTHER", false, db)).toBe(false);
+      const [row] = await db`select status, claimed_by_slack from shop_orders where id = 31`;
+      expect(row!.status).toBe("claimed");
+      expect(row!.claimed_by_slack).toBe("UFULFILLER");
+      expect(await db`select order_id from fulfillment_commitments where order_id = 31`).toHaveLength(1);
+    });
+
+    test("an owner can release someone else's claim", async () => {
+      await db`insert into shop_orders (id, user_id, item_name, status, claimed_by, claimed_by_slack, claimed_at)
+        values (32, ${buyer}, 'Hosting Grant', 'claimed', 'Other', 'UOTHER', now())`;
+      await commitment(32, "UOTHER");
+
+      expect(await releaseOrderClaim(32, "UFULFILLER", true, db)).toBe(true);
+      const [row] = await db`select status from shop_orders where id = 32`;
+      expect(row!.status).toBe("pending");
+      expect(await db`select order_id from fulfillment_commitments where order_id = 32`).toHaveLength(0);
+    });
+
+    test("a done order is untouched", async () => {
+      await db`insert into shop_orders (id, user_id, item_name, status, claimed_by_slack)
+        values (33, ${buyer}, 'Hosting Grant', 'done', 'UFULFILLER')`;
+      expect(await releaseOrderClaim(33, "UFULFILLER", true, db)).toBe(false);
+      const [row] = await db`select status from shop_orders where id = 33`;
+      expect(row!.status).toBe("done");
     });
   });
 

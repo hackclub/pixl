@@ -255,10 +255,16 @@ describe("evidence loading", () => {
       expect(eval1(ev, next).committedCents).toBe(2000);
     });
 
-    test("a grant whose description has no readable amount falls back to the pixel budget", async () => {
-      const row = aiGrant({ item_description: "A grant for AI credits." });
+    test("a grant whose description and item name are unknown falls back to the pixel budget", async () => {
+      const row = aiGrant({ item_name: "Mystery Grant", item_description: "A grant for something." });
       const ev = await load({ owned: [proj()], orders: [row], payouts: [payout()] });
       expect(eval1(ev, row).amount).toMatchObject({ cents: 2220, basis: "budget" });
+    });
+
+    test("a known AI subscription with no readable description still counts $10", async () => {
+      const row = aiGrant({ item_name: "AI subscription/credits", item_description: "Pick any AI provider." });
+      const ev = await load({ owned: [proj()], orders: [row], payouts: [payout()] });
+      expect(eval1(ev, row).amount).toMatchObject({ cents: 2000, basis: "face", budgetCents: 2220 });
     });
   });
 
@@ -554,6 +560,15 @@ describe("authorization and existing actions", () => {
   test("claiming still requires the fulfiller role server-side", () => {
     expect(actions).toContain('export const claimOrder = guardedAction("claimOrder", "fulfiller"');
     expect(actions).toContain('export const cancelOrder = guardedAction("cancelOrder", "owner"');
+  });
+
+  test("marking a grant sent from the CSV is owner-only and reuses the settlement", () => {
+    expect(actions).toContain('export const markGrantSent = guardedAction("markGrantSent", "owner"');
+    const action = actions.slice(actions.indexOf("export const markGrantSent"), actions.indexOf("export const convertOrderToGrant"));
+    expect(action).toContain("claimOrderWithFunding");
+    expect(action).toContain("reserveOnly: true");
+    expect(action).toContain("completeGrant(");
+    expect(action).toContain("orderIsGrant");
   });
 
   test("the fulfillment page still gates on the fulfiller role", () => {
