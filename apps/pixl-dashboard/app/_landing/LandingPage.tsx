@@ -12,7 +12,7 @@ import { LanguageSwitcher } from "./components/LanguageSwitcher";
 import { FontSwitcher } from "./components/FontSwitcher";
 import { Hero } from "./components/Hero";
 import { EndedProvider } from "./components/EndedProvider";
-import { StatsBand } from "./components/StatsBand";
+// StatsBand ("Pixl by the numbers") is hidden for now, import it again to bring it back.
 import { WTFISTHIS } from "./components/Description";
 import { Story } from "./components/Story";
 import { MainContent } from "./components/MainContent";
@@ -74,7 +74,7 @@ export async function LandingPage({ locale, previewEnded = false }: { locale: Lo
           <LanguageSwitcher />
           <FontSwitcher />
           <Hero />
-          <StatsBand />
+          {/* TODO: put <StatsBand /> back here in about 10 days (around 2026-12-01). */}
           <WTFISTHIS />
           <Story />
           <MainContent />
