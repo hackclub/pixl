@@ -189,7 +189,7 @@ export default async function GrantExportPage({
             <CardHeader title="Grants in this file" icon="payment" count={rows.length} />
             <form
               id="grant-download-form"
-              method="post"
+              method="get"
               action="/api/fulfillment/grants/export"
               className="flex flex-wrap items-center gap-3 border-b border-[var(--border)] px-4 py-3"
             >

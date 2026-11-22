@@ -16,33 +16,30 @@ function csvDownload(rows: GrantExportRow[], filename: string): NextResponse {
 }
 
 // The download behind /fulfillment/grants. Owner-only because the file is a
-// batch of buyer emails; guardedRoute writes the audit row.
+// batch of buyer emails; guardedRoute writes the audit row. A plain GET also
+// means the checkbox form doesn't need a CSRF-protected POST just to download
+// a read-only file.
+//
+// ?ids=225&ids=402 narrows the file to the checked rows. The rows are re-read
+// from the same owner-only loader and filtered server-side, so a stale checkbox
+// or a hand-crafted id can never add a different order to the file.
 export const GET = guardedRoute("api.fulfillment.grants_export", "owner", async (_access, request): Promise<NextResponse> => {
-  const scope = parseGrantScope(new URL(request.url).searchParams.get("scope"));
-  const { rows } = await loadGrantExport(scope);
-  if (rows.length === 0) return new NextResponse("No grant rows to export.", { status: 409 });
-
-  return csvDownload(rows, `pixl-grants-${scope}-${new Date().toISOString().slice(0, 10)}.csv`);
-});
-
-// Checkbox download: only the ids the owner ticked. The rows are re-read from
-// the same owner-only loader and filtered server-side, so a stale checkbox or
-// a hand-crafted id can never add a different order to the file.
-export const POST = guardedRoute("api.fulfillment.grants_export_selected", "owner", async (_access, request): Promise<NextResponse> => {
-  const form = await request.formData();
-  const scope = parseGrantScope(String(form.get("scope") ?? ""));
+  const url = new URL(request.url);
+  const scope = parseGrantScope(url.searchParams.get("scope"));
   const ids = new Set<number>();
-  for (const raw of form.getAll("ids")) {
+  for (const raw of url.searchParams.getAll("ids")) {
     const id = Number(raw);
     if (Number.isSafeInteger(id) && id > 0) ids.add(id);
   }
-  if (ids.size === 0) return new NextResponse("Select at least one grant row to export.", { status: 400 });
 
   const { rows } = await loadGrantExport(scope);
-  const selected = selectGrantRows(rows, ids);
+  if (rows.length === 0) return new NextResponse("No grant rows to export.", { status: 409 });
+
+  const selected = ids.size > 0 ? selectGrantRows(rows, ids) : rows;
   if (selected.length === 0) {
     return new NextResponse("None of the selected rows are still available to export.", { status: 409 });
   }
 
-  return csvDownload(selected, `pixl-grants-selected-${new Date().toISOString().slice(0, 10)}.csv`);
+  const kind = ids.size > 0 ? "selected" : scope;
+  return csvDownload(selected, `pixl-grants-${kind}-${new Date().toISOString().slice(0, 10)}.csv`);
 });
