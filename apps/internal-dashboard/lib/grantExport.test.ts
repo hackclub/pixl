@@ -3,6 +3,7 @@ import {
   buildGrantExport,
   fundingGrantCents,
   grantCsv,
+  selectGrantRows,
   type GrantOrderLike,
 } from "./grantExport";
 import { FUNDING_ORDER_PREFIX } from "./eligibility/policy";
@@ -120,6 +121,20 @@ describe("buildGrantExport", () => {
     );
     expect(rows[0].purpose.length).toBeLessThanOrEqual(30);
     expect(rows[0].itemName).toBe("Monitor Grant (Stackable)");
+  });
+});
+
+describe("selected rows", () => {
+  test("keeps only the selected ids and ignores stale or unknown ones", () => {
+    const { rows } = buildGrantExport([order({ id: 4 }), order({ id: 5 })], buyers);
+    expect(selectGrantRows(rows, [5]).map((r) => r.orderId)).toEqual([5]);
+    expect(selectGrantRows(rows, [4, 5]).map((r) => r.orderId)).toEqual([4, 5]);
+    expect(selectGrantRows(rows, [99])).toEqual([]);
+  });
+
+  test("matches bigint ids that arrive as strings", () => {
+    const { rows } = buildGrantExport([order({ id: "5" as unknown as number })], buyers);
+    expect(selectGrantRows(rows, [5]).map((r) => Number(r.orderId))).toEqual([5]);
   });
 });
 

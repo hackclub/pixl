@@ -1,4 +1,5 @@
 import { markGrantSent, unclaimOrder } from "@/app/actions";
+import { GrantSelectionToolbar } from "./GrantSelectionToolbar";
 import { requirePage } from "@/lib/guard";
 import { GRANT_SCOPE_LABEL, loadGrantExportPage, parseGrantScope } from "@/lib/grantExportData";
 import { GRANT_STAGE_LABEL } from "@/lib/fulfillmentGrant";
@@ -186,19 +187,41 @@ export default async function GrantExportPage({
 
           <Card padding="flush">
             <CardHeader title="Grants in this file" icon="payment" count={rows.length} />
-            <Table headers={["Order", "Player", "Email", "Grant", "Qty", "Amount", "Funding", "Status & send"]}>
-              {rows.map((row) => {
-                const result = funding.get(row.orderId);
-                const claimedBySomeoneElse =
-                  row.status === "claimed" && row.claimedBySlack !== access.session.slackId;
-                return (
-                  <tr key={row.orderId}>
-                    <td>
-                      <TextLink href={`/fulfillment?status=${encodeURIComponent(row.status)}&order=${row.orderId}`} className="font-bold">
-                        #{row.orderId}
-                      </TextLink>
-                    </td>
-                    <td>{row.playerName}</td>
+            <form
+              id="grant-download-form"
+              method="post"
+              action="/api/fulfillment/grants/export"
+              className="flex flex-wrap items-center gap-3 border-b border-[var(--border)] px-4 py-3"
+            >
+              <input type="hidden" name="scope" value={scope} />
+              <GrantSelectionToolbar />
+            </form>
+            <div id="grant-rows">
+              <Table headers={["", "Order", "Player", "Email", "Grant", "Qty", "Amount", "Funding", "Status & send"]}>
+                {rows.map((row) => {
+                  const result = funding.get(row.orderId);
+                  const claimedBySomeoneElse =
+                    row.status === "claimed" && row.claimedBySlack !== access.session.slackId;
+                  return (
+                    <tr key={row.orderId}>
+                      <td>
+                        <label className="hc-check">
+                          <input
+                            type="checkbox"
+                            name="ids"
+                            value={row.orderId}
+                            form="grant-download-form"
+                            data-grant-select
+                            aria-label={`Select order #${row.orderId}`}
+                          />
+                        </label>
+                      </td>
+                      <td>
+                        <TextLink href={`/fulfillment?status=${encodeURIComponent(row.status)}&order=${row.orderId}`} className="font-bold">
+                          #{row.orderId}
+                        </TextLink>
+                      </td>
+                      <td>{row.playerName}</td>
                     <td>
                       <Mono>{row.email}</Mono>
                     </td>
@@ -284,8 +307,9 @@ export default async function GrantExportPage({
                     </td>
                   </tr>
                 );
-              })}
-            </Table>
+                })}
+              </Table>
+            </div>
           </Card>
         </>
       )}

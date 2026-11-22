@@ -39,6 +39,13 @@ describe("H2 fulfillment", () => {
     expect(label).toContain("canViewLabel(order, access)");
     expect(label).toContain('"fulfillment.label_view"');
   });
+  test("selected grant downloads are owner-only and filtered server-side", () => {
+    const route = src("app/api/fulfillment/grants/export/route.ts");
+    expect(route).toContain('guardedRoute("api.fulfillment.grants_export_selected", "owner"');
+    expect(route).toContain("request.formData()");
+    expect(route).toContain("selectGrantRows");
+    expect(route).toContain("ids.size === 0");
+  });
   test("order actions refuse self-dealing and foreign flags", () => {
     expect(fnBody("app/actions.ts", "export const claimOrder")).toContain("isOwnOrder");
     expect(fnBody("app/actions.ts", "export const fulfillOrder")).toContain("isOwnOrder");
