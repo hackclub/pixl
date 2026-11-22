@@ -44,10 +44,10 @@ describe("H2 fulfillment", () => {
   });
   test("selected grant downloads are owner-only and filtered server-side", () => {
     const route = src("app/api/fulfillment/grants/export/route.ts");
-    expect(route).toContain('guardedRoute("api.fulfillment.grants_export_selected", "owner"');
-    expect(route).toContain("request.formData()");
+    expect(route).toContain('guardedRoute("api.fulfillment.grants_export", "owner"');
+    expect(route).toContain('url.searchParams.getAll("ids")');
     expect(route).toContain("selectGrantRows");
-    expect(route).toContain("ids.size === 0");
+    expect(route).not.toContain("export const POST");
   });
   test("order actions refuse self-dealing and foreign flags", () => {
     expect(fnBody("app/actions.ts", "export const claimOrder")).toContain("isOwnOrder");
