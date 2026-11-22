@@ -178,6 +178,16 @@ export function buildGrantExport(
   return { rows, problems, totalCents };
 }
 
+// The page's checkboxes post ids, but the server re-reads the rows and only
+// keeps matching ones. Unknown ids (or orders that just got sent) disappear
+// instead of being trusted from the form.
+export function selectGrantRows(rows: GrantExportRow[], ids: Iterable<number>): GrantExportRow[] {
+  // Bigint ids can still arrive as strings from Postgres; compare as numbers
+  // so selection works even before the export row normalization lands.
+  const wanted = new Set(Array.from(ids, Number));
+  return rows.filter((row) => wanted.has(Number(row.orderId)));
+}
+
 export function grantCsv(rows: GrantExportRow[]): string {
   const lines = [GRANT_CSV_COLUMNS.join(",")];
   for (const row of rows) {
