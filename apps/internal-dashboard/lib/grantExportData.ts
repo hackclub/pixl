@@ -39,13 +39,15 @@ export async function loadGrantExport(scope: GrantScope): Promise<GrantExport> {
   return buildGrantExport(orders, buyers);
 }
 
-// Funding coverage for the export page, using the same advisory engine as the
-// fulfillment queue (cached Airtable, current Ships snapshot). Failing to load
-// evidence must not hide the CSV: the page falls back to "Not loaded" badges.
+// Funding coverage for the export page. Use the same live Airtable check as
+// the fulfillment order detail, not the queue's cached badge: otherwise an
+// order can read "Unverified" here while its detail page, after a live lookup,
+// says "Covered". The 5-minute Airtable cache keeps the batch from hammering
+// the API, and a failure still falls back to "Not loaded" without hiding the CSV.
 async function loadGrantFunding(orders: ShopOrderRow[]): Promise<Map<number, EligibilityResult>> {
   if (orders.length === 0) return new Map();
   try {
-    return await evaluateOrders(orders, { liveAirtable: false, ships: await shipsProvider().get() });
+    return await evaluateOrders(orders, { liveAirtable: true, ships: await shipsProvider().get() });
   } catch (e) {
     console.error("grant export funding", (e as Error).message);
     return new Map();
