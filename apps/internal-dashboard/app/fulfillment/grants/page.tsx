@@ -317,7 +317,7 @@ export default async function GrantExportPage({
       <p className="hc-caption text-xs">
         Owner-only: this is the only place the dashboard discloses buyer emails in bulk. Emails come from the buyer&apos;s
         account; orders without a valid email, a readable amount, or with an implausible amount stay out of the file.
-        Funding status is advisory and uses the same check as the fulfillment queue.
+        Funding status is advisory and uses the same live evidence check as the fulfillment order detail.
       </p>
     </div>
   );
