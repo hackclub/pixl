@@ -107,6 +107,9 @@ export function buildGrantExport(
   let totalCents = 0;
 
   for (const order of orders) {
+    // Postgres returns bigint ids as strings. Normalize once here so the CSV,
+    // the page's funding lookup and the mark-sent form all use the same number.
+    const orderId = Number(order.id);
     const funding = order.item_name.startsWith(FUNDING_ORDER_PREFIX);
     const status = order.status || "pending";
     const quantity = Math.max(1, Number(order.quantity) || 1);
@@ -117,7 +120,7 @@ export function buildGrantExport(
 
     if (unitCents === null) {
       problems.push({
-        orderId: order.id,
+        orderId,
         status,
         itemName,
         reason: funding
@@ -130,7 +133,7 @@ export function buildGrantExport(
     const amountCents = unitCents * quantity;
     if (amountCents > MAX_GRANT_CENTS) {
       problems.push({
-        orderId: order.id,
+        orderId,
         status,
         itemName,
         reason: `$${(amountCents / 100).toFixed(2)} is over the $${(MAX_GRANT_CENTS / 100).toFixed(0)} export limit, so check the amount by hand.`,
@@ -142,7 +145,7 @@ export function buildGrantExport(
     const email = (buyer?.email ?? "").trim();
     if (!EMAIL_RE.test(email)) {
       problems.push({
-        orderId: order.id,
+        orderId,
         status,
         itemName,
         reason: "The buyer has no valid email on file.",
@@ -159,7 +162,7 @@ export function buildGrantExport(
       : `For your PIXL shop order #${order.id}: ${quantity > 1 ? `${quantity}x ` : ""}${itemName}.`;
 
     rows.push({
-      orderId: order.id,
+      orderId,
       status,
       userId: order.user_id,
       playerName: (buyer?.name ?? "").trim() || itemName,
