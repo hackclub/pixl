@@ -76,9 +76,10 @@ describe("fulfillment tabs and the actions panel", () => {
     expect(panel("cancelled", true).any).toBe(false);
     expect(panel("cancelled", false).any).toBe(false);
   });
-  test("done orders only offer the owner an edit", () => {
-    expect(panel("done", false).any).toBe(false);
-    expect(panel("done", true)).toMatchObject({ primary: false, edit: true, any: true });
+  test("done orders offer messaging the buyer and an owner edit", () => {
+    expect(panel("done", false)).toMatchObject({ primary: false, contact: true, edit: false, any: true });
+    expect(panel("done", true)).toMatchObject({ primary: false, contact: true, edit: true, any: true });
+    expect(panel("done", false, { hasBuyerSlack: false }).any).toBe(false);
   });
   test("pending: claim is offered, edit is not", () => {
     expect(panel("pending", false, { mine: false })).toMatchObject({ primary: true, edit: false });
@@ -88,9 +89,10 @@ describe("fulfillment tabs and the actions panel", () => {
     expect(panel("claimed", false, { mine: false, hasBuyerSlack: false }).any).toBe(false);
     expect(panel("claimed", true, { mine: false }).primary).toBe(true);
   });
-  test("shipped is terminal: no primary action, owners can still edit", () => {
-    expect(panel("shipped", false)).toMatchObject({ primary: false, any: false });
-    expect(panel("shipped", true)).toMatchObject({ primary: false, edit: true });
+  test("shipped is terminal: no primary action, but the buyer can still be messaged", () => {
+    expect(panel("shipped", false)).toMatchObject({ primary: false, contact: true, any: true });
+    expect(panel("shipped", false, { hasBuyerSlack: false }).any).toBe(false);
+    expect(panel("shipped", true)).toMatchObject({ primary: false, contact: true, edit: true });
   });
   test("someone else's claimed order is read-only for a fulfiller", () => {
     const p = panel("ordered", false, { mine: false, hasBuyerSlack: false });

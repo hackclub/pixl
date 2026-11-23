@@ -110,6 +110,16 @@ suite("atomic fulfillment shipment", () => {
     expect(Number(after[0]!.pixels) - Number(before[0]!.pixels)).toBe(2);
   });
 
+  test("tracking is optional when closing a shipment", async () => {
+    await db`insert into shop_orders (id, user_id, item_name, status, claimed_by_slack)
+      values (6, ${buyer}, 'Envelope', 'credited', 'UFULFILLER')`;
+    expect(await settleShipment(6, "", "UFULFILLER", "Staff", 2, db)).not.toBeNull();
+    const rows = await db`select status, tracking, fulfillment_pixels_paid from shop_orders where id = 6`;
+    expect(rows[0]!.status).toBe("shipped");
+    expect(rows[0]!.tracking).toBe("");
+    expect(Number(rows[0]!.fulfillment_pixels_paid)).toBe(2);
+  });
+
   describe("grants", () => {
     test("two simultaneous sends close the grant and pay exactly once", async () => {
       await db`insert into shop_items (id, category) values (100, 'grants')`;

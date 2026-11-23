@@ -26,7 +26,7 @@ export function EditFulfillmentInfo({ order: o }: { order: ShopOrderRow }) {
               defaultValue={o.actual_cost_usd !== null ? Number(o.actual_cost_usd) : undefined}
             />
           </Field>
-          <Field label="Tracking">
+          <Field label="Tracking number" hint="Optional">
             <Input name="tracking" maxLength={120} defaultValue={o.tracking} />
           </Field>
           <Field label="Bought from" hint="Saved onto the item for the next fulfiller">
@@ -263,7 +263,7 @@ export function OrderActions({
             />
           </Field>
           <Field label="Tracking number" hint="Optional; DM'd to the buyer when provided" className="fw-order-action-field-wide">
-            <Input name="tracking" maxLength={120} defaultValue={o.tracking} placeholder="1Z... (or leave blank)" />
+            <Input name="tracking" maxLength={120} defaultValue={o.tracking} placeholder="1Z... (optional)" />
           </Field>
           <Field label="Bought from" hint="Optional, saved onto the item" className="fw-order-action-field-wide">
             <Input

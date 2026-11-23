@@ -19,9 +19,10 @@ import { SlackHandle } from "./SlackHandle";
 import { CopyEmail } from "./CopyEmail";
 import { FundingDisclosure } from "./Funding";
 import { ELIGIBILITY_HINT } from "@/lib/eligibility/format";
+import { slackDmLink } from "@/lib/slack";
 import { EditFulfillmentInfo, FlagControls, OrderActions } from "./OrderActions";
 import { ItemThumb, TypeBadge } from "./OrderList";
-import { ORDER_STEPS, STAGE_HINT, STAGE_LABEL, STAGE_TONE, SafeLink, slackLink, orderBudgetUsd, stageIndex } from "./shared";
+import { ORDER_STEPS, STAGE_HINT, STAGE_LABEL, STAGE_TONE, SafeLink, orderBudgetUsd, stageIndex } from "./shared";
 
 // These two ship in a plain envelope with no carrier tracking of their own,
 // so a printable address label (app/fulfillment/label/[id]) is how the
@@ -233,7 +234,7 @@ export function OrderDetail({
             {o.player_slack && (
               <>
                 {" · "}
-                <TextLink href={slackLink(o.player_slack)} external>
+                <TextLink href={slackDmLink(o.player_slack)} external>
                   <SlackHandle id={o.player_slack} />
                 </TextLink>
               </>
@@ -320,7 +321,7 @@ export function OrderDetail({
                 [
                   "Slack",
                   o.player_slack ? (
-                    <TextLink key="s" href={slackLink(o.player_slack)} external>
+                    <TextLink key="s" href={slackDmLink(o.player_slack)} external>
                       <SlackHandle id={o.player_slack} />
                     </TextLink>
                   ) : null,
@@ -365,8 +366,8 @@ export function OrderDetail({
             {visible.flag && <FlagControls order={o} canManage={canManage} budget={budget} />}
             {visible.contact && o.player_slack && (
               <div>
-                <ButtonLink href={slackLink(o.player_slack)} external variant="outline" size="sm" icon="message">
-                  Contact buyer
+                <ButtonLink href={slackDmLink(o.player_slack)} external variant="outline" size="sm" icon="slack-fill">
+                  Message on Slack
                 </ButtonLink>
               </div>
             )}
