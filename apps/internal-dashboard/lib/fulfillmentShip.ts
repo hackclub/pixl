@@ -34,7 +34,7 @@ export async function settleShipment(
           fulfilled_at = now(),
           fulfilled_by = ${fulfillerName},
           tracking = ${tracking},
-          fulfillment_pixels_paid = ${pixels}
+          fulfillment_pixels_paid = o.fulfillment_pixels_paid + ${pixels}
       from users as buyer
       where o.id = ${orderId}
         and o.status = 'credited'
@@ -94,7 +94,7 @@ export async function settleItemFulfillment(
           hcb_link = ${hcbLink},
           actual_cost_usd = ${actualCostUsd},
           tracking = ${tracking},
-          fulfillment_pixels_paid = ${pixels}
+          fulfillment_pixels_paid = o.fulfillment_pixels_paid + ${pixels}
       from users as buyer
       where o.id = ${orderId}
         and o.status in ('claimed', 'ordered', 'credited')
@@ -156,15 +156,15 @@ export async function settleGrant(
           tracking = ${grantLink},
           hcb_link = ${grantLink},
           actual_cost_usd = ${actualCostUsd},
-          fulfillment_pixels_paid = ${pixels}
+          fulfillment_pixels_paid = o.fulfillment_pixels_paid + ${pixels}
       from users as buyer
       where o.id = ${orderId}
         and o.status = 'claimed'
         and o.claimed_by_slack = ${fulfillerSlackId}
         and buyer.id = o.user_id
         and (${allowOwnOrder} or buyer.slack_id is distinct from ${fulfillerSlackId})
-        and (o.is_grant or exists (
-          select 1 from shop_items i where i.id = o.item_id and i.category = 'grants'))
+        and (o.is_grant or (not o.item_flow and exists (
+          select 1 from shop_items i where i.id = o.item_id and i.category = 'grants')))
       returning o.user_id, o.item_name`;
     if (!sent.length) return null;
 
@@ -213,4 +213,118 @@ export async function releaseOrderClaim(
     await tx`delete from fulfillment_commitments where order_id = ${orderId}`;
     return true;
   }) as Promise<boolean>;
+}
+
+export type FulfillmentFlow = "grant" | "item";
+
+export interface UnfulfillResult {
+  userId: string;
+  itemName: string;
+  status: "claimed" | "pending";
+  claimerSlack: string;
+  pixelsPaid: number;
+}
+
+// Reopens a done/shipped order without undoing its payout. The previous
+// fulfillment (who, when, HCB link, cost, tracking, payout) is copied to
+// shop_order_unfulfillments together with the reason, so the order row can
+// start a fresh attempt without losing the record of the first one. The claim
+// is kept where there was one; a legacy order with no claimer goes back to the
+// New queue. `flow` optionally switches the order between the grant and normal
+// item flows for the retry (e.g. a refunded grant that is now bought directly).
+//
+// The wallet payout and pixel_transactions row are intentionally untouched:
+// the fulfiller keeps what they were paid, and the next settlement adds to
+// shop_orders.fulfillment_pixels_paid rather than replacing it.
+export async function unfulfillOrder(
+  orderId: number,
+  reason: string,
+  by: string,
+  bySlack: string,
+  opts: { flow?: FulfillmentFlow | null } = {},
+  client: typeof sql = sql,
+): Promise<UnfulfillResult | null> {
+  const why = reason.trim().slice(0, 300);
+  if (!Number.isSafeInteger(orderId) || orderId <= 0 || !why || !by || !bySlack) {
+    throw new Error("Invalid unfulfillment");
+  }
+  const flow = opts.flow ?? null;
+
+  return client.begin(async (tx) => {
+    const rows = await tx`
+      select o.id, o.user_id, o.item_name, o.status, o.claimed_by, o.claimed_by_slack,
+             o.fulfilled_at, o.fulfilled_by, o.hcb_link, o.tracking,
+             o.actual_cost_usd, o.fulfillment_pixels_paid, o.is_grant, o.item_flow,
+             coalesce(i.category, '') as item_category,
+             coalesce(o.fulfilled_at, o.done_at, o.shipped_at) as completed_at
+        from shop_orders o
+        left join shop_items i on i.id = o.item_id
+       where o.id = ${orderId}
+         and o.status in ('done', 'shipped')
+       for update of o`;
+    const o = rows[0];
+    if (!o) return null;
+
+    // How the attempt being undone was completed. is_grant wins over item_flow,
+    // exactly like isGrantOrder in lib/fulfillmentGrant.ts.
+    const kind: FulfillmentFlow =
+      o.is_grant === true ? "grant" : o.item_flow === true ? "item" : o.item_category === "grants" ? "grant" : "item";
+    const prior = await tx`
+      select coalesce(sum(pixels_paid), 0)::int as paid
+        from shop_order_unfulfillments
+       where order_id = ${orderId}`;
+    const pixelsPaid = Math.max(0, Number(o.fulfillment_pixels_paid) - Number(prior[0]?.paid ?? 0));
+
+    await tx`
+      insert into shop_order_unfulfillments (
+        order_id, fulfillment_kind, fulfilled_at, fulfilled_by, fulfilled_by_slack,
+        hcb_link, tracking, actual_cost_usd, pixels_paid,
+        unfulfilled_by, unfulfilled_by_slack, reason
+      ) values (
+        ${orderId}, ${kind}, ${o.completed_at ?? null}, ${String(o.fulfilled_by ?? "")},
+        ${String(o.claimed_by_slack ?? "")}, ${String(o.hcb_link ?? "")}, ${String(o.tracking ?? "")},
+        ${o.actual_cost_usd ?? null}, ${pixelsPaid}, ${by}, ${bySlack}, ${why}
+      )`;
+
+    const updated = await tx`
+      update shop_orders
+      set status = case when coalesce(claimed_by_slack, '') <> '' then 'claimed' else 'pending' end,
+          claimed_by = case when coalesce(claimed_by_slack, '') <> '' then claimed_by else '' end,
+          claimed_by_slack = case when coalesce(claimed_by_slack, '') <> '' then claimed_by_slack else '' end,
+          claimed_at = case when coalesce(claimed_by_slack, '') <> '' then claimed_at else null end,
+          ordered_at = null,
+          credited_at = null,
+          shipped_at = null,
+          done_at = null,
+          fulfilled_at = null,
+          fulfilled_by = '',
+          tracking = '',
+          hcb_link = '',
+          actual_cost_usd = null,
+          item_flow = case when ${flow}::text = 'item' then true
+                           when ${flow}::text = 'grant' then false
+                           else item_flow end,
+          is_grant = case when ${flow}::text = 'grant' then true
+                          when ${flow}::text = 'item' then false
+                          else is_grant end
+      where id = ${orderId}
+        and status in ('done', 'shipped')
+      returning user_id, item_name, status, claimed_by_slack`;
+    const row = updated[0];
+    if (!row) return null;
+
+    // No claimer means the order is back in the New queue, so its old funding
+    // commitment no longer reserves anything.
+    if (row.status === "pending") {
+      await tx`delete from fulfillment_commitments where order_id = ${orderId}`;
+    }
+
+    return {
+      userId: String(row.user_id),
+      itemName: String(row.item_name),
+      status: row.status as "claimed" | "pending",
+      claimerSlack: String(row.claimed_by_slack ?? ""),
+      pixelsPaid,
+    };
+  }) as Promise<UnfulfillResult | null>;
 }

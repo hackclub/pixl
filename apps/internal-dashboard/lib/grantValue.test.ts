@@ -60,6 +60,16 @@ describe("grant order face value", () => {
     ).toBeNull();
     expect(grantOrderFaceCents({ quantity: 1, item_category: null, item_description: "A $10 grant." })).toBeNull();
   });
+  test("an order moved onto the normal item flow has no grant face value", () => {
+    expect(
+      grantOrderFaceCents({
+        quantity: 1,
+        item_category: "grants",
+        item_description: "A $10 grant.",
+        item_flow: true,
+      }),
+    ).toBeNull();
+  });
   test("returns null when the description cannot be read, so callers keep the pixel budget", () => {
     expect(grantOrderFaceCents({ quantity: 1, item_category: "grants", item_description: "A grant." })).toBeNull();
     expect(grantOrderFaceCents({ quantity: 1, item_category: "grants", item_description: null })).toBeNull();

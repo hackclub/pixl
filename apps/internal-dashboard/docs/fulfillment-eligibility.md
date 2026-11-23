@@ -21,6 +21,7 @@ The server's `EARNING_REASONS` list also recognizes `bounty`, `referral_reward`,
 | Confirmed in Unified | none | No Unified read API exists. `UnifiedVerifier` remains an injection point; Ships is the live verification source. |
 | Project funding grants | `projects.needs_funding`, `funding_usd`, `funding_deducted_px`, and the shop order named `Hardware funding grant , <project name>` | `funding_usd` is the reviewer-editable **request**, not a payment. A grant is real once approval withheld pixels (`funding_deducted_px > 0`) and inserted that shop order. There is no foreign key; the link is the exact order name. |
 | Previous fulfillment | `shop_orders` in `ordered / credited / shipped / done`, plus `fulfillment_commitments` | Orders claimed before the migration have no ledger row; their amount is derived from the order and labelled "not in ledger". |
+| Undone fulfillment | `shop_order_unfulfillments` | Audit history only. An unfulfilled order is back in `claimed`/`pending`, so only its current attempt counts. The fulfiller payout already paid is kept. |
 | Real cost | `shop_orders.actual_cost_usd`, `hcb_link` | Entered by the fulfiller at the credited stage. |
 
 Consequence: project hours are verified only when a Ships entry matches (below). Without a fresh Ships snapshot, project funding remains unverified; a player can still be `Covered` when verified reviewer ledger earnings cover the order and no independent review reason blocks it.
@@ -83,6 +84,8 @@ Defined in `orderAmount()`, in this order:
 3. **Shop budget** (`price * pixelValueUsd`), a ceiling used before the real cost is known.
 
 The fulfillment queue shows the same face-value budget for a grant order, so the number a fulfiller sees and the number the funding check commits cannot disagree.
+
+An order moved onto the normal item flow after an unfulfill (`shop_orders.item_flow`, migration 0245) is no longer a catalog grant for funding even if its item is in the grants category: it counts at its recorded supplier cost or pixel budget. A manual conversion back to the grant flow (`is_grant`) still wins. The previous attempt's real cost stays in `shop_order_unfulfillments` for audit and does not count again; in the usual case (a cancelled/refunded grant) that is the correct net spend.
 
 Pixels paid by the player never change the counted amount. They fund the player's wallet, not Hack Club's grant budget. Cancelled orders count 0.
 

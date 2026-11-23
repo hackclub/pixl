@@ -693,6 +693,11 @@ router.delete("/api/shop/save/:id", validate({ query: v.noQuery, params: params(
 // the fulfillment-pipeline columns (status/tracking/stage stamps) but falls back
 // to the base columns so it keeps working before migration 0052 is applied.
 const ORDER_COLUMNS =
+  "id, item_id, item_name, option, price, quantity, status, note, buyer_note, created_at, ordered_at, credited_at, shipped_at, done_at, tracking, is_grant, item_flow";
+// Same set without the unfulfill column (migration 0245), so a server deploy
+// that lands before the migration keeps working instead of dropping tracking
+// and quantity via the very old fallback below.
+const ORDER_COLUMNS_WITHOUT_ITEM_FLOW =
   "id, item_id, item_name, option, price, quantity, status, note, buyer_note, created_at, ordered_at, credited_at, shipped_at, done_at, tracking, is_grant";
 const ORDER_COLUMNS_FALLBACK =
   "id, item_name, option, price, status, note, created_at, fulfilled_at";
@@ -710,12 +715,19 @@ router.get("/api/shop/orders", async (req, res) => {
       .limit(100);
 
   let { data, error } = await build(ORDER_COLUMNS);
+  if (error) ({ data, error } = await build(ORDER_COLUMNS_WITHOUT_ITEM_FLOW));
   if (error) ({ data, error } = await build(ORDER_COLUMNS_FALLBACK));
   if (error) {
     console.error("[shop] orders failed", error);
     return res.status(500).json({ ok: false });
   }
-  const orders = (data ?? []) as { id: number; status: string; item_id?: number | null; is_grant?: boolean }[];
+  const orders = (data ?? []) as {
+    id: number;
+    status: string;
+    item_id?: number | null;
+    is_grant?: boolean;
+    item_flow?: boolean;
+  }[];
 
   // A grant is sent by email as an HCB grant, not shipped, so the Orders tab
   // shows a grant timeline for it. An order is a grant when it was converted
@@ -730,8 +742,13 @@ router.get("/api/shop/orders", async (req, res) => {
       if (it.category === "grants") grantItemIds.add(it.id);
   }
   for (const o of orders) {
-    o.is_grant = o.is_grant === true || (typeof o.item_id === "number" && grantItemIds.has(o.item_id));
+    // A manual conversion to the grant flow always wins; item_flow only turns
+    // the category-derived grant flow off for a re-fulfilled order.
+    o.is_grant =
+      o.is_grant === true ||
+      (o.item_flow !== true && typeof o.item_id === "number" && grantItemIds.has(o.item_id));
     delete o.item_id;
+    delete o.item_flow;
   }
 
   // Queue position for any still-pending order: FIFO by created_at across

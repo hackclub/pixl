@@ -1,7 +1,7 @@
 "use server";
 
 import { claimOrderWithFunding, refreshCommitmentAmount } from "@/lib/eligibility/commit";
-import { releaseOrderClaim, settleGrant, settleItemFulfillment } from "@/lib/fulfillmentShip";
+import { releaseOrderClaim, settleGrant, settleItemFulfillment, unfulfillOrder as unfulfillOrderInDb } from "@/lib/fulfillmentShip";
 import { fulfillmentPayoutPixels, isGrantOrder, GRANT_FULFILLMENT_PAYOUT_PIXELS } from "@/lib/fulfillmentGrant";
 import { manualShipsRefresh, shipsProvider } from "@/lib/eligibility/ships";
 import { FUNDING_ORDER_PREFIX } from "@/lib/eligibility/policy";
@@ -5962,8 +5962,11 @@ async function logOrderAction(
 
 // Whether an order uses the grant flow and payout: its item is in the grants
 // category, or a fulfiller converted this one order (shop_orders.is_grant).
-async function orderIsGrant(order: { item_id?: number | null; is_grant?: boolean | null }): Promise<boolean> {
+// An order pushed onto the normal item flow by an unfulfill (item_flow) is not
+// a grant unless it was also converted, exactly like isGrantOrder.
+async function orderIsGrant(order: { item_id?: number | null; is_grant?: boolean | null; item_flow?: boolean | null }): Promise<boolean> {
   if (order.is_grant === true) return true;
+  if (order.item_flow === true) return false;
   if (order.item_id == null) return false;
   const { data } = await db.from("shop_items").select("category").eq("id", order.item_id).maybeSingle();
   return isGrantOrder({ item_category: (data?.category as string | null | undefined) ?? null });
@@ -6000,7 +6003,7 @@ export const fulfillOrder = guardedAction("fulfillOrder", "fulfiller", async (ac
   }
   const { data: order } = await db
     .from("shop_orders")
-    .select("user_id, item_name, status, claimed_by_slack, item_id, is_grant")
+    .select("user_id, item_name, status, claimed_by_slack, item_id, is_grant, item_flow")
     .eq("id", id)
     .maybeSingle();
   const open = order?.status === "claimed" || order?.status === "ordered" || order?.status === "credited";
@@ -6153,7 +6156,7 @@ export const sendGrant = guardedAction("sendGrant", "fulfiller", async (access, 
   }
   const { data: order } = await db
     .from("shop_orders")
-    .select("user_id, item_name, status, claimed_by_slack, item_id, is_grant")
+    .select("user_id, item_name, status, claimed_by_slack, item_id, is_grant, item_flow")
     .eq("id", id)
     .maybeSingle();
   if (!order || order.status !== "claimed" || !ownsOrder(access, order.claimed_by_slack as string)) {
@@ -6189,7 +6192,7 @@ export const markGrantSent = guardedAction("markGrantSent", "owner", async (acce
   }
   const { data: order } = await db
     .from("shop_orders")
-    .select("user_id, item_name, status, claimed_by_slack, item_id, is_grant")
+    .select("user_id, item_name, status, claimed_by_slack, item_id, is_grant, item_flow")
     .eq("id", id)
     .maybeSingle();
   if (!order || (order.status !== "pending" && order.status !== "claimed")) {
@@ -6239,7 +6242,7 @@ export const convertOrderToGrant = guardedAction("convertOrderToGrant", "fulfill
   if (!Number.isSafeInteger(id) || id <= 0) return;
   const { data: order } = await db
     .from("shop_orders")
-    .select("user_id, item_name, status, claimed_by_slack, item_id, is_grant")
+    .select("user_id, item_name, status, claimed_by_slack, item_id, is_grant, item_flow")
     .eq("id", id)
     .maybeSingle();
   if (!order || (order.status !== "pending" && order.status !== "claimed")) {
@@ -6258,7 +6261,7 @@ export const convertOrderToGrant = guardedAction("convertOrderToGrant", "fulfill
   }
   const { data: changed, error } = await db
     .from("shop_orders")
-    .update({ is_grant: true })
+    .update({ is_grant: true, item_flow: false })
     .eq("id", id)
     .in("status", ["pending", "claimed"])
     .eq("is_grant", false)
@@ -6396,6 +6399,58 @@ export const cancelOrder = guardedAction("cancelOrder", "owner", async (access, 
   );
   revalidatePath("/fulfillment");
   revalidatePath("/pixels");
+});
+
+// Owner escape hatch for a fulfillment that has to be undone after the fact,
+// e.g. a grant that HCB later cancelled and refunded. The order goes back to
+// its claimer's queue (or the New queue if it had none), the previous
+// fulfillment stays on file with the required reason, and the payout already
+// paid stays with the fulfiller. `flow` can move a grant-category order onto
+// the normal item flow for the retry when the replacement is bought directly.
+export const unfulfillOrder = guardedAction("unfulfillOrder", "owner", async (access, formData: FormData): Promise<void> => {
+  const id = Number(formData.get("id") ?? 0);
+  const reason = String(formData.get("reason") ?? "").trim().slice(0, 300);
+  const flowValue = String(formData.get("flow") ?? "");
+  const flow = flowValue === "grant" || flowValue === "item" ? flowValue : null;
+  if (!Number.isSafeInteger(id) || id <= 0 || !reason) {
+    revalidatePath("/fulfillment");
+    return;
+  }
+  const { data: order } = await db
+    .from("shop_orders")
+    .select("user_id, item_name, status")
+    .eq("id", id)
+    .maybeSingle();
+  if (!order || (order.status !== "done" && order.status !== "shipped")) {
+    revalidatePath("/fulfillment");
+    return;
+  }
+  const result = await unfulfillOrderInDb(id, reason, actorName(access), access.session.slackId, { flow });
+  if (!result) {
+    revalidatePath("/fulfillment");
+    revalidatePath("/fulfillment/grants");
+    return;
+  }
+  if ((await refreshCommitmentAmount(id, { ships: shipsProvider() })) === "failed") {
+    await logOrderAction(id, "ledger_refresh_failed", "funding ledger amount could not be updated", actorName(access));
+  }
+  // The reason is internal (it can mention refunds, vendors or mistakes), so
+  // the player only gets the useful part: this order is being redone.
+  await db.from("notifications").insert({
+    user_id: result.userId,
+    title: "Order reopened",
+    body: `Your "${result.itemName}" order is being fulfilled again. We'll let you know when it's on its way.`,
+  });
+  await logOrderAction(
+    id,
+    "order_unfulfilled",
+    `reopened: ${reason}${flow ? ` (now on the ${flow} flow)` : ""}; ${result.pixelsPaid} px payout kept`,
+    actorName(access),
+    { user_id: result.userId, item_name: result.itemName },
+  );
+  revalidatePath("/fulfillment");
+  revalidatePath("/fulfillment/grants");
+  redirect(result.status === "pending" ? `/fulfillment?order=${id}` : `/fulfillment?status=claimed&order=${id}`);
 });
 
 // Backfill player-card photos from Slack for everyone who has a slack_id but

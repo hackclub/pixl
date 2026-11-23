@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { randomBytes } from "node:crypto";
 import postgres from "postgres";
-import { releaseOrderClaim, settleGrant, settleItemFulfillment, settleShipment } from "./fulfillmentShip";
+import { releaseOrderClaim, settleGrant, settleItemFulfillment, settleShipment, unfulfillOrder } from "./fulfillmentShip";
 
 const adminUrl = process.env.PIXL_TEST_DATABASE_URL;
 const suite = adminUrl ? describe : describe.skip;
@@ -29,8 +29,22 @@ suite("atomic fulfillment shipment", () => {
         shipped_at timestamptz, fulfilled_at timestamptz, fulfilled_by text,
         tracking text, fulfillment_pixels_paid integer not null default 0,
         item_id bigint, is_grant boolean not null default false,
+        item_flow boolean not null default false,
         ordered_at timestamptz, credited_at timestamptz, done_at timestamptz,
         hcb_link text, actual_cost_usd numeric
+      );
+      create table shop_order_unfulfillments (
+        id bigserial primary key,
+        order_id bigint not null references shop_orders(id) on delete cascade,
+        fulfillment_kind text not null default 'item',
+        fulfilled_at timestamptz, fulfilled_by text not null default '',
+        fulfilled_by_slack text not null default '',
+        hcb_link text not null default '', tracking text not null default '',
+        actual_cost_usd numeric(10,2), pixels_paid integer not null default 0,
+        unfulfilled_at timestamptz not null default now(),
+        unfulfilled_by text not null default '',
+        unfulfilled_by_slack text not null default '',
+        reason text not null default ''
       );
       create table fulfillment_commitments (
         order_id bigint primary key references shop_orders(id),
@@ -280,6 +294,103 @@ suite("atomic fulfillment shipment", () => {
                (23, ${buyer}, 'Already shipped', 'shipped', 'UFULFILLER')`;
       expect(await settleItemFulfillment(22, { tracking: "", hcbLink: "https://hcb.example/tx/4", actualCostUsd: 9 }, "UFULFILLER", "Staff", 6, db)).not.toBeNull();
       expect(await settleItemFulfillment(23, { tracking: "", hcbLink: "https://hcb.example/tx/5", actualCostUsd: 9 }, "UFULFILLER", "Staff", 6, db)).toBeNull();
+    });
+  });
+
+  describe("unfulfill and re-fulfill", () => {
+    test("a done grant is reopened, its previous fulfillment kept, and its payout not clawed back", async () => {
+      await db`insert into shop_items (id, category) values (102, 'grants') on conflict (id) do nothing`;
+      await db`insert into shop_orders (
+        id, user_id, item_name, status, claimed_by, claimed_by_slack, claimed_at,
+        ordered_at, credited_at, shipped_at, done_at, fulfilled_at, fulfilled_by,
+        tracking, hcb_link, actual_cost_usd, fulfillment_pixels_paid, item_id, is_grant
+      ) values (
+        40, ${buyer}, 'Hosting Grant', 'done', 'Staff', 'UFULFILLER', now(),
+        now(), now(), now(), now(), now(), 'Staff',
+        'https://hcb.example/grants/X', 'https://hcb.example/grants/X', 10, 2, 102, true
+      )`;
+      const before = await db`select pixels from users where id = ${fulfiller}`;
+
+      const result = await unfulfillOrder(40, "Grant refunded by HCB", "Owner", "UOWNER", { flow: "item" }, db);
+      expect(result).toMatchObject({ status: "claimed", claimerSlack: "UFULFILLER", pixelsPaid: 2 });
+
+      const [row] = await db`select status, claimed_by_slack, hcb_link, tracking, actual_cost_usd,
+        done_at, shipped_at, fulfilled_at, fulfillment_pixels_paid, is_grant, item_flow
+        from shop_orders where id = 40`;
+      expect(row!.status).toBe("claimed");
+      expect(row!.claimed_by_slack).toBe("UFULFILLER");
+      expect(row!.hcb_link).toBe("");
+      expect(row!.tracking).toBe("");
+      expect(row!.actual_cost_usd).toBeNull();
+      expect(row!.done_at).toBeNull();
+      expect(row!.shipped_at).toBeNull();
+      expect(row!.fulfilled_at).toBeNull();
+      expect(Number(row!.fulfillment_pixels_paid)).toBe(2);
+      expect(row!.is_grant).toBe(false);
+      expect(row!.item_flow).toBe(true);
+
+      const [history] = await db`select * from shop_order_unfulfillments where order_id = 40`;
+      expect(history!.fulfillment_kind).toBe("grant");
+      expect(history!.fulfilled_by).toBe("Staff");
+      expect(history!.fulfilled_by_slack).toBe("UFULFILLER");
+      expect(history!.hcb_link).toBe("https://hcb.example/grants/X");
+      expect(Number(history!.actual_cost_usd)).toBe(10);
+      expect(Number(history!.pixels_paid)).toBe(2);
+      expect(history!.reason).toBe("Grant refunded by HCB");
+      expect(history!.unfulfilled_by).toBe("Owner");
+
+      const after = await db`select pixels from users where id = ${fulfiller}`;
+      expect(Number(after[0]!.pixels)).toBe(Number(before[0]!.pixels));
+    });
+
+    test("re-fulfilling adds the new payout, and the next unfulfill records only that attempt", async () => {
+      const settled = await settleItemFulfillment(
+        40,
+        { tracking: "1Z-REBUY", hcbLink: "https://hcb.example/tx/40", actualCostUsd: 9 },
+        "UFULFILLER",
+        "Staff",
+        6,
+        db,
+      );
+      expect(settled).not.toBeNull();
+
+      let [row] = await db`select status, tracking, fulfillment_pixels_paid from shop_orders where id = 40`;
+      expect(row!.status).toBe("done");
+      expect(row!.tracking).toBe("1Z-REBUY");
+      expect(Number(row!.fulfillment_pixels_paid)).toBe(8);
+
+      expect(await unfulfillOrder(40, "Second issue", "Owner", "UOWNER", {}, db)).not.toBeNull();
+      [row] = await db`select status, fulfillment_pixels_paid from shop_orders where id = 40`;
+      expect(row!.status).toBe("claimed");
+      expect(Number(row!.fulfillment_pixels_paid)).toBe(8);
+
+      const history = await db`select pixels_paid from shop_order_unfulfillments
+        where order_id = 40 order by id`;
+      expect(history.map((h) => Number(h.pixels_paid))).toEqual([2, 6]);
+    });
+
+    test("a second unfulfill of an order that is no longer finished is a no-op", async () => {
+      expect(await unfulfillOrder(40, "again", "Owner", "UOWNER", {}, db)).toBeNull();
+      const rows = await db`select id from shop_order_unfulfillments where order_id = 40`;
+      expect(rows).toHaveLength(2);
+    });
+
+    test("an unclaimed legacy shipment returns to the New queue and drops its commitment", async () => {
+      await db`insert into shop_orders (
+        id, user_id, item_name, status, claimed_by_slack, claimed_at,
+        shipped_at, fulfilled_at, fulfillment_pixels_paid
+      ) values (41, ${buyer}, 'Legacy pin', 'shipped', '', now(), now(), now(), 2)`;
+      await db`insert into fulfillment_commitments (
+        order_id, user_id, amount_cents, basis, verified_funding_cents,
+        verdict, policy_version, authorized_by, authorized_by_slack
+      ) values (41, ${buyer}, 1000, 'budget', 5000, 'covered', 'test', 'Staff', 'UFULFILLER')`;
+
+      const result = await unfulfillOrder(41, "returned to sender", "Owner", "UOWNER", {}, db);
+      expect(result?.status).toBe("pending");
+      const [row] = await db`select status, claimed_by_slack from shop_orders where id = 41`;
+      expect(row!.status).toBe("pending");
+      expect(row!.claimed_by_slack).toBe("");
+      expect(await db`select order_id from fulfillment_commitments where order_id = 41`).toHaveLength(0);
     });
   });
 

@@ -1,7 +1,7 @@
-import { cancelOrder, clearOrderFlag, claimOrder, convertOrderToGrant, flagOrderOverBudget, fulfillOrder, reassignOrder, sendGrant, unclaimOrder, updateOrderFulfillmentInfo } from "@/app/actions";
+import { cancelOrder, clearOrderFlag, claimOrder, convertOrderToGrant, flagOrderOverBudget, fulfillOrder, reassignOrder, sendGrant, unclaimOrder, unfulfillOrder, updateOrderFulfillmentInfo } from "@/app/actions";
 import type { ShopOrderRow } from "@/lib/db";
 import { isGrantOrder } from "@/lib/fulfillmentGrant";
-import { ActionButton, Details, Field, Input, Muted } from "@/app/_ui/ui";
+import { ActionButton, Details, Field, Input, Muted, NativeSelect, Textarea } from "@/app/_ui/ui";
 import { orderBudgetUsd } from "./shared";
 
 // Corrects the HCB link / actual cost / tracking after the fact. Deliberately
@@ -114,6 +114,51 @@ function UnclaimButton({ order: o }: { order: ShopOrderRow }) {
         Unclaim
       </ActionButton>
     </form>
+  );
+}
+
+// Reopens a finished order without undoing the payout or deleting the record
+// of the first fulfillment. Owner-only (the action enforces it too). Kept out
+// of the normal action flow on purpose: it is an after-the-fact correction,
+// e.g. a grant that HCB cancelled and refunded.
+export function UnfulfillControls({ order: o }: { order: ShopOrderRow }) {
+  if (o.status !== "done" && o.status !== "shipped") return null;
+  const grantShaped = Boolean(o.is_grant || o.item_flow || o.item_category === "grants");
+  return (
+    <Details summary="Unfulfill and return it to the queue">
+      <form action={unfulfillOrder} className="fw-order-action-form">
+        <input type="hidden" name="id" value={o.id} />
+        <Muted className="text-sm">
+          {o.fulfillment_pixels_paid > 0
+            ? `Puts this order back in its fulfiller's queue so it can be fulfilled again. The ${o.fulfillment_pixels_paid} px already paid are kept by the fulfiller, and this fulfillment stays on the order's history.`
+            : "Puts this order back in its fulfiller's queue so it can be fulfilled again. This fulfillment stays on the order's history."}
+        </Muted>
+        <div className="fw-order-action-fields">
+          <Field label="Why is this being unfulfilled?" hint="Required; shown in the order history" className="fw-order-action-field-wide">
+            <Textarea
+              name="reason"
+              maxLength={300}
+              rows={3}
+              required
+              placeholder="The grant was cancelled and refunded, so I'm buying the item directly instead."
+            />
+          </Field>
+          {grantShaped && (
+            <Field label="Fulfill it again as" className="fw-order-action-field-wide">
+              <NativeSelect name="flow" defaultValue={isGrantOrder(o) ? "grant" : "item"}>
+                <option value="grant">A grant (send a new HCB grant)</option>
+                <option value="item">A normal item purchase (HCB transaction, cost, tracking)</option>
+              </NativeSelect>
+            </Field>
+          )}
+        </div>
+        <div className="fw-order-action-buttons">
+          <ActionButton variant="danger" pendingLabel="Reopening..." icon="back">
+            Unfulfill order
+          </ActionButton>
+        </div>
+      </form>
+    </Details>
   );
 }
 

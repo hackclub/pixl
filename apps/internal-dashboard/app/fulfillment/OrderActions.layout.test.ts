@@ -60,4 +60,16 @@ describe("fulfillment action layout", () => {
     expect(css).toContain(".fw-order-action-buttons .hc-btn");
     expect(css).toContain("white-space: normal;");
   });
+
+  test("unfulfilling asks for a required reason and is owner-gated", () => {
+    const control = actions.slice(
+      actions.indexOf("export function UnfulfillControls"),
+      actions.indexOf("export function OrderActions"),
+    );
+    expect(control).toContain('name="reason"');
+    expect(control).toContain("required");
+    expect(control).toContain('name="flow"');
+    expect(control).toContain("already paid are kept");
+    expect(detail).toContain("visible.unfulfill && <UnfulfillControls");
+  });
 });
