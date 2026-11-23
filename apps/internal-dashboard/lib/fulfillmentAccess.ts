@@ -79,7 +79,10 @@ export function visibleOrderActions(c: OrderActionContext): VisibleOrderActions 
     else primary = true;
   }
   const flag = actionable && (c.mine || c.canManage) && (!c.flagged || c.canManage);
-  const contact = actionable && c.hasBuyerSlack;
+  // Messaging the buyer stays useful after an order closes (a tracking or
+  // delivery question), so fulfilled orders keep this action too. Cancelled
+  // orders are the only ones with nothing to ask about.
+  const contact = c.hasBuyerSlack && c.status !== "cancelled";
   const edit = c.canManage && c.status !== "pending" && c.status !== "claimed" && c.status !== "cancelled";
   return { primary, flag, contact, edit, any: primary || flag || contact || edit };
 }

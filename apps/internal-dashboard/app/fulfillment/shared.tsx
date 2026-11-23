@@ -29,7 +29,7 @@ export const STAGE_HINT: Record<OrderStatus, string> = {
   claimed: "Assigned to a fulfiller",
   ordered: "Assigned; purchase recorded",
   credited: "Assigned; purchase recorded",
-  shipped: "Fulfilled; tracking on file",
+  shipped: "Fulfilled",
   done: "Bought and recorded",
   cancelled: "Refunded",
 };
@@ -63,10 +63,6 @@ export function orderBudgetUsd(o: {
 }): string {
   const faceCents = grantOrderFaceCents(o);
   return faceCents == null ? usdBudget(o.price) : (faceCents / 100).toFixed(2);
-}
-
-export function slackLink(id: string): string {
-  return `https://slack.com/app_redirect?channel=${id}`;
 }
 
 export function SafeLink({ url }: { url: string }) {

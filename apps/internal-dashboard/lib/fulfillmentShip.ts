@@ -7,6 +7,8 @@ export interface ShipmentResult {
   itemName: string;
 }
 
+// The tracking number is optional: an envelope, software key or hand-delivered
+// item has none, and the order still counts as shipped and gets paid.
 export async function settleShipment(
   orderId: number,
   tracking: string,
@@ -19,7 +21,7 @@ export async function settleShipment(
 ): Promise<ShipmentResult | null> {
   if (!Number.isSafeInteger(orderId) || orderId <= 0 ||
       !Number.isSafeInteger(pixels) || pixels <= 0 ||
-      !fulfillerSlackId || !tracking) throw new Error("Invalid fulfillment settlement");
+      !fulfillerSlackId) throw new Error("Invalid fulfillment settlement");
 
   return client.begin(async (tx) => {
     const fulfillers = await tx`select id from users where slack_id = ${fulfillerSlackId} for update`;

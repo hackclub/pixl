@@ -285,6 +285,13 @@ export async function postToChannel(channel: string, text: string): Promise<void
   await slackCall("chat.postMessage", { channel, text, unfurl_links: false });
 }
 
+// Deep link that opens (or creates) the DM with a Slack user in the Slack app.
+// A user id works as an app_redirect channel and lands in the right workspace,
+// unlike hackclub.slack.com/team/<id>, which opens the profile instead.
+export function slackDmLink(slackUserId: string): string {
+  return `https://slack.com/app_redirect?channel=${encodeURIComponent(slackUserId)}`;
+}
+
 // Relays a DM through Pixo's external DM API (POST /api/external/dm on
 // apps/pixorpheus). Used whenever EXTERNAL_API_KEY is set, at EXTERNAL_DM_URL
 // or Pixo's in-cluster address by default (lib/pixo.ts), never a public host.
