@@ -65,6 +65,7 @@ export interface VisibleOrderActions {
   flag: boolean;
   contact: boolean;
   edit: boolean;
+  unfulfill: boolean;
   any: boolean;
 }
 
@@ -84,5 +85,8 @@ export function visibleOrderActions(c: OrderActionContext): VisibleOrderActions 
   // orders are the only ones with nothing to ask about.
   const contact = c.hasBuyerSlack && c.status !== "cancelled";
   const edit = c.canManage && c.status !== "pending" && c.status !== "claimed" && c.status !== "cancelled";
-  return { primary, flag, contact, edit, any: primary || flag || contact || edit };
+  // Undoing a finished fulfillment rewrites a closed record (and the payout is
+  // deliberately kept), so it is an owner correction like edit/cancel.
+  const unfulfill = c.canManage && (c.status === "done" || c.status === "shipped");
+  return { primary, flag, contact, edit, unfulfill, any: primary || flag || contact || edit || unfulfill };
 }

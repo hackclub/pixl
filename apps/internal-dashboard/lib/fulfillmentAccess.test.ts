@@ -94,6 +94,15 @@ describe("fulfillment tabs and the actions panel", () => {
     expect(panel("shipped", false, { hasBuyerSlack: false }).any).toBe(false);
     expect(panel("shipped", true)).toMatchObject({ primary: false, contact: true, edit: true });
   });
+  test("only owners can unfulfill a completed order", () => {
+    expect(panel("done", false).unfulfill).toBe(false);
+    expect(panel("done", true).unfulfill).toBe(true);
+    expect(panel("shipped", false).unfulfill).toBe(false);
+    expect(panel("shipped", true).unfulfill).toBe(true);
+    for (const status of ["pending", "claimed", "credited", "cancelled"]) {
+      expect(panel(status, true).unfulfill).toBe(false);
+    }
+  });
   test("someone else's claimed order is read-only for a fulfiller", () => {
     const p = panel("ordered", false, { mine: false, hasBuyerSlack: false });
     expect(p.any).toBe(false);

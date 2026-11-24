@@ -18,6 +18,12 @@ describe("grant orders", () => {
     expect(isGrantOrder({ item_category: null, is_grant: null })).toBe(false);
   });
 
+  test("an unfulfilled order switched to the item flow is not a grant unless converted back", () => {
+    expect(isGrantOrder({ item_category: "grants", item_flow: true })).toBe(false);
+    expect(isGrantOrder({ item_category: "grants", item_flow: false })).toBe(true);
+    expect(isGrantOrder({ item_category: "grants", item_flow: true, is_grant: true })).toBe(true);
+  });
+
   test("the fulfillment payout is 2 pixels for a grant and 6 for any other item", () => {
     expect(GRANT_FULFILLMENT_PAYOUT_PIXELS).toBe(2);
     expect(ITEM_FULFILLMENT_PAYOUT_PIXELS).toBe(6);
@@ -32,6 +38,7 @@ describe("grant orders", () => {
     for (const status of ["pending", "claimed", "done"]) expect(usesGrantFlow({ ...g, status })).toBe(true);
     for (const status of ["ordered", "credited", "shipped"]) expect(usesGrantFlow({ ...g, status })).toBe(false);
     expect(usesGrantFlow({ item_category: "tech", status: "claimed" })).toBe(false);
+    expect(usesGrantFlow({ ...g, item_flow: true, status: "claimed" })).toBe(false);
   });
 });
 
@@ -81,5 +88,21 @@ describe("grant actions wiring", () => {
     expect(b).toContain("fulfillmentPayoutPixels(");
     expect(b).toContain("settleItemFulfillment(");
     expect(b).toContain("isOwnOrder(");
+  });
+
+  test("unfulfillOrder is an owner correction that reopens the order and keeps the payout", () => {
+    const b = body("unfulfillOrder");
+    expect(b).toContain('guardedAction("unfulfillOrder", "owner"');
+    expect(b).toContain('order.status !== "done" && order.status !== "shipped"');
+    expect(b).toContain("unfulfillOrderInDb(");
+    expect(b).toContain("refreshCommitmentAmount(");
+    expect(b).toContain("order_unfulfilled");
+    expect(b).toContain("payout kept");
+    const ship = readFileSync(join(import.meta.dir, "fulfillmentShip.ts"), "utf8");
+    const fn = ship.slice(ship.indexOf("export async function unfulfillOrder"));
+    expect(fn).toContain("insert into shop_order_unfulfillments");
+    expect(fn).toContain("fulfillment_pixels_paid");
+    expect(fn).toContain("pixels_paid");
+    expect(fn).toContain("fulfillment_kind");
   });
 });

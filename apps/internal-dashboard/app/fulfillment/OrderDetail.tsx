@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { BuyerDetails, OrderStatus, ShopOrderRow } from "@/lib/db";
+import type { BuyerDetails, OrderStatus, OrderUnfulfillmentRow, ShopOrderRow } from "@/lib/db";
 import { visibleOrderActions } from "@/lib/fulfillmentAccess";
 import { GRANT_STAGES, GRANT_STAGE_HINT, GRANT_STAGE_LABEL, isGrantOrder, usesGrantFlow } from "@/lib/fulfillmentGrant";
 import {
@@ -11,6 +11,7 @@ import {
   Mono,
   Muted,
   TextLink,
+  Timeline,
   formatDate,
   formatDateTime,
 } from "@/app/_ui/ui";
@@ -20,7 +21,7 @@ import { CopyEmail } from "./CopyEmail";
 import { FundingDisclosure } from "./Funding";
 import { ELIGIBILITY_HINT } from "@/lib/eligibility/format";
 import { slackDmLink } from "@/lib/slack";
-import { EditFulfillmentInfo, FlagControls, OrderActions } from "./OrderActions";
+import { EditFulfillmentInfo, FlagControls, OrderActions, UnfulfillControls } from "./OrderActions";
 import { ItemThumb, TypeBadge } from "./OrderList";
 import { ORDER_STEPS, STAGE_HINT, STAGE_LABEL, STAGE_TONE, SafeLink, orderBudgetUsd, stageIndex } from "./shared";
 
@@ -88,7 +89,7 @@ function Stepper({ order: o }: { order: ShopOrderRow }) {
   );
 }
 
-function Panel({ title, icon, children, aside }: { title: string; icon: "message" | "pin" | "person" | "link" | "bolt"; children: ReactNode; aside?: ReactNode }) {
+function Panel({ title, icon, children, aside }: { title: string; icon: "message" | "pin" | "person" | "link" | "bolt" | "history"; children: ReactNode; aside?: ReactNode }) {
   return (
     <section className="fw-panel">
       <header className="fw-panel-head">
@@ -171,6 +172,7 @@ export function OrderDetail({
   ownOrder,
   canManage,
   eligibility,
+  history,
 }: {
   order: ShopOrderRow;
   buyer?: BuyerDetails;
@@ -180,6 +182,7 @@ export function OrderDetail({
   ownOrder: boolean;
   canManage: boolean;
   eligibility: EligibilityResult | null;
+  history: OrderUnfulfillmentRow[];
 }) {
   const actionable = o.status !== "done" && o.status !== "shipped" && o.status !== "cancelled";
   const budget = orderBudgetUsd(o);
@@ -246,6 +249,12 @@ export function OrderDetail({
             <Badge tone={STAGE_TONE[o.status] ?? "neutral"}>{STAGE_LABEL[o.status] ?? o.status}</Badge>
             {o.option && <Badge>{o.option}</Badge>}
             {o.is_grant && o.item_category !== "grants" && <Badge tone="cyan" outline>Converted to grant</Badge>}
+            {o.item_flow && !o.is_grant && <Badge tone="cyan" outline>Fulfilling as item</Badge>}
+            {history.length > 0 && (
+              <Badge tone="yellow" outline>
+                Reopened {history.length === 1 ? "once" : `${history.length}x`}
+              </Badge>
+            )}
             {o.item_beacon_locked && (
               <Badge tone="yellow" icon="rep">
                 Beacon reward
@@ -359,6 +368,45 @@ export function OrderDetail({
         </div>
       </div>
 
+      {history.length > 0 && (
+        <Panel title="Previous fulfillments" icon="history">
+          <Timeline
+            entries={history.map((h) => {
+              const cost = h.actual_cost_usd == null ? null : Number(h.actual_cost_usd);
+              return {
+                key: h.id,
+                title: (
+                  <>
+                    <strong>Fulfilled by {h.fulfilled_by || "a fulfiller"}</strong>
+                    <Muted>· {formatDateTime(h.fulfilled_at ?? h.unfulfilled_at)}</Muted>
+                    <Badge tone="cyan" outline>{h.fulfillment_kind === "grant" ? "Grant" : "Item"}</Badge>
+                    {h.pixels_paid > 0 && <Badge tone="success" outline>{h.pixels_paid} px paid</Badge>}
+                  </>
+                ),
+                body: (
+                  <div className="flex flex-col gap-1 text-sm">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                      {h.hcb_link && (
+                        <span>
+                          HCB <SafeLink url={h.hcb_link} />
+                        </span>
+                      )}
+                      {cost !== null && <span>Cost ${cost.toFixed(2)}</span>}
+                      {h.tracking && h.tracking !== h.hcb_link && <span>Tracking <Mono>{h.tracking}</Mono></span>}
+                    </div>
+                    <Callout tone="warning" icon="back">
+                      <strong>Reopened by {h.unfulfilled_by || "an owner"}</strong>{" "}
+                      <Muted>· {formatDateTime(h.unfulfilled_at)}</Muted>
+                      <p className="mt-1 whitespace-pre-line">{h.reason}</p>
+                    </Callout>
+                  </div>
+                ),
+              };
+            })}
+          />
+        </Panel>
+      )}
+
       {visible.any && (
         <Panel title="Actions" icon="bolt">
           <div className="flex flex-col gap-3">
@@ -372,6 +420,7 @@ export function OrderDetail({
               </div>
             )}
             {visible.edit && <EditFulfillmentInfo order={o} />}
+            {visible.unfulfill && <UnfulfillControls order={o} />}
           </div>
         </Panel>
       )}

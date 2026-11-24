@@ -76,12 +76,17 @@ export interface GrantOrderShape {
   item_name?: string | null;
   item_category?: string | null;
   item_description?: string | null;
+  // An unfulfilled order can be moved onto the normal item flow (migration
+  // 0245). It then has no grant face value; its pixel budget applies.
+  item_flow?: boolean | null;
 }
 
 // Total face value for an order in the grants category, or null when it is
-// not a catalog grant (project funding grants are matched separately) or its
-// amount cannot be read. Callers fall back to the pixel budget on null.
+// not a catalog grant (project funding grants are matched separately), it was
+// moved onto the normal item flow, or its amount cannot be read. Callers fall
+// back to the pixel budget on null.
 export function grantOrderFaceCents(order: GrantOrderShape): number | null {
+  if (order.item_flow === true) return null;
   if (order.item_category !== "grants") return null;
   const unit = grantFaceValueCents(order.item_description, order.item_name);
   if (unit === null) return null;

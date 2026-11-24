@@ -376,7 +376,7 @@ export async function loadPlayerEvidence(
                c.user_id as collab_user_id, c.approved_hours as collab_hours, c.airtable_record_id as collab_record_id, c.prior_approved_hours as collab_prior_hours
         from project_collaborators c join projects p on p.id = c.project_id
         where c.status = 'accepted' and c.user_id in ${q(userIds)}`,
-    q`select o.id, o.user_id, o.item_name, o.quantity, o.price, o.status, o.actual_cost_usd, o.flagged_at,
+    q`select o.id, o.user_id, o.item_name, o.quantity, o.price, o.status, o.actual_cost_usd, o.flagged_at, o.item_flow,
                i.category as item_category, i.description as item_description
         from shop_orders o left join shop_items i on i.id = o.item_id
         where o.user_id in ${q(userIds)}`,
@@ -588,16 +588,19 @@ export async function loadPlayerEvidence(
     flagged_at: string | null;
     item_category: string | null;
     item_description: string | null;
+    item_flow?: boolean | null;
   }[]) {
     const list = ordersByUser.get(o.user_id) ?? [];
     // Catalog grants are worth their round dollar face value, not the pixel
     // budget: 2x AI Credits is $20, not 222 px ≈ $22.20. Project funding
     // grants have no item row and get their face value in grantsByUser below.
+    // An order moved onto the item flow after an unfulfill has no face value.
     const faceCents = grantOrderFaceCents({
       quantity: Number(o.quantity) || 1,
       item_name: o.item_name,
       item_category: o.item_category,
       item_description: o.item_description,
+      item_flow: o.item_flow === true,
     });
     list.push({
       id: Number(o.id),
@@ -609,6 +612,7 @@ export async function loadPlayerEvidence(
       actualCostUsd: o.actual_cost_usd == null ? null : num(o.actual_cost_usd),
       flagged: !!o.flagged_at,
       grantFaceUsd: faceCents == null ? null : faceCents / 100,
+      itemFlow: o.item_flow === true,
     });
     ordersByUser.set(o.user_id, list);
   }
@@ -705,6 +709,7 @@ export function toOrderInput(o: {
   status: string;
   actual_cost_usd: number | null;
   flagged_at: string | null;
+  item_flow?: boolean | null;
 }): OrderInput {
   return {
     id: Number(o.id),
@@ -715,6 +720,7 @@ export function toOrderInput(o: {
     status: o.status,
     actualCostUsd: o.actual_cost_usd == null ? null : Number(o.actual_cost_usd),
     flagged: !!o.flagged_at,
+    itemFlow: o.item_flow === true,
   };
 }
 

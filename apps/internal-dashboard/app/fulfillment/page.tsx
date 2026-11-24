@@ -4,6 +4,7 @@ import { requirePage } from "@/lib/guard";
 import {
   listShopOrders,
   listFulfillers,
+  listOrderUnfulfillments,
   buyerDetailsByUserId,
   buyerCountriesByUserId,
   fulfillerStatsBySlackId,
@@ -262,6 +263,7 @@ export default async function FulfillmentPage({
     selected && selectedCanSee ? buyerDetailsByUserId([selected.user_id]) : Promise.resolve(new Map<string, BuyerDetails>()),
     selected && !selectedCanSee ? buyerCountriesByUserId([selected.user_id]) : Promise.resolve(new Map<string, string>()),
   ]);
+  const history = selected ? await listOrderUnfulfillments(Number(selected.id)) : [];
   // Owner-only: a financial rollup, not something a fulfiller needs to do the job.
   const economy = access.isOwner ? await shopEconomySummary() : null;
 
@@ -601,6 +603,7 @@ export default async function FulfillmentPage({
                 mine={selected.claimed_by_slack === me}
                 canManage={access.isOwner}
                 eligibility={eligibility.get(Number(selected.id)) ?? null}
+                history={history}
               />
             ) : (
               <EmptyState title="No request selected" icon="package" />

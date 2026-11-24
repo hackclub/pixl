@@ -2724,7 +2724,9 @@ export interface ShopOrderRow {
   // Flat pixel payout to the fulfiller for actually fulfilling this order (see
   // settleItemFulfillment in lib/fulfillmentShip.ts). 0 = not yet
   // paid - stores the exact amount, not just a boolean, so a future rate
-  // change never makes an already-paid order's history ambiguous.
+  // change never makes an already-paid order's history ambiguous. Unfulfilling
+  // an order keeps this (the payout is never clawed back) and a later
+  // fulfillment adds to it, so it is the running total across every attempt.
   fulfillment_pixels_paid: number;
   // What it actually cost, in real dollars - distinct from `price` (pixels)
   // and the derived USD "budget" (a ceiling, not the real spend). Null until
@@ -2762,6 +2764,10 @@ export interface ShopOrderRow {
   // An order is a grant if this is set OR its item category is "grants": use
   // isGrantOrder in lib/fulfillmentGrant.ts, never read this alone.
   is_grant?: boolean | null;
+  // An unfulfilled order can be pushed back onto the normal item flow even
+  // when its item is in the grants category (migration 0245). is_grant still
+  // wins; use isGrantOrder rather than reading this directly.
+  item_flow?: boolean | null;
 }
 
 // Shop orders players placed with pixels, newest first. Player name + Slack are
@@ -2844,6 +2850,57 @@ export async function listGrantOrdersForExport(statuses: string[]): Promise<Shop
   return rows
     .filter((o) => isGrantOrder(o) || o.item_name.startsWith(FUNDING_ORDER_PREFIX))
     .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+}
+
+export interface OrderUnfulfillmentRow {
+  id: number;
+  order_id: number;
+  fulfillment_kind: "grant" | "item";
+  fulfilled_at: string | null;
+  fulfilled_by: string;
+  fulfilled_by_slack: string;
+  hcb_link: string;
+  tracking: string;
+  actual_cost_usd: number | string | null;
+  pixels_paid: number;
+  unfulfilled_at: string;
+  unfulfilled_by: string;
+  unfulfilled_by_slack: string;
+  reason: string;
+}
+
+// Previous, undone fulfillment attempts for one order, oldest first. Reads as
+// an empty list before migration 0245 is applied so the order page keeps
+// rendering; the unfulfill action itself still requires the table.
+export async function listOrderUnfulfillments(orderId: number): Promise<OrderUnfulfillmentRow[]> {
+  try {
+    const rows = await sql`
+      select id, order_id, fulfillment_kind, fulfilled_at, fulfilled_by,
+             fulfilled_by_slack, hcb_link, tracking, actual_cost_usd, pixels_paid,
+             unfulfilled_at, unfulfilled_by, unfulfilled_by_slack, reason
+        from shop_order_unfulfillments
+       where order_id = ${orderId}
+       order by unfulfilled_at asc, id asc`;
+    return rows.map((r) => ({
+      id: Number(r.id),
+      order_id: Number(r.order_id),
+      fulfillment_kind: r.fulfillment_kind === "grant" ? "grant" : "item",
+      fulfilled_at: r.fulfilled_at ? new Date(r.fulfilled_at as string).toISOString() : null,
+      fulfilled_by: String(r.fulfilled_by ?? ""),
+      fulfilled_by_slack: String(r.fulfilled_by_slack ?? ""),
+      hcb_link: String(r.hcb_link ?? ""),
+      tracking: String(r.tracking ?? ""),
+      actual_cost_usd: (r.actual_cost_usd as number | string | null) ?? null,
+      pixels_paid: Number(r.pixels_paid) || 0,
+      unfulfilled_at: new Date(r.unfulfilled_at as string).toISOString(),
+      unfulfilled_by: String(r.unfulfilled_by ?? ""),
+      unfulfilled_by_slack: String(r.unfulfilled_by_slack ?? ""),
+      reason: String(r.reason ?? ""),
+    }));
+  } catch (e) {
+    console.error("listOrderUnfulfillments", (e as Error).message);
+    return [];
+  }
 }
 
 // A single order by id, for the shipping-label print page - same row shape

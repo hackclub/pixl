@@ -237,6 +237,15 @@ describe("which dollar value counts", () => {
     expect(a).toMatchObject({ cents: 2000, basis: "face", budgetCents: 2240, faceCents: 2000 });
   });
 
+  test("an order moved onto the normal item flow ignores the grant face value", () => {
+    const a = orderAmount(
+      order({ itemName: "Hardware Grant", quantity: 2, pricePx: 224, itemFlow: true }),
+      currentPolicy(),
+      PX,
+    );
+    expect(a).toMatchObject({ cents: 2240, basis: "budget", faceCents: null });
+  });
+
   test("grant face value is used even when a supplier cost is recorded", () => {
     const a = orderAmount(order({ itemName: "Hardware Grant", quantity: 2, pricePx: 224, actualCostUsd: 22.4 }), currentPolicy(), PX);
     expect(a.cents).toBe(2000);
