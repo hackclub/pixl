@@ -41,6 +41,7 @@ import {
   revokeProjectPixels,
   projectPixelTotal,
   lifetimeRe,
+  listProposedBanProjects,
   creditReviewerPixels,
   debitReviewerPixels,
   type CreditReviewerResult,
@@ -151,8 +152,15 @@ async function nextReviewPath(
   by: string,
   stage: string,
   justReviewedId: number,
+  fromProposedBans = false,
 ): Promise<string> {
   try {
+    // A verdict on a proposed ban keeps the reviewer in that queue: next
+    // proposed ban, or the Proposed bans list when none are left.
+    if (fromProposedBans) {
+      const remaining = (await listProposedBanProjects()).filter((p) => p.id !== justReviewedId);
+      return remaining[0] ? `/review/${remaining[0].id}` : "/review/proposed-bans";
+    }
     const nextId = await nextReviewId({
       viewer: access.session.slackId,
       by,
@@ -170,7 +178,7 @@ async function nextReviewPath(
     });
     return nextId ? `/review/${nextId}` : "/review";
   } catch {
-    return "/review";
+    return fromProposedBans ? "/review/proposed-bans" : "/review";
   }
 }
 
@@ -1415,7 +1423,7 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
     await logModAction(project.user_id, "project_first_pass", `${project.name}: proposed ${proposedKey.replace("_", " ")} , ${note}`, by);
     if (proposedKey === "approved" && !skipRobertForHardware) await afterResponse(() => submitToRobert(projectId), "submitToRobert");
     await flagReviewReward(rewardPx);
-    const nextPath = await nextReviewPath(access, by, stage, projectId);
+    const nextPath = await nextReviewPath(access, by, stage, projectId, isProposedBan);
     revalidatePath("/review");
     redirect(nextPath);
   }
@@ -1559,7 +1567,7 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
     }), "announceReview changes");
     await logModAction(project.user_id, "project_needs_changes", `${project.name}: ${note}`, by);
     await flagReviewReward(rewardPx);
-    const nextPath = await nextReviewPath(access, by, stage, projectId);
+    const nextPath = await nextReviewPath(access, by, stage, projectId, isProposedBan);
     revalidatePath("/review");
     redirect(nextPath);
   }
@@ -1606,7 +1614,7 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
     }
     await logModAction(project.user_id, "project_banned", `${project.name}: ${note}`, by);
     await flagReviewReward(rewardPx);
-    const nextPath = await nextReviewPath(access, by, stage, projectId);
+    const nextPath = await nextReviewPath(access, by, stage, projectId, isProposedBan);
     revalidatePath("/review");
     revalidatePath("/", "layout");
     redirect(nextPath);
@@ -1987,7 +1995,7 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
     console.error(`reviewProject: Airtable push threw for project ${projectId}`, (err as Error).message);
   }
   await flagReviewReward(rewardPx);
-  const nextPath = await nextReviewPath(access, by, stage, projectId);
+  const nextPath = await nextReviewPath(access, by, stage, projectId, isProposedBan);
   revalidatePath("/review");
   redirect(nextPath);
 });
