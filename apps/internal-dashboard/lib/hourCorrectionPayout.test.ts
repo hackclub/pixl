@@ -43,6 +43,13 @@ describe("post-approval hours correction uses the original paid effective rate",
     expect(correct(220, 5, 4)).toBe(176);
   });
 
+  test("raising hours keeps the paid rate and never pays less than before", () => {
+    // 52.8h paid 2602 px (49.3 px/h with referral boost); raised to 53.8h.
+    const raised = correct(2602, 52.8, 53.8);
+    expect(raised).toBe(2651);
+    expect(raised).toBeGreaterThan(2602);
+  });
+
   test("never mints pixels when a zero-payout project is corrected", () => {
     expect(correct(0, 10, 9)).toBe(0);
   });
