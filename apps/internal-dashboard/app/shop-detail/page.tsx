@@ -20,9 +20,9 @@ import {
 
 export const dynamic = "force-dynamic";
 
-// One page, every region's price and price source side by side, per item, so
-// an admin auditing regional pricing (Europe was the trigger) doesn't have to
-// hop between /shop's per-region tabs to see what's off. See
+// One page, every region's price, sale and price source side by side, per
+// item, so an admin auditing regional pricing (Europe was the trigger) doesn't
+// have to hop between /shop's per-region tabs to see what's off. See
 // updateShopItemRegionDetails in app/actions.ts for the save side.
 export default async function ShopDetailPage({
   searchParams,
@@ -50,7 +50,7 @@ export default async function ShopDetailPage({
       <PageHeader
         title="Regional pricing"
         count={names.length}
-        description="Every shop item with each region's price and where that price came from, for auditing pricing against the real listing."
+        description="Every shop item with each region's price, sale and where that price came from, for auditing pricing against the real listing."
         actions={
           <ButtonLink href="/shop" variant="outline" size="sm" icon="view-back">
             Shop
@@ -118,6 +118,7 @@ export default async function ShopDetailPage({
                     <tr>
                       <th>Region</th>
                       <th>Price</th>
+                      <th>Sale % / ends (UTC)</th>
                       <th>USD</th>
                       <th>Price source link / alternate</th>
                     </tr>
@@ -132,6 +133,8 @@ export default async function ShopDetailPage({
                           label: SHOP_REGION_LABELS[r],
                           hasRow: !!row,
                           price: row?.price ?? 0,
+                          discountPercent: row?.discount_percent ?? 0,
+                          discountEndsAt: row?.discount_ends_at ?? null,
                           priceSourceUrl: row?.price_source_url ?? "",
                           altSourceUrl: row?.alt_source_url ?? "",
                           hasConfig: !!row?.config_options,

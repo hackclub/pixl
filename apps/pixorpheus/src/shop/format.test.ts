@@ -47,6 +47,17 @@ describe("shop notifications escape admin-authored text", () => {
     const lines = diffLines(base, { ...base, price: "<!channel>" as unknown as number, position: "<!here>" as unknown as number });
     expect(lines.join("\n")).not.toContain("<!");
   });
+
+  test("sale end changes are announced as an explicit UTC instant", () => {
+    const lines = diffLines(
+      { ...base, discount_percent: 20 },
+      { ...base, discount_percent: 20, discount_ends_at: "2026-11-30T18:00:00.000Z" },
+    );
+    expect(lines).toContain("• 🏷️ sale ends: 2026-11-30 18:00 UTC");
+    expect(diffLines({ ...base, discount_percent: 20, discount_ends_at: "2026-11-30T18:00:00.000Z" }, { ...base, discount_percent: 20 })).toContain(
+      "• sale end removed",
+    );
+  });
 });
 
 describe("request id dedup", () => {

@@ -2567,11 +2567,14 @@ export interface ShopItemRow {
   // project (projects.is_peak) - see availableBeaconUnlocks in
   // apps/server/src/routes/shop.ts. Item-wide, propagated like manual_locked.
   beacon_locked: boolean;
-  // Item-wide percentage off every price component (base + config choices),
-  // 0 = no discount - see updateShopItem in app/actions.ts and buy_shop_item,
-  // which applies the exact same rounding so the displayed and charged price
-  // always match.
+  // Sale percentage off every price component (base + config choices) for
+  // this region's row, 0 = no sale - see updateShopItem / updateShopItemPrices
+  // in app/actions.ts and buy_shop_item, which applies the exact same rounding
+  // so the displayed and charged price always match.
   discount_percent: number;
+  // Optional end of the sale (timestamptz). Null = runs until cleared; once
+  // past, buy_shop_item charges full price and the shop hides the discount.
+  discount_ends_at: string | null;
   // Set on a personal item (created for one specific player, see
   // createPersonalShopItem in app/actions.ts and drizzle/0212). Those are kept
   // out of every normal catalog listing and managed from their own section.
