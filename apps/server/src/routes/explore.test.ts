@@ -63,7 +63,7 @@ describe("PUBLIC_PROJECT_COLUMNS", () => {
     const clause = selectClauseFor(PUBLIC_PROJECT_COLUMNS);
     for (const field of [
       "id", "user_id", "name", "description", "project_type", "level", "status",
-      "image_url", "repo_url", "demo_url", "shipped_at", "created_at",
+      "image_url", "repo_url", "demo_url", "shipped_at", "first_shipped_at", "created_at",
       "hackatime_seconds", "is_peak",
     ]) {
       expect(clause).toContain(`"${field}"`);
