@@ -25,6 +25,9 @@ export function AddShopItemForm({
   // Per-region price overrides, keyed by region. A region with no entry here
   // just uses the shared `price` field when the form submits.
   const [regionPrices, setRegionPrices] = useState<Partial<Record<ShopRegion, string>>>({});
+  // Per-region sale percentages, keyed by region. A region with no entry here
+  // is added at full price (no sale).
+  const [regionSales, setRegionSales] = useState<Partial<Record<ShopRegion, string>>>({});
   // Price-changing options (config_options), optional. The item's own
   // price/region overrides above double as each region's base price, so
   // there's no separate base-price field here, just the reference link.
@@ -107,22 +110,40 @@ export function AddShopItemForm({
                     className="min-w-0 flex-1"
                   />
                   {checked && (
-                    <Input
-                      type="number"
-                      min={0}
-                      placeholder={price || "px"}
-                      value={regionPrices[r] ?? ""}
-                      onChange={(e) => setRegionPrices((prev) => ({ ...prev, [r]: e.target.value }))}
-                      name={regionPrices[r] ? `price_${r}` : undefined}
-                      className="h-7 w-20 shrink-0 text-xs"
-                    />
+                    <>
+                      <Input
+                        type="number"
+                        min={0}
+                        placeholder={price || "px"}
+                        value={regionPrices[r] ?? ""}
+                        onChange={(e) => setRegionPrices((prev) => ({ ...prev, [r]: e.target.value }))}
+                        name={regionPrices[r] ? `price_${r}` : undefined}
+                        className="h-7 w-20 shrink-0 text-xs"
+                        aria-label={`${SHOP_REGION_LABELS[r]} price in pixels`}
+                        title="Price in pixels"
+                      />
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={1}
+                        placeholder="sale %"
+                        value={regionSales[r] ?? ""}
+                        onChange={(e) => setRegionSales((prev) => ({ ...prev, [r]: e.target.value }))}
+                        name={regionSales[r] ? `discount_${r}` : undefined}
+                        className="h-7 w-16 shrink-0 text-xs"
+                        aria-label={`${SHOP_REGION_LABELS[r]} sale percent off`}
+                        title="Sale % off"
+                      />
+                    </>
                   )}
                 </div>
               );
             })}
           </div>
           <Muted className="text-xs">
-            Pick the regions to add this to. Type a price next to a region to override the default for it.
+            Pick the regions to add this to. The first box next to a region overrides its price, the second puts
+            that region&apos;s copy on sale (% off).
           </Muted>
         </div>
 

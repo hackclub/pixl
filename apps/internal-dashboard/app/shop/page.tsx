@@ -102,14 +102,15 @@ export default async function ShopPage({
   // Active Trials the admin can gate a shop item behind (unlock via completion).
   const gateTrials = allSidequests.filter((t) => t.active);
   const trophies = everyItem.filter((i) => i.unlock_xp > 0);
-  // Every region's price for a given item, by name, for the "edit price in
-  // every region" form, so an admin can reprice all regions in one place. A
-  // region with no row for this item just shows 0 (not for sale).
-  const pricesByName = new Map<string, Partial<Record<ShopRegion, number>>>();
+  // Every region's price and sale for a given item, by name, for the "edit
+  // price in every region" form, so an admin can reprice and discount all
+  // regions in one place. A region with no row for this item just shows 0 (not
+  // for sale) and no sale.
+  const pricesByName = new Map<string, Partial<Record<ShopRegion, { price: number; discount: number }>>>();
   for (const it of everyItem) {
     if (it.unlock_xp > 0) continue;
     const m = pricesByName.get(it.name) ?? {};
-    m[it.region] = it.price;
+    m[it.region] = { price: it.price, discount: it.discount_percent };
     pricesByName.set(it.name, m);
   }
   let allItems = regionItems.filter((i) => i.unlock_xp === 0);
@@ -285,18 +286,34 @@ export default async function ShopPage({
                         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                           {SHOP_REGIONS.map((r) => (
                             <Field key={r} label={SHOP_REGION_LABELS[r]}>
-                              <Input
-                                name={`price_${r}`}
-                                type="number"
-                                min={0}
-                                defaultValue={pricesByName.get(item.name)?.[r] ?? 0}
-                              />
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  name={`price_${r}`}
+                                  type="number"
+                                  min={0}
+                                  defaultValue={pricesByName.get(item.name)?.[r]?.price ?? 0}
+                                  className="min-w-0 flex-1"
+                                  aria-label={`${SHOP_REGION_LABELS[r]} price in pixels`}
+                                />
+                                <Input
+                                  name={`discount_${r}`}
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  step={1}
+                                  defaultValue={pricesByName.get(item.name)?.[r]?.discount ?? 0}
+                                  className="w-20 shrink-0"
+                                  aria-label={`${SHOP_REGION_LABELS[r]} sale percent off`}
+                                  title="Sale % off"
+                                />
+                              </div>
                             </Field>
                           ))}
                         </div>
                         <Muted className="text-xs">
-                          0 means not for sale in that region. Only prices change here; name, description, options and
-                          image stay per-region, edit those above.
+                          0 price means not for sale in that region. The first box is the price in px, the second is
+                          that region&apos;s sale (% off, 0 = none). Name, description, options and image stay
+                          per-region, edit those above.
                         </Muted>
                         <div>
                           <ActionButton pendingLabel="Saving...">Save prices</ActionButton>
@@ -450,8 +467,8 @@ function EditItemForm({
         />
       </div>
       <Field
-        label="Discount %"
-        hint="0 = none. One percentage for every region, off the base price and every config add-on."
+        label="Sale %"
+        hint="0 = none. This region only, off the base price and every config add-on. Set every region's sale at once under 'Edit price in every region' below."
       >
         <Input
           name="discount_percent"

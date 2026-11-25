@@ -4897,6 +4897,14 @@ function readRegion(raw: string): ShopRegion {
   return (SHOP_REGIONS as readonly string[]).includes(raw) ? (raw as ShopRegion) : "US";
 }
 
+// A sale is a percentage off a single shop_items row, and a row is one region's
+// copy of an item - so clamping every write here is what lets two regions run
+// different sales, with buy_shop_item applying the same rounding the UI shows.
+function readDiscountPercent(raw: FormDataEntryValue | null): number {
+  if (raw === null) return 0;
+  return Math.max(0, Math.min(100, Math.round(Number(raw) || 0)));
+}
+
 function readCategory(raw: string): ShopCategory {
   return (SHOP_CATEGORIES as readonly string[]).includes(raw) ? (raw as ShopCategory) : "other";
 }
@@ -4928,7 +4936,8 @@ function readOptions(raw: string): string[] {
 // comma-separated list from the form (falls back to the single `region`
 // field so old bookmarked/scripted submits with just that field still work);
 // each region can override the shared `price` via a `price_<REGION>` field,
-// e.g. `price_INDIA`, a region with no such field just uses `price`.
+// e.g. `price_INDIA`, and set its own sale via `discount_<REGION>`. A region
+// with no such field just uses `price` / no sale.
 export const addShopItem = guardedAction("addShopItem", "owner", async (access, formData: FormData): Promise<void> => {
   const name = String(formData.get("name") ?? "").trim().slice(0, 60);
   const description = String(formData.get("description") ?? "").trim().slice(0, 300);
@@ -4961,6 +4970,7 @@ export const addShopItem = guardedAction("addShopItem", "owner", async (access, 
     const regionPriceRaw = formData.get(`price_${region}`);
     const price =
       regionPriceRaw != null ? Math.max(0, Math.round(Number(regionPriceRaw))) : basePrice;
+    const discountPercent = readDiscountPercent(formData.get(`discount_${region}`));
 
     // Double-submit guard: an identical name+region created in the last
     // minute is the same click arriving twice, not a new item.
@@ -4993,6 +5003,7 @@ export const addShopItem = guardedAction("addShopItem", "owner", async (access, 
         region,
         category,
         config_options: configOptions,
+        discount_percent: discountPercent,
         created_by: actorName(access),
       })
       .select("*")
@@ -5032,11 +5043,12 @@ export const updateShopItem = guardedAction("updateShopItem", "owner", async (ac
   // (see availableBeaconUnlocks in apps/server/src/routes/shop.ts).
   // Item-wide, mirrored below the same way the Trial gate/manual lock are.
   const beaconLocked = formData.get("beacon_locked") === "1";
-  // A single percentage off every price component (base + config choices),
-  // the same for every region - not a per-region price like /shop-detail.
-  // Item-wide, mirrored below the same way the other gates are. Clamped so a
-  // stray negative/huge value can't reach buy_shop_item's math.
-  const discountPercent = Math.max(0, Math.min(100, Math.round(Number(formData.get("discount_percent") ?? 0)) || 0));
+  // Sale percentage off every price component (base + config choices) for
+  // THIS region's row only - a "sale" is region-scoped, so one region can be
+  // discounted while another isn't. /shop's "Edit price in every region" form
+  // sets all regions' sales in one submit. Clamped so a stray negative/huge
+  // value can't reach buy_shop_item's math.
+  const discountPercent = readDiscountPercent(formData.get("discount_percent"));
   // Saving silently skips telling pixorpheus about this change (e.g. a typo
   // fix that isn't worth a Slack ping), see notifyShopUpdates below.
   const silent = formData.get("silent") === "1";
@@ -5076,12 +5088,14 @@ export const updateShopItem = guardedAction("updateShopItem", "owner", async (ac
   // Snapshot every row this call may touch BEFORE writing, so pixorpheus can be
   // handed an old → new diff. Every sibling region row always gets pulled in
   // here, not just when "apply_all_regions" is checked - the Trial gate,
-  // manual lock, Beacon lock, and discount are ALL mirrored item-wide below
-  // regardless of that checkbox (which only covers name/description/category),
-  // so leaving siblings out of the snapshot made an item-wide change that
-  // correctly reached all 8 regions get announced as if only one had. The
-  // sibling ids have to be resolved up front too: once the main row is
-  // renamed they no longer all share `gateName`.
+  // manual lock, and Beacon lock are ALL mirrored item-wide below regardless
+  // of that checkbox (which only covers name/description/category), so leaving
+  // siblings out of the snapshot made an item-wide change that correctly
+  // reached all 8 regions get announced as if only one had. The sibling ids
+  // have to be resolved up front too: once the main row is renamed they no
+  // longer all share `gateName`. The discount is NOT mirrored (it is this
+  // region's sale), but siblings stay in the snapshot so an "apply to all
+  // regions" rename is still announced once for every region.
   const affectedIds = [id];
   if (gateName) {
     const { data: siblings } = await db
@@ -5169,15 +5183,8 @@ export const updateShopItem = guardedAction("updateShopItem", "owner", async (ac
     .eq("unlock_xp", 0);
   if (beaconErr) console.error("updateShopItem (beacon lock)", beaconErr.message);
 
-  // Same for the discount , one percentage for every region, not a per-region
-  // price like /shop-detail.
-  const { error: discountErr } = await db
-    .from("shop_items")
-    .update({ discount_percent: discountPercent })
-    .eq("name", gateName)
-    .is("reserved_user_id", null)
-    .eq("unlock_xp", 0);
-  if (discountErr) console.error("updateShopItem (discount)", discountErr.message);
+  // The discount is deliberately NOT mirrored to sibling regions - it is this
+  // region's sale and lives on this row. `patch` above already wrote it.
 
   if (applyAllRegions && originalName) {
     const { error: propErr } = await db
@@ -5266,13 +5273,14 @@ export const updateShopItem = guardedAction("updateShopItem", "owner", async (ac
   revalidatePath("/shop");
 });
 
-// Reprices an item across every region in one save, so an admin doesn't have
-// to switch the region tab and reopen "Edit item" per region. Matched by name
-// (the same item is one row per region), same as apply_all_regions above.
-// A region with no price field submitted (shouldn't happen, the form always
-// renders all of SHOP_REGIONS) is left untouched; a region with no existing
-// row for this item is a no-op update, not an insert , stocking a brand new
-// region still goes through "Add an item" on that region's tab.
+// Reprices an item and sets each region's sale across every region in one
+// save, so an admin doesn't have to switch the region tab and reopen "Edit
+// item" per region. Matched by name (the same item is one row per region),
+// same as apply_all_regions above. A region with no price/discount field
+// submitted (shouldn't happen, the form always renders all of SHOP_REGIONS)
+// is left untouched; a region with no existing row for this item is a no-op
+// update, not an insert , stocking a brand new region still goes through
+// "Add an item" on that region's tab.
 export const updateShopItemPrices = guardedAction("updateShopItemPrices", "owner", async (access, formData: FormData): Promise<void> => {
   const name = String(formData.get("item_name") ?? "").trim();
   if (!name) return;
@@ -5286,16 +5294,21 @@ export const updateShopItemPrices = guardedAction("updateShopItemPrices", "owner
 
   for (const r of SHOP_REGIONS) {
     const raw = formData.get(`price_${r}`);
-    if (raw === null) continue;
-    const price = Math.max(0, Math.round(Number(raw) || 0));
-    const patch: Record<string, unknown> = { price };
-    // Same configurator base_price sync as updateShopItem above - this
-    // repricer is region-scoped, so look up that region's own existing row.
-    const existingConfig = ((before ?? []).find(
-      (b) => (b as { region: string }).region === r,
-    ) as { config_options: { base_price?: number; reference_url?: string; groups?: unknown[] } | null } | undefined)
-      ?.config_options;
-    if (existingConfig) patch.config_options = { ...existingConfig, base_price: price };
+    const discountRaw = formData.get(`discount_${r}`);
+    if (raw === null && discountRaw === null) continue;
+    const patch: Record<string, unknown> = {};
+    if (raw !== null) {
+      const price = Math.max(0, Math.round(Number(raw) || 0));
+      patch.price = price;
+      // Same configurator base_price sync as updateShopItem above - this
+      // repricer is region-scoped, so look up that region's own existing row.
+      const existingConfig = ((before ?? []).find(
+        (b) => (b as { region: string }).region === r,
+      ) as { config_options: { base_price?: number; reference_url?: string; groups?: unknown[] } | null } | undefined)
+        ?.config_options;
+      if (existingConfig) patch.config_options = { ...existingConfig, base_price: price };
+    }
+    if (discountRaw !== null) patch.discount_percent = readDiscountPercent(discountRaw);
     const { error } = await db
       .from("shop_items")
       .update(patch)
@@ -5417,12 +5430,14 @@ export const updateShopItemRegionDetails = guardedAction("updateShopItemRegionDe
     const priceRaw = formData.get(`price_${r}`);
     const sourceRaw = formData.get(`source_${r}`);
     const altRaw = formData.get(`alt_source_${r}`);
-    if (priceRaw === null && sourceRaw === null && altRaw === null) continue;
+    const discountRaw = formData.get(`discount_${r}`);
+    if (priceRaw === null && sourceRaw === null && altRaw === null && discountRaw === null) continue;
     const row = (before ?? []).find((b) => (b as { region: string }).region === r) as
       | { config_options: unknown; price: number }
       | undefined;
     const patch: Record<string, unknown> = {};
     if (priceRaw !== null) patch.price = Math.max(0, Math.round(Number(priceRaw) || 0));
+    if (discountRaw !== null) patch.discount_percent = readDiscountPercent(discountRaw);
     if (sourceRaw !== null) patch.price_source_url = String(sourceRaw).trim().slice(0, 500);
     if (altRaw !== null) {
       const alt = String(altRaw).trim().slice(0, 500);

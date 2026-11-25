@@ -12,6 +12,8 @@ export interface ShopDetailRegionData {
   label: string;
   hasRow: boolean;
   price: number;
+  // Sale (% off) for this region's row only, 0 = none.
+  discountPercent: number;
   priceSourceUrl: string;
   altSourceUrl: string;
   hasConfig: boolean;
@@ -62,6 +64,22 @@ export function ShopItemConfigurators({
               disabled={!r.hasRow}
               pixelValueUsd={pixelValueUsd}
             />
+          </td>
+          <td>
+            <div className="flex items-center gap-1.5">
+              <Input
+                name={`discount_${r.region}`}
+                type="number"
+                min={0}
+                max={100}
+                step={1}
+                disabled={!r.hasRow}
+                defaultValue={r.discountPercent}
+                className="w-20"
+                aria-label={`${r.label} sale percent off`}
+              />
+              <Muted className="shrink-0 text-xs">% off</Muted>
+            </div>
           </td>
           <td className="hc-muted whitespace-nowrap tabular-nums">${(r.price * pixelValueUsd).toFixed(2)}</td>
           <td className="min-w-72">
