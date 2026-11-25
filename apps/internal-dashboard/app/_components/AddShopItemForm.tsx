@@ -86,6 +86,15 @@ export function AddShopItemForm({
           </Field>
         </div>
 
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Sale %" hint="Default for every selected region">
+            <Input name="discount_percent" type="number" min={0} max={100} step={1} placeholder="20" />
+          </Field>
+          <Field label="Sale ends (UTC)" hint="Default for every selected region; blank = no end">
+            <Input name="discount_ends_at" type="datetime-local" />
+          </Field>
+        </div>
+
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between">
             <span className="hc-label">Regions</span>
@@ -133,7 +142,7 @@ export function AddShopItemForm({
                         name={regionSales[r] ? `discount_${r}` : undefined}
                         className="h-7 w-16 shrink-0 text-xs"
                         aria-label={`${SHOP_REGION_LABELS[r]} sale percent off`}
-                        title="Sale % off"
+                        title="Sale % override for this region"
                       />
                     </>
                   )}
@@ -142,8 +151,9 @@ export function AddShopItemForm({
             })}
           </div>
           <Muted className="text-xs">
-            Pick the regions to add this to. The first box next to a region overrides its price, the second puts
-            that region&apos;s copy on sale (% off).
+            Pick the regions to add this to. The first box next to a region overrides its price, the second overrides
+            the default sale % above. An end time applies to every selected region; edit a region later to give it a
+            different end.
           </Muted>
         </div>
 

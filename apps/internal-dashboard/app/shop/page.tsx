@@ -19,6 +19,7 @@ import { PersonalShopItems } from "@/app/_components/PersonalShopItems";
 import { ShopItemEditConfigurator } from "@/app/_components/ShopItemEditConfigurator";
 import { BulkUploadShopItemsForm } from "@/app/_components/BulkUploadShopItemsForm";
 import { parseOptionGroups } from "@/lib/shopOptions";
+import { saleEndsInputValue, saleEndsLabel, saleIsActive } from "@/lib/shopSale";
 import { config } from "@/app/_generated/config";
 import {
   ActionButton,
@@ -106,11 +107,18 @@ export default async function ShopPage({
   // price in every region" form, so an admin can reprice and discount all
   // regions in one place. A region with no row for this item just shows 0 (not
   // for sale) and no sale.
-  const pricesByName = new Map<string, Partial<Record<ShopRegion, { price: number; discount: number }>>>();
+  const pricesByName = new Map<
+    string,
+    Partial<Record<ShopRegion, { price: number; discount: number; discountEndsAt: string | null }>>
+  >();
   for (const it of everyItem) {
     if (it.unlock_xp > 0) continue;
     const m = pricesByName.get(it.name) ?? {};
-    m[it.region] = { price: it.price, discount: it.discount_percent };
+    m[it.region] = {
+      price: it.price,
+      discount: it.discount_percent,
+      discountEndsAt: it.discount_ends_at,
+    };
     pricesByName.set(it.name, m);
   }
   let allItems = regionItems.filter((i) => i.unlock_xp === 0);
@@ -216,6 +224,8 @@ export default async function ShopPage({
           <div className="flex flex-col gap-4">
             {items.map((item) => {
               const stock = stockByItem.get(item.id) ?? [];
+              const saleActive = saleIsActive(item.discount_percent, item.discount_ends_at);
+              const saleEnds = saleEndsLabel(item.discount_ends_at);
               return (
                 <Card key={item.id} className={item.active ? "" : "opacity-60"}>
                   <div className="flex gap-4">
@@ -226,10 +236,14 @@ export default async function ShopPage({
                         <Badge tone="success">{item.price} px</Badge>
                         <Badge outline>${(item.price * config.economy.pixelValueUsd).toFixed(2)} budget</Badge>
                         <Badge>{SHOP_CATEGORY_LABELS[item.category] ?? SHOP_CATEGORY_LABELS.other}</Badge>
-                        {item.discount_percent > 0 && (
+                        {saleActive && (
                           <Badge tone="warning">
                             {item.discount_percent}% off ({Math.round((item.price * (100 - item.discount_percent)) / 100)} px)
+                            {saleEnds ? ` until ${saleEnds}` : ""}
                           </Badge>
+                        )}
+                        {!saleActive && item.discount_percent > 0 && (
+                          <Badge>Sale ended{saleEnds ? ` ${saleEnds}` : ""}</Badge>
                         )}
                         {!item.active && <Badge>Hidden</Badge>}
                       </div>
@@ -307,13 +321,21 @@ export default async function ShopPage({
                                   title="Sale % off"
                                 />
                               </div>
+                              <Input
+                                name={`discount_ends_${r}`}
+                                type="datetime-local"
+                                defaultValue={saleEndsInputValue(pricesByName.get(item.name)?.[r]?.discountEndsAt)}
+                                className="mt-1 w-full"
+                                aria-label={`${SHOP_REGION_LABELS[r]} sale ends in UTC`}
+                                title="Sale ends (UTC); blank = no end date"
+                              />
                             </Field>
                           ))}
                         </div>
                         <Muted className="text-xs">
-                          0 price means not for sale in that region. The first box is the price in px, the second is
-                          that region&apos;s sale (% off, 0 = none). Name, description, options and image stay
-                          per-region, edit those above.
+                          0 price means not for sale in that region. Each region has its price in px, its sale % (0 =
+                          none), and when that sale ends in UTC (blank = no end). Name, description, options and image
+                          stay per-region, edit those above.
                         </Muted>
                         <div>
                           <ActionButton pendingLabel="Saving...">Save prices</ActionButton>
@@ -466,20 +488,40 @@ function EditItemForm({
           }
         />
       </div>
-      <Field
-        label="Sale %"
-        hint="0 = none. This region only, off the base price and every config add-on. Set every region's sale at once under 'Edit price in every region' below."
-      >
-        <Input
-          name="discount_percent"
-          type="number"
-          min="0"
-          max="100"
-          step="1"
-          defaultValue={item.discount_percent || 0}
-          className="w-24"
-        />
-      </Field>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field
+          label="Sale %"
+          hint="0 = none. Off the base price and every config add-on. Applies to this region unless the box below is ticked."
+        >
+          <Input
+            name="discount_percent"
+            type="number"
+            min="0"
+            max="100"
+            step="1"
+            defaultValue={item.discount_percent || 0}
+            className="w-24"
+          />
+        </Field>
+        <Field label="Sale ends (UTC)" hint="Optional. Blank = runs until cleared.">
+          <Input
+            name="discount_ends_at"
+            type="datetime-local"
+            defaultValue={saleEndsInputValue(item.discount_ends_at)}
+            className="w-full"
+          />
+        </Field>
+      </div>
+      <Checkbox
+        name="apply_sale_all_regions"
+        value="1"
+        label={
+          <>
+            Apply this <strong>sale % and end time</strong> to every region (overwrites each region&apos;s current
+            sale)
+          </>
+        }
+      />
       <Checkbox name="silent" value="1" label="Save silently (don't notify Pixo/Slack about this change)" />
       <div>
         <ActionButton pendingLabel="Saving...">Save changes</ActionButton>

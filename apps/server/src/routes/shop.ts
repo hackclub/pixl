@@ -96,10 +96,10 @@ async function regionFor(userId: string): Promise<string> {
 
 // Base columns plus unlock_xp (trophies), region and category. unlock_xp/
 // config_options arrived with migration 0032/0058, region with 0063, category
-// with 0106 , fall back gracefully before each is applied so the catalog
-// keeps loading.
+// with 0106, discount_ends_at with 0246 , fall back gracefully before each is
+// applied so the catalog keeps loading.
 const ITEM_COLUMNS =
-  "id, name, description, price, image_url, options, unlock_xp, config_options, region, category, unlock_trial_ids, manual_locked, lock_note, beacon_locked, discount_percent, created_at, reserved_user_id, review_locked";
+  "id, name, description, price, image_url, options, unlock_xp, config_options, region, category, unlock_trial_ids, manual_locked, lock_note, beacon_locked, discount_percent, discount_ends_at, created_at, reserved_user_id, review_locked";
 const ITEM_COLUMNS_FALLBACK = "id, name, description, price, image_url, options";
 
 // How recently an item has to have been added to still be worth flagging as
@@ -194,6 +194,7 @@ async function fetchItems(filterIds?: number[], region?: string) {
         category: "other",
         unlock_trial_ids: [],
         discount_percent: 0,
+        discount_ends_at: null,
         created_at: null,
       })),
     };
@@ -251,6 +252,22 @@ async function attachBuyerCounts(items: Record<string, unknown>[]): Promise<void
   }
 }
 
+// Whether an item's sale is running right now. A sale with no end time runs
+// until cleared; one past its end time is over even though discount_percent is
+// still on the row (the dashboard shows it as ended). Mirrors the same check
+// in buy_shop_item (drizzle/0246).
+export function saleIsActive(
+  item: { discount_percent?: unknown; discount_ends_at?: unknown },
+  now: number = Date.now(),
+): boolean {
+  const pct = Number(item.discount_percent);
+  if (!Number.isFinite(pct) || pct <= 0) return false;
+  const ends = item.discount_ends_at;
+  if (ends == null || ends === "") return true;
+  const end = ends instanceof Date ? ends.getTime() : new Date(String(ends)).getTime();
+  return Number.isFinite(end) ? end > now : false;
+}
+
 // Applies each item's discount_percent to every price component it displays
 // (base price, and for a configurator item its base_price + each choice's
 // price), rounding each one exactly the way buy_shop_item does - so whatever
@@ -260,7 +277,11 @@ async function attachBuyerCounts(items: Record<string, unknown>[]): Promise<void
 function applyDiscount(items: Record<string, unknown>[]): void {
   const scale = (n: unknown, pct: number): number => Math.round((Number(n) || 0) * (100 - pct) / 100);
   for (const item of items) {
-    const pct = Math.max(0, Math.min(100, Number(item.discount_percent) || 0));
+    const pct = saleIsActive(item)
+      ? Math.max(0, Math.min(100, Number(item.discount_percent) || 0))
+      : 0;
+    // Don't leave a stale -x% badge on clients after the sale ends.
+    item.discount_percent = pct;
     if (pct <= 0) continue;
     item.original_price = item.price;
     item.price = scale(item.price, pct);

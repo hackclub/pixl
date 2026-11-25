@@ -6,14 +6,16 @@ import { ShopConfiguratorPanel } from "@/app/_components/ShopConfiguratorPanel";
 import type { EditableGroup } from "@/app/_components/ShopConfigEditor";
 import { Input, Muted, TextLink } from "@/app/_ui/ui";
 import { isSafeUrl } from "@/lib/safeUrl";
+import { saleEndsInputValue } from "@/lib/shopSale";
 
 export interface ShopDetailRegionData {
   region: string;
   label: string;
   hasRow: boolean;
   price: number;
-  // Sale (% off) for this region's row only, 0 = none.
+  // Sale (% off) for this region's row only, 0 = none, and its optional end.
   discountPercent: number;
+  discountEndsAt: string | null;
   priceSourceUrl: string;
   altSourceUrl: string;
   hasConfig: boolean;
@@ -80,6 +82,15 @@ export function ShopItemConfigurators({
               />
               <Muted className="shrink-0 text-xs">% off</Muted>
             </div>
+            <Input
+              name={`discount_ends_${r.region}`}
+              type="datetime-local"
+              disabled={!r.hasRow}
+              defaultValue={saleEndsInputValue(r.discountEndsAt)}
+              className="mt-1 w-full"
+              aria-label={`${r.label} sale ends in UTC`}
+              title="Sale ends (UTC); blank = no end date"
+            />
           </td>
           <td className="hc-muted whitespace-nowrap tabular-nums">${(r.price * pixelValueUsd).toFixed(2)}</td>
           <td className="min-w-72">

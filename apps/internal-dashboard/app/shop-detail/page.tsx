@@ -118,7 +118,7 @@ export default async function ShopDetailPage({
                     <tr>
                       <th>Region</th>
                       <th>Price</th>
-                      <th>Sale</th>
+                      <th>Sale % / ends (UTC)</th>
                       <th>USD</th>
                       <th>Price source link / alternate</th>
                     </tr>
@@ -134,6 +134,7 @@ export default async function ShopDetailPage({
                           hasRow: !!row,
                           price: row?.price ?? 0,
                           discountPercent: row?.discount_percent ?? 0,
+                          discountEndsAt: row?.discount_ends_at ?? null,
                           priceSourceUrl: row?.price_source_url ?? "",
                           altSourceUrl: row?.alt_source_url ?? "",
                           hasConfig: !!row?.config_options,

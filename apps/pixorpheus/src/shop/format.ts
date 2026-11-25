@@ -23,6 +23,7 @@ export type ShopRow = {
   lock_note?: string | null;
   beacon_locked?: boolean | null;
   discount_percent?: number | null;
+  discount_ends_at?: string | Date | null;
 };
 
 export type WebhookPayload = {
@@ -54,6 +55,14 @@ const esc = (s: unknown): string => escapeMrkdwn(typeof s === "string" ? s : Str
 const escRegion = (r: string): string => esc(r).replace(/`/g, "");
 export const region = (r: ShopRow): string => (typeof r.region === "string" && r.region ? r.region : "US");
 
+/** Sale end timestamps compare by instant, not by string shape. */
+const saleEnd = (v: unknown): number | null => {
+  if (v == null || v === "") return null;
+  const t = v instanceof Date ? v.getTime() : new Date(String(v)).getTime();
+  return Number.isFinite(t) ? t : null;
+};
+const utcLabel = (t: number) => `${new Date(t).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+
 function sortRegions(regions: Iterable<string>): string[] {
   return [...new Set(regions)].sort((a, b) => {
     const ia = REGION_ORDER.indexOf(a);
@@ -76,8 +85,8 @@ function short(s: string, max = 140): string {
 }
 
 /** Human-readable list of what changed between two rows on an UPDATE.
- *  Only region-independent fields go here, so the same edit across regions
- *  produces identical lines (and therefore groups into one message). */
+ *  Shared fields and the region-scoped sale go here; the same edit across
+ *  regions produces identical lines (and therefore groups into one message). */
 export function diffLines(oldRow: ShopRow, newRow: ShopRow): string[] {
   const lines: string[] = [];
 
@@ -122,6 +131,11 @@ export function diffLines(oldRow: ShopRow, newRow: ShopRow): string[] {
   if ((oldRow.discount_percent ?? 0) !== (newRow.discount_percent ?? 0)) {
     const pct = num(newRow.discount_percent);
     lines.push(pct > 0 ? `• 🏷️ discount: ${pct}% off` : "• discount removed");
+  }
+  const oldSaleEnd = saleEnd(oldRow.discount_ends_at);
+  const newSaleEnd = saleEnd(newRow.discount_ends_at);
+  if (oldSaleEnd !== newSaleEnd) {
+    lines.push(newSaleEnd ? `• 🏷️ sale ends: ${utcLabel(newSaleEnd)}` : "• sale end removed");
   }
 
   return lines;

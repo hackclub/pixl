@@ -241,6 +241,22 @@ if (!adminUrl) {
       expect(await pixels(usUser)).toBe(100000 - 50);
       expect(await pixels(euUser)).toBe(100000 - 75);
     });
+
+    test("a sale past its end time charges full price", async () => {
+      const ended = await createItem("Ended Sale Widget", "US");
+      const running = await createItem("Running Sale Widget", "US");
+      await db`update shop_items set discount_percent = 50,
+        discount_ends_at = now() - interval '1 minute' where id = ${ended}`;
+      await db`update shop_items set discount_percent = 50,
+        discount_ends_at = now() + interval '1 hour' where id = ${running}`;
+
+      const endedUser = await createUser({ country: "US" });
+      const runningUser = await createUser({ country: "US" });
+      expect((await buy(endedUser, ended)).status).toBe(200);
+      expect((await buy(runningUser, running)).status).toBe(200);
+      expect(await pixels(endedUser)).toBe(100000 - 100);
+      expect(await pixels(runningUser)).toBe(100000 - 50);
+    });
   });
 
   describe("buy_shop_item itself", () => {
