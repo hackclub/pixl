@@ -26,7 +26,7 @@
     "map:sync": "bun run packages/map-sync/sync.ts",
     "npcs:bake": "bun run apps/server/src/scripts/bake-npcs.ts"
   },
-  "packageManager": "bun@1.3.13",
+  "packageManager": "bun@1.4.2",
   "overrides": {
     "esbuild": "0.28.2"
   }
