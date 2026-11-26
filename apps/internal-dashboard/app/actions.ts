@@ -68,7 +68,19 @@ import {
   type DashEventRow,
   getReviewPayoutSettings,
   ensureJournalShareToken,
+  listUsedHcbGrantLinks,
 } from "@/lib/db";
+import { loadGrantExport, parseGrantScope } from "@/lib/grantExportData";
+import type { GrantExportRow } from "@/lib/grantExport";
+import {
+  grantHashFromLink,
+  grantLinkFromId,
+  matchGrantsToOrders,
+  parseHcbGrantsCsv,
+  parseHcbGrantsJson,
+  type GrantImportOrder,
+  type GrantImportPreview,
+} from "@/lib/grantImport";
 import { buildAuditNote, parseAuditNote, TECHNICAL_FEATURES_MIN } from "@/lib/auditNote";
 import { activeReviewClaim } from "@/lib/reviewClaimState";
 import { mustPreserveApprovedProjectTerms } from "@/lib/earnedProject";
@@ -6236,6 +6248,63 @@ export const sendGrant = guardedAction("sendGrant", "fulfiller", async (access, 
   );
 });
 
+// Shared by the single-row Mark sent form and the HCB grants import. Returns a
+// reason instead of throwing when the order moved on, so a bulk import can skip
+// one row without losing the rest. The caller decides whether a stale order is
+// an error (single form) or a skip (batch).
+async function settleGrantForOwner(
+  access: AdminAccess,
+  orderId: number,
+  grantLink: string,
+  actualCostUsd: number,
+  source: string,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const { data: order } = await db
+    .from("shop_orders")
+    // select("*") so this path also works on schemas that don't have the
+    // in-progress item_flow column yet; orderIsGrant reads what it needs.
+    .select("*")
+    .eq("id", orderId)
+    .maybeSingle();
+  if (!order || (order.status !== "pending" && order.status !== "claimed")) {
+    return { ok: false, reason: "This order is no longer waiting for a grant." };
+  }
+  if (!(await orderIsGrant(order))) {
+    return { ok: false, reason: "This order isn't a grant. Convert it to a grant first, or use the item flow." };
+  }
+  if (order.status === "claimed" && order.claimed_by_slack !== access.session.slackId) {
+    return { ok: false, reason: "This grant is already claimed by someone else. Reassign it on the order page first." };
+  }
+  if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId, access.isOwner)) {
+    return { ok: false, reason: "You can't fulfill your own shop order." };
+  }
+
+  if (order.status === "pending") {
+    const outcome = await claimOrderWithFunding(
+      { orderId, by: actorName(access), bySlack: access.session.slackId },
+      { ships: shipsProvider(), reserveOnly: true },
+    );
+    if (outcome.kind === "refused") {
+      if (outcome.code === "not_pending" || outcome.code === "not_found") {
+        return { ok: false, reason: "This order is no longer waiting for a grant." };
+      }
+      return { ok: false, reason: outcome.message };
+    }
+    if (outcome.kind !== "claimed") return { ok: false, reason: "Claim-only RPC is not installed." };
+    if (outcome.code === "claimed") {
+      await logOrderAction(orderId, "order_reserved", `assigned from ${source}`, actorName(access), order);
+    }
+  }
+
+  const settled = await completeGrant(
+    access,
+    { id: orderId, user_id: order.user_id as string, item_name: order.item_name as string },
+    grantLink,
+    actualCostUsd,
+  );
+  return settled ? { ok: true } : { ok: false, reason: "The order could not be settled; reload and try again." };
+}
+
 // Owner follow-up to the Grant CSV: after uploading the file in HCB, paste the
 // grant link on that row and close the order here. A pending order is first
 // reserved for the owner through the same funding ledger as a normal claim,
@@ -6249,47 +6318,161 @@ export const markGrantSent = guardedAction("markGrantSent", "owner", async (acce
     revalidatePath("/fulfillment/grants");
     return;
   }
-  const { data: order } = await db
-    .from("shop_orders")
-    .select("user_id, item_name, status, claimed_by_slack, item_id, is_grant, item_flow")
-    .eq("id", id)
-    .maybeSingle();
-  if (!order || (order.status !== "pending" && order.status !== "claimed")) {
-    revalidatePath("/fulfillment/grants");
-    return;
-  }
-  if (!(await orderIsGrant(order))) {
-    throw new Error("This order isn't a grant. Convert it to a grant first, or use the item flow.");
-  }
-  if (order.status === "claimed" && order.claimed_by_slack !== access.session.slackId) {
-    throw new Error("This grant is already claimed by someone else. Reassign it on the order page first.");
-  }
 
-  if (order.status === "pending") {
-    const outcome = await claimOrderWithFunding(
-      { orderId: id, by: actorName(access), bySlack: access.session.slackId },
-      { ships: shipsProvider(), reserveOnly: true },
-    );
-    if (outcome.kind === "refused") {
-      if (outcome.code === "not_pending" || outcome.code === "not_found") {
-        revalidatePath("/fulfillment/grants");
-        return;
-      }
-      throw new Error(outcome.message);
+  const result = await settleGrantForOwner(access, id, grantLink, actualCostUsd, "the grant CSV");
+  if (!result.ok) {
+    if (result.reason === "This order is no longer waiting for a grant.") {
+      revalidatePath("/fulfillment/grants");
+      return;
     }
-    if (outcome.kind !== "claimed") throw new Error("Claim-only RPC is not installed.");
-    if (outcome.code === "claimed") {
-      await logOrderAction(id, "order_reserved", "assigned from the grant CSV", actorName(access), order);
-    }
+    throw new Error(result.reason);
   }
-
-  await completeGrant(
-    access,
-    { id, user_id: order.user_id as string, item_name: order.item_name as string },
-    grantLink,
-    actualCostUsd,
-  );
 });
+
+// The no-OAuth import: an owner runs the official HCB CLI (`hcb grants --org
+// ysws-pixl`) after uploading the CSV, then drops the JSON here. This action
+// only reads the waiting orders and pairs them; no money moves and buyer emails
+// never leave the server (the preview carries order ids, display names and
+// grant links).
+export const previewGrantImport = guardedAction(
+  "previewGrantImport",
+  "owner",
+  async (_access, formData: FormData): Promise<{ ok: true; preview: GrantImportPreview } | { ok: false; error: string }> => {
+    const scope = parseGrantScope(String(formData.get("scope") ?? ""));
+    const raw = String(formData.get("json") ?? "");
+    const trimmed = raw.trim();
+    // The file input sends both formats through one field. JSON starts with a
+    // bracket; everything else is treated as the bookmarklet CSV so the owner
+    // doesn't have to pick a mode.
+    const parsed = trimmed.startsWith("[") || trimmed.startsWith("{")
+      ? parseHcbGrantsJson(raw)
+      : parseHcbGrantsCsv(raw);
+    if (parsed.error) return { ok: false, error: parsed.error };
+
+    const { rows } = await loadGrantExport(scope);
+    if (rows.length === 0) return { ok: false, error: "No grant orders are waiting in this view." };
+
+    const used = await listUsedHcbGrantLinks();
+    const toImportOrder = (row: GrantExportRow): GrantImportOrder => ({
+      orderId: row.orderId,
+      playerName: row.playerName,
+      itemName: row.itemName,
+      quantity: row.quantity,
+      amountCents: row.amountCents,
+      status: row.status,
+      email: row.email,
+      createdAt: row.createdAt,
+    });
+
+    return {
+      ok: true,
+      preview: matchGrantsToOrders(rows.map(toImportOrder), parsed.grants, used, parsed.ignored),
+    };
+  },
+);
+
+interface ImportedGrantSelection {
+  orderId: number;
+  grantId: string;
+  amountCents: number;
+}
+
+function parseGrantSelections(raw: string): ImportedGrantSelection[] {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(value)) return [];
+
+  const out: ImportedGrantSelection[] = [];
+  for (const item of value) {
+    if (typeof item !== "object" || item === null) continue;
+    const record = item as Record<string, unknown>;
+    const orderId = Number(record.orderId);
+    const grantId = typeof record.grantId === "string" ? record.grantId : "";
+    const amountCents = Number(record.amountCents);
+    if (!Number.isSafeInteger(orderId) || orderId <= 0) continue;
+    if (!grantLinkFromId(grantId)) continue;
+    if (!Number.isSafeInteger(amountCents) || amountCents <= 0) continue;
+    out.push({ orderId, grantId, amountCents });
+  }
+  // A bulk run is already slow (claim + settle + DM per order); cap the form
+  // input so a hand-crafted request can't hold a server action open forever.
+  return out.slice(0, 500);
+}
+
+// Records the selected pairs from the import preview. The client's grant ids
+// and amounts are re-validated against a fresh read: the order must still be
+// waiting, its amount must not have changed, and the grant must not already be
+// on another order. settleGrant then does the atomic status/wallet/ledger work.
+export const markImportedGrants = guardedAction(
+  "markImportedGrants",
+  "owner",
+  async (access, formData: FormData): Promise<
+    { ok: true; marked: number; skipped: { orderId: number; reason: string }[] } | { ok: false; error: string }
+  > => {
+    const scope = parseGrantScope(String(formData.get("scope") ?? ""));
+    const selections = parseGrantSelections(String(formData.get("pairs") ?? "[]"));
+    if (selections.length === 0) return { ok: false, error: "Select at least one matched grant." };
+
+    const { rows } = await loadGrantExport(scope);
+    const byId = new Map(rows.map((row) => [row.orderId, row]));
+    const used = new Set(
+      (await listUsedHcbGrantLinks())
+        .map((link) => grantHashFromLink(link))
+        .filter((hash): hash is string => Boolean(hash)),
+    );
+
+    const skipped: { orderId: number; reason: string }[] = [];
+    let marked = 0;
+    for (const selection of selections) {
+      const row = byId.get(selection.orderId);
+      if (!row) {
+        skipped.push({ orderId: selection.orderId, reason: "No longer waiting for a grant." });
+        continue;
+      }
+      if (row.amountCents !== selection.amountCents) {
+        skipped.push({ orderId: selection.orderId, reason: "Order amount changed; re-run the import." });
+        continue;
+      }
+      const grantLink = grantLinkFromId(selection.grantId);
+      const hash = grantLink ? grantHashFromLink(grantLink) : null;
+      if (!grantLink || !hash) {
+        skipped.push({ orderId: selection.orderId, reason: "Invalid HCB grant link." });
+        continue;
+      }
+      if (used.has(hash)) {
+        skipped.push({ orderId: selection.orderId, reason: "That grant is already recorded on another order." });
+        continue;
+      }
+
+      try {
+        const result = await settleGrantForOwner(
+          access,
+          selection.orderId,
+          grantLink,
+          row.amountCents / 100,
+          "the HCB grant import",
+        );
+        if (!result.ok) {
+          skipped.push({ orderId: selection.orderId, reason: result.reason });
+          continue;
+        }
+        used.add(hash);
+        marked++;
+      } catch (e) {
+        console.error("markImportedGrants", selection.orderId, (e as Error).message);
+        skipped.push({ orderId: selection.orderId, reason: "Unexpected error; check this order by hand." });
+      }
+    }
+
+    revalidatePath("/fulfillment");
+    revalidatePath("/fulfillment/grants");
+    return { ok: true, marked, skipped };
+  },
+);
 
 // Turns one order into a grant order (shop_orders.is_grant) so it uses the
 // short grant flow: for grant-shaped orders on items that aren't tagged as

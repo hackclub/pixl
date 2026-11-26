@@ -40,6 +40,9 @@ export interface GrantOrderLike {
   item_description?: string | null;
   claimed_by?: string;
   claimed_by_slack?: string;
+  // Used by the HCB grants import to pair each grant with the order it was
+  // sent for. Missing on older fixtures, so callers may omit it.
+  created_at?: string | Date | null;
 }
 
 export interface GrantBuyer {
@@ -60,6 +63,9 @@ export interface GrantExportRow {
   instructions: string;
   claimedBy: string;
   claimedBySlack: string;
+  // ISO timestamp of the order, used to pair HCB grants to the right order
+  // when the same buyer has more than one grant order. Empty if unavailable.
+  createdAt: string;
 }
 
 export interface GrantExportProblem {
@@ -161,6 +167,9 @@ export function buildGrantExport(
       ? `For your PIXL project ${projectName} hardware funding (order #${order.id}).`
       : `For your PIXL shop order #${order.id}: ${quantity > 1 ? `${quantity}x ` : ""}${itemName}.`;
 
+    const created = order.created_at ? new Date(order.created_at) : null;
+    const createdAt = created && !Number.isNaN(created.getTime()) ? created.toISOString() : "";
+
     rows.push({
       orderId,
       status,
@@ -174,6 +183,7 @@ export function buildGrantExport(
       instructions: clip(instructions, 300),
       claimedBy: (order.claimed_by ?? "").trim(),
       claimedBySlack: (order.claimed_by_slack ?? "").trim(),
+      createdAt,
     });
     totalCents += amountCents;
   }

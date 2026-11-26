@@ -1,4 +1,5 @@
 import { markGrantSent, unclaimOrder } from "@/app/actions";
+import { GrantImportPanel } from "./GrantImportPanel";
 import { GrantSelectionToolbar } from "./GrantSelectionToolbar";
 import { requirePage } from "@/lib/guard";
 import { GRANT_SCOPE_LABEL, loadGrantExportPage, parseGrantScope } from "@/lib/grantExportData";
@@ -68,8 +69,9 @@ export default async function GrantExportPage({
       <Callout tone="info" icon="payment">
         <strong>This page only makes a file.</strong> Nothing is sent from the dashboard. Download the CSV, check
         the rows and their funding status, then upload it in HCB under <strong>Cards → Bulk send card grants</strong>.
-        Record each grant&apos;s link with <strong>Mark sent</strong> once it exists. An order stays on this list
-        until the grant is sent, so check HCB before uploading the same file twice.
+        After that, use <strong>Import HCB grants</strong> below to pull the created links back in bulk, or record
+        one link at a time with <strong>Mark sent</strong>. An order stays on this list until the grant is sent,
+        so check HCB before uploading the same file twice.
       </Callout>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -184,6 +186,8 @@ export default async function GrantExportPage({
               description or the funding order note, so give the rows a quick read.
             </Muted>
           </div>
+
+          <GrantImportPanel scope={scope} />
 
           <Card padding="flush">
             <CardHeader title="Grants in this file" icon="payment" count={rows.length} />
