@@ -11,7 +11,7 @@ export interface Order {
   quantity?: number | null;
   price: number;
   created_at?: string | null;
-  queue_position?: number | null;
+  /** How many orders are in the shared fulfillment queue. No position is sent. */
   queue_total?: number | null;
   tracking?: string | null;
   note?: string | null;
@@ -118,10 +118,9 @@ export function OrderCard({ order: o }: { order: Order }) {
       ) : (
         <>
           <Tracker status={grantFlow ? o.status : itemStageOf(o.status)} stages={grantFlow ? GRANT_STAGES : STAGES} />
-          {o.status === "pending" && o.queue_position ? (
+          {o.status === "pending" && o.queue_total ? (
             <div className={meta}>
-              #{o.queue_position}
-              {o.queue_total ? ` of ${o.queue_total}` : ""} in line to be claimed by fulfillment
+              {o.queue_total} {o.queue_total === 1 ? "order" : "orders"} in line to be claimed by fulfillment
             </div>
           ) : null}
         </>
