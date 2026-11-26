@@ -81,6 +81,15 @@ function fullRow(overrides: Record<string, unknown> = {}): Record<string, unknow
   return row;
 }
 
+describe("review evidence edit policy", () => {
+  test("BOM and project evidence stay locked throughout review", () => {
+    for (const status of ["shipped", "fraud_review", "second_review", "rejected"])
+      expect(mayEditProjectAtStatus(status)).toBe(false);
+    for (const status of ["draft", "needs_changes", "approved"])
+      expect(mayEditProjectAtStatus(status)).toBe(true);
+  });
+});
+
 describe("toPlayerProject", () => {
   test("strips every known internal/admin column", () => {
     const safe = toPlayerProject(fullRow());
@@ -180,6 +189,23 @@ describe("toPlayerProject", () => {
       banned_at: "2026-09-17T14:44:54.819Z",
     });
     expect(safe.status).toBe("second_review");
+  });
+});
+
+describe("game category", () => {
+  test("keeps games separate from runtime and hardware/software review tracks", () => {
+    const game = parseProjectBody({ name: "Block Runner", projectType: "hardware", kind: "software", isGame: true });
+    expect(game.fields?.project_type).toBe("hardware");
+    expect(game.fields?.kind).toBe("software");
+    expect(game.fields?.is_game).toBe(true);
+    expect(parseProjectBody({ name: "IDE", projectType: "python", isGame: false }).fields?.is_game).toBe(false);
+    expect(parseProjectBody({ name: "Older client" }).fields?.is_game).toBe(false);
+  });
+
+  test("players can see their game's category without exposing reviewer fields", () => {
+    const safe = toPlayerProject({ id: 19, name: "My Game", status: "draft", is_game: true });
+    expect(safe.is_game).toBe(true);
+    expect("system_note" in safe).toBe(false);
   });
 });
 

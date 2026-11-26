@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { queueWaitSince } from "@/lib/queueWait";
+import { hasCurrentFirstPass } from "@/lib/reviewCycleDisplay";
 import type { ShippedProject } from "@/lib/db";
 import type { QueueLock } from "@/lib/reviewAssignment";
 import { LevelBadge, StatusBadge, FundingBadge, TypeBadge, BeaconBadge } from "@/app/_components/ProjectBadges";
@@ -63,7 +64,7 @@ export function ReviewTable({
   const claimer = (id: string) => handles.get(id) ?? "someone";
   // Only lists mixing in second_review rows have a first-pass reviewer to
   // show, so skip the column instead of rendering it always empty.
-  const showFirstPass = rows.some((p) => p.first_pass_by);
+  const showFirstPass = rows.some(hasCurrentFirstPass);
   const headers = [
     ...(selectName ? [<SelectAllBox key="select" />] : []),
     "Project",
@@ -86,13 +87,11 @@ export function ReviewTable({
         const lock = locks?.[Number(p.id)];
         const lockLabel = !lock
           ? null
-          : lock.reason === "page"
-            ? "Locked: only the first page can be opened"
-            : `Reserved for ${lock.assignee ?? "the reviewer who asked for changes"}${
-                lock.until
-                  ? ` until ${new Date(lock.until).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })}`
-                  : ""
-              }`;
+          : `Reserved for ${lock.assignee ?? "the reviewer who asked for changes"}${
+              lock.until
+                ? ` until ${new Date(lock.until).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })}`
+                : ""
+            }`;
         return (
           <tr
             key={p.id}
@@ -133,6 +132,7 @@ export function ReviewTable({
                     {lockLabel && <Badge icon="private">{lockLabel}</Badge>}
                     <LevelBadge level={p.level} />
                     <TypeBadge type={p.project_type} />
+                    {p.is_game && <Badge tone="purple">Game</Badge>}
                     <FundingBadge needsFunding={p.needs_funding} fundingUsd={p.funding_usd} />
                     {p.is_peak && <BeaconBadge />}
                   </div>
@@ -167,7 +167,10 @@ export function ReviewTable({
                     title={`${claimer(p.claimedBy)} opened this for review in the last 30 minutes. You can still open it, but you can't grade it while their claim is live.`}
                   >
                     <Badge tone="info" icon="view">
-                      {claimer(p.claimedBy)} is reviewing
+                      <span className="inline-flex min-w-0 max-w-[13rem] items-center gap-1">
+                        <span className="min-w-0 truncate">{claimer(p.claimedBy)}</span>
+                        <span className="shrink-0">is reviewing</span>
+                      </span>
                     </Badge>
                   </span>
                 )}
@@ -175,14 +178,18 @@ export function ReviewTable({
             </td>
             {showFirstPass && (
               <td>
-                <span className="block max-w-[180px] truncate">{staffName(p.first_pass_by, "-")}</span>
-                {p.first_pass_at && (
-                  <Muted className="block text-xs">
-                    <span title={new Date(p.first_pass_at).toUTCString()}>
-                      {new Date(p.first_pass_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })}
-                    </span>
-                  </Muted>
-                )}
+                {hasCurrentFirstPass(p) ? (
+                  <>
+                    <span className="block max-w-[180px] truncate">{staffName(p.first_pass_by, "-")}</span>
+                    {p.first_pass_at && (
+                      <Muted className="block text-xs">
+                        <span title={new Date(p.first_pass_at).toUTCString()}>
+                          {new Date(p.first_pass_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })}
+                        </span>
+                      </Muted>
+                    )}
+                  </>
+                ) : <Muted>-</Muted>}
               </td>
             )}
             {hackatimeUserIds && (

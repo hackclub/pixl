@@ -19,6 +19,12 @@ suite("claim_shop_order_with_commitment", () => {
       ${opts.enforce ?? true}, ${opts.verdict ?? "covered"}, 'test', ${sql.json({ k: 1 })}
     ) as r`.then((rows) => rows[0]!.r as { ok: boolean; code: string });
 
+  const reserve = (orderId: number, amount: number, funding: number, opts: { enforce?: boolean; verdict?: string; slack?: string } = {}) =>
+    sql`select reserve_shop_order_with_commitment(
+      ${orderId}, 'Fulfiller', ${opts.slack ?? "UF1"}, ${amount}, 'budget', ${funding}, 0,
+      ${opts.enforce ?? true}, ${opts.verdict ?? "covered"}, 'test', ${sql.json({ k: 1 })}
+    ) as r`.then((rows) => rows[0]!.r as { ok: boolean; code: string });
+
   const newOrderFor = async (user: string, status = "pending") =>
     Number((await sql`insert into shop_orders (user_id, status, price) values (${user}, ${status}, 100) returning id`)[0]!.id);
   const newOrder = () => newOrderFor(userId);
@@ -34,9 +40,10 @@ suite("claim_shop_order_with_commitment", () => {
     }
     await migrator.unsafe("create extension if not exists pgcrypto; create schema if not exists extensions;");
     const dir = join(import.meta.dir, "../../../server/drizzle");
-    const files = readdirSync(dir).filter((f) => /^\d{4}_.*\.sql$/.test(f) && !f.startsWith("0229")).sort();
+    const files = readdirSync(dir).filter((f) => /^\d{4}_.*\.sql$/.test(f) && !f.startsWith("0229") && !f.startsWith("0238")).sort();
     for (const f of files) await migrator.unsafe(readFileSync(join(dir, f), "utf8"));
     await migrator.unsafe(readFileSync(join(dir, "0229_fulfillment_commitments.sql"), "utf8"));
+    await migrator.unsafe(readFileSync(join(dir, "0238_claim_before_placing.sql"), "utf8"));
     await migrator.end({ timeout: 2 });
     sql = postgres(url.toString(), { max: 8, onnotice: () => {} });
     userId = (await sql`insert into users (oauth_provider, oauth_id, display_name) values ('test', gen_random_uuid()::text, 'Test') returning id`)[0]!.id as string;
@@ -65,6 +72,39 @@ suite("claim_shop_order_with_commitment", () => {
     expect(await claim(id, 500, 99999)).toEqual({ ok: true, code: "already_claimed" });
     const rows = await sql`select 1 from fulfillment_commitments where order_id = ${id}`;
     expect(rows).toHaveLength(1);
+  });
+
+  test("claim-only assigns the fulfiller and funds without pretending it was placed", async () => {
+    const id = await newOrder();
+    expect(await reserve(id, 500, 99999)).toEqual({ ok: true, code: "claimed" });
+    expect(await reserve(id, 500, 99999)).toEqual({ ok: true, code: "already_claimed" });
+    const [row] = await sql`select status, claimed_by_slack, claimed_at, ordered_at from shop_orders where id = ${id}`;
+    expect(row).toMatchObject({ status: "claimed", claimed_by_slack: "UF1", ordered_at: null });
+    expect(row!.claimed_at).toBeInstanceOf(Date);
+    expect(await sql`select order_id from fulfillment_commitments where order_id = ${id}`).toHaveLength(1);
+    // A separate, owner-checked dashboard action later moves it to ordered.
+    await sql`update shop_orders set status = 'ordered', ordered_at = now() where id = ${id} and status = 'claimed'`;
+    const [placed] = await sql`select status, ordered_at from shop_orders where id = ${id}`;
+    expect(placed!.status).toBe("ordered");
+    expect(placed!.ordered_at).toBeInstanceOf(Date);
+  });
+
+  test("claim-only competes atomically with place-and-claim", async () => {
+    const id = await newOrder();
+    const results = await Promise.all([reserve(id, 100, 99999, { slack: "UA" }), claim(id, 100, 99999, { slack: "UB" })]);
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+    expect(await sql`select order_id from fulfillment_commitments where order_id = ${id}`).toHaveLength(1);
+    const [row] = await sql`select status, ordered_at from shop_orders where id = ${id}`;
+    expect(["claimed", "ordered"]).toContain(row!.status);
+    expect(row!.status === "claimed" ? row!.ordered_at === null : row!.ordered_at instanceof Date).toBe(true);
+  });
+
+  test("an owner can cancel and refund a reserved order exactly once", async () => {
+    const id = await newOrder();
+    expect((await reserve(id, 100, 99999)).ok).toBe(true);
+    expect((await sql`select cancel_claimed_shop_order(${id}, 'Owner') as n`)[0]!.n).toBe(100);
+    expect((await sql`select cancel_claimed_shop_order(${id}, 'Owner') as n`)[0]!.n).toBe(0);
+    expect((await sql`select status from shop_orders where id = ${id}`)[0]!.status).toBe("cancelled");
   });
 
   test("two fulfillers racing for one order produce one winner", async () => {

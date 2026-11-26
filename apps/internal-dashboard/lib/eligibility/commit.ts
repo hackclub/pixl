@@ -1,6 +1,7 @@
 import { db as realDb } from "../pgCompat";
 import { config } from "@/app/_generated/config";
 import type { ShipsProvider, ShipsView } from "./ships";
+import { shipsProvider } from "./ships";
 import { toOrderInput, loadPlayerEvidence, evaluateFromEvidence, withGrantLink, type SqlLike, type UnifiedVerifier } from "./evidence";
 import { orderAmount, type EligibilityResult } from "./engine";
 import { currentPolicy, type EligibilityPolicy } from "./policy";
@@ -99,7 +100,7 @@ const LEDGER_MISSING = new Set(["42883", "42P01"]);
 
 export async function claimOrderWithFunding(
   p: { orderId: number; by: string; bySlack: string },
-  opts: { policy?: EligibilityPolicy; verifier?: UnifiedVerifier; db?: typeof realDb; sql?: SqlLike; ships?: ShipsProvider | ShipsView } = {},
+  opts: { policy?: EligibilityPolicy; verifier?: UnifiedVerifier; db?: typeof realDb; sql?: SqlLike; ships?: ShipsProvider | ShipsView; reserveOnly?: boolean } = {},
 ): Promise<ClaimOutcome> {
   const policy = opts.policy ?? currentPolicy();
   const db = opts.db ?? realDb;
@@ -109,7 +110,8 @@ export async function claimOrderWithFunding(
 
   let result: EligibilityResult | null = null;
   try {
-    const ev = await loadPlayerEvidence([row.user_id as string], { liveAirtable: true, verifier: opts.verifier, sql: opts.sql, ships: opts.ships });
+    const provider = opts.ships ?? (process.env.FULFILLMENT_SHIPS_SOURCE === "airbridge" ? shipsProvider() : undefined);
+    const ev = await loadPlayerEvidence([row.user_id as string], { liveAirtable: true, verifier: opts.verifier, sql: opts.sql, ships: provider });
     const player = ev.get(row.user_id as string);
     if (player) result = evaluateFromEvidence(player, toOrderInput(row as Parameters<typeof toOrderInput>[0]), policy);
   } catch (e) {
@@ -123,14 +125,14 @@ export async function claimOrderWithFunding(
   const args = result
     ? claimRpcArgs(result, { ...p, enforce: policy.enforceOnClaim })
     : degradedRpcArgs(row as Parameters<typeof toOrderInput>[0], policy, p);
-  const { data, error } = await db.rpc<{ ok: boolean; code: string }>("claim_shop_order_with_commitment", args);
+  const { data, error } = await db.rpc<{ ok: boolean; code: string }>(opts.reserveOnly ? "reserve_shop_order_with_commitment" : "claim_shop_order_with_commitment", args);
   if (error) {
-    if (LEDGER_MISSING.has(error.code ?? "") && policy.allowUnledgeredClaim) {
+    if (!opts.reserveOnly && LEDGER_MISSING.has(error.code ?? "") && policy.allowUnledgeredClaim) {
       console.error("claimOrderWithFunding: ledger not installed, claim will not be recorded", error.message);
       return { kind: "unledgered", reason: "ledger_not_installed" };
     }
     if (LEDGER_MISSING.has(error.code ?? "")) {
-      throw new Error("Funding ledger is not installed (migration 0229). Claim refused.");
+      throw new Error(opts.reserveOnly ? "Claim-only migration is not installed. Claim refused." : "Funding ledger is not installed (migration 0229). Claim refused.");
     }
     throw new Error(error.message);
   }

@@ -61,9 +61,10 @@ export type ProposedBanDecision =
 export function proposedBanDecision(
   viewer: ReviewViewer,
   verdict: string,
-  opts: { own: boolean; proposedBy: string; actor: string },
+  opts: { own: boolean; owner?: boolean; proposedBy: string; actor: string },
 ): ProposedBanDecision {
-  if (opts.own) return { kind: "deny", reason: "You can't decide on a project you own or collaborate on." };
+  if (opts.own && !opts.owner)
+    return { kind: "deny", reason: "You can't decide on a project you collaborate on." };
   if (!viewer.canSecondPass && !viewer.isOwner)
     return { kind: "deny", reason: "You don't have second-pass review access." };
   // By Slack id: the same person under a renamed display name is still the

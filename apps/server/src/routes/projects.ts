@@ -1,6 +1,9 @@
 import { Router } from "express";
+import { projectCreationClosed, submissionsClosedFor } from "../submissionDeadline.js";
+import { submissionDeadline } from "../config.generated.js";
 import { db } from "../db/client.js";
 import { runPrecheck, shouldPrecheck } from "../precheck/run.js";
+import { checkReadmeLength } from "../precheck/readmeLength.js";
 import { addNotification } from "./notifications.js";
 import { findAllInYswsArchive } from "../ysws/archive.js";
 import { buildDoubleDip, type TeamMember } from "../ysws/doubleDip.js";
@@ -17,10 +20,13 @@ import { allowedImageUrl, markdownImagesAllowed } from "../http/imageUrls.js";
 import { isGitRepoUrl } from "./gitRepoUrl.js";
 import { urlAlive } from "./urlLiveness.js";
 import { recordShipForOperations } from "../operations/service.js";
-import { trialItemCreditTarget } from "../trialPayout.js";
+import { settleTrialReward } from "./trialReward.js";
 import { z } from "zod";
 import { validate, v, optStr, optBool, optNum, params } from "../http/validate.js";
 import { countJournalImages, journalImagesNeeded, journalTextLength } from "./journalRules.js";
+import { withWritableJournalProject } from "./journalLock.js";
+import { approvedUpdateReviewResetFields, approvedUpdateShipState } from "./projectReviewCycle.js";
+import { mustPreserveApprovedProjectTerms } from "../earnedProject.js";
 
 const router = Router();
 
@@ -36,6 +42,7 @@ const projectBody = z.object({
   usedAi: optBool,
   aiNotes: optStr(20_000),
   projectType: optStr(64),
+  isGame: optBool,
   kind: optStr(32),
   needsFunding: optBool,
   fundingUsd: optNum,
@@ -72,6 +79,7 @@ const PLAYER_PROJECT_FIELDS = [
   "demo_url",
   "image_url",
   "project_type",
+  "is_game",
   "kind",
   "used_ai",
   "ai_notes",
@@ -369,6 +377,7 @@ interface ProjectFields {
   demo_url: string;
   image_url: string;
   project_type: string;
+  is_game: boolean;
   used_ai: boolean;
   ai_notes: string;
   hackatime_projects: string[];
@@ -464,6 +473,7 @@ export function parseProjectBody(
       demo_url: demoUrl,
       image_url: imageUrl,
       project_type: projectType,
+      is_game: body?.isGame === true,
       used_ai: usedAi,
       ai_notes: usedAi ? aiNotes : "",
       hackatime_projects: normalizeHackatimeProjects(body?.hackatimeProjects),
@@ -507,6 +517,7 @@ router.post("/api/projects", validate({ query: v.noQuery, body: projectBody }), 
   const session = req.session;
   if (!session) return res.status(401).json({ ok: false });
 
+  if (projectCreationClosed()) return res.status(403).json({ ok: false, error: "project_creation_closed" });
   const parsed = parseProjectBody(req.body);
   if (parsed.error !== undefined)
     return res.status(400).json({ ok: false, error: parsed.error });
@@ -552,7 +563,7 @@ router.put("/api/projects/:id", validate({ query: v.noQuery, params: params({ id
   // their RE). Keep the existing level on approved projects; the reviewer owns it.
   const { data: cur } = await db
     .from("projects")
-    .select("status, level, sidequest_id, bom_url, banned_at")
+    .select("status, is_update, level, sidequest_id, bom_url, banned_at")
     .eq("id", id)
     .eq("user_id", session.userId)
     .maybeSingle();
@@ -560,6 +571,9 @@ router.put("/api/projects/:id", validate({ query: v.noQuery, params: params({ id
   if (!mayEditProjectAtStatus(cur.status as string) || cur.banned_at)
     return res.status(409).json({ ok: false, error: "project_locked_in_review" });
   const fields: Record<string, unknown> = { ...parsed.fields };
+  // Old clients don't send isGame. Do not erase manually tagged projects
+  // when their owners save through a cached client version.
+  if (req.body?.isGame === undefined) delete fields.is_game;
   fields.bom_url = (cur as { bom_url?: string } | null)?.bom_url ?? "";
 
   // Trial link is picked at creation and editable while the project is a draft.
@@ -568,9 +582,11 @@ router.put("/api/projects/:id", validate({ query: v.noQuery, params: params({ id
   if ("error" in trial) return res.status(400).json({ ok: false, error: trial.error });
   fields.sidequest_id = trial.id;
 
-  // On an approved project, neither the tier nor the Trial link may change (both
-  // feed payout/RE that already settled) , keep whatever the reviewer approved.
-  if ((cur as { status?: string } | null)?.status === "approved") {
+  // Previously approved hours are still counted toward the player's RE during
+  // an update review (including needs_changes). Freeze the tier AND Trial
+  // link for that old work until an explicit separately modelled regrade exists.
+  // New submissions in needs_changes can still edit their proposed tier.
+  if (mustPreserveApprovedProjectTerms(cur.status, cur.is_update)) {
     fields.level = (cur as { level?: number }).level ?? 1;
     fields.sidequest_id = (cur as { sidequest_id?: number | null }).sidequest_id ?? null;
   }
@@ -581,7 +597,8 @@ router.put("/api/projects/:id", validate({ query: v.noQuery, params: params({ id
     .eq("id", id)
     .eq("user_id", session.userId)
     // Recheck at write time: a concurrent ship/review may have locked it.
-    .in("status", ["draft", "needs_changes", "approved"])
+    .eq("status", cur.status)
+    .eq("is_update", cur.is_update)
     .is("banned_at", null)
     .select()
     .maybeSingle();
@@ -591,6 +608,26 @@ router.put("/api/projects/:id", validate({ query: v.noQuery, params: params({ id
     return res.status(500).json({ ok: false });
   }
   res.json({ ok: true, project: toPlayerProject(data, session.userId) });
+});
+
+// Preview checks the currently typed URL without saving unsaved project edits.
+// The owner check and GitHub-only fetcher prevent arbitrary unauthenticated fetches.
+router.post("/api/projects/:id/readme-check", validate({
+  query: v.noQuery,
+  params: params({ id: v.id }),
+  body: z.object({ repoUrl: z.string().trim().min(1).max(500) }),
+}), async (req, res) => {
+  const session = req.session;
+  if (!session) return res.status(401).json({ ok: false });
+  const id = Number(req.params.id);
+  const { data: project, error } = await db.from("projects")
+    .select("id")
+    .eq("id", id)
+    .eq("user_id", session.userId)
+    .maybeSingle();
+  if (error || !project) return res.status(404).json({ ok: false, error: "not_found" });
+  const check = await checkReadmeLength(req.body.repoUrl as string);
+  return res.json({ ok: true, ...check });
 });
 
 // Ship a project for review: draft/needs_changes -> shipped, or approved ->
@@ -615,6 +652,34 @@ router.post("/api/projects/:id/ship", validate({ query: v.noQuery, params: param
 
   if (project.banned_at)
     return res.status(400).json({ ok: false, error: "project_banned" });
+
+  // Submissions closed on config.submissionDeadline; the only ship still
+  // allowed is the one resubmit a project earns from a request for changes:
+  // made in the 24h before the deadline -> until deadline + 48h; made after
+  // the deadline -> within 24h of the request. The request time is the newest
+  // needs_changes review_audits row, looked up only when it can matter.
+  let changesRequestedAt: string | null = null;
+  if (new Date() > submissionDeadline && project.status === "needs_changes") {
+    const { data: audit, error: auditLookupError } = await db
+      .from("review_audits")
+      .select("created_at")
+      .eq("project_id", id)
+      .eq("verdict", "needs_changes")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (auditLookupError) {
+      console.error("[projects] changes-requested lookup failed", auditLookupError.message);
+      return res.status(500).json({ ok: false });
+    }
+    changesRequestedAt = (audit?.created_at as string | undefined) ?? null;
+  }
+  if (submissionsClosedFor(project, new Date(), submissionDeadline, changesRequestedAt))
+    return res.status(403).json({
+      ok: false,
+      error: "submissions_closed",
+      message: "Submissions have closed. A project where a reviewer requested changes can be resubmitted once: until 48 hours after the deadline if the changes were requested in the last 24 hours before it, or within 24 hours of the request if they were requested after the deadline.",
+    });
 
   const shippable = ["draft", "needs_changes", "approved"];
   if (!shippable.includes(project.status as string) && !project.rejected_at)
@@ -652,6 +717,19 @@ router.post("/api/projects/:id/ship", validate({ query: v.noQuery, params: param
   // URLs are only validated here, at ship time (save accepts anything).
   if (!(await isGitRepoUrl(project.repo_url as string)))
     return res.status(400).json({ ok: false, error: "repo_not_git" });
+  // Fast, deterministic README gate before this project enters the queue.
+  // Non-GitHub repos and temporary GitHub outages still get human review;
+  // neither should become a new reason to reject a legitimate ship.
+  const readmeCheck = await checkReadmeLength(project.repo_url as string);
+  if (readmeCheck.status === "missing")
+    return res.status(400).json({ ok: false, error: "readme_missing" });
+  if (readmeCheck.status === "too_short")
+    return res.status(400).json({
+      ok: false,
+      error: "readme_too_short",
+      need: readmeCheck.minWords,
+      have: readmeCheck.words,
+    });
   const isHardware = project.kind === "hardware";
   const demoCheck = normalizeDemoUrl(project.demo_url as string, isHardware);
   if ("error" in demoCheck)
@@ -824,12 +902,12 @@ router.post("/api/projects/:id/ship", validate({ query: v.noQuery, params: param
     );
   }
 
-  const isUpdate = project.status === "approved" && !project.rejected_at;
+  const { startsUpdate, isUpdate } = approvedUpdateShipState(project as { status: string; is_update?: boolean | null; rejected_at?: string | null });
   const updateNotes = String(req.body?.updateNotes ?? "").trim().slice(0, 8000);
   const shipNote = String(req.body?.shipNote ?? "").trim().slice(0, 2000);
-  if (isUpdate && !updateNotes)
+  if (startsUpdate && !updateNotes)
     return res.status(400).json({ ok: false, error: "update_notes_required" });
-  if (isUpdate && updateNotes.length < 100)
+  if (startsUpdate && updateNotes.length < 100)
     return res.status(400).json({ ok: false, error: "update_notes_too_short" });
   const userDisclosedOtherYsws = req.body?.otherYsws === true;
   const otherYsws = userDisclosedOtherYsws || !!project.imported_ysws_entry_id;
@@ -934,30 +1012,35 @@ router.post("/api/projects/:id/ship", validate({ query: v.noQuery, params: param
       notify_reviewer_slack_id: "",
       review_note: "",
       review_note_by: "",
+      // A fully approved project's update is a fresh review. Prior approvals
+      // remain in review_audits and approved_hours/prior_approved_hours.
+      // Needs-changes reships retain the three-day reviewer assignment.
+      ...(startsUpdate ? approvedUpdateReviewResetFields() : {}),
       rejected_at: null,
       reject_reason: "",
       reject_by: "",
       hackatime_seconds: trackedSeconds,
       is_update: isUpdate,
-      update_notes: isUpdate ? updateNotes : "",
+      update_notes: isUpdate ? (startsUpdate ? updateNotes : String(project.update_notes ?? "")) : "",
       ship_note: shipNote,
       other_ysws: otherYsws,
       other_ysws_notes: userDisclosedOtherYsws ? otherYswsNotes : "",
       system_note: systemNote,
-      sidequest_id: sidequestId,
+      // The historical Trial link must stay tied to already-paid RE on updates.
+      sidequest_id: isUpdate ? project.sidequest_id : sidequestId,
       eligibility_attested: true,
       // airtable_record_id points at the row from this project's LAST
       // approval. Left alone, the dashboard's Airtable push (actions.ts:
       // pushProjectToAirtable) reuses that id forever and an update ship's
       // eventual re-approval overwrites the original ship's row instead of
       // getting its own - clear it here so a genuine update starts fresh.
-      ...(isUpdate ? { airtable_record_id: null } : {}),
+      ...(startsUpdate ? { airtable_record_id: null } : {}),
       // approved_hours is the cumulative credited total and a re-approval
       // overwrites it, so freeze what was already approved at the moment of the
       // update: the update's Airtable row and the review page both need "new
       // hours = total - this" (internal-dashboard newHoursOnly). Only touched on
       // an update, so a needs_changes reship keeps the baseline.
-      ...(isUpdate ? { prior_approved_hours: Number(project.approved_hours) || 0 } : {}),
+      ...(startsUpdate ? { prior_approved_hours: Number(project.approved_hours) || 0 } : {}),
     })
     .eq("id", id)
     .eq("user_id", session.userId)
@@ -974,7 +1057,7 @@ router.post("/api/projects/:id/ship", validate({ query: v.noQuery, params: param
   if (!data) return res.status(409).json({ ok: false, error: "project_state_changed" });
   // Collaborators get their own Airtable row per approval, same rule as the
   // owner's airtable_record_id above: an update ship starts fresh rows.
-  if (isUpdate) {
+  if (startsUpdate) {
     const { error: collabResetError } = await db
       .from("project_collaborators")
       .update({ airtable_record_id: null })
@@ -1071,12 +1154,14 @@ router.post("/api/projects/:id/unship", validate({ query: v.noQuery, params: par
     })
     .eq("id", id)
     .eq("user_id", session.userId)
+    .eq("status", "shipped")
     .select()
-    .single();
+    .maybeSingle();
   if (error) {
     console.error("[projects] unship failed", error);
     return res.status(500).json({ ok: false });
   }
+  if (!data) return res.status(409).json({ ok: false, error: "project_state_changed" });
   res.json({ ok: true, project: toPlayerProject(data, session.userId) });
 });
 
@@ -1088,142 +1173,37 @@ router.post("/api/projects/:id/unship", validate({ query: v.noQuery, params: par
 router.post("/api/projects/:id/trial-reward", validate({ query: v.noQuery, params: params({ id: v.id }), body: z.object({ choice: optStr(16) }) }), async (req, res) => {
   const session = req.session;
   if (!session) return res.status(401).json({ ok: false });
-
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ ok: false });
   const choice = String(req.body?.choice ?? "");
   if (choice !== "item" && choice !== "pixels")
     return res.status(400).json({ ok: false, error: "bad_choice" });
 
-  const { data: project } = await db
-    .from("projects")
-    .select("id, name, status, approved_hours, sidequest_id, trial_reward_choice, trial_held_px, trial_prize_px")
-    .eq("id", id)
-    .eq("user_id", session.userId)
-    .maybeSingle();
-  if (!project) return res.status(404).json({ ok: false });
-  if (project.status !== "approved" || project.trial_reward_choice !== "pending")
-    return res.status(400).json({ ok: false, error: "nothing_to_claim" });
+  try {
+    const result = await settleTrialReward(id, session.userId, choice);
+    if (!result.ok) return res.status(result.error === "not_found" ? 404 : 400)
+      .json({ ok: false, error: result.error });
 
-  // A Trial can be deleted out from under an approved ship (it has happened,
-  // see [[trial-npc-link-drift]]). That must not strand the player's pixels, so
-  // only the prize branch actually needs the row.
-  const { data: trial } = await db
-    .from("sidequests")
-    .select("id, name, reward, prize_shop_item_id")
-    .eq("id", project.sidequest_id as number)
-    .maybeSingle();
-  if (!trial && choice === "item")
-    return res.status(400).json({ ok: false, error: "trial_missing" });
-  const trialLabel = (trial?.name as string) || "this Trial";
-
-  // Claim the choice first. If someone else's request already took it, this
-  // matches no rows and we stop before paying anything out.
-  const { data: claimed } = await db
-    .from("projects")
-    .update({ trial_reward_choice: choice })
-    .eq("id", id)
-    .eq("user_id", session.userId)
-    .eq("trial_reward_choice", "pending")
-    .select("id")
-    .maybeSingle();
-  if (!claimed) return res.status(409).json({ ok: false, error: "already_claimed" });
-
-  const heldPx = Math.max(Number(project.trial_held_px) || 0, 0);
-  // The prize covers the Trial's minimum hours; those pixels (trial_prize_px)
-  // are what you forfeit by keeping the prize. Everything beyond the minimum is
-  // paid in pixels either way.
-  const prizePx = Math.max(Number(project.trial_prize_px) || 0, 0);
-  const beyondPx = Math.max(heldPx - prizePx, 0);
-
-  if (choice === "pixels") {
-    const { error } = await db.rpc("credit_project_pixels", {
-      p_user_id: session.userId,
-      p_project_id: id,
-      p_amount: heldPx,
-      p_hours: Number(project.approved_hours) || 0,
-      p_created_by: "trial_reward",
-    });
-    if (error) {
-      console.error("[projects] trial pixels payout failed", error);
-      await db.from("projects").update({ trial_reward_choice: "pending" }).eq("id", id);
-      return res.status(500).json({ ok: false });
+    if (result.choice === "pixels") {
+      void addNotification(
+        session.userId,
+        "Trial reward: pixels",
+        `You took the pixels for "${result.trialLabel}". ${result.pixels} pixels are in your wallet.`,
+      );
+      return res.json({ ok: true, choice, pixels: result.pixels });
     }
     void addNotification(
       session.userId,
-      "Trial reward: pixels",
-      `You took the pixels for "${trialLabel}". ${heldPx} pixels are in your wallet.`,
+      "Trial reward claimed",
+      result.pixels > 0
+        ? `"${result.item}" is on its way for finishing "${result.trialLabel}", plus ${result.pixels} pixels for the hours past the minimum. Track the prize in your orders.`
+        : `"${result.item}" is on its way for finishing "${result.trialLabel}". Track it in your orders.`,
     );
-    return res.json({ ok: true, choice, pixels: heldPx });
+    res.json({ ok: true, choice, item: result.item, pixels: result.pixels });
+  } catch (e) {
+    console.error("[projects] trial reward settlement failed", e);
+    res.status(500).json({ ok: false });
   }
-
-  // The prize itself walks the same fulfilment pipeline as anything bought
-  // with pixels - its price is prizePx, the pixels the player forfeits (never
-  // credited) by keeping the item instead of taking the "pixels" choice
-  // above, not 0. Fulfillment's budget math and the shop economy summary
-  // both read this column directly, so a literal 0 here would make the
-  // physical prize look free to source and undercount what was really
-  // redeemed. Prefers the Trial's linked catalog item, falls back to its
-  // free-text reward as a custom order ops fulfils by hand.
-  let itemId: number | null = null;
-  let itemName = (trial.reward as string) || (trial.name as string);
-  if (trial.prize_shop_item_id) {
-    const { data: prizeItem } = await db
-      .from("shop_items")
-      .select("id, name")
-      .eq("id", trial.prize_shop_item_id)
-      .maybeSingle();
-    if (prizeItem) {
-      itemId = prizeItem.id as number;
-      itemName = prizeItem.name as string;
-    }
-  }
-  const { data: order, error: orderError } = await db
-    .from("shop_orders")
-    .insert({
-      user_id: session.userId,
-      item_id: itemId,
-      item_name: itemName,
-      option: `Trial: ${trial.name}`,
-      price: prizePx,
-      status: "pending",
-    })
-    .select("id")
-    .single();
-  if (orderError || !order) {
-    console.error("[projects] trial prize order failed", orderError);
-    await db.from("projects").update({ trial_reward_choice: "pending" }).eq("id", id);
-    return res.status(500).json({ ok: false });
-  }
-  await db.from("projects").update({ trial_prize_order_id: order.id }).eq("id", id);
-  // Keeping the prize still pays out the pixels for hours past the minimum.
-  if (beyondPx > 0) {
-    // credit_project_pixels pays (target - already earned on this project), so
-    // the target must include earlier payouts - see trialPayout.ts.
-    const { data: paidTxs } = await db
-      .from("pixel_transactions")
-      .select("amount")
-      .eq("project_id", id)
-      .eq("user_id", session.userId)
-      .in("reason", ["project_approved", "review_reverted"]);
-    const alreadyPx = (paidTxs ?? []).reduce((sum, t) => sum + Number(t.amount), 0);
-    const { error: pxError } = await db.rpc("credit_project_pixels", {
-      p_user_id: session.userId,
-      p_project_id: id,
-      p_amount: trialItemCreditTarget(alreadyPx, heldPx, prizePx),
-      p_hours: Number(project.approved_hours) || 0,
-      p_created_by: "trial_reward",
-    });
-    if (pxError) console.error("[projects] trial beyond-min pixels payout failed", pxError);
-  }
-  void addNotification(
-    session.userId,
-    "Trial reward claimed",
-    beyondPx > 0
-      ? `"${itemName}" is on its way for finishing "${trial.name}", plus ${beyondPx} pixels for the hours past the minimum. Track the prize in your orders.`
-      : `"${itemName}" is on its way for finishing "${trial.name}". Track it in your orders.`,
-  );
-  res.json({ ok: true, choice, item: itemName, pixels: beyondPx });
 });
 
 // True for the project's owner, or an accepted collaborator (view/log-hours
@@ -1439,15 +1419,6 @@ router.get("/api/projects/:id/timeline", async (req, res) => {
 // Journals are what a reviewer reads to judge the hours, so they freeze the
 // moment a project is in review (same set as IN_REVIEW in operations/domain.ts)
 // and open back up on needs_changes/approved/draft.
-async function journalLockedForReview(projectId: number): Promise<boolean> {
-  const { data } = await db
-    .from("projects")
-    .select("status")
-    .eq("id", projectId)
-    .maybeSingle();
-  return ["shipped", "second_review", "fraud_review"].includes(String(data?.status ?? ""));
-}
-
 // Add a journal entry (markdown content + optional hours) to an own project.
 router.post("/api/projects/:id/journal", validate({ query: v.noQuery, params: params({ id: v.id }), body: journalBody }), async (req, res) => {
   const session = req.session;
@@ -1457,8 +1428,6 @@ router.post("/api/projects/:id/journal", validate({ query: v.noQuery, params: pa
   if (!Number.isFinite(id)) return res.status(400).json({ ok: false });
   if (!(await canAccessProject(session.userId, id)))
     return res.status(404).json({ ok: false });
-  if (await journalLockedForReview(id))
-    return res.status(409).json({ ok: false, error: "project_in_review" });
 
   const content = String(req.body?.content ?? "").trim().slice(0, 5000);
   if (!content)
@@ -1486,16 +1455,19 @@ router.post("/api/projects/:id/journal", validate({ query: v.noQuery, params: pa
       .status(400)
       .json({ ok: false, error: "journal_images_required", need: imagesNeed, have: imagesHave, hours });
 
-  const { data, error } = await db
-    .from("project_journals")
-    .insert({ project_id: id, user_id: session.userId, content, hours, title })
-    .select()
-    .single();
-  if (error) {
-    console.error("[projects] journal create failed", error);
-    return res.status(500).json({ ok: false });
+  try {
+    const result = await withWritableJournalProject(id, async (tx) => {
+      const rows = await tx`insert into project_journals (project_id, user_id, content, hours, title)
+        values (${id}, ${session.userId}, ${content}, ${hours}, ${title}) returning *`;
+      return rows[0];
+    });
+    if (!result.ok) return res.status(result.reason === "not_found" ? 404 : 409)
+      .json({ ok: false, error: result.reason });
+    res.json({ ok: true, entry: result.value });
+  } catch (e) {
+    console.error("[projects] journal create failed", e);
+    res.status(500).json({ ok: false });
   }
-  res.json({ ok: true, entry: data });
 });
 
 // Edit one of the user's own journal entries (owner-only, same as delete).
@@ -1507,8 +1479,6 @@ router.patch("/api/projects/:id/journal/:entryId", validate({ query: v.noQuery, 
   const entryId = Number(req.params.entryId);
   if (!Number.isFinite(id) || !Number.isFinite(entryId))
     return res.status(400).json({ ok: false });
-  if (await journalLockedForReview(id))
-    return res.status(409).json({ ok: false, error: "project_in_review" });
 
   const content = String(req.body?.content ?? "").trim().slice(0, 5000);
   if (!content)
@@ -1534,20 +1504,22 @@ router.patch("/api/projects/:id/journal/:entryId", validate({ query: v.noQuery, 
       .status(400)
       .json({ ok: false, error: "journal_images_required", need: imagesNeed, have: imagesHave, hours });
 
-  const { data, error } = await db
-    .from("project_journals")
-    .update({ content, hours, title, edited_at: new Date().toISOString() })
-    .eq("id", entryId)
-    .eq("project_id", id)
-    .eq("user_id", session.userId)
-    .select()
-    .maybeSingle();
-  if (error) {
-    console.error("[projects] journal edit failed", error);
-    return res.status(500).json({ ok: false });
+  try {
+    const result = await withWritableJournalProject(id, async (tx) => {
+      const rows = await tx`update project_journals
+        set content = ${content}, hours = ${hours}, title = ${title}, edited_at = now()
+        where id = ${entryId} and project_id = ${id} and user_id = ${session.userId}
+        returning *`;
+      return rows[0] ?? null;
+    });
+    if (!result.ok) return res.status(result.reason === "not_found" ? 404 : 409)
+      .json({ ok: false, error: result.reason });
+    if (!result.value) return res.status(404).json({ ok: false });
+    res.json({ ok: true, entry: result.value });
+  } catch (e) {
+    console.error("[projects] journal edit failed", e);
+    res.status(500).json({ ok: false });
   }
-  if (!data) return res.status(404).json({ ok: false });
-  res.json({ ok: true, entry: data });
 });
 
 // Delete one of the user's own journal entries.
@@ -1559,20 +1531,20 @@ router.delete("/api/projects/:id/journal/:entryId", validate({ query: v.noQuery,
   const entryId = Number(req.params.entryId);
   if (!Number.isFinite(id) || !Number.isFinite(entryId))
     return res.status(400).json({ ok: false });
-  if (await journalLockedForReview(id))
-    return res.status(409).json({ ok: false, error: "project_in_review" });
 
-  const { error } = await db
-    .from("project_journals")
-    .delete()
-    .eq("id", entryId)
-    .eq("project_id", id)
-    .eq("user_id", session.userId);
-  if (error) {
-    console.error("[projects] journal delete failed", error);
-    return res.status(500).json({ ok: false });
+  try {
+    const result = await withWritableJournalProject(id, async (tx) => {
+      await tx`delete from project_journals
+        where id = ${entryId} and project_id = ${id} and user_id = ${session.userId}`;
+      return true;
+    });
+    if (!result.ok) return res.status(result.reason === "not_found" ? 404 : 409)
+      .json({ ok: false, error: result.reason });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("[projects] journal delete failed", e);
+    res.status(500).json({ ok: false });
   }
-  res.json({ ok: true });
 });
 
 // Delete one of the user's own projects.

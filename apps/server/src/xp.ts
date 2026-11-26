@@ -1,5 +1,5 @@
 import { db } from "./db/client.js";
-import { earnedProjectHours, EARNED_PROJECT_STATUSES, type EarnedProjectRow } from "./earnedProject.js";
+import { earnedProjectHours, earnedCollaboratorHours, EARNED_PROJECT_STATUSES, type EarnedProjectRow } from "./earnedProject.js";
 import {
   MAX_LEVEL,
   levelForRe,
@@ -63,8 +63,14 @@ export async function approvedHoursFor(
   userId: string,
   excludeProjectId?: number,
 ): Promise<number> {
-  const rows = await approvedProjectsFor(userId, excludeProjectId);
-  return round1(rows.reduce((s, p) => s + (earnedProjectHours(p) ?? 0), 0));
+  const [rows, collaborations] = await Promise.all([
+    approvedProjectsFor(userId, excludeProjectId),
+    bankedCollaborations(userId, excludeProjectId),
+  ]);
+  return round1(
+    rows.reduce((s, p) => s + (earnedProjectHours(p) ?? 0), 0) +
+    collaborations.reduce((s, c) => s + c.hours, 0),
+  );
 }
 
 /** RE awarded directly to a player - not tied to any project. Currently just
@@ -85,11 +91,13 @@ export async function bonusReFor(userId: string): Promise<number> {
  * the player's level.
  */
 export async function lifetimeRe(userId: string, excludeProjectId?: number): Promise<number> {
-  const [rows, bonus] = await Promise.all([
+  const [rows, bonus, collaborations] = await Promise.all([
     approvedProjectsFor(userId, excludeProjectId),
     bonusReFor(userId),
+    bankedCollaborations(userId, excludeProjectId),
   ]);
-  return round1(rows.reduce((s, p) => s + bankedReOf(p), bonus));
+  const collaboratorRe = collaborations.reduce((s, c) => s + reForHours(c.hours, c.tier), 0);
+  return round1(rows.reduce((s, p) => s + bankedReOf(p), bonus) + collaboratorRe);
 }
 
 // Total lifetime RE across every player - the "Core Integrity" figure shown
@@ -97,17 +105,64 @@ export async function lifetimeRe(userId: string, excludeProjectId?: number): Pro
 // two queries instead of once per user (this repo has no per-user loop for
 // an aggregate this size).
 export async function totalCommunityRe(): Promise<number> {
-  const [{ data: projects }, { data: awards }] = await Promise.all([
+  const [{ data: projects }, { data: awards }, collaborations] = await Promise.all([
     db
       .from("projects")
       .select("approved_hours, hackatime_seconds, level, sidequest_id, status, is_update, prior_approved_hours")
       .in("status", EARNED_PROJECT_STATUSES)
       .is("banned_at", null),
     db.from("vault_chapter_awards").select("re_awarded"),
+    bankedCollaborations(),
   ]);
   const projectRe = ((projects ?? []) as ProjectRow[]).reduce((s, p) => s + bankedReOf(p), 0);
   const bonusRe = (awards ?? []).reduce((s, r) => s + (Number(r.re_awarded) || 0), 0);
-  return round1(projectRe + bonusRe);
+  const collaboratorRe = collaborations.reduce((s, c) => s + reForHours(c.hours, c.tier), 0);
+  return round1(projectRe + bonusRe + collaboratorRe);
+}
+
+
+/** Approved collaboration RE, including historical (now-removed) collaborators
+ * who must not lose earned RE. The server and dashboard each query their own DB.
+ * No nested joins: pgCompat does not support them.
+ */
+async function bankedCollaborations(
+  userId?: string,
+  excludeProjectId?: number,
+): Promise<Array<{ hours: number; tier: number }>> {
+  let q = db
+    .from("project_collaborators")
+    .select("project_id, user_id, approved_hours, prior_approved_hours")
+    .in("status", ["accepted", "removed"]);
+  if (userId) q = q.eq("user_id", userId);
+  const { data: collaborations, error: collabError } = await q;
+  if (collabError) throw new Error(`Failed reading approved collaborations: ${collabError.message}`);
+  const rows = (collaborations ?? []).filter((c) =>
+    !excludeProjectId || Number(c.project_id) !== excludeProjectId
+  );
+  if (rows.length === 0) return [];
+
+  const { data: projects, error: projectError } = await db
+    .from("projects")
+    .select("id, user_id, status, is_update, level")
+    .in("id", [...new Set(rows.map((c) => Number(c.project_id)))])
+    .in("status", EARNED_PROJECT_STATUSES)
+    .is("banned_at", null);
+  if (projectError) throw new Error(`Failed reading projects for collaborations: ${projectError.message}`);
+  const byId = new Map((projects ?? []).map((p) => [Number(p.id), p]));
+  const banked: Array<{ hours: number; tier: number }> = [];
+  for (const c of rows) {
+    const p = byId.get(Number(c.project_id));
+    if (!p || p.user_id === c.user_id) continue; // Never count the owner twice.
+    const hours = earnedCollaboratorHours(
+      { status: String(p.status), is_update: p.is_update === true },
+      {
+        approved_hours: c.approved_hours == null ? null : Number(c.approved_hours),
+        prior_approved_hours: c.prior_approved_hours == null ? null : Number(c.prior_approved_hours),
+      },
+    );
+    if (hours !== null && hours > 0) banked.push({ hours, tier: Number(p.level) || 1 });
+  }
+  return banked;
 }
 
 async function approvedProjectsFor(
@@ -184,17 +239,19 @@ export async function levelFor(userId: string, excludeProjectId?: number): Promi
 // to be rescaled to match (roughly x12.5 on the expected tier mix, but that
 // factor moves with the mix - the thresholds were flagged as guesses anyway).
 export async function communityEnergy(): Promise<number> {
-  const [{ data }, { data: awards }] = await Promise.all([
+  const [{ data }, { data: awards }, collaborations] = await Promise.all([
     db
       .from("projects")
       .select("approved_hours, hackatime_seconds, level, sidequest_id, status, is_update, prior_approved_hours")
       .in("status", EARNED_PROJECT_STATUSES)
       .is("banned_at", null),
     db.from("vault_chapter_awards").select("re_awarded"),
+    bankedCollaborations(),
   ]);
   const projectRe = (data ?? []).reduce((s, p) => s + bankedReOf(p as ProjectRow), 0);
   const awardRe = (awards ?? []).reduce((s, r) => s + (Number(r.re_awarded) || 0), 0);
-  return Math.round(projectRe + awardRe);
+  const collaboratorRe = collaborations.reduce((s, c) => s + reForHours(c.hours, c.tier), 0);
+  return Math.round(projectRe + awardRe + collaboratorRe);
 }
 
 // RE sitting in the pipeline: projects that passed a first-pass review and

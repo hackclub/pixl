@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { useState } from "react";
 import { useLocale } from "./LocaleProvider";
 import { Marquee } from "./Marquee";
+import { EndedLine } from "./StatsBand";
 
 // green / orange / red, indexed by difficulty. Read it off the card's own
 // difficulty, never off its position in the row: the colour used to be
@@ -135,6 +136,7 @@ export function Sidequests() {
         >
           {t.description}
         </motion.p>
+        <EndedLine line="questLine" />
       </div>
 
       <motion.div

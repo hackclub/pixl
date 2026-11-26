@@ -3,6 +3,7 @@ import { db } from "../db/client.js";
 import { sanitizeImage } from "../imageValidation.js";
 import { consumeRateLimit, type RateLimitOptions } from "../rateLimit.js";
 import { validateBomCsv, sanitizeBomCsv } from "./bomCsv.js";
+import { mayEditProjectAtStatus } from "./projects.js";
 import { CDN_UPLOAD_QUOTA, reserveCdnUploadQuota, releaseCdnUploadQuota } from "./cdnQuota.js";
 import { validate, v, params } from "../http/validate.js";
 import { auditRequest } from "../audit.js";
@@ -225,7 +226,7 @@ router.post(
       return res.status(400).json({ ok: false, error: "project_not_found" });
     const { data: project, error: projectError } = await db
       .from("projects")
-      .select("id")
+      .select("id, status, banned_at")
       .eq("id", projectId)
       .eq("user_id", session.userId)
       .maybeSingle();
@@ -234,6 +235,8 @@ router.post(
       return res.status(500).json({ ok: false });
     }
     if (!project) return res.status(404).json({ ok: false, error: "project_not_found" });
+    if (!mayEditProjectAtStatus(project.status as string) || project.banned_at)
+      return res.status(409).json({ ok: false, error: "project_locked_in_review" });
     const accountRetryAfter = consumeRateLimit(BOM_ACCOUNT_LIMIT, session.userId);
     if (accountRetryAfter !== null) {
       res.setHeader("Retry-After", accountRetryAfter);
@@ -283,15 +286,22 @@ router.post(
         await releaseCdnUploadQuota(session.userId, safeBuf.length, quota.windowId);
       return res.status(502).json({ ok: false, error: "cdn_failed" });
     }
-    const { error: updateError } = await db
+    // The review may start while the CDN request is in flight. Enforce the
+    // same status gate at write time, not just before the upload.
+    const { data: updated, error: updateError } = await db
       .from("projects")
       .update({ bom_url: outcome.url })
       .eq("id", projectId)
-      .eq("user_id", session.userId);
+      .eq("user_id", session.userId)
+      .in("status", ["draft", "needs_changes", "approved"])
+      .is("banned_at", null)
+      .select("id")
+      .maybeSingle();
     if (updateError) {
       console.error("[uploads] bom project update failed", updateError);
       return res.status(500).json({ ok: false });
     }
+    if (!updated) return res.status(409).json({ ok: false, error: "project_locked_in_review" });
     auditRequest(req, { action: "upload.bom", target: `project:${projectId}`, result: "ok", meta: { bytes: safeBuf.length } });
     res.json({ ok: true, url: outcome.url });
   },

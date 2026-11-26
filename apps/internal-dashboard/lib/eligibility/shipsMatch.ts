@@ -85,14 +85,23 @@ export function matchShips(view: ShipsView, target: MatchTarget, nowMs: number =
   if (m.kind === "empty") {
     return blank("no_record", "The Airtable record has no Unified record id yet, so it cannot be matched to Ships.", m.stagingId);
   }
+  if (snap.source === "airbridge" && m.kind !== "mapped") {
+    return blank("no_record", "Airbridge requires an exact Unified ID from the Pixl staging record.");
+  }
   if (m.kind === "mapped") {
     const id = m.unifiedId;
     if (snap.ambiguousIds.has(id)) return blank("ambiguous", "Ships lists this Unified record more than once.", id);
     if (snap.invalidIds.has(id)) return blank("ambiguous", "Ships has a malformed entry for this Unified record.", id);
     const entry = snap.byId.get(id);
-    if (!entry) return blank("not_found", "The Unified record is not present in the current Ships dataset.", id);
+    if (!entry) return blank("not_found", "The mapped Unified approval is missing or was removed.", id);
+    if (snap.source === "airbridge" && (!entry.checkedAt || nowMs - entry.checkedAt > 30 * 60_000)) {
+      return blank("unavailable", "The exact Unified approval needs a fresh Airbridge recheck.", id);
+    }
     if (!target.repoKey || !entry.repoKey || entry.repoKey !== target.repoKey) {
       return blank("identity_mismatch", "The Ships entry for this Unified record points at a different repository.", id);
+    }
+    if (snap.source === "airbridge" && entry.identityBlocked) {
+      return blank("identity_mismatch", "Previously known Slack identity could not be revalidated; manual review required.", id);
     }
     if (sameSlack(entry, target.playerSlackId) === false) {
       return blank("identity_mismatch", "The Ships entry for this Unified record belongs to a different Slack user.", id);

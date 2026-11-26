@@ -15,8 +15,10 @@ import {
   type UnifiedState,
 } from "./engine";
 import { matchShips, type UnifiedMapping } from "./shipsMatch";
+import { readCachedStaging } from "./airbridgeCache";
 import { repoKeyOf, type ShipsProvider, type ShipsView } from "./ships";
 import { currentPolicy, FUNDING_ORDER_PREFIX, type EligibilityPolicy } from "./policy";
+import { grantOrderFaceCents } from "../grantValue";
 
 export interface UnifiedVerifier {
   available: boolean;
@@ -374,8 +376,10 @@ export async function loadPlayerEvidence(
                c.user_id as collab_user_id, c.approved_hours as collab_hours, c.airtable_record_id as collab_record_id, c.prior_approved_hours as collab_prior_hours
         from project_collaborators c join projects p on p.id = c.project_id
         where c.status = 'accepted' and c.user_id in ${q(userIds)}`,
-    q`select id, user_id, item_name, quantity, price, status, actual_cost_usd, flagged_at
-        from shop_orders where user_id in ${q(userIds)}`,
+    q`select o.id, o.user_id, o.item_name, o.quantity, o.price, o.status, o.actual_cost_usd, o.flagged_at, o.item_flow,
+               i.category as item_category, i.description as item_description
+        from shop_orders o left join shop_items i on i.id = o.item_id
+        where o.user_id in ${q(userIds)}`,
     ledgerFor(q, userIds),
     q`select distinct on (project_id) project_id, claimed_hours
         from review_audits where verdict = 'hours_deflated' order by project_id, created_at asc`.catch(() => []),
@@ -519,7 +523,11 @@ export async function loadPlayerEvidence(
   let airtableOk = true;
   const approved = raw.filter((x) => x.p.status === "approved" && !x.p.banned);
   const uniqueIds = [...new Set(approved.map((x) => x.recordId).filter((x): x is string => !!x))];
-  const lookups = await airtableLookups(uniqueIds, opts.liveAirtable || !!opts.airtable, opts.airtable ?? fetchSubmissionStates);
+  // Airbridge dashboard reads only local PostgreSQL. External staging data is
+  // refreshed by the worker; no Airtable request is made during page render.
+  const lookups = process.env.FULFILLMENT_SHIPS_SOURCE === "airbridge" && !opts.airtable
+    ? await readCachedStaging(uniqueIds)
+    : await airtableLookups(uniqueIds, opts.liveAirtable || !!opts.airtable, opts.airtable ?? fetchSubmissionStates);
   for (const x of raw) {
     if (!x.recordId) continue;
     if (lookups.has(x.recordId)) {
@@ -578,8 +586,22 @@ export async function loadPlayerEvidence(
     status: string;
     actual_cost_usd: string | number | null;
     flagged_at: string | null;
+    item_category: string | null;
+    item_description: string | null;
+    item_flow?: boolean | null;
   }[]) {
     const list = ordersByUser.get(o.user_id) ?? [];
+    // Catalog grants are worth their round dollar face value, not the pixel
+    // budget: 2x AI Credits is $20, not 222 px ≈ $22.20. Project funding
+    // grants have no item row and get their face value in grantsByUser below.
+    // An order moved onto the item flow after an unfulfill has no face value.
+    const faceCents = grantOrderFaceCents({
+      quantity: Number(o.quantity) || 1,
+      item_name: o.item_name,
+      item_category: o.item_category,
+      item_description: o.item_description,
+      item_flow: o.item_flow === true,
+    });
     list.push({
       id: Number(o.id),
       userId: o.user_id,
@@ -589,6 +611,8 @@ export async function loadPlayerEvidence(
       status: o.status,
       actualCostUsd: o.actual_cost_usd == null ? null : num(o.actual_cost_usd),
       flagged: !!o.flagged_at,
+      grantFaceUsd: faceCents == null ? null : faceCents / 100,
+      itemFlow: o.item_flow === true,
     });
     ordersByUser.set(o.user_id, list);
   }
@@ -685,6 +709,7 @@ export function toOrderInput(o: {
   status: string;
   actual_cost_usd: number | null;
   flagged_at: string | null;
+  item_flow?: boolean | null;
 }): OrderInput {
   return {
     id: Number(o.id),
@@ -695,6 +720,7 @@ export function toOrderInput(o: {
     status: o.status,
     actualCostUsd: o.actual_cost_usd == null ? null : Number(o.actual_cost_usd),
     flagged: !!o.flagged_at,
+    itemFlow: o.item_flow === true,
   };
 }
 

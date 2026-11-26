@@ -22,6 +22,7 @@ export interface Project {
   status: ProjectStatus;
   kind: "software" | "hardware" | null;
   project_type: string | null;
+  is_game: boolean | null;
   level: number | null;
   used_ai: boolean | null;
   ai_notes: string | null;

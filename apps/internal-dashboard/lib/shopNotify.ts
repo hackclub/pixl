@@ -26,6 +26,8 @@ export interface ShopRowSnapshot {
   region?: string | null;
   unlock_xp?: number | null;
   price_source_url?: string | null;
+  discount_percent?: number | null;
+  discount_ends_at?: string | Date | null;
 }
 
 type ChangeType = "INSERT" | "UPDATE" | "DELETE";

@@ -8,7 +8,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "bun:test";
 import { config } from "@/app/_generated/config";
-import { payoutStats, projectPayoutPx, projectPayoutUsd, reForHours, clampTier, clampHours } from "./economy";
+import { combinedStats, formatRows, parseRows, payoutStats, projectPayoutPx, projectPayoutUsd, reForHours, clampTier, clampHours } from "./economy";
 
 // [hours, tier, reBefore, reForHours, projectPayoutUsd, projectPayoutPx]
 // generated with apps/server/src/config.generated.ts on 2026-10-11.
@@ -88,5 +88,41 @@ describe("payoutStats (what the page shows)", () => {
     expect(clampTier("x")).toBe(1);
     expect(clampHours("-3")).toBe(0);
     expect(clampHours("2.5")).toBe(2.5);
+  });
+});
+
+describe("combinedStats", () => {
+  test("one row equals payoutStats", () => {
+    const c = combinedStats([{ hours: 10, tier: 2 }], 500);
+    const s = payoutStats(10, 2, 500);
+    expect({ px: c.px, re: c.re, avg: c.avgUsdPerHour }).toEqual({ px: s.px, re: s.re, avg: s.avgUsdPerHour });
+  });
+
+  test("later projects start from the RE earlier ones banked", () => {
+    const rows = [
+      { hours: 10, tier: 1 },
+      { hours: 10, tier: 3 },
+    ];
+    const c = combinedStats(rows, 0);
+    const second = projectPayoutPx(10, 3, reForHours(10, 1));
+    expect(c.px).toBe(Math.round(projectPayoutPx(10, 1, 0) + second));
+    expect(c.re).toBe(Math.round(reForHours(10, 1) + reForHours(10, 3)));
+    expect(c.hours).toBe(20);
+    expect(c.rows).toHaveLength(2);
+  });
+
+  test("empty list is zero", () => {
+    expect(combinedStats([], 100)).toMatchObject({ px: 0, re: 0, avgUsdPerHour: null });
+  });
+
+  test("rows param round-trips, clamps and caps", () => {
+    expect(parseRows("10:2,3.5:9,x:y")).toEqual([
+      { hours: 10, tier: 2 },
+      { hours: 3.5, tier: 4 },
+      { hours: 0, tier: 1 },
+    ]);
+    expect(parseRows(formatRows([{ hours: 4, tier: 3 }]))).toEqual([{ hours: 4, tier: 3 }]);
+    expect(parseRows(Array(50).fill("1:1").join(","))).toHaveLength(20);
+    expect(parseRows(undefined)).toEqual([]);
   });
 });

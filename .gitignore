@@ -38,3 +38,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 samples/
 # per-machine Claude Code config (permissions, MCP toggles)
 .claude/settings.local.json
+
+# Next.js build output
+.next/

@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/client.js";
+import { sql } from "../db/pgCompat.js";
+import { rankedIdeas } from "./ideasRank.js";
 import { withLock } from "../db/advisoryLock.js";
 import { containsBlocked } from "../moderation.js";
 import { allowedImageUrl } from "../http/imageUrls.js";
@@ -44,16 +46,20 @@ router.get("/api/ideas", async (req, res) => {
 
   const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
   const sort = req.query.sort === "top" ? "top" : "new";
-  let query = db
-    .from("ideas")
-    .select("*")
-    .is("banned_at", null)
-    .order("created_at", { ascending: false })
-    .limit(200);
-  if (q) query = query.ilike("title", `%${q}%`);
-  const { data: ideas, error } = await query;
-  if (error) {
-    console.error("[ideas] list failed", error);
+  let ideas: Record<string, unknown>[];
+  try {
+    if (sort === "top") {
+      ideas = [...await rankedIdeas(q)] as Record<string, unknown>[];
+    } else {
+      let query = db.from("ideas").select("*").is("banned_at", null)
+        .order("created_at", { ascending: false }).limit(200);
+      if (q) query = query.ilike("title", `%${q}%`);
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      ideas = (data ?? []) as Record<string, unknown>[];
+    }
+  } catch (e) {
+    console.error("[ideas] list failed", e);
     return res.status(500).json({ ok: false });
   }
 
@@ -241,6 +247,18 @@ router.post("/api/ideas/:id/apply", validate({ query: v.noQuery, params: params(
   if (idea.user_id === session.userId)
     return res.status(400).json({ ok: false, error: "own_idea" });
 
+  let applied;
+  try {
+    applied = await sql`insert into idea_collab_applications (idea_id, user_id)
+      values (${id}, ${session.userId}) on conflict do nothing returning idea_id`;
+  } catch (e) {
+    if ((e as { code?: string }).code !== "42P01") {
+      console.error("[ideas] application failed", e);
+      return res.status(500).json({ ok: false });
+    }
+    applied = [{ idea_id: id }];
+  }
+  if (!applied.length) return res.json({ ok: true, alreadyApplied: true });
   const authorId = idea.user_id as string;
   void addNotification(
     authorId,

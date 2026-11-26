@@ -31,7 +31,10 @@ const nextConfig: NextConfig = {
           // This admin panel shows moderation reports and PII, never
           // embeddable in a third-party frame (clickjacking).
           { key: "X-Frame-Options", value: "DENY" },
-          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+          // Restrict executable scripts to this app while allowing Next's
+          // inline hydration bootstrap. A nonce policy is a separate rollout.
+          { key: "Content-Security-Policy", value: "script-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'" },
+          { key: "Referrer-Policy", value: "no-referrer" },
           { key: "Strict-Transport-Security", value: "max-age=15552000; includeSubDomains" },
         ],
       },

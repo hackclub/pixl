@@ -115,6 +115,7 @@ describe("public route list", () => {
       "* /auth/*",
       "GET /hackatime/callback",
       "GET /api/news",
+      "GET /api/results",
       "GET /api/journals/public/:projectId/:token",
       "GET /api/shop/item/:id/public",
       "GET /api/explore/players",

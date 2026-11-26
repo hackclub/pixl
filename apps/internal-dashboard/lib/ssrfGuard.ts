@@ -140,6 +140,10 @@ export interface SafeJsonResult {
   json: unknown;
 }
 
+// Public Git hosts can return arbitrarily large bodies; commit evidence only
+// needs a bounded JSON response. Enforce this before buffering any bytes.
+export const MAX_SAFE_JSON_BYTES = 2 * 1024 * 1024;
+
 interface ResolvedDeps {
   lookupImpl: LookupImpl;
   isBlockedIp: (ip: string) => boolean;
@@ -175,14 +179,34 @@ function requestOnce(
       u,
       reqOptions,
       (res) => {
+        const status = res.statusCode ?? 0;
+        const location = res.headers.location ?? null;
+        // A redirect's body is irrelevant; do not buffer a host-controlled
+        // response just to read its Location header.
+        if (status >= 300 && status < 400) {
+          resolve({ status, location, body: "" });
+          res.destroy();
+          return;
+        }
+        const declared = Number(res.headers["content-length"]);
+        if (Number.isFinite(declared) && declared > MAX_SAFE_JSON_BYTES) {
+          reject(new Error("response too large"));
+          res.destroy();
+          return;
+        }
         const chunks: Buffer[] = [];
-        res.on("data", (c: Buffer) => chunks.push(c));
+        let bytes = 0;
+        res.on("data", (c: Buffer) => {
+          bytes += c.length;
+          if (bytes > MAX_SAFE_JSON_BYTES) {
+            reject(new Error("response too large"));
+            res.destroy();
+            return;
+          }
+          chunks.push(c);
+        });
         res.on("end", () =>
-          resolve({
-            status: res.statusCode ?? 0,
-            location: res.headers.location ?? null,
-            body: Buffer.concat(chunks).toString("utf8"),
-          }),
+          resolve({ status, location, body: Buffer.concat(chunks).toString("utf8") }),
         );
         res.on("error", reject);
       },

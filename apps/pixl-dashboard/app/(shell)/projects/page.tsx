@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PageHeader, buttonVariants } from "@/components/ui/primitives";
+import { config, formatDate, submissionDeadline } from "@/app/_generated/config";
 import { serverApi } from "@/lib/server-api";
 import { CommitReminder } from "./_components/commit-reminder";
 import { Feeds, type ActivityItem, type NewsItem } from "./_components/feeds";
@@ -8,6 +9,7 @@ import { HcaSyncedNotice } from "./_components/hca-notice";
 import { ImportBox, type MacondoProject, type YswsShip } from "./_components/import-box";
 import { JoinCodeBox, PendingInvites, type PendingInvite } from "./_components/list-boxes";
 import { Legend, ProjectList } from "./_components/project-list";
+import { SubmissionCountdown } from "./_components/submission-countdown";
 import { loadBlackout, loadProjects, loadStats } from "./data";
 import { TourReplayButton } from "./_tour/tour-provider";
 
@@ -36,6 +38,11 @@ export default async function ProjectsPage({ searchParams }: { searchParams: Pro
         </Link>
       </PageHeader>
       <HcaSyncedNotice value={hca_synced} />
+      <SubmissionCountdown
+        className="mb-4"
+        deadline={config.submissionDeadline}
+        label={formatDate(submissionDeadline)}
+      />
       <HackatimeStrip stats={stats} />
       <CommitReminder className="mb-4" />
       <PendingInvites invites={invites?.invites ?? []} />

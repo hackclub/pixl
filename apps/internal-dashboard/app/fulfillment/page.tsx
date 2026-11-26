@@ -4,6 +4,7 @@ import { requirePage } from "@/lib/guard";
 import {
   listShopOrders,
   listFulfillers,
+  listOrderUnfulfillments,
   buyerDetailsByUserId,
   buyerCountriesByUserId,
   fulfillerStatsBySlackId,
@@ -37,19 +38,16 @@ import { config } from "@/app/_generated/config";
 import {
   ActionButton,
   ButtonLink,
-  Callout,
   Card,
   CardHeader,
   CountBadge,
-  Details,
   EmptyRow,
   EmptyState,
   Field,
   Input,
+  Icon,
   Mono,
   PageHeader,
-  Stat,
-  StatGrid,
   Table,
   TextLink,
   buttonClass,
@@ -61,11 +59,19 @@ import { OrderDetail } from "./OrderDetail";
 
 export const dynamic = "force-dynamic";
 
-const TAB_KEYS = ["pending", "ordered", "credited", "shipped", "done", "cancelled", "flagged", "all", "leaderboard", "fulfillers"] as const;
+const TAB_KEYS = ["pending", "claimed", "fulfilled", "cancelled", "flagged", "all", "leaderboard", "fulfillers"] as const;
 type TabKey = (typeof TAB_KEYS)[number];
 
-// Keep the everyday fulfillment stages visible; uncommon stages live in Filters.
-const PRIMARY_QUEUE_TABS: readonly TabKey[] = ["pending", "ordered", "shipped", "done", "all"];
+// The visible item pipeline is New -> Claimed -> Fulfilled. Legacy URLs from the
+// old six-stage pipeline (and legacy row statuses) fold into those groups.
+function normalizeTab(status: string | undefined): TabKey {
+  if (status === "ordered" || status === "credited") return "claimed";
+  if (status === "shipped" || status === "done") return "fulfilled";
+  return TAB_KEYS.includes(status as TabKey) ? (status as TabKey) : "pending";
+}
+
+const CLAIMED_STAGES = ["claimed", "ordered", "credited"];
+const FULFILLED_STAGES = ["done", "shipped"];
 
 // Lifetime shop P&L, fulfilled orders only. Both sides are scoped to the same
 // cohort (orders with an actual_cost_usd on file, i.e. credited or later), so
@@ -73,23 +79,19 @@ const PRIMARY_QUEUE_TABS: readonly TabKey[] = ["pending", "ordered", "shipped", 
 function ShopEconomy({ economy }: { economy: ShopEconomySummary }) {
   const redeemedUsd = economy.totalPx * config.economy.pixelValueUsd;
   const net = redeemedUsd - economy.totalActualCostUsd;
-  const orders = economy.ordersWithCost > 0 ? `${economy.ordersWithCost} fulfilled orders` : "Fulfilled orders";
   return (
-    <StatGrid>
-      <Stat
-        label="Redeemed by players"
-        icon="enter"
-        value={`${economy.totalPx.toLocaleString()} px`}
-        hint={`$${redeemedUsd.toFixed(2)} · ${orders}`}
-      />
-      <Stat label="Spent fulfilling" icon="payment" value={`$${economy.totalActualCostUsd.toFixed(2)}`} />
-      <Stat
-        label="Net"
-        icon="analytics"
-        tone={net >= 0 ? "success" : "danger"}
-        value={`${net >= 0 ? "+" : "-"}$${Math.abs(net).toFixed(2)}`}
-      />
-    </StatGrid>
+    <div className="fw-menu-economy">
+      <dl>
+        <div><dt>Redeemed by players</dt><dd>{economy.totalPx.toLocaleString()} px</dd></div>
+        <div><dt>Redeemed value</dt><dd>{"$"}{redeemedUsd.toFixed(2)}</dd></div>
+        <div><dt>Spent fulfilling</dt><dd>{"$"}{economy.totalActualCostUsd.toFixed(2)}</dd></div>
+        <div className="fw-menu-economy-net" data-positive={net >= 0}>
+          <dt>Net of these orders</dt>
+          <dd>{net >= 0 ? "+" : "-"}{"$"}{Math.abs(net).toFixed(2)}</dd>
+        </div>
+      </dl>
+      <p className="hc-muted">Across {economy.ordersWithCost.toLocaleString()} orders with recorded costs; not overall program profit.</p>
+    </div>
   );
 }
 
@@ -170,15 +172,19 @@ async function FulfillerManager() {
 export default async function FulfillmentPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; mine?: string; q?: string; order?: string; elig?: string; verify?: string; sort?: string }>;
+  searchParams: Promise<{ status?: string; mine?: string; q?: string; order?: string; elig?: string; verify?: string; sort?: string; page?: string }>;
 }) {
   const access = await requirePage("fulfiller");
   const me = access.session.slackId;
-  const { status, mine, q, order: orderParam, elig, verify, sort } = await searchParams;
+  const { status, mine, q, order: orderParam, elig, verify, sort, page } = await searchParams;
+  const pageNumber = Number(page ?? 1);
+  const pageIndex = Number.isSafeInteger(pageNumber) && pageNumber > 0
+    ? Math.min(pageNumber - 1, 10000) : 0;
+  const pageSize = 200;
   const eligFilter = parseEligibilityFilter(elig);
   const verifyFilter = parseVerificationFilter(verify);
   const sortKey = parseSort(sort);
-  const active: TabKey = TAB_KEYS.includes(status as TabKey) ? (status as TabKey) : "pending";
+  const active: TabKey = normalizeTab(status);
   if (!canOpenFulfillmentTab(active, access)) redirect("/fulfillment");
   const keepMine = mine === "1";
   const query = (q ?? "").trim().slice(0, 100);
@@ -189,23 +195,27 @@ export default async function FulfillmentPage({
 
   // "My queue" is a fixed cross-stage view, not a filter on the selected tab:
   // every order this fulfiller has claimed that isn't done yet. Filtering the
-  // default New tab instead would always be empty, since nobody has claimed a
-  // pending order yet.
-  let loaded: ShopOrderRow[];
-  if (!showingQueue) {
-    loaded = [];
-  } else if (mineOnly) {
-    const [orderedRows, creditedRows, shippedRows] = await Promise.all([
-      listShopOrders("ordered", 500),
-      listShopOrders("credited", 500),
-      listShopOrders("shipped", 500),
-    ]);
-    loaded = [...orderedRows, ...creditedRows, ...shippedRows]
-      .filter((o) => o.claimed_by_slack === me)
-      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  } else {
-    loaded = await listShopOrders(active === "all" ? undefined : active, 500);
-  }
+  // default New tab instead would always be empty, since claimed orders
+  // move to their own stage.
+  const loaded = !showingQueue ? [] : await listShopOrders(
+    mineOnly ? undefined : active === "all" ? undefined : active === "claimed" || active === "fulfilled" ? undefined : active,
+    pageSize + 1,
+    {
+      ...(mineOnly
+        ? { claimedBySlack: me, stages: CLAIMED_STAGES }
+        : active === "claimed"
+          ? { stages: CLAIMED_STAGES }
+          : active === "fulfilled"
+            ? { stages: FULFILLED_STAGES }
+            : {}),
+      search: query,
+      offset: pageIndex * pageSize,
+      viewerSlack: me,
+      allowPrivateNames: access.isOwner,
+    },
+  );
+  const hasNext = loaded.length > pageSize;
+  if (hasNext) loaded.pop();
 
   const nameFor = (o: ShopOrderRow) => (canSeeBuyerDetails(o, access) ? o.player_name : o.player_display_name);
   let eligibility = new Map<number, EligibilityResult>();
@@ -217,13 +227,7 @@ export default async function FulfillmentPage({
       console.error("fulfillment eligibility", (e as Error).message);
     }
   }
-  const needle = query.toLowerCase();
-  const searchable = (o: ShopOrderRow): string[] => {
-    const r = eligibility.get(Number(o.id));
-    const project = (r?.projects ?? []).flatMap((p) => [p.name, p.repoKey ?? "", p.ships?.githubUsername ?? ""]);
-    return [o.item_name, o.option, nameFor(o), o.player_slack ?? "", ...project];
-  };
-  const searched = needle ? loaded.filter((o) => searchable(o).some((v) => v.toLowerCase().includes(needle))) : loaded;
+  const searched = loaded;
   const filtered = searched
     .filter((o) => !eligFilter || (eligibility.get(Number(o.id))?.status ?? "unverified") === eligFilter)
     .filter((o) => !verifyFilter || eligibility.get(Number(o.id))?.verification === verifyFilter);
@@ -239,7 +243,10 @@ export default async function FulfillmentPage({
   const selected = orders.find((o) => Number(o.id) === requestedId) ?? orders[0] ?? null;
   const explicitSelection = selected !== null && Number(selected.id) === requestedId;
 
-  if (selected) {
+  // The Airbridge source is already a local read model: avoid rerunning all
+  // project and funding queries for the selected row in the same request.
+  // Actual order claims recheck eligibility independently.
+  if (selected && process.env.FULFILLMENT_SHIPS_SOURCE !== "airbridge") {
     try {
       const fresh = await evaluateOrders([selected], { liveAirtable: true, ships: shipsView ?? undefined });
       for (const [id, r] of fresh) eligibility.set(id, r);
@@ -256,15 +263,21 @@ export default async function FulfillmentPage({
     selected && selectedCanSee ? buyerDetailsByUserId([selected.user_id]) : Promise.resolve(new Map<string, BuyerDetails>()),
     selected && !selectedCanSee ? buyerCountriesByUserId([selected.user_id]) : Promise.resolve(new Map<string, string>()),
   ]);
+  const history = selected ? await listOrderUnfulfillments(Number(selected.id)) : [];
   // Owner-only: a financial rollup, not something a fulfiller needs to do the job.
   const economy = access.isOwner ? await shopEconomySummary() : null;
 
+  const pipelineStages = counts ? [
+    { key: "pending" as const, label: "New", count: counts.pending },
+    { key: "claimed" as const, label: "Claimed", count: counts.claimed + counts.ordered + counts.credited },
+    { key: "fulfilled" as const, label: "Fulfilled", count: counts.done + counts.shipped },
+    { key: "cancelled" as const, label: "Cancelled", count: counts.cancelled },
+  ] : [];
+
   const tabs: { key: TabKey; label: string; count?: number }[] = [
     { key: "pending", label: "New", count: counts?.pending },
-    { key: "ordered", label: "Ordered", count: counts?.ordered },
-    { key: "credited", label: "Credited", count: counts?.credited },
-    { key: "shipped", label: "Shipped", count: counts?.shipped },
-    { key: "done", label: "Done", count: counts?.done },
+    { key: "claimed", label: "Claimed", count: counts ? counts.claimed + counts.ordered + counts.credited : undefined },
+    { key: "fulfilled", label: "Fulfilled", count: counts ? counts.done + counts.shipped : undefined },
     { key: "cancelled", label: "Cancelled", count: counts?.cancelled },
     { key: "flagged", label: "Over budget", count: counts?.flagged },
     { key: "all", label: "All", count: counts?.all },
@@ -278,6 +291,7 @@ export default async function FulfillmentPage({
     elig?: EligibilityStatus | null;
     verify?: VerificationLabel | null;
     sort?: SortKey;
+    page?: number;
   }) => {
     const params = new URLSearchParams();
     const st = next.status ?? active;
@@ -292,6 +306,8 @@ export default async function FulfillmentPage({
     const sv = next.sort ?? sortKey;
     if (sv !== "newest") params.set("sort", sv);
     if (next.order !== undefined) params.set("order", String(next.order));
+    const pn = next.page ?? (next.order !== undefined ? pageIndex + 1 : 1);
+    if (pn > 1) params.set("page", String(pn));
     const qs = params.toString();
     return qs ? `/fulfillment?${qs}` : "/fulfillment";
   };
@@ -306,17 +322,21 @@ export default async function FulfillmentPage({
       ? "Nothing in your queue"
       : active === "pending"
         ? "No orders waiting to be claimed"
-        : active === "flagged"
-          ? "Nothing over budget right now"
-          : "Nothing here yet";
+        : active === "claimed"
+          ? "Nothing claimed right now"
+          : active === "fulfilled"
+            ? "No fulfilled orders yet"
+            : active === "flagged"
+              ? "Nothing over budget right now"
+              : "Nothing here yet";
 
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
         title={mineOnly ? "My queue" : "Fulfillment"}
-        description="Process player requests, place orders, and keep everything moving. Claim one to place the real order; tracking is DM'd to the buyer when it ships, and an order can be cancelled for a refund until someone claims it."
+        description="Find what needs attention, source within budget, and track each request through delivery."
         actions={
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="fw-header-actions">
             {showingQueue ? (
               <ButtonLink href={hrefFor({ mine: !mineOnly })} variant={mineOnly ? "primary" : "outline"} size="sm" icon="list">
                 {mineOnly ? "Back to all orders" : "My queue"}
@@ -331,29 +351,115 @@ export default async function FulfillmentPage({
                 Leaderboard
               </ButtonLink>
             )}
+            <ButtonLink href="/fulfillment/airbridge-preview" variant="outline" size="sm" icon="analytics">
+              Airbridge preview
+            </ButtonLink>
+            {access.isOwner && !showingFulfillers && (
+              <ButtonLink href="/fulfillment/grants" variant="outline" size="sm" icon="cloud-download">
+                Grant CSV
+              </ButtonLink>
+            )}
             {access.isOwner && !showingFulfillers && (
               <ButtonLink href={hrefFor({ status: "fulfillers" })} variant="outline" size="sm" icon="person">
                 Fulfillers
               </ButtonLink>
             )}
+
+            <span className="fw-header-divider" aria-hidden="true" />
+            {shipsView && (
+              <details className="fw-header-menu" name="fulfillment-tools">
+                <summary className={buttonClass("outline", "sm") + " fw-header-menu-trigger"}>
+                  <span
+                    className="fw-header-sync-dot"
+                    data-state={!shipsView.snapshot || shipsView.error ? "down" : shipsView.fresh ? "ok" : "stale"}
+                    aria-hidden="true"
+                  />
+                  {shipsView.snapshot?.source === "airbridge" ? "Unified" : "Ships"}
+                  <span className="fw-header-menu-sub">
+                    {shipsView.snapshot && shipsView.fresh && !shipsView.error ? "synced" : shipsView.snapshot ? "stale" : "unavailable"}
+                  </span>
+                  <span className="fw-header-chevron" aria-hidden="true">⌄</span>
+                </summary>
+                <div className="fw-header-menu-popover" role="group" aria-label="Approval verification">
+                  <p className="fw-header-menu-title">Approval verification</p>
+                  <ShipsSyncBar view={shipsView} compact />
+                </div>
+              </details>
+            )}
+            <details className="fw-header-menu" name="fulfillment-tools">
+              <summary className={buttonClass("outline", "sm") + " fw-header-menu-trigger"}>
+                <Icon glyph="payment" size={16} />
+                Budget rules
+                <span className="fw-header-chevron" aria-hidden="true">⌄</span>
+              </summary>
+              <div className="fw-header-menu-popover" role="group" aria-label="Spending guide">
+                <p className="fw-header-menu-title">Spending guide</p>
+                <p className="fw-header-rate">{"$"}{config.economy.pixelValueUsd.toFixed(2)} per pixel</p>
+                <p>Each order has a budget equal to its pixel price multiplied by this rate.</p>
+                <p>Buy at or below that amount. If the lowest available price is higher, <strong>do not order</strong>: flag the order with the vendor and price for an owner.</p>
+              </div>
+            </details>
+            {economy && (
+              <details className="fw-header-menu" name="fulfillment-tools">
+                <summary className={buttonClass("outline", "sm") + " fw-header-menu-trigger"}>
+                  <Icon glyph="analytics" size={16} />
+                  Shop economy
+                  <span className="fw-header-chevron" aria-hidden="true">⌄</span>
+                </summary>
+                <div className="fw-header-menu-popover" role="group" aria-label="Shop economy">
+                  <p className="fw-header-menu-title">Shop economy</p>
+                  <ShopEconomy economy={economy} />
+                </div>
+              </details>
+            )}
           </div>
         }
       />
 
-      <Callout tone="info" icon="payment">
-        Every order shows a <strong>budget</strong>: what the player&apos;s pixels are worth at $
-        {config.economy.pixelValueUsd.toFixed(2)} per pixel. Buy it for that or less. If the cheapest you can find is
-        over budget, don&apos;t place the order: flag it with what you found and an owner picks it up from the Over
-        budget tab.
-      </Callout>
-
-      {economy && (
-        <Details summary="Shop economy">
-          <ShopEconomy economy={economy} />
-        </Details>
+      {showingQueue && counts && !mineOnly && (
+        <section className="fw-pipeline" aria-label="Fulfillment pipeline">
+          <div className="fw-pipeline-heading">
+            <div>
+              <p className="fw-pipeline-eyebrow">ORDER WORKFLOW</p>
+              <h2 className="hc-heading text-lg">Fulfillment at a glance</h2>
+              <p className="hc-caption text-xs">All {counts.all.toLocaleString()} orders, not just this page or filter.</p>
+            </div>
+            <Link
+              href={hrefFor({ status: "flagged", q: "", elig: null, verify: null, sort: "newest" })}
+              className="fw-pipeline-flags"
+            >
+              Over budget <strong>{counts.flagged.toLocaleString()}</strong>
+            </Link>
+          </div>
+          <nav className="fw-pipeline-stages" aria-label="Jump to an order stage">
+            {pipelineStages.map((stage) => (
+              <Link
+                key={stage.key}
+                href={hrefFor({ status: stage.key, q: "", elig: null, verify: null, sort: "newest" })}
+                className="fw-pipeline-stage"
+                data-stage={stage.key}
+                aria-current={active === stage.key ? "page" : undefined}
+              >
+                <span>{stage.label}</span>
+                <strong className="tabular-nums">{stage.count.toLocaleString()}</strong>
+              </Link>
+            ))}
+          </nav>
+          <div className="fw-pipeline-track" role="img" aria-label="Distribution of all orders by fulfillment stage">
+            {pipelineStages.map((stage) => stage.count > 0 ? (
+              <span
+                key={stage.key}
+                data-stage={stage.key}
+                style={{ width: `${(stage.count / Math.max(1, counts.all)) * 100}%` }}
+                title={`${stage.label}: ${stage.count}`}
+              />
+            ) : null)}
+          </div>
+          <p className="fw-pipeline-note">
+            Select a stage to work on its orders. The over-budget queue is a flag, not an additional stage.
+          </p>
+        </section>
       )}
-
-      {shipsView && <ShipsSyncBar view={shipsView} />}
 
       {showingFulfillers ? (
         <FulfillerManager />
@@ -363,158 +469,106 @@ export default async function FulfillmentPage({
         <div className="fw-grid" data-explicit={explicitSelection ? "true" : undefined}>
           <section className="fw-list" aria-label="Requests">
             <div className="fw-list-head">
-              <h2 className="hc-heading text-lg">
-                Requests <span className="hc-muted">({orders.length})</span>
-              </h2>
-              <form action="/fulfillment" method="get" role="search" className="fw-search">
-                {active !== "pending" && <input type="hidden" name="status" value={active} />}
-                {mineOnly && <input type="hidden" name="mine" value="1" />}
-                {eligFilter && <input type="hidden" name="elig" value={eligFilter} />}
-                {verifyFilter && <input type="hidden" name="verify" value={verifyFilter} />}
-                {sortKey !== "newest" && <input type="hidden" name="sort" value={sortKey} />}
-                <Input name="q" type="search" defaultValue={query} maxLength={100} placeholder="Search players, GitHub, projects, items..." aria-label="Search requests" />
-                <button type="submit" className={buttonClass("outline")}>
-                  Search
-                </button>
-              </form>
-            </div>
-            {!mineOnly && (
-              <nav className="fw-chips fw-stage-tabs" aria-label="Order stage">
-                {tabs.filter((t) => PRIMARY_QUEUE_TABS.includes(t.key)).map((t) => (
-                  <Link
-                    key={t.key}
-                    href={hrefFor({ status: t.key, order: undefined })}
-                    className="fw-chip"
-                    aria-current={t.key === active ? "page" : undefined}
-                  >
-                    {t.label}
-                    {t.count !== undefined && <CountBadge>{t.count}</CountBadge>}
-                  </Link>
-                ))}
-                {!PRIMARY_QUEUE_TABS.includes(active) && tabs.filter((t) => t.key === active).map((t) => (
-                  <Link
-                    key={t.key}
-                    href={hrefFor({ status: t.key, order: undefined })}
-                    className="fw-chip"
-                    aria-current="page"
-                  >
-                    {t.label}
-                    {t.count !== undefined && <CountBadge>{t.count}</CountBadge>}
-                  </Link>
-                ))}
-              </nav>
-            )}
-            {showingQueue && (
-              <div className="fw-filters-shell">
-                <details className="fw-filters" open={Boolean(eligFilter || verifyFilter || sortKey !== "newest")}>
-                  <summary className="fw-filter-toggle">
-                    <span>Filters &amp; sort</span>
-                    {(Number(Boolean(eligFilter)) + Number(Boolean(verifyFilter)) + Number(sortKey !== "newest")) > 0 && (
-                      <span className="fw-filter-count">
-                        {Number(Boolean(eligFilter)) + Number(Boolean(verifyFilter)) + Number(sortKey !== "newest")} active
-                      </span>
-                    )}
-                  </summary>
-                  <div className="fw-filter-body">
-                    {!mineOnly && (
-                      <div className="fw-filter-group">
-                        <div className="fw-filter-group-title">
-                          <strong>Other stages</strong>
-                          <span>Less commonly used order queues</span>
-                        </div>
-                        <nav className="fw-chips" aria-label="Other order stages">
-                          {tabs.filter((t) => !PRIMARY_QUEUE_TABS.includes(t.key)).map((t) => (
-                            <Link
-                              key={t.key}
-                              href={hrefFor({ status: t.key, order: undefined })}
-                              className="fw-chip"
-                              aria-current={t.key === active ? "page" : undefined}
-                            >
-                              {t.label}
-                              {t.count !== undefined && <CountBadge>{t.count}</CountBadge>}
+              <div className="fw-list-heading">
+                <h2 className="hc-heading text-lg">Requests</h2>
+                <span className="hc-muted text-xs">{orders.length.toLocaleString()} shown{hasNext ? " on this page" : ""}</span>
+              </div>
+              <div className="fw-list-tools">
+                <form action="/fulfillment" method="get" role="search" className="fw-search">
+                  {active !== "pending" && <input type="hidden" name="status" value={active} />}
+                  {mineOnly && <input type="hidden" name="mine" value="1" />}
+                  {eligFilter && <input type="hidden" name="elig" value={eligFilter} />}
+                  {verifyFilter && <input type="hidden" name="verify" value={verifyFilter} />}
+                  {sortKey !== "newest" && <input type="hidden" name="sort" value={sortKey} />}
+                  <Input name="q" type="search" defaultValue={query} maxLength={100} placeholder="Search requests..." aria-label="Search requests" />
+                  <button type="submit" className={buttonClass("outline", "sm")} aria-label="Search requests" title="Search requests">
+                    <Icon glyph="search" size={17} />
+                  </button>
+                </form>
+                {showingQueue && (
+                  <div className="fw-filters-shell">
+                    <details className="fw-filters">
+                      <summary className="fw-filter-toggle">
+                        <Icon glyph="settings" size={16} />
+                        <span>Filters</span>
+                        {(Number(Boolean(eligFilter)) + Number(Boolean(verifyFilter)) + Number(sortKey !== "newest")) > 0 && (
+                          <span className="fw-filter-count">
+                            {Number(Boolean(eligFilter)) + Number(Boolean(verifyFilter)) + Number(sortKey !== "newest")} active
+                          </span>
+                        )}
+                      </summary>
+                      <div className="fw-filter-body">
+                        <div className="fw-filter-group">
+                          <div className="fw-filter-group-title">
+                            <strong>Funding</strong>
+                            <span>Does the player have enough verified budget?</span>
+                          </div>
+                          <nav className="fw-chips" aria-label="Filter by funding">
+                            <Link href={hrefFor({ elig: null, order: undefined })} className="fw-chip" aria-current={eligFilter ? undefined : "page"}>
+                              All
                             </Link>
-                          ))}
-                        </nav>
-                      </div>
-                    )}
-                    <div className="fw-filter-group">
-                      <div className="fw-filter-group-title">
-                        <strong>Funding</strong>
-                        <span>Does the player have enough verified budget?</span>
-                      </div>
-                      <nav className="fw-chips" aria-label="Filter by funding">
-                        <Link href={hrefFor({ elig: null, order: undefined })} className="fw-chip" aria-current={eligFilter ? undefined : "page"}>
-                          All
-                        </Link>
-                        {ELIGIBILITY_FILTERS.map((f) => (
-                          <Link
-                            key={f}
-                            href={hrefFor({ elig: f, order: undefined })}
-                            className="fw-chip"
-                            aria-current={f === eligFilter ? "page" : undefined}
-                          >
-                            {ELIGIBILITY_LABEL[f]}
+                            {ELIGIBILITY_FILTERS.map((f) => (
+                              <Link
+                                key={f}
+                                href={hrefFor({ elig: f, order: undefined })}
+                                className="fw-chip"
+                                aria-current={f === eligFilter ? "page" : undefined}
+                              >
+                                {ELIGIBILITY_LABEL[f]}
+                              </Link>
+                            ))}
+                          </nav>
+                        </div>
+                        <div className="fw-filter-group">
+                          <div className="fw-filter-group-title">
+                            <strong>Ships verification</strong>
+                            <span>Is the player's project approval confirmed?</span>
+                          </div>
+                          <nav className="fw-chips" aria-label="Filter by verification">
+                            <Link href={hrefFor({ verify: null, order: undefined })} className="fw-chip" aria-current={verifyFilter ? undefined : "page"}>
+                              All
+                            </Link>
+                            {VERIFICATION_FILTERS.map((f) => (
+                              <Link
+                                key={f}
+                                href={hrefFor({ verify: f, order: undefined })}
+                                className="fw-chip"
+                                aria-current={f === verifyFilter ? "page" : undefined}
+                              >
+                                {VERIFICATION_LABEL[f]}
+                              </Link>
+                            ))}
+                          </nav>
+                        </div>
+                        <div className="fw-filter-group">
+                          <div className="fw-filter-group-title">
+                            <strong>Sort requests</strong>
+                            <span>Choose which requests appear first</span>
+                          </div>
+                          <nav className="fw-chips" aria-label="Sort">
+                            {SORT_KEYS.map((k) => (
+                              <Link
+                                key={k}
+                                href={hrefFor({ sort: k, order: undefined })}
+                                className="fw-chip"
+                                aria-current={k === sortKey ? "page" : undefined}
+                              >
+                                {SORT_LABEL[k]}
+                              </Link>
+                            ))}
+                          </nav>
+                        </div>
+                        {(eligFilter || verifyFilter || sortKey !== "newest") && (
+                          <Link className="fw-filter-reset" href={hrefFor({ elig: null, verify: null, sort: "newest", order: undefined })}>
+                            Clear extra filters
                           </Link>
-                        ))}
-                      </nav>
-                    </div>
-                    <div className="fw-filter-group">
-                      <div className="fw-filter-group-title">
-                        <strong>Ships verification</strong>
-                        <span>Is the player's project approval confirmed?</span>
+                        )}
                       </div>
-                      <nav className="fw-chips" aria-label="Filter by verification">
-                        <Link href={hrefFor({ verify: null, order: undefined })} className="fw-chip" aria-current={verifyFilter ? undefined : "page"}>
-                          All
-                        </Link>
-                        {VERIFICATION_FILTERS.map((f) => (
-                          <Link
-                            key={f}
-                            href={hrefFor({ verify: f, order: undefined })}
-                            className="fw-chip"
-                            aria-current={f === verifyFilter ? "page" : undefined}
-                          >
-                            {VERIFICATION_LABEL[f]}
-                          </Link>
-                        ))}
-                      </nav>
-                    </div>
-                    <div className="fw-filter-group">
-                      <div className="fw-filter-group-title">
-                        <strong>Sort requests</strong>
-                        <span>Choose which requests appear first</span>
-                      </div>
-                      <nav className="fw-chips" aria-label="Sort">
-                        {SORT_KEYS.map((k) => (
-                          <Link
-                            key={k}
-                            href={hrefFor({ sort: k, order: undefined })}
-                            className="fw-chip"
-                            aria-current={k === sortKey ? "page" : undefined}
-                          >
-                            {SORT_LABEL[k]}
-                          </Link>
-                        ))}
-                      </nav>
-                    </div>
-                    {(eligFilter || verifyFilter || sortKey !== "newest") && (
-                      <Link className="fw-filter-reset" href={hrefFor({ elig: null, verify: null, sort: "newest", order: undefined })}>
-                        Clear extra filters
-                      </Link>
-                    )}
-                  </div>
-                </details>
-                {(eligFilter || verifyFilter || sortKey !== "newest") && (
-                  <div className="fw-filter-active" aria-label="Applied filters">
-                    <span className="fw-filter-active-label">Showing:</span>
-                    {eligFilter && <span>Funding: {ELIGIBILITY_LABEL[eligFilter]}</span>}
-                    {verifyFilter && <span>Ships: {VERIFICATION_LABEL[verifyFilter]}</span>}
-                    {sortKey !== "newest" && <span>Sort: {SORT_LABEL[sortKey]}</span>}
-                    <Link href={hrefFor({ elig: null, verify: null, sort: "newest", order: undefined })}>Clear</Link>
+                    </details>
                   </div>
                 )}
               </div>
-            )}
+            </div>
             {orders.length === 0 ? (
               <EmptyState title={emptyTitle} icon="package" />
             ) : (
@@ -527,6 +581,15 @@ export default async function FulfillmentPage({
                 eligibility={eligibility}
               />
             )}
+            {(hasNext || pageIndex > 0) && (
+              <div className="flex items-center justify-between gap-3 px-4 py-3 text-sm">
+                <span className="hc-muted">Page {pageIndex + 1}</span>
+                <div className="flex gap-2">
+                  {pageIndex > 0 && <Link href={hrefFor({ page: pageIndex })} className={buttonClass("outline")}>Previous</Link>}
+                  {hasNext && <Link href={hrefFor({ page: pageIndex + 2 })} className={buttonClass("outline")}>Next</Link>}
+                </div>
+              </div>
+            )}
           </section>
           <section className="fw-pane" aria-label="Selected request">
             {selected ? (
@@ -536,10 +599,11 @@ export default async function FulfillmentPage({
                 buyer={selectedCanSee ? buyerDetails.get(selected.user_id) : undefined}
                 country={selectedCanSee ? undefined : (buyerCountries.get(selected.user_id) ?? "")}
                 requesterName={nameFor(selected)}
-                ownOrder={isOwnOrder(selected, me)}
+                ownOrder={isOwnOrder(selected, me, access.isOwner)}
                 mine={selected.claimed_by_slack === me}
                 canManage={access.isOwner}
                 eligibility={eligibility.get(Number(selected.id)) ?? null}
+                history={history}
               />
             ) : (
               <EmptyState title="No request selected" icon="package" />

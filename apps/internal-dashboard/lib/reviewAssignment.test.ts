@@ -82,51 +82,44 @@ describe("openableQueueIds", () => {
     Array.from({ length: n }, (_, i) => ({ id: i + 1, status: "shipped", ...extra }));
   const now = T0 + 5 * HOUR;
 
-  test("a plain reviewer gets the first 15 only", () => {
-    const open = openableQueueIds(rows(40), "UBBB", false, now);
-    expect([...open].sort((a, b) => a - b)).toEqual(Array.from({ length: 15 }, (_, i) => i + 1));
+  test("a plain reviewer can open the whole queue, not just the first page", () => {
+    expect(openableQueueIds(rows(40), "UBBB", false, now).size).toBe(40);
   });
 
   test("owners can open everything", () => {
     expect(openableQueueIds(rows(40), "UBBB", true, now).size).toBe(40);
   });
 
-  test("held, own and claimed rows don't use up a slot but stay openable", () => {
+  test("held, own and claimed rows stay openable", () => {
     const list: QueueRowLike[] = [
       { id: 2, status: "shipped", hold_at: iso(T0) },
       { id: 3, status: "shipped", own: true },
       { id: 4, status: "shipped", claimedBy: "UCCC" },
-      ...Array.from({ length: 20 }, (_, i) => ({ id: 10 + i, status: "shipped" })),
+      ...rows(20).map((r) => ({ ...r, id: Number(r.id) + 10 })),
     ];
     const open = openableQueueIds(list, "UBBB", false, now);
     expect(open.has(2) && open.has(3) && open.has(4)).toBe(true);
-    // 3 viewable rows plus the first 15 free ones.
-    expect(open.size).toBe(18);
-    expect(open.has(10)).toBe(true);
-    expect(open.has(24)).toBe(true);
-    expect(open.has(25)).toBe(false);
+    expect(open.size).toBe(23);
   });
 
-  test("a row reserved for another reviewer is locked and doesn't use a slot", () => {
+  test("a row reserved for another reviewer is the only one locked", () => {
     const list: QueueRowLike[] = [
       { id: 1, status: "shipped", assigned_reviewer_slack_id: "UAAA", assigned_at: iso(T0), shipped_at: iso(T0 + HOUR) },
-      ...Array.from({ length: 20 }, (_, i) => ({ id: 10 + i, status: "shipped" })),
+      ...rows(20).map((r) => ({ ...r, id: Number(r.id) + 10 })),
     ];
     const open = openableQueueIds(list, "UBBB", false, now);
     expect(open.has(1)).toBe(false);
-    expect(open.size).toBe(15);
-    expect(open.has(24)).toBe(true);
-    expect(open.has(25)).toBe(false);
+    expect(open.size).toBe(20);
   });
 
-  test("a project assigned to the viewer is open wherever it sits in the queue", () => {
+  test("a project assigned to the viewer is open", () => {
     const list: QueueRowLike[] = [
       ...rows(30),
       { id: 99, status: "shipped", assigned_reviewer_slack_id: "UBBB", assigned_at: iso(T0), shipped_at: iso(T0 + HOUR) },
     ];
     const open = openableQueueIds(list, "UBBB", false, now);
     expect(open.has(99)).toBe(true);
-    expect(open.size).toBe(16);
+    expect(open.size).toBe(31);
   });
 
   test("an overdue assignment is just a normal row again", () => {
@@ -135,31 +128,6 @@ describe("openableQueueIds", () => {
       { id: 1, status: "shipped", assigned_reviewer_slack_id: "UAAA", assigned_at: iso(T0), shipped_at: iso(T0 + HOUR) },
     ];
     expect(openableQueueIds(list, "UBBB", false, late).has(1)).toBe(true);
-  });
-
-  test("a project the viewer has open stays open after the queue shifts past it", () => {
-    // They opened id 15 while it was on the first page. Then a fix-and-reship
-    // with an older wait came back ahead of it and pushed it to 16.
-    const list: QueueRowLike[] = [
-      { id: 100, status: "shipped" },
-      ...rows(14),
-      { id: 15, status: "shipped", reviewing_by: "UBBB" },
-      ...Array.from({ length: 10 }, (_, i) => ({ id: 20 + i, status: "shipped" })),
-    ];
-    const open = openableQueueIds(list, "UBBB", false, now);
-    expect(open.has(15)).toBe(true);
-    expect(open.has(20)).toBe(false);
-  });
-
-  test("a project the viewer has open on the first page still uses a slot", () => {
-    const list: QueueRowLike[] = [
-      { id: 1, status: "shipped", reviewing_by: "UBBB" },
-      ...Array.from({ length: 20 }, (_, i) => ({ id: 10 + i, status: "shipped" })),
-    ];
-    const open = openableQueueIds(list, "UBBB", false, now);
-    expect(open.size).toBe(15);
-    expect(open.has(23)).toBe(true);
-    expect(open.has(24)).toBe(false);
   });
 });
 
