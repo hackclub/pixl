@@ -10,8 +10,16 @@ const ELIGIBLE_HOURS = 24;
 const WINDOW_AFTER_DEADLINE_HOURS = 48;
 const LATE_WINDOW_HOURS = 24;
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// Hand-rolled so the copy is identical on every platform: toLocaleString's
+// en-GB output is "22 Nov at 23:59" on macOS but "22 Nov, 23:59" on Linux.
 function utcLabel(d: Date): string {
-  return `${d.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC" })} UTC`;
+  const day = d.getUTCDate();
+  const month = MONTHS[d.getUTCMonth()];
+  const hour = String(d.getUTCHours()).padStart(2, "0");
+  const minute = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${day} ${month} at ${hour}:${minute} UTC`;
 }
 
 /** The sentence to append for a request for changes made at `now`, or null when none applies. */
