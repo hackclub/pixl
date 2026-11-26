@@ -564,11 +564,16 @@ describe("authorization and existing actions", () => {
 
   test("marking a grant sent from the CSV is owner-only and reuses the settlement", () => {
     expect(actions).toContain('export const markGrantSent = guardedAction("markGrantSent", "owner"');
-    const action = actions.slice(actions.indexOf("export const markGrantSent"), actions.indexOf("export const convertOrderToGrant"));
-    expect(action).toContain("claimOrderWithFunding");
-    expect(action).toContain("reserveOnly: true");
-    expect(action).toContain("completeGrant(");
-    expect(action).toContain("orderIsGrant");
+    const action = actions.slice(actions.indexOf("export const markGrantSent"), actions.indexOf("export const previewGrantImport"));
+    expect(action).toContain("settleGrantForOwner(");
+
+    // The claim + complete grant work lives in the shared helper (also used by
+    // the HCB grants import), so assert it there rather than inside the form.
+    const helper = actions.slice(actions.indexOf("async function settleGrantForOwner"), actions.indexOf("export const markGrantSent"));
+    expect(helper).toContain("claimOrderWithFunding");
+    expect(helper).toContain("reserveOnly: true");
+    expect(helper).toContain("completeGrant(");
+    expect(helper).toContain("orderIsGrant");
   });
 
   test("the fulfillment page still gates on the fulfiller role", () => {
