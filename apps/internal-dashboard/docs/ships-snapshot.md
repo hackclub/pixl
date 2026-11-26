@@ -16,7 +16,7 @@ The route returns only aggregate counts, timestamps, and the last error. It requ
 ## Refresh behavior
 
 - The source is `https://api.ships.hackclub.com/api/v1/ysws_entries?all=true&boba=false` so all historical active entries are included (Ships otherwise returns only the last three months). Real Ships host overrides are normalized to keep these query parameters.
-- Each response is read with a timeout and a 64 MB limit, then validated as the complete archive array.
+- The legacy live reader has a 60s request deadline and the scheduled all-history refresher has a 90s deadline, with a 96 MiB response limit for both. This mitigates transient slow downloads; the goal is to move page reads to the stored snapshot instead. The cron route allows 120s and its GitHub Actions caller allows 110s. Each response is validated before being trusted.
 - Only exact, case-insensitive `ysws = "PIXL"` rows are persisted. Descriptions, display names, screenshots, and other program rows are never written.
 - Candidate entries are indexed and checked before a transaction inserts the generation and changes the active pointer. The current and immediately previous generations are retained.
 - A failed fetch, validation, or transaction leaves the active pointer and its rows unchanged. The attempt and bounded error are recorded, and exponential retry delay grows from 30 seconds to 15 minutes.
