@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, setSystemTime, test } from "bun:test";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import express from "express";
@@ -6,6 +6,11 @@ import { issueSessionToken } from "../auth/session.js";
 import { db } from "../db/pgCompat.js";
 import { bearer, testAuthGate } from "../http/testkit.js";
 import projectsRouter from "./projects.js";
+
+// The ship route gates on the event submission deadline. Pin the clock before
+// it so these tests keep testing the gate instead of failing once it passes.
+beforeAll(() => setSystemTime(new Date("2026-11-15T12:00:00.000Z")));
+afterAll(() => setSystemTime());
 
 function chainable(result: { data: unknown; error: unknown }) {
   const chain: Record<string, unknown> = {};

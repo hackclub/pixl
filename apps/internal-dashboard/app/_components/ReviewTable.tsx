@@ -167,7 +167,10 @@ export function ReviewTable({
                     title={`${claimer(p.claimedBy)} opened this for review in the last 30 minutes. You can still open it, but you can't grade it while their claim is live.`}
                   >
                     <Badge tone="info" icon="view">
-                      {claimer(p.claimedBy)} is reviewing
+                      <span className="inline-flex min-w-0 max-w-[13rem] items-center gap-1">
+                        <span className="min-w-0 truncate">{claimer(p.claimedBy)}</span>
+                        <span className="shrink-0">is reviewing</span>
+                      </span>
                     </Badge>
                   </span>
                 )}

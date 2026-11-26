@@ -7,9 +7,13 @@ import { motion } from "framer-motion";
 // name clickable.
 type Person = { name: string; link: string };
 const ORGS: Person[] = [
-  { name: "Ridit", link: "https://hackclub.enterprise.slack.com/team/U0ARC79GEAV" },
   { name: "Gabin", link: "https://hackclub.enterprise.slack.com/team/U0A2SJ7B739" },
-  { name: "Ricky", link: "https://hackclub.enterprise.slack.com/team/U0A1VPETCR3" },
+];
+// Everyone who built it (organized by the first one only, see ORGS).
+const BUILDERS: Person[] = [
+  ORGS[0],
+  { name: "Ridit", link: "" },
+  { name: "Ricky", link: "" },
 ];
 const SPONSORS: Person[] = [
   { name: "barnav", link: "https://hackclub.enterprise.slack.com/team/U08RVF1BAN4" },
@@ -52,7 +56,10 @@ export function Crew() {
       transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1], delay: 1 }}
     >
       <p>
-        made by <NameList people={ORGS} />
+        organized by <NameList people={ORGS} />
+      </p>
+      <p>
+        built by <NameList people={BUILDERS} />
       </p>
       <p>
         Sponsored by <NameList people={SPONSORS} />

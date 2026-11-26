@@ -12,7 +12,32 @@ const {
   approvedTrialIds,
   isReviewer,
   reviewGrantLockNote,
+  saleIsActive,
 } = await import("./shop.js");
+
+describe("saleIsActive", () => {
+  const now = Date.parse("2026-11-25T12:00:00.000Z");
+  const sale = (discount_percent: unknown, discount_ends_at: unknown) => ({ discount_percent, discount_ends_at });
+
+  test("a sale without an end date runs until cleared", () => {
+    expect(saleIsActive(sale(20, null), now)).toBe(true);
+  });
+
+  test("a future end date keeps the sale running", () => {
+    expect(saleIsActive(sale(20, "2026-11-25T13:00:00.000Z"), now)).toBe(true);
+    expect(saleIsActive(sale(20, new Date("2026-11-25T13:00:00.000Z")), now)).toBe(true);
+  });
+
+  test("a past or exactly-now end date ends the sale", () => {
+    expect(saleIsActive(sale(20, "2026-11-25T11:59:59.000Z"), now)).toBe(false);
+    expect(saleIsActive(sale(20, "2026-11-25T12:00:00.000Z"), now)).toBe(false);
+  });
+
+  test("0% or an unreadable end date is never an active sale", () => {
+    expect(saleIsActive(sale(0, null), now)).toBe(false);
+    expect(saleIsActive(sale(20, "not a date"), now)).toBe(false);
+  });
+});
 
 describe("regionMismatch", () => {
   test("same region is allowed", () => {

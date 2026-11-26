@@ -39,3 +39,19 @@ export function approvedUpdateReviewResetFields() {
     robert_error: "",
   };
 }
+
+/** Reshipping requested changes to an APPROVED project's update must keep
+ * is_update and the already banked approval. Only the first approved -> shipped
+ * transition clears the review cycle and freezes new prior_approved_hours.
+ */
+export function approvedUpdateShipState(project: {
+  status: string;
+  is_update?: boolean | null;
+  rejected_at?: string | null;
+}): { startsUpdate: boolean; isUpdate: boolean } {
+  const startsUpdate = project.status === "approved" && !project.rejected_at;
+  return {
+    startsUpdate,
+    isUpdate: startsUpdate || (project.status === "needs_changes" && project.is_update === true),
+  };
+}

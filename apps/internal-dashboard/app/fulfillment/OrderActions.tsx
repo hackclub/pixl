@@ -1,7 +1,8 @@
-import { cancelOrder, clearOrderFlag, claimOrder, markOrderPlaced, flagOrderOverBudget, markOrderCredited, markOrderDone, reassignOrder, shipOrder, updateOrderFulfillmentInfo } from "@/app/actions";
+import { cancelOrder, clearOrderFlag, claimOrder, convertOrderToGrant, flagOrderOverBudget, fulfillOrder, reassignOrder, sendGrant, unclaimOrder, unfulfillOrder, updateOrderFulfillmentInfo } from "@/app/actions";
 import type { ShopOrderRow } from "@/lib/db";
-import { ActionButton, Details, Field, Input, Muted } from "@/app/_ui/ui";
-import { usdBudget } from "./shared";
+import { isGrantOrder } from "@/lib/fulfillmentGrant";
+import { ActionButton, Details, Field, Input, Muted, NativeSelect, Textarea } from "@/app/_ui/ui";
+import { orderBudgetUsd } from "./shared";
 
 // Corrects the HCB link / actual cost / tracking after the fact. Deliberately
 // not gated by `actionable`: a typo'd link or a wrong cost still needs fixing
@@ -25,7 +26,7 @@ export function EditFulfillmentInfo({ order: o }: { order: ShopOrderRow }) {
               defaultValue={o.actual_cost_usd !== null ? Number(o.actual_cost_usd) : undefined}
             />
           </Field>
-          <Field label="Tracking">
+          <Field label="Tracking number" hint="Optional">
             <Input name="tracking" maxLength={120} defaultValue={o.tracking} />
           </Field>
           <Field label="Bought from" hint="Saved onto the item for the next fulfiller">
@@ -78,6 +79,89 @@ export function FlagControls({ order: o, canManage, budget }: { order: ShopOrder
   );
 }
 
+// Switches one order to the short grant flow. Only offered while nothing has
+// been bought yet, for grant-shaped orders on items that aren't tagged grants.
+function ConvertToGrant({ order: o }: { order: ShopOrderRow }) {
+  return (
+    <form action={convertOrderToGrant}>
+      <input type="hidden" name="id" value={o.id} />
+      <ActionButton
+        variant="outline"
+        size="sm"
+        pendingLabel="Converting..."
+        icon="send"
+        confirm="Switch this order to the grant flow? It skips the purchase, receipt and tracking steps: you just send the HCB grant to the buyer's email."
+      >
+        Convert to grant
+      </ActionButton>
+    </form>
+  );
+}
+
+// Puts a claimed order back in the New queue. Only shown before anything was
+// bought: ordered/credited/shipped orders use cancel & refund or fulfillment.
+function UnclaimButton({ order: o }: { order: ShopOrderRow }) {
+  return (
+    <form action={unclaimOrder}>
+      <input type="hidden" name="id" value={o.id} />
+      <ActionButton
+        variant="outline"
+        size="sm"
+        pendingLabel="Unclaiming..."
+        icon="member-remove"
+        confirm={`Release order #${o.id} back to the unclaimed queue?${o.claimed_by ? ` It is currently claimed by ${o.claimed_by}.` : ""}`}
+      >
+        Unclaim
+      </ActionButton>
+    </form>
+  );
+}
+
+// Reopens a finished order without undoing the payout or deleting the record
+// of the first fulfillment. Owner-only (the action enforces it too). Kept out
+// of the normal action flow on purpose: it is an after-the-fact correction,
+// e.g. a grant that HCB cancelled and refunded.
+export function UnfulfillControls({ order: o }: { order: ShopOrderRow }) {
+  if (o.status !== "done" && o.status !== "shipped") return null;
+  const grantShaped = Boolean(o.is_grant || o.item_flow || o.item_category === "grants");
+  return (
+    <Details summary="Unfulfill and return it to the queue">
+      <form action={unfulfillOrder} className="fw-order-action-form">
+        <input type="hidden" name="id" value={o.id} />
+        <Muted className="text-sm">
+          {o.fulfillment_pixels_paid > 0
+            ? `Puts this order back in its fulfiller's queue so it can be fulfilled again. The ${o.fulfillment_pixels_paid} px already paid are kept by the fulfiller, and this fulfillment stays on the order's history.`
+            : "Puts this order back in its fulfiller's queue so it can be fulfilled again. This fulfillment stays on the order's history."}
+        </Muted>
+        <div className="fw-order-action-fields">
+          <Field label="Why is this being unfulfilled?" hint="Required; shown in the order history" className="fw-order-action-field-wide">
+            <Textarea
+              name="reason"
+              maxLength={300}
+              rows={3}
+              required
+              placeholder="The grant was cancelled and refunded, so I'm buying the item directly instead."
+            />
+          </Field>
+          {grantShaped && (
+            <Field label="Fulfill it again as" className="fw-order-action-field-wide">
+              <NativeSelect name="flow" defaultValue={isGrantOrder(o) ? "grant" : "item"}>
+                <option value="grant">A grant (send a new HCB grant)</option>
+                <option value="item">A normal item purchase (HCB transaction, cost, tracking)</option>
+              </NativeSelect>
+            </Field>
+          )}
+        </div>
+        <div className="fw-order-action-buttons">
+          <ActionButton variant="danger" pendingLabel="Reopening..." icon="back">
+            Unfulfill order
+          </ActionButton>
+        </div>
+      </form>
+    </Details>
+  );
+}
+
 export function OrderActions({
   order: o,
   mine,
@@ -112,18 +196,10 @@ export function OrderActions({
       </form>
     ) : null;
 
-  // Shipped: the only thing left is the final close.
-  if (o.status === "shipped") {
-    if (!canManage) return null;
-    return (
-      <form action={markOrderDone}>
-        <input type="hidden" name="id" value={o.id} />
-        <ActionButton variant="success" pendingLabel="Closing..." icon="checkmark">
-          Mark done
-        </ActionButton>
-      </form>
-    );
-  }
+  // Fulfilled is terminal. shipped is a legacy terminal state from the old
+  // item pipeline (tracking already sent, payout already paid): nothing left
+  // here, though owners can correct the record from the edit panel.
+  if (o.status === "done" || o.status === "shipped") return null;
 
   // Claimed by someone else: offer to take it over rather than acting on their queue.
   if (!mine && o.status !== "pending") {
@@ -140,6 +216,7 @@ export function OrderActions({
             Reassign to me
           </ActionButton>
         </form>
+        {o.status === "claimed" && <UnclaimButton order={o} />}
         {cancelForm}
       </div>
     );
@@ -160,81 +237,99 @@ export function OrderActions({
         <form action={claimOrder}>
           <input type="hidden" name="id" value={o.id} />
           <ActionButton pendingLabel="Claiming..." icon="member-add">
-            Claim order
+            {isGrantOrder(o) ? "Claim grant" : "Claim order"}
           </ActionButton>
         </form>
+        {!isGrantOrder(o) && <ConvertToGrant order={o} />}
         {cancelForm}
       </div>
     );
   }
 
-  if (o.status === "claimed") {
+  // Grant flow: one form, then the order is done. No purchase, receipt or
+  // tracking number, the buyer gets an HCB grant invite by email.
+  if (o.status === "claimed" && isGrantOrder(o)) {
     return (
       <div className="fw-order-action-stack">
-        <Muted className="text-sm">Assigned to you. Nothing has been purchased yet.</Muted>
-        <form action={markOrderPlaced}>
-          <input type="hidden" name="id" value={o.id} />
-          <ActionButton pendingLabel="Marking placed..." icon="bag">
-            Mark order placed
-          </ActionButton>
-        </form>
-        {cancelForm}
-      </div>
-    );
-  }
-
-  // Ordered -> credited needs the HCB link and actual cost: the transaction
-  // only exists once HCB has actually charged the card.
-  if (o.status === "ordered") {
-    return (
-      <div className="fw-order-action-stack">
-        <form action={markOrderCredited} className="fw-order-action-form">
+        <Muted className="text-sm">
+          Send the HCB grant to the buyer&apos;s email, then paste the grant link here. The buyer is DM&apos;d to check their email.
+        </Muted>
+        <form action={sendGrant} className="fw-order-action-form">
           <input type="hidden" name="id" value={o.id} />
           <div className="fw-order-action-fields">
-            <Field label="HCB link" hint="The transaction or grant this was paid from">
-              <Input name="hcbLink" type="url" maxLength={300} required placeholder="https://hcb.hackclub.com/..." />
+            <Field label="HCB grant link" hint="The grant you just sent" className="fw-order-action-field-wide">
+              <Input name="grantLink" type="url" maxLength={300} required placeholder="https://hcb.hackclub.com/grants/..." />
             </Field>
-            <Field label="Actual cost ($)">
-              <Input name="actualCostUsd" type="number" min="0" step="0.01" required placeholder={usdBudget(o.price)} />
-            </Field>
-            <Field label="Bought from" hint="Optional, saved onto the item" className="fw-order-action-field-wide">
-              <Input
-                name="sourceUrl"
-                type="url"
-                maxLength={500}
-                defaultValue={o.item_source_url ?? ""}
-                placeholder="https://..."
-              />
+            <Field label="Amount ($)">
+              <Input name="actualCostUsd" type="number" min="0" step="0.01" required defaultValue={orderBudgetUsd(o)} />
             </Field>
           </div>
           <div className="fw-order-action-buttons">
-            <ActionButton pendingLabel="Saving..." icon="checkmark">
-              Mark credited (receipt uploaded)
+            <ActionButton pendingLabel="Sending..." icon="send">
+              Grant sent
             </ActionButton>
           </div>
         </form>
-        {cancelForm}
+        <div className="flex flex-wrap items-center gap-2">
+          <UnclaimButton order={o} />
+          {cancelForm}
+        </div>
       </div>
     );
   }
 
-  // Credited -> shipped: keep tracking and confirmation controls separate.
+  // Claimed items, and legacy ordered/credited orders, use the one terminal
+  // fulfillment form: HCB transaction + real cost, tracking optional. Saving it
+  // closes the order and pays the fulfiller; there is no separate done click.
   return (
     <div className="fw-order-action-stack">
-      <form action={shipOrder} className="fw-order-action-form">
+      <form action={fulfillOrder} className="fw-order-action-form">
         <input type="hidden" name="id" value={o.id} />
         <div className="fw-order-action-fields">
-          <Field label="Tracking number" hint="DM'd to the buyer" className="fw-order-action-field-wide">
-            <Input name="tracking" maxLength={120} required placeholder="1Z..." />
+          <Field label="HCB link" hint="The transaction or grant this was paid from">
+            <Input
+              name="hcbLink"
+              type="url"
+              maxLength={300}
+              required
+              defaultValue={o.hcb_link}
+              placeholder="https://hcb.hackclub.com/..."
+            />
+          </Field>
+          <Field label="Actual cost ($)">
+            <Input
+              name="actualCostUsd"
+              type="number"
+              min="0"
+              step="0.01"
+              required
+              defaultValue={o.actual_cost_usd !== null ? Number(o.actual_cost_usd) : undefined}
+              placeholder={orderBudgetUsd(o)}
+            />
+          </Field>
+          <Field label="Tracking number" hint="Optional; DM'd to the buyer when provided" className="fw-order-action-field-wide">
+            <Input name="tracking" maxLength={120} defaultValue={o.tracking} placeholder="1Z... (optional)" />
+          </Field>
+          <Field label="Bought from" hint="Optional, saved onto the item" className="fw-order-action-field-wide">
+            <Input
+              name="sourceUrl"
+              type="url"
+              maxLength={500}
+              defaultValue={o.item_source_url ?? ""}
+              placeholder="https://..."
+            />
           </Field>
         </div>
         <div className="fw-order-action-buttons">
-          <ActionButton pendingLabel="Shipping..." icon="send">
-            Mark shipped
+          <ActionButton pendingLabel="Fulfilling..." icon="checkmark">
+            Fulfill order
           </ActionButton>
         </div>
       </form>
-      {cancelForm}
+      <div className="flex flex-wrap items-center gap-2">
+        {o.status === "claimed" && <UnclaimButton order={o} />}
+        {cancelForm}
+      </div>
     </div>
   );
 }

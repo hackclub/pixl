@@ -5,7 +5,10 @@ import { serverApi, serverGet } from "@/lib/server-api";
 import { getSession } from "@/lib/session";
 import { expiredUrl, sessionRejected } from "@/lib/session-expiry";
 import { GAME_URL } from "@/lib/urls";
+import { config, formatDate, submissionDeadline } from "@/app/_generated/config";
+import { DeadlineBanner } from "./deadline-banner";
 import { Gate } from "./gate";
+import { PhantomBanner } from "./phantom-banner";
 import { ShellNav } from "./shell-nav";
 
 interface Wallet {
@@ -48,6 +51,10 @@ export default async function ShellLayout({ children }: { children: React.ReactN
       />
       {/* Clears the fixed sidebar and top rail (a bottom dock under 900px). */}
       <div className="pt-[54px] pl-(--sidebar) max-[900px]:pb-[64px] max-[900px]:pl-0">
+        <div className="px-[20px]">
+          <DeadlineBanner deadline={config.submissionDeadline} label={formatDate(submissionDeadline)} />
+          <PhantomBanner />
+        </div>
         <main className={wrap}>{children}</main>
       </div>
     </>

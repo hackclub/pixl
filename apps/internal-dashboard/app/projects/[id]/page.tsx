@@ -10,6 +10,7 @@ import { fetchCommits, type CommitResult } from "@/lib/commits";
 import {
   reReviewProject,
   archiveProject,
+  extendProjectSubmission,
   rejectProject,
   unrejectProject,
   banProject,
@@ -687,6 +688,19 @@ export default async function ProjectPage({
                     <input type="hidden" name="projectId" value={project.id} />
                     <ActionButton variant="success" size="sm" pendingLabel="Restoring...">
                       Restore (un-reject)
+                    </ActionButton>
+                  </form>
+                )}
+                {!project.banned_at && !project.rejected_at && (
+                  <form action={extendProjectSubmission}>
+                    <input type="hidden" name="projectId" value={project.id} />
+                    <ActionButton
+                      variant="outline"
+                      size="sm"
+                      pendingLabel="Extending..."
+                      confirm="Give this project 24 hours from now to ship even though submissions closed? The owner is notified."
+                    >
+                      Extend submission 24h
                     </ActionButton>
                   </form>
                 )}

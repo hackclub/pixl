@@ -1,9 +1,16 @@
 import { describe, expect, test } from "bun:test";
-import { submissionsClosedFor } from "./submissionDeadline.js";
+import { projectCreationClosed, submissionsClosedFor } from "./submissionDeadline.js";
 
 const deadline = new Date("2026-11-20T23:59:59Z");
 const before = new Date("2026-11-20T12:00:00Z");
 const after = new Date("2026-11-21T00:00:01Z");
+const lateInWindow = new Date("2026-11-22T23:00:00Z"); // deadline + ~47h
+const afterWindow = new Date("2026-11-23T00:00:01Z"); // deadline + 48h + 2s
+const lastDay = "2026-11-20T10:00:00Z"; // inside the 24h before the deadline
+const tooEarly = "2026-11-19T20:00:00Z"; // more than 24h before the deadline
+const lateRequest = "2026-11-21T10:00:00Z"; // after the deadline
+
+const needsChanges = { status: "needs_changes", first_shipped_at: "2026-11-01T00:00:00Z", shipped_at: "2026-11-10T00:00:00Z" };
 
 describe("submissionsClosedFor", () => {
   test("never closes before the deadline", () => {
@@ -17,21 +24,70 @@ describe("submissionsClosedFor", () => {
   });
 
   test("refuses an unshipped draft that was shipped once before", () => {
-    expect(submissionsClosedFor({ status: "draft", first_shipped_at: "2026-10-01T00:00:00Z", shipped_at: null }, after, deadline)).toBe(true);
+    expect(submissionsClosedFor({ status: "draft", first_shipped_at: "2026-10-01T00:00:00Z", shipped_at: null }, after, deadline, lastDay)).toBe(true);
   });
 
-  test("allows one resubmit for needs_changes submitted before the deadline", () => {
-    const p = { status: "needs_changes", first_shipped_at: "2026-11-01T00:00:00Z", shipped_at: "2026-11-10T00:00:00Z" };
-    expect(submissionsClosedFor(p, after, deadline)).toBe(false);
+  test("changes requested in the last 24h: resubmit until deadline + 48h", () => {
+    expect(submissionsClosedFor(needsChanges, after, deadline, lastDay)).toBe(false);
+    expect(submissionsClosedFor(needsChanges, lateInWindow, deadline, lastDay)).toBe(false);
+    expect(submissionsClosedFor(needsChanges, afterWindow, deadline, lastDay)).toBe(true);
+  });
+
+  test("includes both edges of the 24h range", () => {
+    expect(submissionsClosedFor(needsChanges, after, deadline, "2026-11-19T23:59:59Z")).toBe(false);
+    expect(submissionsClosedFor(needsChanges, after, deadline, deadline)).toBe(false);
+  });
+
+  test("refuses changes requested earlier than 24h before the deadline", () => {
+    expect(submissionsClosedFor(needsChanges, after, deadline, tooEarly)).toBe(true);
+    expect(submissionsClosedFor(needsChanges, after, deadline, "2026-11-19T23:59:58Z")).toBe(true);
+  });
+
+  test("changes requested after the deadline: 24h from the request", () => {
+    expect(submissionsClosedFor(needsChanges, new Date("2026-11-21T10:30:00Z"), deadline, lateRequest)).toBe(false);
+    expect(submissionsClosedFor(needsChanges, new Date("2026-11-22T09:59:59Z"), deadline, lateRequest)).toBe(false);
+    expect(submissionsClosedFor(needsChanges, new Date("2026-11-22T10:00:01Z"), deadline, lateRequest)).toBe(true);
+  });
+
+  test("a late request can run past deadline + 48h, measured from the request", () => {
+    expect(submissionsClosedFor(needsChanges, new Date("2026-11-23T05:00:00Z"), deadline, "2026-11-22T20:00:00Z")).toBe(false);
+  });
+
+  test("refuses when no changes-requested time is known", () => {
+    expect(submissionsClosedFor(needsChanges, after, deadline)).toBe(true);
+    expect(submissionsClosedFor(needsChanges, after, deadline, null)).toBe(true);
   });
 
   test("refuses a second post-deadline resubmit", () => {
-    const p = { status: "needs_changes", first_shipped_at: "2026-11-01T00:00:00Z", shipped_at: "2026-11-22T00:00:00Z" };
-    expect(submissionsClosedFor(p, after, deadline)).toBe(true);
+    const p = { ...needsChanges, shipped_at: "2026-11-22T00:00:00Z" };
+    expect(submissionsClosedFor(p, lateInWindow, deadline, lastDay)).toBe(true);
+    expect(submissionsClosedFor(p, lateInWindow, deadline, "2026-11-22T20:00:00Z")).toBe(true);
   });
 
   test("refuses a rejected project even if it looks like needs_changes", () => {
-    const p = { status: "needs_changes", rejected_at: "2026-11-15T00:00:00Z", first_shipped_at: "2026-11-01T00:00:00Z", shipped_at: "2026-11-10T00:00:00Z" };
-    expect(submissionsClosedFor(p, after, deadline)).toBe(true);
+    const p = { ...needsChanges, rejected_at: "2026-11-15T00:00:00Z" };
+    expect(submissionsClosedFor(p, after, deadline, lastDay)).toBe(true);
+  });
+});
+
+describe("projectCreationClosed", () => {
+  test("new projects are allowed up to the deadline and refused after", () => {
+    expect(projectCreationClosed(before, deadline)).toBe(false);
+    expect(projectCreationClosed(deadline, deadline)).toBe(false);
+    expect(projectCreationClosed(after, deadline)).toBe(true);
+  });
+});
+
+describe("per-project extension", () => {
+  const approved = { status: "approved", first_shipped_at: "2026-10-06T09:29:28Z", shipped_at: "2026-10-25T06:25:36Z" };
+  test("an approved project can ship until its extension ends", () => {
+    expect(submissionsClosedFor(approved, after, deadline)).toBe(true);
+    const ext = { ...approved, submission_extended_until: "2026-11-22T12:00:00Z" };
+    expect(submissionsClosedFor(ext, after, deadline)).toBe(false);
+    expect(submissionsClosedFor(ext, new Date("2026-11-22T12:00:01Z"), deadline)).toBe(true);
+  });
+  test("an extension never reopens a rejected project", () => {
+    const ext = { ...approved, rejected_at: "2026-11-21T00:00:00Z", submission_extended_until: "2026-11-30T00:00:00Z" };
+    expect(submissionsClosedFor(ext, after, deadline)).toBe(true);
   });
 });
