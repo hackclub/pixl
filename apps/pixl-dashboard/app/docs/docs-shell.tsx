@@ -5,29 +5,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { NavItem } from "@/lib/docs";
 import { cn } from "@/lib/cn";
-import { buttonVariants, railButton } from "@/components/ui/primitives";
+import { TopRail, type RailStats } from "@/components/top-rail";
+import { buttonVariants } from "@/components/ui/primitives";
 
 const OPEN_KEY = "pixl-docs-open-groups";
-const DARK_PALETTES = [
-  { id: "cabinet", label: "Cabinet", swatches: ["#121a23", "#68c7cb", "#ffad68"] },
-  { id: "graphite", label: "Graphite Arcade", swatches: ["#151715", "#fc7059", "#f4a45f"] },
-];
-
 // Same two states as the shell sidebar: ink block on hover, red block when
 // current. 15px, not 16: Poppins runs wider than Pixelify at the same size,
 // and 16 put the longer titles back to wrapping inside the 300px sidebar.
 const sectionLink = cn(
   "block border-2 border-transparent py-[7px] pr-[12px] pl-[20px] font-sans text-[15px] font-medium leading-[1.4] text-ink no-underline",
   "[transition:color_.13s_ease,background-color_.13s_ease,border-color_.13s_ease,transform_.12s_ease]",
-  "hover:translate-x-[3px] hover:border-stroke hover:bg-ink hover:text-panel-deep",
+  "hover:border-stroke hover:bg-ink hover:text-panel-deep",
 );
 const sectionLinkActive = "border-stroke bg-accent font-semibold text-panel-deep hover:bg-accent";
-
-const themeOption = cn(
-  "flex w-full items-center gap-[9px] border-none bg-transparent px-[11px] py-[8px] text-left",
-  "font-pixel text-[13.5px] tracking-[.3px] text-ink transition-[background-color,color] duration-[120ms] ease-[ease]",
-  "hover:bg-accent hover:text-panel-deep",
-);
 
 function groupNav(nav: NavItem[]): { label: string; items: NavItem[] }[] {
   const groups: { label: string; items: NavItem[] }[] = [];
@@ -39,7 +29,15 @@ function groupNav(nav: NavItem[]): { label: string; items: NavItem[] }[] {
   return groups;
 }
 
-export function DocsShell({ nav, children }: { nav: NavItem[]; children: React.ReactNode }) {
+export function DocsShell({
+  nav,
+  stats,
+  children,
+}: {
+  nav: NavItem[];
+  stats: RailStats | null;
+  children: React.ReactNode;
+}) {
   // The shell outlives any single doc now (see layout.tsx), so the active
   // page can't come in as a prop - it changes underneath a mounted shell.
   const activeSlug = usePathname().replace(/^\/docs\/?/, "").replace(/\/$/, "");
@@ -54,10 +52,6 @@ export function DocsShell({ nav, children }: { nav: NavItem[]; children: React.R
   // mount instead.
   const [open, setOpen] = useState<Set<string>>(() => new Set());
   const [backHref, setBackHref] = useState("/dashboard");
-  const [theme, setThemeState] = useState("light");
-  const [darkPalette, setDarkPaletteState] = useState("graphite");
-  const [themeLoaded, setThemeLoaded] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
 
   // Whether a group renders expanded: manually opened (persisted in `open`)
   // OR it's the group holding the page you're currently on. The active-group
@@ -96,42 +90,6 @@ export function DocsShell({ nav, children }: { nav: NavItem[]; children: React.R
     }
   }, []);
 
-  useEffect(() => {
-    try {
-      setThemeState(localStorage.getItem("pixl_theme_v2") === "dark" ? "dark" : "light");
-      const savedPalette = localStorage.getItem("pixl_dark_palette_v1");
-      const matchingPalette = DARK_PALETTES.find((palette) => palette.id === savedPalette);
-      if (matchingPalette) setDarkPaletteState(matchingPalette.id);
-    } catch {
-      // keep the light default
-    }
-    setThemeLoaded(true);
-  }, []);
-
-  useEffect(() => {
-    if (!themeLoaded) return;
-    const root = document.documentElement;
-    root.dataset.theme = theme;
-    if (theme === "dark") root.dataset.palette = darkPalette;
-    else delete root.dataset.palette;
-  }, [theme, darkPalette, themeLoaded]);
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    function onDocClick(e: MouseEvent) {
-      if (!(e.target as HTMLElement).closest("[data-theme-picker]")) setMenuOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setMenuOpen(false);
-    }
-    document.addEventListener("click", onDocClick);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("click", onDocClick);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [menuOpen]);
-
   function toggleGroup(label: string) {
     setOpen((prev) => {
       const next = new Set(prev);
@@ -146,25 +104,6 @@ export function DocsShell({ nav, children }: { nav: NavItem[]; children: React.R
     });
   }
 
-  function setTheme(id: string) {
-    try {
-      if (id === "light") {
-        setThemeState("light");
-        localStorage.setItem("pixl_theme_v2", "light");
-      } else if (DARK_PALETTES.some((palette) => palette.id === id)) {
-        setThemeState("dark");
-        setDarkPaletteState(id);
-        localStorage.setItem("pixl_theme_v2", "dark");
-        localStorage.setItem("pixl_dark_palette_v1", id);
-      }
-    } catch {
-      // best-effort persistence only
-    }
-    setMenuOpen(false);
-  }
-
-  const selectedTheme = theme === "light" ? "light" : darkPalette;
-
   return (
     // Nav | article | on-this-page. --sidebar is wider than the dash's own:
     // these are page titles, not icon-sized nav labels, and at 260px the
@@ -175,8 +114,12 @@ export function DocsShell({ nav, children }: { nav: NavItem[]; children: React.R
         "grid min-h-screen grid-cols-[var(--sidebar)_minmax(0,1fr)_240px] items-start [--sidebar:300px]",
         "max-[1080px]:grid-cols-[var(--sidebar)_minmax(0,1fr)] max-[820px]:grid-cols-1",
         "[body:has(&)]:overflow-y-auto!",
+        // Clear the fixed top rail: page columns get it as top padding on
+        // wide screens, the whole stack once the sidebar folds on top.
+        "[html:has(&)]:scroll-pt-[64px] max-[820px]:pt-[54px]",
       )}
     >
+      <TopRail stats={stats} className="max-[900px]:left-(--sidebar) max-[820px]:left-0" />
       <aside
         className={cn(
           "sticky top-0 h-screen overflow-y-auto border-r-4 border-stroke bg-panel px-[12px] pt-[22px] pb-[32px]",
@@ -192,60 +135,6 @@ export function DocsShell({ nav, children }: { nav: NavItem[]; children: React.R
             <img src="/docs/icon.svg" alt="" className="size-[26px] [image-rendering:pixelated]" />
             PIXL <span className="text-gold">DOCS</span>
           </Link>
-          <div className="relative" data-theme-picker>
-            <button
-              className={railButton}
-              type="button"
-              aria-label="Change theme"
-              aria-expanded={menuOpen}
-              onClick={() => setMenuOpen((v) => !v)}
-            >
-              <svg viewBox="0 0 16 16" fill="currentColor">
-                <rect x="4" y="2" width="8" height="2" />
-                <rect x="2" y="4" width="2" height="7" />
-                <rect x="12" y="4" width="2" height="6" />
-                <rect x="4" y="11" width="7" height="2" />
-                <rect x="10" y="10" width="2" height="2" />
-                <rect x="5" y="5" width="2" height="2" />
-                <rect x="9" y="5" width="2" height="2" />
-                <rect x="5" y="8" width="2" height="2" />
-              </svg>
-            </button>
-            {menuOpen && (
-              <div className="absolute top-[calc(100%+6px)] right-0 z-60 flex min-w-[200px] flex-col overflow-hidden border-2 border-stroke bg-panel shadow-drop">
-                <button
-                  className={cn(themeOption, "whitespace-nowrap", selectedTheme === "light" && "bg-theme-selected text-theme-selected-ink hover:bg-theme-selected")}
-                  type="button"
-                  aria-pressed={selectedTheme === "light"}
-                  onClick={() => setTheme("light")}
-                >
-                  <span aria-hidden className="flex shrink-0 border border-stroke">
-                    {["#f5eed2", "#ec3750", "#ff8c37"].map((color) => (
-                      <span key={color} className="size-[11px] border-r border-stroke last:border-r-0" style={{ backgroundColor: color }} />
-                    ))}
-                  </span>
-                  <span>Pixl Paper</span>
-                </button>
-                <div aria-hidden className="h-[2px] bg-stroke" />
-                {DARK_PALETTES.map((t) => (
-                  <button
-                    key={t.id}
-                    className={cn(themeOption, "whitespace-nowrap", selectedTheme === t.id && "bg-theme-selected text-theme-selected-ink hover:bg-theme-selected")}
-                    type="button"
-                    aria-pressed={selectedTheme === t.id}
-                    onClick={() => setTheme(t.id)}
-                  >
-                    <span aria-hidden className="flex shrink-0 border border-stroke">
-                      {t.swatches.map((color) => (
-                        <span key={color} className="size-[11px] border-r border-stroke last:border-r-0" style={{ backgroundColor: color }} />
-                      ))}
-                    </span>
-                    <span>{t.label}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
         <button
           className={cn(buttonVariants({ variant: "dark" }), "mx-[6px] mb-[16px] justify-center")}

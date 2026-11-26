@@ -19,6 +19,9 @@ export const PUBLIC_ROUTES: readonly PublicRoute[] = Object.freeze([
   { method: "*", pattern: "/auth/*" },
   { method: "GET", pattern: "/hackatime/callback" },
   { method: "GET", pattern: "/api/news" },
+  // Five aggregate program totals for the post-deadline landing page; no
+  // per-player data (routes/results.ts).
+  { method: "GET", pattern: "/api/results" },
   { method: "GET", pattern: "/api/journals/public/:projectId/:token" },
   { method: "GET", pattern: "/api/shop/item/:id/public" },
   { method: "GET", pattern: "/api/explore/players" },

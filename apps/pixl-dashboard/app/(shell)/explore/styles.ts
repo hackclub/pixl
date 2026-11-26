@@ -1,7 +1,7 @@
 // Class strings shared across the explore pages.
 
 /** Grid of project trading cards. */
-export const shipGrid = "grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3";
+export const shipGrid = "grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-5";
 
 /** Section heading with a small gold square in front. */
 export const sectionHeading =

@@ -1,7 +1,5 @@
 import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/guard";
-import { getLiveMode } from "@/lib/liveModeServer";
-import { LiveBlocked } from "@/app/_components/LiveBlocked";
 import {
   listFulfillerIds,
   fulfillerStatsBySlackId,
@@ -44,6 +42,7 @@ const EMPTY_STATS: FulfillerStats = {
 
 const STAGE_LABEL: Record<OrderStatus, string> = {
   pending: "New",
+  claimed: "Claimed",
   ordered: "Ordered",
   credited: "Credited",
   shipped: "Shipped",
@@ -53,6 +52,7 @@ const STAGE_LABEL: Record<OrderStatus, string> = {
 
 const STAGE_TONE: Record<OrderStatus, Tone> = {
   pending: "warning",
+  claimed: "info",
   ordered: "info",
   credited: "purple",
   shipped: "cyan",
@@ -74,7 +74,6 @@ function fmtDuration(seconds: number): string {
 
 export default async function FulfillerPage({ params }: { params: Promise<{ id: string }> }) {
   await requirePage("owner");
-  if (await getLiveMode()) return <LiveBlocked what="Fulfillers" />;
   const { id } = await params;
   const slackId = decodeURIComponent(id);
 

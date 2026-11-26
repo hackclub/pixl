@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseProjectBody, toPlayerProject } from "./projects.js";
+import { mayEditProjectAtStatus, parseProjectBody, toPlayerProject } from "./projects.js";
 
 // Every internal/admin column found on `projects` across drizzle/*.sql as of
 // this test - reviewer/admin identities, fraud/system notes, review draft
@@ -80,6 +80,15 @@ function fullRow(overrides: Record<string, unknown> = {}): Record<string, unknow
   for (const field of INTERNAL_ONLY_FIELDS) row[field] = `secret-${field}`;
   return row;
 }
+
+describe("review evidence edit policy", () => {
+  test("BOM and project evidence stay locked throughout review", () => {
+    for (const status of ["shipped", "fraud_review", "second_review", "rejected"])
+      expect(mayEditProjectAtStatus(status)).toBe(false);
+    for (const status of ["draft", "needs_changes", "approved"])
+      expect(mayEditProjectAtStatus(status)).toBe(true);
+  });
+});
 
 describe("toPlayerProject", () => {
   test("strips every known internal/admin column", () => {
@@ -183,6 +192,23 @@ describe("toPlayerProject", () => {
   });
 });
 
+describe("game category", () => {
+  test("keeps games separate from runtime and hardware/software review tracks", () => {
+    const game = parseProjectBody({ name: "Block Runner", projectType: "hardware", kind: "software", isGame: true });
+    expect(game.fields?.project_type).toBe("hardware");
+    expect(game.fields?.kind).toBe("software");
+    expect(game.fields?.is_game).toBe(true);
+    expect(parseProjectBody({ name: "IDE", projectType: "python", isGame: false }).fields?.is_game).toBe(false);
+    expect(parseProjectBody({ name: "Older client" }).fields?.is_game).toBe(false);
+  });
+
+  test("players can see their game's category without exposing reviewer fields", () => {
+    const safe = toPlayerProject({ id: 19, name: "My Game", status: "draft", is_game: true });
+    expect(safe.is_game).toBe(true);
+    expect("system_note" in safe).toBe(false);
+  });
+});
+
 describe("parseProjectBody image URLs", () => {
   const base = { name: "Thing" };
   test("a Hack Club CDN thumbnail is kept", () => {
@@ -217,5 +243,17 @@ describe("toPlayerProject join_code", () => {
   test("a collaborator, or a caller that names no viewer, never does", () => {
     expect(toPlayerProject(row, "collaborator").join_code).toBeNull();
     expect(toPlayerProject(row).join_code).toBeNull();
+  });
+});
+
+
+describe("project evidence lock during review", () => {
+  test("a maker may prepare a draft, answer changes, or prepare a newly approved update", () => {
+    for (const status of ["draft", "needs_changes", "approved"])
+      expect(mayEditProjectAtStatus(status)).toBe(true);
+  });
+  test("submission evidence is immutable in every live review stage", () => {
+    for (const status of ["shipped", "fraud_review", "second_review", "rejected", "", null, undefined])
+      expect(mayEditProjectAtStatus(status)).toBe(false);
   });
 });

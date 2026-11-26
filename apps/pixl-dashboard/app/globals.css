@@ -7,15 +7,23 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 }
 
-/* Themed scrollbars: thin, square, LEDGER tokens, so they follow light/dark.
-   Chrome/Firefox use the standard properties; Safari uses ::-webkit-*. */
+/* Pixel scrollbars: a square thumb with no track or arrows, shown only while
+   the pointer is over the scroll area. --scroll-thumb follows the LEDGER
+   theme; the landing pins its own. Chrome/Safari draw the ::-webkit-* parts
+   (setting the standard properties would switch those off in Chrome), and
+   Firefox, which has no ::-webkit-scrollbar, gets the standard ones. */
 @layer base {
-  * { scrollbar-width: thin; scrollbar-color: var(--dim) var(--panel-2); }
-  ::-webkit-scrollbar { width: 10px; height: 10px; }
-  ::-webkit-scrollbar-track { background: var(--panel-2); }
-  ::-webkit-scrollbar-thumb { background: var(--dim); border: 2px solid var(--panel-2); border-radius: 0; }
-  ::-webkit-scrollbar-thumb:hover { background: var(--ink); }
-  ::-webkit-scrollbar-corner { background: var(--panel-2); }
+  :root { --scroll-thumb: var(--dim); }
+  ::-webkit-scrollbar { width: 8px; height: 8px; background: transparent; }
+  ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+  ::-webkit-scrollbar-button { display: none; }
+  ::-webkit-scrollbar-thumb { background: transparent; border-radius: 0; }
+  :hover::-webkit-scrollbar-thumb { background: var(--scroll-thumb); }
+  ::-webkit-scrollbar-thumb:hover, ::-webkit-scrollbar-thumb:active { background: var(--gold); }
+  @supports not selector(::-webkit-scrollbar) {
+    * { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+    :hover { scrollbar-color: var(--scroll-thumb) transparent; }
+  }
 }
 
 /* Element defaults. In the base layer so any utility on the element wins
@@ -123,9 +131,46 @@
   src:url("/fonts/phantom-sans/Bold.woff2") format("woff2");
   font-weight:bold;font-style:normal;font-display:swap;
 }
+/* Phantom's display face, used only by the PHANTOM promo wordmark. Self-hosted
+   so font-src 'self' in the CSP still covers it. */
+@font-face{
+  font-family:"Instrument Serif";
+  src:url("/fonts/instrument-serif-italic.woff2") format("woff2");
+  font-weight:400;font-style:italic;font-display:swap;
+}
 html[data-font="phantom"] body,
-html[data-font="phantom"] body *:not(code,pre,kbd,samp,code *,pre *){
+html[data-font="phantom"] body *:not(code,pre,kbd,samp,code *,pre *,.phantom-wordmark){
   font-family:"Phantom Sans",system-ui,sans-serif !important;
+}
+
+/* ── PHANTOM promo banner ── */
+.phantom-wordmark{
+  font-family:"Instrument Serif",ui-serif,Georgia,serif;
+  font-style:italic;
+  letter-spacing:-.015em;
+  background-image:linear-gradient(105deg,#efeee9 0%,#efeee9 42%,#ffffff 50%,#efeee9 58%,#efeee9 100%);
+  background-size:260% 100%;
+  background-position:100% 0;
+  -webkit-background-clip:text;
+  background-clip:text;
+  color:transparent;
+  animation:phantom-sheen 9s ease-in-out infinite;
+}
+@keyframes phantom-sheen{
+  0%,62%{background-position:100% 0}
+  100%{background-position:0 0}
+}
+.phantom-flag{
+  animation:phantom-flag-sway 8s ease-in-out infinite;
+  transform-origin:18% 82%;
+}
+@keyframes phantom-flag-sway{
+  0%,100%{transform:rotate(-2.5deg)}
+  50%{transform:rotate(1.5deg)}
+}
+@media (prefers-reduced-motion: reduce){
+  .phantom-wordmark{animation:none;background-image:none;color:#efeee9}
+  .phantom-flag{animation:none}
 }
 
 /* ── Tailwind 4 theme bridge: LEDGER tokens as utilities (bg-panel, text-ink,
@@ -178,3 +223,10 @@ html[data-font="phantom"] body *:not(code,pre,kbd,samp,code *,pre *){
   cursor: url(/img/cursor/cursor-pointer.png) 16 16, pointer;
 }
 
+
+/* 404 page: the missing-texture tile drops in once, in whole-pixel steps. */
+@keyframes not-found-drop {
+  from { opacity: 0; transform: translateY(-1.5rem); }
+  to { opacity: 1; transform: none; }
+}
+.not-found-tile { animation: not-found-drop .5s steps(5) both; }

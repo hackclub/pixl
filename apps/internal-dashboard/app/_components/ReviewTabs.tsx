@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CountBadge } from "@/app/_ui/ui";
-import { useLiveMode } from "@/app/_components/LiveMode";
 
 export function ReviewTabs({
   isSuper,
@@ -24,7 +23,6 @@ export function ReviewTabs({
   proposedBanCount?: number;
 }) {
   const pathname = usePathname();
-  const live = useLiveMode();
   // A fraud reviewer sees the Fraud reviews tab and nothing else.
   const tabs: { href: string; label: string; count?: number }[] = fraudOnly
     ? []
@@ -32,6 +30,7 @@ export function ReviewTabs({
         { href: "/review", label: "Needs review", count: pending },
         { href: "/review/reviewed", label: "Reviewed" },
         { href: "/review/stats", label: "Stats" },
+        { href: "/review/ending-score", label: "Pixl ending score" },
       ];
   if (canFraudReview) {
     // Every score Robert's fraud reviewer has given, newest first, including
@@ -47,9 +46,7 @@ export function ReviewTabs({
   if (canSpotCheck) tabs.push({ href: "/review/spot-check", label: "Spot check", count: spotCheckCount });
   if (isSuper) {
     tabs.push({ href: "/review/log", label: "Reviewer log" });
-    // Internal reviewer notes: the tab disappears while live (the page itself
-    // also refuses to render).
-    if (!live) tabs.push({ href: "/review/audit", label: "Audit notes" });
+    tabs.push({ href: "/review/audit", label: "Audit notes" });
   }
   // The guidelines gate only fires once per guidelines version, so this is
   // the way back in for anyone who skipped or wants a refresher.

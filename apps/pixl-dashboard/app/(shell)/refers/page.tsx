@@ -33,7 +33,7 @@ export default async function RefersPage({
   const res = await serverGet<ReferralMe>("/api/referral/me");
 
   return (
-    <div className="max-w-[720px]">
+    <div className="mx-auto max-w-[720px]">
       <PageHeader
         title="REFERRALS"
         sub="Share your code. When someone you refer ships their first qualifying project, you both get paid."

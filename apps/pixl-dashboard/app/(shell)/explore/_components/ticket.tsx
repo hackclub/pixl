@@ -12,7 +12,7 @@ const fmt = (n: unknown) => Math.round(Number(n) || 0).toLocaleString("en-US");
 export function Ticket({ p, projectCount }: { p: PlayerProfile["player"]; projectCount: number }) {
   const year = joinedYear(p.created_at);
   return (
-    <div className="relative my-[13px] h-[599px] w-[460px] bg-[url(/img/ticket_frame.png)] bg-[length:460px_599px] bg-no-repeat max-[520px]:[zoom:.68]">
+    <div className="relative my-[13px] h-[599px] w-[460px] bg-[url(/img/ticket_frame_trials.png)] bg-[length:460px_599px] bg-no-repeat max-[520px]:[zoom:.68]">
       <div className="absolute top-[57.6px] left-7 flex h-[77.4px] w-[278px] items-center overflow-hidden">
         <span
           className={cn(

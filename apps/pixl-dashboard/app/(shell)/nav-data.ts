@@ -19,7 +19,6 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       link("dashboard", "OVERVIEW"),
       link("projects", "PROJECTS"),
-      link("quests", "QUESTS"),
       link("trials", "TRIALS"),
       link("docs", "DOCS", "/docs"),
     ],
@@ -66,7 +65,6 @@ export const ICONS: Record<string, readonly Rect[]> = {
   report: [[3, 2, 2, 12], [5, 3, 8, 6]],
   account: [[5, 2, 6, 5], [3, 9, 10, 5]],
   trials: [[2, 3, 12, 2], [2, 11, 12, 2], [2, 3, 2, 10], [12, 3, 2, 10], [7, 5, 2, 1], [7, 7, 2, 1], [7, 9, 2, 1]],
-  quests: [[4, 3, 8, 2], [2, 5, 12, 2], [4, 7, 8, 2], [6, 9, 4, 2], [7, 11, 2, 2]],
   explore: [[5, 2, 6, 2], [3, 4, 2, 6], [11, 4, 2, 6], [5, 10, 6, 2], [11, 11, 2, 2], [13, 13, 2, 2]],
   leaderboard: [[6, 3, 4, 11], [2, 7, 4, 7], [10, 9, 4, 5]],
   ideas: [[5, 1, 6, 2], [3, 3, 2, 5], [11, 3, 2, 5], [5, 8, 2, 2], [9, 8, 2, 2], [6, 10, 4, 2], [6, 13, 4, 2]],

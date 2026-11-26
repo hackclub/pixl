@@ -35,6 +35,7 @@ Save a valid mailing address on your profile before ordering. Checkout stays blo
 Your Orders page tracks each one:
 
 - **NEW.** Order received. Pixels come out of your balance straight away.
+- **CLAIMED.** A fulfiller has picked it up but has not placed the purchase yet.
 - **ORDERED.** Fulfillment has ordered or packed it.
 - **PAID.** Payment confirmed on our end.
 - **SHIPPED.** In transit, with tracking attached.

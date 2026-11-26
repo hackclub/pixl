@@ -63,7 +63,12 @@ async function connectAs(ownSlackId: string | null, hackatimeSlackId: string | n
     const state = new URL(((await start.json()) as { url: string }).url).searchParams.get("state")!;
     const cb = await realFetch(`${base}/hackatime/callback?code=c&state=${encodeURIComponent(state)}`, { redirect: "manual" });
     expect(cb.status).toBe(302);
-    return { outcome: new URL(cb.headers.get("location")!).searchParams.get("hackatime"), updates };
+    const location = new URL(cb.headers.get("location")!);
+    return {
+      outcome: location.searchParams.get("hackatime"),
+      reason: location.searchParams.get("hackatime_reason"),
+      updates,
+    };
   } finally {
     db.from = realFrom;
     globalThis.fetch = realFetch;
@@ -75,18 +80,24 @@ describe("Hackatime connect identity binding", () => {
   test("the player's own Hackatime account is connected", async () => {
     const r = await connectAs("U0123ABCD", "U0123ABCD");
     expect(r.outcome).toBe("connected");
+    expect(r.reason).toBeNull();
     expect(r.updates).toEqual([{ hackatime_token: "ht-token" }]);
   });
 
   test("someone else's Hackatime token is never stored", async () => {
     const r = await connectAs("U0123ABCD", "U9999ZZZZ");
     expect(r.outcome).toBe("failed");
+    expect(r.reason).toBe("account_mismatch");
     expect(r.updates).toHaveLength(0);
   });
 
   test("an unknown Hackatime identity or an account with no Slack ID fails closed", async () => {
-    expect((await connectAs("U0123ABCD", null)).updates).toHaveLength(0);
-    expect((await connectAs(null, "U0123ABCD")).updates).toHaveLength(0);
+    const unknown = await connectAs("U0123ABCD", null);
+    expect(unknown.updates).toHaveLength(0);
+    expect(unknown.reason).toBe("no_slack_id");
+    const noOwner = await connectAs(null, "U0123ABCD");
+    expect(noOwner.updates).toHaveLength(0);
+    expect(noOwner.reason).toBe("account_mismatch");
   });
 
   test("identity parsing", () => {

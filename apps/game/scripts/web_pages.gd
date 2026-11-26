@@ -12,7 +12,6 @@ const ALLOWED_PATHS := [
 	"projects",
 	"shop",
 	"orders",
-	"quests",
 	"trials",
 	"account",
 	"report",
@@ -135,7 +134,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_B:
 			open("shop")
 		KEY_J:
-			open("quests")
+			open("trials")
 		_:
 			return
 	get_viewport().set_input_as_handled()

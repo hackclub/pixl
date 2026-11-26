@@ -13,8 +13,7 @@ const inlineError = "text-[12.5px] text-bad";
 const voteBtn = cn(
   "inline-flex cursor-px items-center gap-[5px] border-2 border-stroke bg-panel-2 px-[11px] py-1",
   "font-pixel text-[13px] font-semibold text-dim disabled:cursor-default",
-  "[transition:color_.12s_ease,border-color_.12s_ease,background-color_.12s_ease,transform_.08s_ease]",
-  "enabled:hover:-translate-y-px",
+  "transition-[background-color] duration-[120ms] enabled:hover:bg-panel-deep",
 );
 
 export function VoteGroup({ idea }: { idea: Idea }) {
@@ -40,7 +39,7 @@ export function VoteGroup({ idea }: { idea: Idea }) {
           type="button"
           className={cn(
             voteBtn,
-            "enabled:hover:border-gold enabled:hover:text-gold",
+            "enabled:hover:bg-[color-mix(in_srgb,var(--gold)_22%,var(--panel-2))]",
             up.on && "border-gold bg-gold text-btn-ink",
           )}
           disabled={locked}
@@ -54,7 +53,7 @@ export function VoteGroup({ idea }: { idea: Idea }) {
           type="button"
           className={cn(
             voteBtn,
-            "enabled:hover:border-bad enabled:hover:text-bad",
+            "enabled:hover:bg-[color-mix(in_srgb,var(--bad)_22%,var(--panel-2))]",
             down.on && "border-bad bg-bad text-btn-ink",
           )}
           disabled={locked}

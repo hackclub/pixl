@@ -1,8 +1,6 @@
 import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/guard";
-import { getLiveMode } from "@/lib/liveModeServer";
-import { LiveBlocked } from "@/app/_components/LiveBlocked";
 import { getReport, listChatFor, reportCounts } from "@/lib/db";
 import { resolveReport } from "@/app/actions";
 import { BanForm, WarnForm } from "@/app/_components/Moderate";
@@ -30,7 +28,6 @@ export default async function ReportDetailPage({
   params: Promise<{ id: string }>;
 }) {
   await requirePage("owner");
-  if (await getLiveMode()) return <LiveBlocked what="Reports" />;
   const { id } = await params;
   const report = await getReport(Number(id));
   if (!report) notFound();

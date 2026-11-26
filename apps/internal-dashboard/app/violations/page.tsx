@@ -1,7 +1,4 @@
 import { requirePage } from "@/lib/guard";
-import { getLiveMode } from "@/lib/liveModeServer";
-import { LiveBlocked } from "@/app/_components/LiveBlocked";
-import { liveName } from "@/lib/liveMode";
 import { listViolations } from "@/lib/db";
 import { BanForm, WarnForm } from "@/app/_components/Moderate";
 import SlackName from "@/app/_ui/SlackName";
@@ -30,8 +27,6 @@ export default async function ViolationsPage({
   searchParams: Promise<{ kind?: string; q?: string; page?: string }>;
 }) {
   await requirePage("owner");
-  const live = await getLiveMode();
-  if (live) return <LiveBlocked what="Violations" reason="This page is internal moderation data" />;
   const { kind, q, page } = await searchParams;
   const all = await listViolations(500);
 
@@ -45,7 +40,7 @@ export default async function ViolationsPage({
   if (query)
     rows = rows.filter(
       (v) =>
-        liveName(live, v.users, v.users?.real_name || v.users?.display_name || "").toLowerCase().includes(query) ||
+        (v.users?.real_name || v.users?.display_name || "").toLowerCase().includes(query) ||
         (v.content ?? "").toLowerCase().includes(query),
     );
 
@@ -91,7 +86,7 @@ export default async function ViolationsPage({
           />
           <Table headers={["Player", "Content", "Kind", "When", "Moderate"]}>
             {slice.map((v) => {
-              const name = liveName(live, v.users, v.users?.real_name || v.users?.display_name || v.user_id);
+              const name = v.users?.real_name || v.users?.display_name || v.user_id;
               return (
                 <tr key={v.id}>
                   <td>

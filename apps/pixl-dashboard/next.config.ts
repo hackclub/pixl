@@ -52,6 +52,7 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       { source: "/sidequests", destination: "/trials", permanent: false },
+      { source: "/quests", destination: "/trials", permanent: false },
       { source: "/play", destination: config.urls.play, permanent: false },
       { source: "/play/:path*", destination: `${config.urls.play}/:path*`, permanent: false },
     ];

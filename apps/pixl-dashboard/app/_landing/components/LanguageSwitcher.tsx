@@ -82,7 +82,7 @@ export function LanguageSwitcher() {
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={dict.menu.language}
-        className="flex cursor-pointer items-center gap-2 border-black border-b-4 border-l-2 border-r-4 border-t-2 bg-[#F5EED2] px-3 py-1.5 font-pixel text-base text-black transition-all hover:border-b-6 sm:gap-2.5 sm:px-6 sm:py-2 sm:text-lg lg:text-xl"
+        className="flex cursor-pointer items-center gap-2 border-black border-b-4 border-l-2 border-r-4 border-t-2 bg-[#F5EED2] px-3 py-1.5 font-pixel text-base text-black transition-colors hover:bg-[#e6dcb8] sm:gap-2.5 sm:px-6 sm:py-2 sm:text-lg lg:text-xl"
       >
         {current}
         <svg

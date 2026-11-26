@@ -25,7 +25,7 @@ const LEADERBOARD_SIZE = 25;
 
 // #public-safe-only, no ban_reason/review_note/system_note/airtable_record_id etc
 export const PUBLIC_PROJECT_COLUMNS =
-  "id, user_id, name, description, project_type, level, status, image_url, repo_url, demo_url, shipped_at, created_at, hackatime_seconds, is_peak";
+  "id, user_id, name, description, project_type, level, status, image_url, repo_url, demo_url, shipped_at, first_shipped_at, created_at, hackatime_seconds, is_peak";
 
 // #public, no session needed - fields already safe (no slack_id/email)
 router.get("/api/explore/players", async (req, res) => {
@@ -284,6 +284,24 @@ router.get("/api/explore/leaderboard/upvotes", async (req, res) => {
   res.json({ ok: true, players, yourRank, yourValue: byOwner.get(session.userId) ?? 0 });
 });
 
+// Upvote count per project + whether this viewer already upvoted each one.
+async function upvoteInfo(pids: number[], viewerId: string | undefined) {
+  const upCounts = new Map<number, number>();
+  const myUp = new Set<number>();
+  if (pids.length > 0) {
+    const { data: ups } = await db
+      .from("project_upvotes")
+      .select("project_id, voter_id")
+      .in("project_id", pids);
+    for (const u of ups ?? []) {
+      const pid = u.project_id as number;
+      upCounts.set(pid, (upCounts.get(pid) ?? 0) + 1);
+      if (viewerId && u.voter_id === viewerId) myUp.add(pid);
+    }
+  }
+  return { upCounts, myUp };
+}
+
 router.get("/api/explore/showcase", async (req, res) => {
   const session = req.session;
   if (!session) return res.status(401).json({ ok: false });
@@ -311,12 +329,18 @@ router.get("/api/explore/showcase", async (req, res) => {
       .in("id", ids);
     for (const u of users ?? []) names.set(u.id as string, u.display_name as string);
   }
+  const { upCounts, myUp } = await upvoteInfo(
+    (projects ?? []).map((p) => p.id as number),
+    session.userId,
+  );
 
   res.json({
     ok: true,
     projects: (projects ?? []).map((p) => ({
       ...p,
       owner_name: names.get(p.user_id as string) ?? "?",
+      upvotes: upCounts.get(p.id as number) ?? 0,
+      has_upvoted: myUp.has(p.id as number),
     })),
   });
 });
@@ -463,21 +487,10 @@ router.get("/api/explore/projects", async (req, res) => {
       });
   }
 
-  // Upvote count per project + whether this viewer already upvoted each one.
-  const pids = (projects ?? []).map((p) => p.id as number);
-  const upCounts = new Map<number, number>();
-  const myUp = new Set<number>();
-  if (pids.length > 0) {
-    const { data: ups } = await db
-      .from("project_upvotes")
-      .select("project_id, voter_id")
-      .in("project_id", pids);
-    for (const u of ups ?? []) {
-      const pid = u.project_id as number;
-      upCounts.set(pid, (upCounts.get(pid) ?? 0) + 1);
-      if (session && u.voter_id === session.userId) myUp.add(pid);
-    }
-  }
+  const { upCounts, myUp } = await upvoteInfo(
+    (projects ?? []).map((p) => p.id as number),
+    session?.userId,
+  );
 
   res.json({
     ok: true,

@@ -308,7 +308,7 @@ func _build_ui() -> void:
 	quest_chip.gui_input.connect(func(event: InputEvent):
 		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 			if _in_gameplay() and not global.ui_blocked() and not ChatHud.is_typing() and not Dialogue.is_open:
-				WebPages.open("quests"))
+				WebPages.open("trials"))
 	_shortcuts.add_child(quest_chip)
 
 	var quest_row := HBoxContainer.new()

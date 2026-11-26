@@ -2,7 +2,7 @@
 // mirror apps/server's ship validation so the button doesn't promise a ship
 // the server will refuse. No economy math: hours are server-reported seconds.
 import { canShip, type HtStats, type Project } from "../types";
-import { htBlockerText, htTotals, isKicanvasUrl, isVideoUrl } from "../format";
+import { htBlockerText, htTotals, isDesignViewerUrl, isVideoUrl } from "../format";
 import type { FormState } from "./editor-state";
 
 export interface ShipInputs {
@@ -53,7 +53,7 @@ export function shipBlockers(
   if (isHw && form.demoUrl.trim()) {
     const demo = form.demoUrl.trim();
     if (form.projectType === "cad") {
-      if (!isKicanvasUrl(demo) && !isVideoUrl(demo)) b.push("add a kicanvas.org design link (or a video) as your demo");
+      if (!isDesignViewerUrl(demo) && !isVideoUrl(demo)) b.push("add a kicanvas.org, printables.com or Onshape design link (or a video) as your demo");
     } else if (form.finishedBuild && !isVideoUrl(demo)) {
       b.push("add a video demo showing the build working");
     }

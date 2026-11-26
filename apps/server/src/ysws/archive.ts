@@ -1,5 +1,7 @@
 const ARCHIVE_URL = "https://ships.hackclub.com/api/v1/ysws_entries";
 const CACHE_MS = 10 * 60_000;
+const RETRY_MS = 60_000;
+const FETCH_TIMEOUT_MS = 25_000;
 
 export interface ArchiveEntry {
   ysws: string;
@@ -33,6 +35,8 @@ interface LoadedArchive {
 }
 
 let cache: { at: number; data: LoadedArchive } | null = null;
+let inFlight: Promise<void> | null = null;
+let failedAt = 0;
 
 export function normalizeProjectUrl(raw: string): string {
   let s = String(raw ?? "").trim().toLowerCase();
@@ -68,49 +72,62 @@ function toEntry(entry: Record<string, unknown>): ArchiveEntry {
   };
 }
 
-async function loadArchive(): Promise<LoadedArchive | null> {
-  if (cache && Date.now() - cache.at < CACHE_MS) return cache.data;
-  try {
-    const r = await fetch(ARCHIVE_URL, { signal: AbortSignal.timeout(15000) });
-    if (!r.ok) throw new Error(`status ${r.status}`);
-    const json = (await r.json()) as any;
-    const raw: unknown[] = Array.isArray(json)
-      ? json
-      : Array.isArray(json?.entries)
-        ? json.entries
-        : Array.isArray(json?.data)
-          ? json.data
-          : [];
+function refreshArchive(): Promise<void> {
+  if (inFlight) return inFlight;
+  if (failedAt && Date.now() - failedAt < RETRY_MS) return Promise.resolve();
 
-    const byUrl = new Map<string, ArchiveEntry[]>();
-    const ships: ArchiveShip[] = [];
-    for (const rawEntry of raw) {
-      const entry = rawEntry as Record<string, unknown>;
-      const info = toEntry(entry);
-      for (const key of ["code_url", "demo_url"]) {
-        const u = normalizeProjectUrl(String(entry[key] ?? ""));
-        if (u === "") continue;
-        const list = byUrl.get(u);
-        if (list) list.push(info);
-        else byUrl.set(u, [info]);
+  inFlight = (async () => {
+    try {
+      const r = await fetch(ARCHIVE_URL, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+      if (!r.ok) throw new Error(`status ${r.status}`);
+      const json = (await r.json()) as any;
+      const raw: unknown[] = Array.isArray(json)
+        ? json
+        : Array.isArray(json?.entries)
+          ? json.entries
+          : Array.isArray(json?.data)
+            ? json.data
+            : [];
+
+      const byUrl = new Map<string, ArchiveEntry[]>();
+      const ships: ArchiveShip[] = [];
+      for (const rawEntry of raw) {
+        const entry = rawEntry as Record<string, unknown>;
+        const info = toEntry(entry);
+        for (const key of ["code_url", "demo_url"]) {
+          const u = normalizeProjectUrl(String(entry[key] ?? ""));
+          if (u === "") continue;
+          const list = byUrl.get(u);
+          if (list) list.push(info);
+          else byUrl.set(u, [info]);
+        }
+        const id = cleanField(entry.id);
+        if (id === "" || info.slackId === "") continue;
+        ships.push({
+          ...info,
+          id,
+          codeUrl: safeUrl(entry.code_url),
+          demoUrl: safeUrl(entry.demo_url),
+          description: cleanField(entry.description).slice(0, 2000),
+          screenshotUrl: safeUrl(entry.screenshot_url),
+        });
       }
-      const id = cleanField(entry.id);
-      if (id === "" || info.slackId === "") continue;
-      ships.push({
-        ...info,
-        id,
-        codeUrl: safeUrl(entry.code_url),
-        demoUrl: safeUrl(entry.demo_url),
-        description: cleanField(entry.description).slice(0, 2000),
-        screenshotUrl: safeUrl(entry.screenshot_url),
-      });
+      cache = { at: Date.now(), data: { byUrl, ships } };
+      failedAt = 0;
+    } catch (e) {
+      failedAt = Date.now();
+      console.error("[ysws-archive] fetch failed", e);
+    } finally {
+      inFlight = null;
     }
-    cache = { at: Date.now(), data: { byUrl, ships } };
-    return cache.data;
-  } catch (e) {
-    console.error("[ysws-archive] fetch failed", e);
-    return cache ? cache.data : null;
-  }
+  })();
+  return inFlight;
+}
+
+async function loadArchive(): Promise<LoadedArchive | null> {
+  if (!cache) await refreshArchive();
+  else if (Date.now() - cache.at >= CACHE_MS) void refreshArchive();
+  return cache?.data ?? null;
 }
 
 // Every archive entry sharing this repo/demo URL - a team's prior submission

@@ -394,4 +394,44 @@ if (!adminUrl) {
       }
     });
   });
+
+  describe("hostile frames after sign-in", () => {
+    const hostile = [
+      "null",
+      "5",
+      '"text"',
+      "[1,2]",
+      '{"type":"move","posX":{"toString":0},"posY":0}',
+      '{"type":"move","posX":1,"posY":{"valueOf":1,"toString":2}}',
+      '{"type":"change_scene","scene":{"toString":0}}',
+      '{"type":"set_skin","skin":{"toString":0}}',
+      '{"type":"chat","text":{"toString":0}}',
+      '{"type":"dm","to":{"toString":0},"text":{"toString":0}}',
+      '{"type":"block","userId":{"toString":0}}',
+      '{"type":"emote","id":{"toString":0}}',
+      '{"type":"lobby_create","name":{"toString":0},"isPublic":{"valueOf":1}}',
+      '{"type":"lobby_join","id":{"toString":0},"password":{"toString":0}}',
+      '{"type":"lobby_manage","action":{"toString":0},"name":{"toString":0}}',
+      '{"type":"save_npcs","scene":{"toString":0},"npcs":[null,5,{"id":{"toString":0},"posX":{"valueOf":1}}]}',
+    ];
+
+    test("never kill the server or drop the socket, and nothing is logged as a handler failure", async () => {
+      const failures: unknown[][] = [];
+      const original = console.error;
+      console.error = (...args: unknown[]) => {
+        if (String(args[0]).includes("[ws] message handler failed")) failures.push(args);
+        original(...args);
+      };
+      try {
+        const client = await signIn(await createUser());
+        for (const frame of hostile) client.ws.send(frame);
+        const reply = await client.ask({ type: "lobby_list" }, ["lobby_list"]);
+        expect(reply.type).toBe("lobby_list");
+        expect(client.ws.readyState).toBe(WebSocket.OPEN);
+        expect(failures).toEqual([]);
+      } finally {
+        console.error = original;
+      }
+    });
+  });
 }

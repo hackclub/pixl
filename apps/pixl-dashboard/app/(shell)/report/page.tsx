@@ -31,7 +31,7 @@ export default async function ReportPage() {
   const mine = (await serverApi<{ reports?: MyReport[] }>("/api/reports/mine"))?.reports ?? [];
 
   return (
-    <div className="max-w-[720px]">
+    <div className="mx-auto max-w-[720px]">
       <PageHeader title="REPORT A PLAYER" sub="Seen someone being mean? Let the team know. You can stay anonymous." />
 
       <Card className="mb-6">

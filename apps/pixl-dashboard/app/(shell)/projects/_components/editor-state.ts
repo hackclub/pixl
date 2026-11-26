@@ -10,6 +10,7 @@ export interface FormState {
   imageUrl: string;
   kind: "software" | "hardware";
   projectType: string;
+  isGame: boolean;
   level: number;
   usedAi: boolean;
   aiNotes: string;
@@ -38,6 +39,7 @@ export function initialForm(p: Partial<Project>, trialId?: number | null): FormS
     imageUrl: p.image_url ?? "",
     kind: p.kind === "hardware" ? "hardware" : "software",
     projectType: p.project_type ?? "other",
+    isGame: p.is_game === true,
     level: p.level ?? 1,
     usedAi: !!p.used_ai,
     aiNotes: p.ai_notes ?? "",
@@ -68,6 +70,7 @@ export function toFields(f: FormState) {
     usedAi: f.usedAi,
     aiNotes: f.aiNotes.trim(),
     projectType: (TYPES.has(f.projectType) ? f.projectType : "other") as "other",
+    isGame: f.isGame,
     level: Math.min(Math.max(Math.trunc(f.level) || 1, 1), 4),
     kind: f.kind,
     needsFunding: f.kind === "hardware" && f.needsFunding,

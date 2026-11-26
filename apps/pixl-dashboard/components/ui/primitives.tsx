@@ -12,17 +12,15 @@ const buttonBase = cva(
     "inline-flex items-center gap-[7px] whitespace-nowrap rounded-none no-underline cursor-px",
     "border-2 border-r-4 border-b-4 border-stroke",
     "font-pixel text-[15px] font-semibold tracking-[.5px] px-[17px] py-[9px]",
-    "transition-[background-color,color,border-color,border-bottom-width,transform] duration-[130ms]",
-    "hover:border-b-8 hover:-translate-x-[2px] hover:-translate-y-[2px]",
-    "active:border-b-2 active:translate-x-0 active:translate-y-[2px]",
-    "disabled:cursor-default disabled:opacity-45 disabled:translate-none disabled:border-b-4",
-    "disabled:hover:translate-none disabled:hover:border-b-4",
+    // Hover only changes the background: buttons never move or grow.
+    "transition-[background-color,color] duration-[130ms]",
+    "disabled:cursor-default disabled:opacity-45",
   ],
   {
     variants: {
       variant: {
         default: "bg-gold text-btn-ink hover:bg-gold-soft hover:text-btn-ink disabled:hover:bg-gold",
-        dark: "bg-button-dark text-button-dark-ink hover:bg-button-dark hover:text-gold",
+        dark: "bg-button-dark text-button-dark-ink hover:bg-[color-mix(in_srgb,var(--button-dark)_82%,#fff)] hover:text-button-dark-ink",
         ghost: "bg-transparent text-ink hover:bg-panel-2 hover:text-ink disabled:hover:bg-transparent",
         teal: "bg-teal text-btn-ink hover:bg-(--teal-hover) disabled:hover:bg-teal",
         red: "bg-bad text-panel-deep hover:bg-[color-mix(in_srgb,var(--bad)_85%,#fff)] disabled:hover:bg-bad",
@@ -51,8 +49,7 @@ export const railButton = cn(
   "inline-flex size-[32px] shrink-0 items-center justify-center rounded-none cursor-px",
   "border-2 border-r-4 border-b-4 border-stroke bg-panel text-ink",
   "font-pixel text-[15px] font-bold leading-none",
-  "transition-[background-color,color,border-bottom-width,transform] duration-[130ms]",
-  "hover:border-b-8 hover:-translate-x-[2px] hover:-translate-y-[2px] hover:bg-accent hover:text-panel-deep",
+  "transition-[background-color,color] duration-[130ms] hover:bg-accent hover:text-panel-deep",
   "[&_svg]:size-[16px] [&_svg]:[image-rendering:pixelated]",
 );
 

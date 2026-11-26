@@ -52,3 +52,57 @@ export function payoutStats(hours: number, tier: number, reBefore = 0): PayoutSt
     avgUsdPerHour: hours > 0 ? usd / hours : null,
   };
 }
+
+export const MAX_ROWS = 20;
+
+export interface CalcRow {
+  hours: number;
+  tier: number;
+}
+
+export interface CombinedStats extends PayoutStats {
+  /** Stats for each row, in order, each starting from the RE the rows before it banked. */
+  rows: PayoutStats[];
+  /** Total hours across all rows. */
+  hours: number;
+}
+
+/**
+ * Payout for several projects shipped back to back. The rate ramps with lifetime
+ * RE, so each project starts from the base RE plus the RE every earlier row
+ * banked (the same sequencing the server applies as ships are approved).
+ */
+export function combinedStats(rows: readonly CalcRow[], reBefore = 0): CombinedStats {
+  let re = reBefore;
+  let usd = 0;
+  let px = 0;
+  let earned = 0;
+  let hours = 0;
+  const per: PayoutStats[] = [];
+  for (const r of rows) {
+    per.push(payoutStats(r.hours, r.tier, re));
+    usd += projectPayoutUsd(r.hours, r.tier, re);
+    px += projectPayoutPx(r.hours, r.tier, re);
+    const gained = reForHours(r.hours, r.tier);
+    earned += gained;
+    re += gained;
+    hours += r.hours;
+  }
+  return { px: Math.round(px), re: Math.round(earned), avgUsdPerHour: hours > 0 ? usd / hours : null, rows: per, hours };
+}
+
+/** Parses "hours:tier,hours:tier" (the ?rows= param), clamped and capped at MAX_ROWS. */
+export function parseRows(raw: unknown): CalcRow[] {
+  if (typeof raw !== "string" || !raw) return [];
+  return raw
+    .split(",")
+    .slice(0, MAX_ROWS)
+    .map((part) => {
+      const [h, t] = part.split(":");
+      return { hours: clampHours(h), tier: clampTier(t) };
+    });
+}
+
+export function formatRows(rows: readonly CalcRow[]): string {
+  return rows.map((r) => `${r.hours}:${r.tier}`).join(",");
+}

@@ -1,8 +1,10 @@
 name: Refresh PIXL Ships snapshot
 
+# Automatic refresh is paused while the snapshot reader is disabled.
+# Re-enable the 10-minute schedule only after configuring the GitHub Actions
+# SHIPS_SNAPSHOT_CRON_SECRET and validating the persisted snapshot rollout.
 on:
-  schedule:
-    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
 
 permissions: {}
 

@@ -1,6 +1,4 @@
 import { requirePage } from "@/lib/guard";
-import { getLiveMode } from "@/lib/liveModeServer";
-import { LiveBlocked } from "@/app/_components/LiveBlocked";
 import {
   listReferrals,
   referrerLeaderboard,
@@ -32,7 +30,6 @@ const usd = (px: number) => `$${(px * config.economy.pixelValueUsd).toFixed(2)}`
 
 export default async function ReferralsPage() {
   await requirePage("owner");
-  if (await getLiveMode()) return <LiveBlocked what="Referrals" />;
 
   const referrals = await listReferrals();
   const leaderboard = await referrerLeaderboard(referrals);

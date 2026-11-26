@@ -1,4 +1,6 @@
 import type { Commit } from "@/lib/commits";
+import { createConcurrencyLimiter } from "./concurrency";
+import { linkedEvidenceNames } from "./hackatimeEvidence";
 import { db, type ShippedProject } from "@/lib/db";
 
 const BASE = (process.env.HACKATIME_BASE ?? "https://hackatime.hackclub.com").replace(/\/$/, "");
@@ -187,6 +189,13 @@ export interface HackatimeReport {
   projects: HackatimeProjectReport[];
 }
 
+/** One contributor's Hackatime report. Collaborators track on their own
+ * Hackatime account, so a multi-person ship has one of these per person. */
+export interface HackatimePersonReport {
+  userId: string;
+  report: HackatimeReport;
+}
+
 function fmtSeconds(s: number): string {
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
@@ -248,24 +257,29 @@ export async function fetchHackatimeReport(
     const data = ((await statsRes.json()) as { data?: Record<string, unknown> }).data ?? {};
 
     const rawProjects = mapBreakdown(data.projects);
-    // Every project name the panel will actually display below (line ~313's
-    // filter) that's worth spending 2 extra network calls on. Not just the
-    // submission's explicitly linked projects - a Hackatime project with real
-    // tracked time but not in `linked` still gets shown (p.seconds > 0), so
-    // fetching spans/lapses only for `linked` left those rows permanently
-    // missing their session count and any lapse recordings. But an active
-    // coder's account can have dozens of unrelated projects with a handful of
-    // stray seconds each, and fetching spans+lapses for every single one of
-    // those fanned out to 50-100+ concurrent external requests per review
-    // page load, which is what actually made the page slow - so the eager
-    // fetch here is capped to `linked` plus unlinked projects with a
-    // meaningful amount of time, not literally any nonzero seconds.
-    const MEANINGFUL_UNLINKED_SECONDS = 180;
-    const displayNames = new Set(
-      rawProjects
-        .filter((p) => linked.has(p.name) || p.seconds >= MEANINGFUL_UNLINKED_SECONDS)
-        .map((p) => p.name),
-    );
+    const displayNames = new Set(linkedEvidenceNames(rawProjects, linked));
+    // Limit this report's fan-out even when a maker has many Hackatime projects.
+    const limitExternal = createConcurrencyLimiter(6);
+    // Languages scoped to just this submission's linked projects , the
+    // account-wide stats above mix in everything else the maker codes.
+    const scopedLanguagesPromise: Promise<HackatimeBreakdown[]> = linked.size > 0
+      ? limitExternal(async () => {
+          try {
+            const langRes = await fetch(
+              `${BASE}/api/v1/users/${encodeURIComponent(id)}/stats` +
+                `?features=languages&filter_by_project=${encodeURIComponent([...linked].join(","))}`,
+              { headers, signal: AbortSignal.timeout(10000), next: { revalidate: 300 } },
+            );
+            if (langRes.ok) {
+              const ld = ((await langRes.json()) as { data?: Record<string, unknown> }).data ?? {};
+              return mapBreakdown(ld.languages);
+            }
+          } catch {
+            /* fall back to account-wide languages */
+          }
+          return [];
+        })
+      : Promise.resolve([]);
     // Per-project sessions/first/last from spans, in parallel , a maker's
     // Hackatime account rarely has more than a handful of shown projects.
     const spanInfo = new Map<string, { sessions: number; first: number | null; last: number | null }>();
@@ -274,8 +288,8 @@ export async function fetchHackatimeReport(
     // response as data.user_id.
     const hackatimeUserId = data.user_id != null ? String(data.user_id) : "";
     const lapseInfo = new Map<string, LapseTimelapse[]>();
-    await Promise.all(
-      [...displayNames].map(async (name) => {
+    const spanLookups = Promise.all(
+      [...displayNames].map((name) => limitExternal(async () => {
         try {
           const r = await fetch(
             `${BASE}/api/v1/users/${encodeURIComponent(id)}/heartbeats/spans` +
@@ -299,35 +313,20 @@ export async function fetchHackatimeReport(
         } catch {
           /* ignore per-project span failures */
         }
-      }),
+      })),
     );
-    if (hackatimeUserId) {
-      await Promise.all(
-        [...displayNames].map(async (name) => {
-          const lapses = await fetchLapsesForProject(hackatimeUserId, name);
-          if (lapses.length > 0) lapseInfo.set(name, lapses);
-        }),
-      );
-    }
+    const lapseLookups = hackatimeUserId
+      ? Promise.all(
+          [...displayNames].map((name) => limitExternal(async () => {
+            const lapses = await fetchLapsesForProject(hackatimeUserId, name);
+            if (lapses.length > 0) lapseInfo.set(name, lapses);
+          })),
+        )
+      : Promise.resolve();
 
-    // Languages scoped to just this submission's linked projects , the
-    // account-wide stats above mix in everything else the maker codes.
-    let projectLanguages: HackatimeBreakdown[] = [];
-    if (linked.size > 0) {
-      try {
-        const langRes = await fetch(
-          `${BASE}/api/v1/users/${encodeURIComponent(id)}/stats` +
-            `?features=languages&filter_by_project=${encodeURIComponent([...linked].join(","))}`,
-          { headers, signal: AbortSignal.timeout(10000), next: { revalidate: 300 } },
-        );
-        if (langRes.ok) {
-          const ld = ((await langRes.json()) as { data?: Record<string, unknown> }).data ?? {};
-          projectLanguages = mapBreakdown(ld.languages);
-        }
-      } catch {
-        /* fall back to account-wide languages */
-      }
-    }
+    // Spans, Lapse recordings and scoped languages are independent. Running
+    // them together avoids three sequential external-API waits on cold opens.
+    const [, , projectLanguages] = await Promise.all([spanLookups, lapseLookups, scopedLanguagesPromise]);
 
     const projects: HackatimeProjectReport[] = rawProjects
       .filter((p) => linked.has(p.name) || p.seconds > 0)

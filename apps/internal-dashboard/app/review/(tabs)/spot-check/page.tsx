@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { requirePage, requireGuidelinesAck } from "@/lib/guard";
 import { listSpotCheckProjects } from "@/lib/db";
 import { slackHandles } from "@/lib/slack";
-import { getHideReviewers } from "@/lib/liveModeServer";
 import { listBlackoutQueueProjectIds } from "@/lib/operations";
 import { Card, CardHeader } from "@/app/_ui/ui";
 import { TelescreenReviewTable } from "../TelescreenReviewTable";
@@ -18,19 +17,12 @@ export default async function SpotCheckPage() {
   await requireGuidelinesAck(access);
   if (!access.isOwner && !access.canSecondPass) redirect("/review");
 
-  const [rows, blackoutIds, hideReviewers] = await Promise.all([
+  const [rows, blackoutIds] = await Promise.all([
     // includeClaimed: a project another reviewer has open stays listed (tagged), like /review.
     listSpotCheckProjects(access.session.slackId, undefined, { includeClaimed: true }),
     listBlackoutQueueProjectIds(),
-    getHideReviewers(),
   ]);
-  // While live (names not revealed), another reviewer's claim isn't resolved to a handle.
-  const handles = await slackHandles(
-    rows.flatMap((p) => [
-      p.users?.slack_id,
-      hideReviewers && p.claimedBy !== access.session.slackId ? null : p.claimedBy,
-    ]),
-  );
+  const handles = await slackHandles(rows.flatMap((p) => [p.users?.slack_id, p.claimedBy]));
 
   return (
     <div className="flex flex-col gap-6">

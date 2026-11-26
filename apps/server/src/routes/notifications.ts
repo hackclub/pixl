@@ -72,19 +72,24 @@ router.get("/api/notifications", async (req, res) => {
   const session = req.session;
   if (!session) return res.status(401).json({ ok: false });
 
-  const { data, error } = await db
-    .from("notifications")
-    .select("*")
-    .eq("user_id", session.userId)
-    .order("created_at", { ascending: false })
-    .limit(50);
-  if (error) {
-    console.error("[notifications] list failed", error);
+  // Bound the inbox list, not the badge: older unread messages still count.
+  const [listing, unreadTotal] = await Promise.all([
+    db.from("notifications").select("*")
+      .eq("user_id", session.userId)
+      .order("created_at", { ascending: false })
+      .limit(50),
+    db.from("notifications").select("id", { count: "exact", head: true })
+      .eq("user_id", session.userId)
+      .eq("read", false)
+      // pgCompat does not implement Supabase head:true: without limit(0) it
+      // fetches every matching ID before issuing the separate exact COUNT.
+      .limit(0),
+  ]);
+  if (listing.error || unreadTotal.error || unreadTotal.count === null) {
+    console.error("[notifications] list/count failed", listing.error ?? unreadTotal.error);
     return res.status(500).json({ ok: false });
   }
-  const notifications = data ?? [];
-  const unread = notifications.filter((n: { read?: boolean }) => !n.read).length;
-  res.json({ ok: true, notifications, unread });
+  res.json({ ok: true, notifications: listing.data ?? [], unread: unreadTotal.count });
 });
 
 router.post("/api/notifications/read", validate({ query: v.noQuery, body: v.empty }), async (req, res) => {

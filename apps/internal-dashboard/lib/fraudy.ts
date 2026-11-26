@@ -34,6 +34,11 @@ export function fraudyHours(seconds: number): string {
   return (Math.round((seconds / 3600) * 10) / 10).toString();
 }
 
+/** Key for a Fraudy result: two people can have a same-named Hackatime project. */
+export function fraudyCheckKey(hackatimeId: string | number, project: string): string {
+  return `${hackatimeId}:${project}`;
+}
+
 function num(v: unknown): number {
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? n : 0;

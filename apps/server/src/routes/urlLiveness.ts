@@ -123,7 +123,11 @@ function makeSafeLookup(lookupImpl: LookupImpl, isBlocked: (ip: string) => boole
 // UA, no cookies) even for a game that's genuinely live and playable , every
 // roblox.com demo link was getting rejected as "unreachable". Skip the fetch for
 // these hosts once the SSRF guard clears them; still no bypass of hostIsPublic.
-const TRUSTED_UNFETCHABLE_HOSTS = new Set(["roblox.com"]);
+// share.streamlit.io answers 444 to every request from the cluster's egress IP,
+// and every *.streamlit.app demo bounces through it first. The app's own host is
+// still fetched, but Streamlit bounces live and nonexistent apps alike, so a
+// dead Streamlit link passes too (reviewers still open the demo).
+const TRUSTED_UNFETCHABLE_HOSTS = new Set(["roblox.com", "share.streamlit.io"]);
 
 export function isTrustedUnfetchableHost(hostname: string): boolean {
   return TRUSTED_UNFETCHABLE_HOSTS.has(hostname.replace(/^www\./, "").toLowerCase());
@@ -233,12 +237,30 @@ function cookieHeader(jar: CookieJar, host: string): Record<string, string> | un
   return { cookie: [...hostJar].map(([k, v]) => `${k}=${v}`).join("; ") };
 }
 
+// Streamlit's auth bounce alone is 4 requests, so 5 left one hop of slack.
+const MAX_HOPS = 8;
+
+// One retry for a transient network failure (reset, timeout) on a hop. A blocked
+// host is a verdict, not a blip, so it is never retried.
+async function requestWithRetry(
+  u: URL,
+  options: SafeRequestOptions,
+  deps: ResolvedDeps,
+): Promise<SafeResponse> {
+  try {
+    return await safeRequest(u, options, deps);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException)?.code === "EBLOCKEDHOST") throw e;
+    return safeRequest(u, options, deps);
+  }
+}
+
 export async function urlAlive(url: string, deps: UrlLivenessDeps = {}): Promise<boolean> {
   // re-validate host on every hop
   const resolved = resolveDeps(deps);
   const jar: CookieJar = new Map();
   let current = url;
-  for (let hop = 0; hop < 5; hop++) {
+  for (let hop = 0; hop < MAX_HOPS; hop++) {
     let u: URL;
     try {
       u = new URL(current);
@@ -250,8 +272,8 @@ export async function urlAlive(url: string, deps: UrlLivenessDeps = {}): Promise
     if (isTrustedUnfetchableHost(u.hostname)) return true;
     try {
       const headers = cookieHeader(jar, u.host);
-      let r = await safeRequest(u, { method: "HEAD", headers }, resolved);
-      if (r.status === 405 || r.status === 501) r = await safeRequest(u, { method: "GET", headers }, resolved);
+      let r = await requestWithRetry(u, { method: "HEAD", headers }, resolved);
+      if (r.status === 405 || r.status === 501) r = await requestWithRetry(u, { method: "GET", headers }, resolved);
       storeCookies(jar, u.host, r.setCookies);
       if (r.status >= 300 && r.status < 400) {
         if (!r.location) return false;

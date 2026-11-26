@@ -9,7 +9,8 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { REVIEW_MACROS, expandMacro } from "@/lib/reviewMacros";
+import { REVIEW_MACROS, MAX_REVIEW_NOTE_LENGTH, expandMacro, hasUnfilledMacroPlaceholder, showReviewMacroPrompt, type CustomReviewMacro } from "@/lib/reviewMacros";
+import { dismissReviewerMacroPrompt } from "@/app/actions";
 import {
   reviewProject,
   applySubmissionEdits,
@@ -29,7 +30,7 @@ import {
 } from "@/app/_generated/config";
 import { TECHNICAL_FEATURES_MIN } from "@/lib/auditNote";
 import { BlackoutReviewSection, type BlackoutReviewData } from "@/app/_components/BlackoutReviewSection";
-import { Badge, Button, Callout, Checkbox, Details, Field, formatDateTime, Input, NativeSelect, Textarea } from "@/app/_ui/ui";
+import { Badge, Button, ButtonLink, Callout, Checkbox, Details, Field, formatDateTime, Input, NativeSelect, Textarea } from "@/app/_ui/ui";
 import { actionErrorMessage, isStaleDeployError } from "@/app/_ui/actionError";
 import { round1 } from "@/lib/hours";
 
@@ -124,7 +125,6 @@ function TierAndPayout({
   trialMinHours,
   trialName,
   fundingUsd = 0,
-  showPayout = true,
 }: {
   hours: number;
   tier: number;
@@ -138,8 +138,6 @@ function TierAndPayout({
   trialName?: string;
   /** Hardware funding grant, deducted from the payout like creditBeneficiary's fundingPx. */
   fundingUsd?: number;
-  /** The money breakdown is for the final pass; first-pass reviewers only grade the tier. */
-  showPayout?: boolean;
 }) {
   const [regrading, startRegrade] = useTransition();
   const [regradeError, setRegradeError] = useState("");
@@ -208,9 +206,8 @@ function TierAndPayout({
       {regradeError && <Callout tone="danger" icon="important">{regradeError}</Callout>}
 
       {/* The breakdown is collapsed by default; the summary keeps the number
-          that matters (what the player actually gets) visible. First pass
-          doesn't see it: reviewers there only pick the tier. */}
-      {showPayout && <Details
+          that matters (what the player actually gets) visible. */}
+      <Details
         summary={
           <span className="tabular-nums">
             Payout: {netPx.toLocaleString()} px · ${netUsd.toFixed(2)}
@@ -288,7 +285,7 @@ function TierAndPayout({
           doesn&apos;t wait for your verdict. Community-goal bonuses and any referral boost apply on top and aren&apos;t
           shown.
         </p>
-      </Details>}
+      </Details>
     </div>
   );
 }
@@ -488,6 +485,8 @@ export function ReviewForm({
   canEditSubmission = false,
   defaultRevealName = true,
   defaultNotifyOnResubmit = false,
+  initialReviewMacros = [],
+  initialMacroPromptDismissed = false,
   serverDraft,
 }: {
   projectId: number;
@@ -533,6 +532,9 @@ export function ReviewForm({
   defaultRevealName?: boolean;
   /** Default for the "Notify on resubmit" checkbox. */
   defaultNotifyOnResubmit?: boolean;
+  /** Personal text macros saved on this reviewer\'s account. */
+  initialReviewMacros?: CustomReviewMacro[];
+  initialMacroPromptDismissed?: boolean;
   /** The shared server-side draft (saveReviewDraft). Used only when this
    * browser has no local draft of its own to restore. */
   serverDraft?: {
@@ -541,6 +543,23 @@ export function ReviewForm({
     at: string | null;
   };
 }) {
+  const [customMacros] = useState<CustomReviewMacro[]>(initialReviewMacros);
+  const [macroPromptDismissed, setMacroPromptDismissed] = useState(initialMacroPromptDismissed);
+  const [macroPromptSaving, setMacroPromptSaving] = useState(false);
+  const [macroPromptError, setMacroPromptError] = useState(false);
+  const dismissMacroInvite = async () => {
+    setMacroPromptSaving(true);
+    setMacroPromptError(false);
+    try {
+      const result = await dismissReviewerMacroPrompt();
+      if (result.ok) setMacroPromptDismissed(true);
+      else setMacroPromptError(true);
+    } catch {
+      setMacroPromptError(true);
+    } finally {
+      setMacroPromptSaving(false);
+    }
+  };
   const formRef = useRef<HTMLFormElement>(null);
   const repoOpened = useRef<HTMLInputElement>(null);
   const demoOpened = useRef<HTMLInputElement>(null);
@@ -625,6 +644,13 @@ export function ReviewForm({
       draft = null;
     }
     if (draft) {
+      // A local copy is saved on any edit (tier, hours...), so it can hold a
+      // blank text box. Blank fields must not hide text the server draft has,
+      // such as the AI draft pre-filled in technical features.
+      for (const [k, v] of Object.entries(serverDraft?.draft ?? {})) {
+        const mine = draft[k];
+        if (typeof v === "string" && v.trim() !== "" && typeof mine === "string" && mine.trim() === "") draft[k] = v;
+      }
       setDraftSource("local");
       // Push it to the server right away, so a restored draft the reviewer
       // never edits again still reaches whoever does the real pass.
@@ -716,7 +742,9 @@ export function ReviewForm({
       try {
         // The hours typed in the form, so the deflation draft explains the
         // number the reviewer already picked.
-        setAiDraft(await generateAiReviewDraftAction(projectId, hours));
+        const r = await generateAiReviewDraftAction(projectId, hours);
+        if (r.ok) setAiDraft(r.draft);
+        else setAiError(`Couldn't generate a draft: ${r.error}`);
       } catch (e) {
         setAiError(actionErrorMessage(e, "generate a draft"));
       }
@@ -828,6 +856,10 @@ export function ReviewForm({
       setStepError(message);
       return false;
     };
+    if (verdict === "needs_changes" && hasUnfilledMacroPlaceholder(noteRef.current?.value ?? "")) {
+      noteRef.current?.focus();
+      return fail(3, "Specify what's missing from the README before requesting changes.");
+    }
     // Hours are only credited on an approve, so only an approve needs the reason.
     if (verdict === "approved" && needsDeflationReason && !deflationReasonRef.current?.value.trim())
       return fail(2, "Say why you're lowering the hours before deciding.");
@@ -1075,7 +1107,6 @@ export function ReviewForm({
             trialMinHours={trial?.minHours}
             trialName={trial?.name}
             fundingUsd={fundingUsd}
-            showPayout={!!secondPass}
           />
           {trial?.minHours != null &&
             (hours < trial.minHours ? (
@@ -1244,11 +1275,12 @@ export function ReviewForm({
           <p className="hc-eyebrow">Verdict</p>
           <Field
             label="Note to the player"
-            hint={`Required. Be nice and personal, show their work is good. Macros: ${REVIEW_MACROS.map((m) => `${m.trigger} = ${m.label}`).join(", ")}`}
+            hint={`Required. Be nice and personal, show their work is good. Built-in shortcuts: ${REVIEW_MACROS.map((m) => m.trigger).join(", ")}. Your custom shortcuts work here too.`}
           >
             <AuditTextarea
               name="note"
               required
+              maxLength={MAX_REVIEW_NOTE_LENGTH}
               ref={noteRef}
               onChange={(e) => {
                 // Macros (lib/reviewMacros.ts): typing /ai swaps in the canned
@@ -1256,7 +1288,7 @@ export function ReviewForm({
                 // back down to "/ai" never expands it.
                 const input = e.currentTarget;
                 if ((e.nativeEvent as InputEvent).inputType?.startsWith("insert")) {
-                  const expanded = expandMacro(input.value, input.selectionStart ?? input.value.length);
+                  const expanded = expandMacro(input.value, input.selectionStart ?? input.value.length, [...REVIEW_MACROS, ...customMacros]);
                   if (expanded) {
                     input.value = expanded.value;
                     input.setSelectionRange(expanded.caret, expanded.caret);
@@ -1270,6 +1302,23 @@ export function ReviewForm({
               rows={4}
             />
           </Field>
+          {showReviewMacroPrompt(customMacros, macroPromptDismissed) && (
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--sunken)] p-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold">Want your own review shortcuts?</p>
+                  <p className="hc-muted text-xs">Optional: create a personal /macro in Settings. This invitation disappears once you save one or dismiss it.</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <ButtonLink href="/settings#review" variant="outline" size="sm">Set up macros</ButtonLink>
+                  <Button type="button" size="sm" variant="ghost" disabled={macroPromptSaving} onClick={() => { void dismissMacroInvite(); }}>
+                    {macroPromptSaving ? "Dismissing..." : "Not now"}
+                  </Button>
+                </div>
+              </div>
+              {macroPromptError && <p className="mt-2 text-xs text-[var(--hc-red)]" role="alert">Could not dismiss the invitation. Try again.</p>}
+            </div>
+          )}
           <Checkbox
             name="revealName"
             value="1"

@@ -173,6 +173,13 @@ describe("evidence loading", () => {
       expect(r.priorGrantCents).toBe(0);
     });
 
+    test("a reserved but not purchased grant still uses funding", async () => {
+      const grant = orderRow({ id: 5, item_name: grantName, price: 150, status: "claimed" });
+      const next = orderRow({ id: 6, price: 100 });
+      const ev = await load({ owned: [funded()], orders: [grant, next] });
+      expect(eval1(ev, next).committedCents).toBe(2000);
+    });
+
     test("a cancelled grant order frees its funds and is not re-counted as a prior grant", async () => {
       const grant = orderRow({ id: 5, item_name: grantName, price: 150, status: "cancelled" });
       const next = orderRow({ id: 6, price: 100 });
@@ -215,6 +222,49 @@ describe("evidence loading", () => {
     test("the funding order name written by the review action matches the matcher", () => {
       const src = readFileSync(join(import.meta.dir, "../../app/actions.ts"), "utf8");
       expect(src).toContain("item_name: `${FUNDING_ORDER_PREFIX}${project.name}`");
+    });
+  });
+
+  describe("catalog grants use their round face value", () => {
+    const load = (tables: Tables) => loadPlayerEvidence([U1], { liveAirtable: false, sql: fakeSql(tables), verifier: confirming, now: NOW });
+    const eval1 = (ev: Awaited<ReturnType<typeof load>>, row: Record<string, unknown>) =>
+      evaluateFromEvidence(ev.get(U1)!, toOrderInput(row as never), POLICIES["2026-10-22.1"], NOW);
+    const aiGrant = (over: Record<string, unknown> = {}) =>
+      orderRow({
+        id: 5,
+        item_name: "AI Credits",
+        quantity: 2,
+        price: 222,
+        item_category: "grants",
+        item_description: "A $10 grant for AI credits for the provider of your choice.",
+        ...over,
+      });
+
+    test("2x AI Credits counts $20, not the $22.20 pixel budget", async () => {
+      const row = aiGrant();
+      const ev = await load({ owned: [proj()], orders: [row], payouts: [payout()] });
+      const r = eval1(ev, row);
+      expect(r.amount).toMatchObject({ cents: 2000, basis: "face", budgetCents: 2220 });
+      expect(r.status).toBe("covered");
+    });
+
+    test("a claimed grant order commits its face value, not the pixel ceiling", async () => {
+      const grant = aiGrant({ status: "claimed" });
+      const next = orderRow({ id: 6, price: 100 });
+      const ev = await load({ owned: [proj()], orders: [grant, next], payouts: [payout()] });
+      expect(eval1(ev, next).committedCents).toBe(2000);
+    });
+
+    test("a grant whose description and item name are unknown falls back to the pixel budget", async () => {
+      const row = aiGrant({ item_name: "Mystery Grant", item_description: "A grant for something." });
+      const ev = await load({ owned: [proj()], orders: [row], payouts: [payout()] });
+      expect(eval1(ev, row).amount).toMatchObject({ cents: 2220, basis: "budget" });
+    });
+
+    test("a known AI subscription with no readable description still counts $10", async () => {
+      const row = aiGrant({ item_name: "AI subscription/credits", item_description: "Pick any AI provider." });
+      const ev = await load({ owned: [proj()], orders: [row], payouts: [payout()] });
+      expect(eval1(ev, row).amount).toMatchObject({ cents: 2000, basis: "face", budgetCents: 2220 });
     });
   });
 
@@ -512,23 +562,39 @@ describe("authorization and existing actions", () => {
     expect(actions).toContain('export const cancelOrder = guardedAction("cancelOrder", "owner"');
   });
 
+  test("marking a grant sent from the CSV is owner-only and reuses the settlement", () => {
+    expect(actions).toContain('export const markGrantSent = guardedAction("markGrantSent", "owner"');
+    const action = actions.slice(actions.indexOf("export const markGrantSent"), actions.indexOf("export const previewGrantImport"));
+    expect(action).toContain("settleGrantForOwner(");
+
+    // The claim + complete grant work lives in the shared helper (also used by
+    // the HCB grants import), so assert it there rather than inside the form.
+    const helper = actions.slice(actions.indexOf("async function settleGrantForOwner"), actions.indexOf("export const markGrantSent"));
+    expect(helper).toContain("claimOrderWithFunding");
+    expect(helper).toContain("reserveOnly: true");
+    expect(helper).toContain("completeGrant(");
+    expect(helper).toContain("orderIsGrant");
+  });
+
   test("the fulfillment page still gates on the fulfiller role", () => {
     expect(read("app/fulfillment/page.tsx")).toContain('requirePage("fulfiller")');
   });
 
-  test("claimOrder keeps self-dealing protection, notification and audit logging", () => {
-    const body = actions.slice(actions.indexOf("export const claimOrder"), actions.indexOf("export const flagOrderOverBudget"));
-    expect(body).toContain("isOwnOrder");
-    expect(body).toContain('"order_claimed"');
-    expect(body).toContain('title: "Order placed!');
-    expect(body).toContain("claimOrderWithFunding");
-  });
+  test("claimOrder reserves without purchase; the item is fulfilled in one later step", () => {
+    const claim = actions.slice(actions.indexOf("export const claimOrder"), actions.indexOf("export const flagOrderOverBudget"));
+    expect(claim).toContain("isOwnOrder");
+    expect(claim).toContain('"order_reserved"');
+    expect(claim).toContain("claimOrderWithFunding");
+    expect(claim).toContain("reserveOnly: true");
+    expect(claim).not.toContain('title: "Order placed!');
+    expect(claim).not.toContain('status: "ordered"');
 
-  test("markOrderCredited still requires an HCB link and refreshes the commitment amount", () => {
-    const body = actions.slice(actions.indexOf("export const markOrderCredited"), actions.indexOf("export const shipOrder"));
-    expect(body).toContain("!hcbLink");
-    expect(body).toContain("isSafeUrl(hcbLink)");
-    expect(body).toContain("refreshCommitmentAmount");
+    const fulfilled = actions.slice(actions.indexOf("export const fulfillOrder"), actions.indexOf("export const sendGrant"));
+    expect(fulfilled).toContain("!hcbLink");
+    expect(fulfilled).toContain("isSafeUrl(hcbLink)");
+    expect(fulfilled).toContain("refreshCommitmentAmount");
+    expect(fulfilled).toContain("settleItemFulfillment(");
+    expect(fulfilled).toContain("isOwnOrder(");
   });
 
   test("the eligibility modules export no server actions and never mutate Airtable", () => {
@@ -552,7 +618,7 @@ describe("authorization and existing actions", () => {
     const dir = join(root, "lib/eligibility");
     for (const f of readdirSync(dir).filter((x) => x.endsWith(".ts") && !x.endsWith(".test.ts"))) {
       const src = readFileSync(join(dir, f), "utf8");
-      expect(src).not.toMatch(/cancel_shop_order|cancel_claimed_shop_order|markOrderCredited|shipOrder|markOrderDone/);
+      expect(src).not.toMatch(/cancel_shop_order|cancel_claimed_shop_order|fulfillOrder|settleItemFulfillment/);
     }
   });
 });

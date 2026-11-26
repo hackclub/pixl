@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
 import { requirePage, requireGuidelinesAck } from "@/lib/guard";
 import { canSeeBuilderPII } from "@/lib/reviewAccess";
-import { getHideReviewers } from "@/lib/liveModeServer";
-import { reviewerName } from "@/lib/liveMode";
+import { staffName } from "@/lib/staffName";
 import { listReviewAudits } from "@/lib/db";
 import { Badge, Card, CardHeader, EmptyRow, Muted, Table, TextLink, formatDateTime, type Tone } from "@/app/_ui/ui";
 
@@ -26,12 +25,12 @@ const VERDICT_BADGE: Record<string, { label: string; tone: Tone }> = {
   needs_changes: { label: "sent back", tone: "danger" },
   banned: { label: "banned", tone: "danger" },
   first_pass_banned: { label: "ban proposed", tone: "danger" },
+  first_pass_removed: { label: "1st pass removed", tone: "warning" },
 };
 
 export default async function ReviewLogPage() {
   const access = await requirePage("reviewer");
   await requireGuidelinesAck(access);
-  const hideReviewers = await getHideReviewers();
   if (!access.isOwner) redirect("/review");
   // Legal names only for owners/final reviewers.
   const log = await listReviewAudits(undefined, undefined, { realNames: canSeeBuilderPII(access) });
@@ -48,9 +47,8 @@ export default async function ReviewLogPage() {
         <Table headers={["Verdict", "Reviewer", "Project", "Checks", "When"]}>
           {log.map((r) => {
             const badge = VERDICT_BADGE[r.verdict] ?? { label: r.verdict, tone: "danger" as const };
-            const reviewer = reviewerName(r.reviewer, access.session.slackId, hideReviewers);
-            // No link while the name is masked: the URL would give it away.
-            const reviewerId = reviewer === "Reviewer" ? null : reviewerPlayerId(reviewerIds, r.reviewer);
+            const reviewer = staffName(r.reviewer);
+            const reviewerId = reviewerPlayerId(reviewerIds, r.reviewer);
             return (
               <tr key={r.id} className="align-top">
                 <td>

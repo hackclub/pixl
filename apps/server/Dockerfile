@@ -5,7 +5,7 @@
 # what `bun run start` does (node dist/index.js) and what packages/config's
 # generated .js entry exists for.
 
-FROM oven/bun:1.3.13 AS build
+FROM oven/bun:1.4.2 AS build
 WORKDIR /app
 
 COPY package.json bun.lock ./

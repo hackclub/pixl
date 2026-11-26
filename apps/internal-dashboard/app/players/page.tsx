@@ -1,7 +1,5 @@
 import { Suspense } from "react";
 import { requirePage } from "@/lib/guard";
-import { getLiveMode } from "@/lib/liveModeServer";
-import { liveName } from "@/lib/liveMode";
 import { listPlayers } from "@/lib/db";
 import { slackHandles } from "@/lib/slack";
 import { massPlayerAction, syncSlackAvatars } from "@/app/actions";
@@ -32,15 +30,15 @@ const PER = 25;
 
 type Player = Awaited<ReturnType<typeof listPlayers>>[number];
 
-function playerName(live: boolean, p: Player, handle?: string | null): string {
-  return liveName(live, p, p.real_name || handle || p.display_name || "Unknown");
+function playerName(p: Player, handle?: string | null): string {
+  return p.real_name || handle || p.display_name || "Unknown";
 }
 
 // Slack handles stream in after the table renders, so a slow Slack never
 // holds the page.
 async function PlayerName({ p, handles }: { p: Player; handles: Promise<Map<string, string>> }) {
   const map = await handles;
-  return <>{playerName(false, p, p.slack_id ? map.get(p.slack_id) : null)}</>;
+  return <>{playerName(p, p.slack_id ? map.get(p.slack_id) : null)}</>;
 }
 
 export default async function PlayersPage({
@@ -49,7 +47,6 @@ export default async function PlayersPage({
   searchParams: Promise<{ q?: string; page?: string; done?: string; error?: string }>;
 }) {
   const access = await requirePage("owner");
-  const live = await getLiveMode();
   const { q, page, done, error } = await searchParams;
   const all = await listPlayers(q);
 
@@ -58,8 +55,7 @@ export default async function PlayersPage({
   const cur = Math.min(Math.max(parseInt(page ?? "1", 10) || 1, 1), pages);
   const start = (cur - 1) * PER;
   const players = all.slice(start, start + PER);
-  // Live mode never shows real names or Slack identities, so skip the lookup.
-  const handles = live ? Promise.resolve(new Map<string, string>()) : slackHandles(players.map((p) => p.slack_id));
+  const handles = slackHandles(players.map((p) => p.slack_id));
   const qp = (n: number) => `/players?page=${n}${q ? `&q=${encodeURIComponent(q)}` : ""}`;
 
   const canWarn = access.isOwner;
@@ -127,23 +123,17 @@ export default async function PlayersPage({
               {players.map((p) => (
                 <tr key={p.id}>
                   <td className="w-8">
-                    <RowSelect id={p.id} label={`Select ${liveName(live, p, p.real_name || p.display_name || p.id)}`} />
+                    <RowSelect id={p.id} label={`Select ${p.real_name || p.display_name || p.id}`} />
                   </td>
                   <td>
                     <TextLink href={`/players/${p.id}`} className="font-bold">
-                      {live ? (
-                        playerName(true, p)
-                      ) : (
-                        <Suspense fallback={playerName(false, p)}>
-                          <PlayerName p={p} handles={handles} />
-                        </Suspense>
-                      )}
+                      <Suspense fallback={playerName(p)}>
+                        <PlayerName p={p} handles={handles} />
+                      </Suspense>
                     </TextLink>
-                    {!live && (
-                      <div className="text-xs hc-muted">
-                        <Mono>{p.slack_id ?? "no Slack id"}</Mono> · {p.oauth_provider}
-                      </div>
-                    )}
+                    <div className="text-xs hc-muted">
+                      <Mono>{p.slack_id ?? "no Slack id"}</Mono> · {p.oauth_provider}
+                    </div>
                   </td>
                   <td className="tabular-nums">{p.projectCount}</td>
                   <td className="tabular-nums">

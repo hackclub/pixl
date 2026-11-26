@@ -27,8 +27,8 @@ function pick(items: [Gate, NavItem][]): NavItem[] {
 }
 
 // Role-filtered nav. Each page still re-checks with requirePage(); this only
-// decides what's worth showing. Live mode hides the PII-heavy pages.
-export function buildNav(access: AdminAccess, live: boolean): NavModel {
+// decides what's worth showing.
+export function buildNav(access: AdminAccess): NavModel {
   const owner = access.isOwner;
   const reviewer = owner || access.isReviewer;
 
@@ -42,7 +42,7 @@ export function buildNav(access: AdminAccess, live: boolean): NavModel {
     [reviewer, { href: "/projects", label: "Projects", glyph: "rep" }],
     [owner, { href: "/players", label: "Players", glyph: "people-3" }],
     [!owner && access.isHelper, { href: "/tickets", label: "Tickets", glyph: "support" }],
-    [!owner && !live && access.isFulfiller, { href: "/fulfillment", label: "Fulfillment", glyph: "package" }],
+    [!owner && access.isFulfiller, { href: "/fulfillment", label: "Fulfillment", glyph: "package" }],
   ]);
 
   const all: NavGroup[] = [
@@ -51,19 +51,20 @@ export function buildNav(access: AdminAccess, live: boolean): NavModel {
       glyph: "list",
       items: pick([
         [owner && access.isHelper, { href: "/tickets", label: "Tickets", glyph: "support" }],
-        [owner && !live && access.isFulfiller, { href: "/fulfillment", label: "Fulfillment", glyph: "package" }],
+        [owner && access.isFulfiller, { href: "/fulfillment", label: "Fulfillment", glyph: "package" }],
       ]),
     },
     {
       label: "Economy",
       glyph: "bank",
       items: pick([
-        [!live && owner, { href: "/pixels", label: "Pixels", glyph: "bank" }],
+        [owner, { href: "/pixels", label: "Pixels", glyph: "bank" }],
+        [owner, { href: "/budget", label: "Budget", glyph: "payment" }],
         [owner, { href: "/shop", label: "Shop", glyph: "bag" }],
         [owner, { href: "/shop-detail", label: "Shop detail", glyph: "search" }],
         [owner, { href: "/events", label: "Events", glyph: "explore" }],
         [owner, { href: "/operations", label: "Operations", glyph: "flag" }],
-        [!live && owner, { href: "/referrals", label: "Referrals", glyph: "member-add" }],
+        [owner, { href: "/referrals", label: "Referrals", glyph: "member-add" }],
       ]),
     },
     {
@@ -74,15 +75,16 @@ export function buildNav(access: AdminAccess, live: boolean): NavModel {
         [owner, { href: "/story", label: "Story", glyph: "docs" }],
         [owner, { href: "/community-goals", label: "Community goals", glyph: "rep" }],
         [owner, { href: "/show-n-tell", label: "Show & Tell", glyph: "photo" }],
+        [owner, { href: "/nps", label: "NPS", glyph: "message" }],
       ]),
     },
     {
       label: "Moderation",
       glyph: "private",
       items: pick([
-        [!live && owner, { href: "/reports", label: "Reports", glyph: "message-exclamation" }],
-        [!live && owner, { href: "/violations", label: "Violations", glyph: "message" }],
-        [!live && owner, { href: "/bans", label: "Bans", glyph: "private" }],
+        [owner, { href: "/reports", label: "Reports", glyph: "message-exclamation" }],
+        [owner, { href: "/violations", label: "Violations", glyph: "message" }],
+        [owner, { href: "/bans", label: "Bans", glyph: "private" }],
         [owner, { href: "/ideas", label: "Ideas", glyph: "idea" }],
       ]),
     },

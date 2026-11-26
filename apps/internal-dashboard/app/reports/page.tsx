@@ -1,6 +1,4 @@
 import { requirePage } from "@/lib/guard";
-import { getLiveMode } from "@/lib/liveModeServer";
-import { LiveBlocked } from "@/app/_components/LiveBlocked";
 import { listReports } from "@/lib/db";
 import {
   Badge,
@@ -24,7 +22,6 @@ export default async function ReportsPage({
   searchParams: Promise<{ status?: string; verror?: string }>;
 }) {
   await requirePage("owner");
-  if (await getLiveMode()) return <LiveBlocked what="Reports" />;
   const { status, verror } = await searchParams;
   const all = await listReports(500);
 

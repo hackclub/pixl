@@ -1,7 +1,5 @@
 import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/guard";
-import { getLiveMode } from "@/lib/liveModeServer";
-import { LiveBlocked } from "@/app/_components/LiveBlocked";
 import { getShopOrder, buyerDetailsByUserId } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { canViewLabel } from "@/lib/fulfillmentAccess";
@@ -20,7 +18,6 @@ export default async function ShippingLabelPage({
   params: Promise<{ id: string }>;
 }) {
   const access = await requirePage("fulfiller");
-  if (await getLiveMode()) return <LiveBlocked what="Shipping labels" />;
   const { id } = await params;
   const orderId = Number(id);
   if (!Number.isSafeInteger(orderId) || orderId <= 0) notFound();

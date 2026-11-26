@@ -1,6 +1,5 @@
 import { requirePage, requireGuidelinesAck } from "@/lib/guard";
-import { getHideReviewers } from "@/lib/liveModeServer";
-import { reviewerName } from "@/lib/liveMode";
+import { staffName } from "@/lib/staffName";
 import { db, payoutTotalsBySlackId, type ReviewAuditRow } from "@/lib/db";
 import { ReviewVerdictChart, type VerdictWindow } from "@/app/_components/ReviewVerdictChart";
 import { WEEKLY_REVIEW_MINIMUM, countReviewsSince, reviewWeekStartMs, slackIdFromLabel, summarizeWindow } from "@/lib/reviewStats";
@@ -43,11 +42,6 @@ export default async function ReviewStatsPage({
   await requireGuidelinesAck(access);
   const { error: flashError, ok: flashOk } = await searchParams;
   const grant = await getReviewGrantView(access.session.slackId);
-  // While live, other reviewers show as "Reviewer" (the Show reviewer names
-  // button reveals them); masked here on the server so the real names never
-  // reach the chart's client props.
-  const hideReviewers = await getHideReviewers();
-  const rn = (label: string) => reviewerName(label, access.session.slackId, hideReviewers);
   const [{ data, error }, payoutTotals] = await Promise.all([
     db.from("review_audits").select("*").order("created_at", { ascending: false }).limit(2000),
     payoutTotalsBySlackId(),
@@ -74,13 +68,13 @@ export default async function ReviewStatsPage({
   const verdictWindows: VerdictWindow[] = windowDefs.map((w) => ({
     key: w.key,
     label: w.label,
-    ...summarizeWindow(audits, w.since, rn),
+    ...summarizeWindow(audits, w.since, staffName),
   }));
 
   // Owners can open a reviewer's own Pixl account (the players pages are
-  // owner-only). Never while the name is masked: the URL would give it away.
+  // owner-only).
   const reviewerIds = access.isOwner ? await reviewerPlayerIds(audits.map((a) => a.reviewer)) : new Map<string, string>();
-  const reviewerLink = (label: string) => (rn(label) === "Reviewer" ? null : reviewerPlayerId(reviewerIds, label));
+  const reviewerLink = (label: string) => reviewerPlayerId(reviewerIds, label);
 
   const byReviewer = new Map<string, ReviewAuditRow[]>();
   for (const a of audits) {
@@ -221,15 +215,15 @@ export default async function ReviewStatsPage({
           paid out, at whatever rate was in effect at the time.
         </p>
         <Table headers={headers}>
-          {stats.map((s, i) => {
+          {stats.map((s) => {
             const rushed = s.avgSeconds > 0 && s.avgSeconds < 60;
             return (
-              <tr key={hideReviewers ? i : s.reviewer}>
+              <tr key={s.reviewer}>
                 <td className="font-bold break-words">
                   {reviewerLink(s.reviewer) ? (
-                    <TextLink href={`/players/${reviewerLink(s.reviewer)}`}>{rn(s.reviewer)}</TextLink>
+                    <TextLink href={`/players/${reviewerLink(s.reviewer)}`}>{staffName(s.reviewer)}</TextLink>
                   ) : (
-                    rn(s.reviewer)
+                    staffName(s.reviewer)
                   )}
                 </td>
                 <td className="hc-mono">{s.total}</td>

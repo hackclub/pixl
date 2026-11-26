@@ -230,6 +230,7 @@ class Builder<T = any> implements PromiseLike<PgResult<T[]>> {
   private ignoreDuplicates = false;
   private returning = false;
   private wantCount = false;
+  private headOnly = false;
   private rowMode: "many" | "one" | "maybeOne" = "many";
 
   constructor(private table: string) {}
@@ -238,6 +239,7 @@ class Builder<T = any> implements PromiseLike<PgResult<T[]>> {
     if (this.mode === "select") this.columns = columns;
     else this.returning = true;
     if (opts?.count) this.wantCount = true;
+    if (opts?.head) this.headOnly = true;
     return this;
   }
 
@@ -439,18 +441,23 @@ class Builder<T = any> implements PromiseLike<PgResult<T[]>> {
 
   async run(): Promise<PgResult<any>> {
     try {
-      const { text, params } = this.build();
-      const rows = (await sql.unsafe(text, params as never[])) as unknown as Record<string, unknown>[];
-
-      let count: number | null = null;
-      if (this.wantCount && this.mode === "select") {
+      const countOnly = this.headOnly && this.wantCount && this.mode === "select";
+      const countQuery = async (): Promise<number | null> => {
+        if (!this.wantCount || this.mode !== "select") return null;
         const cp: unknown[] = [];
         const c = (await sql.unsafe(
           `select count(*)::int as n from ${ident(this.table)}${this.where(cp)}`,
           cp as never[],
         )) as unknown as { n: number }[];
-        count = c[0]?.n ?? 0;
-      }
+        return c[0]?.n ?? 0;
+      };
+      // Skip rows on head
+      const rowsQuery = async () => {
+        if (countOnly) return [] as Record<string, unknown>[];
+        const { text, params } = this.build();
+        return (await sql.unsafe(text, params as never[])) as unknown as Record<string, unknown>[];
+      };
+      const [rows, count] = await Promise.all([rowsQuery(), countQuery()]);
 
       if (this.rowMode === "one") {
         if (rows.length !== 1) {

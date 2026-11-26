@@ -43,10 +43,8 @@ export function Gate({ next, error }: { next: string; error?: string | null }) {
           <a
             className={cn(
               "inline-block border-2 border-r-8 border-b-8 border-black bg-black px-[36px] py-[14px]",
-              "font-pixel text-[32px] leading-none text-[#f5eed2] hover:text-gold-soft",
-              "transition-[translate,border-bottom-width] duration-150",
-              "hover:-translate-x-[4px] hover:-translate-y-[4px] hover:border-b-[12px]",
-              "active:translate-x-0 active:translate-y-[2px] active:border-b-4",
+              "font-pixel text-[32px] leading-none text-[#f5eed2] hover:bg-[#2b2b33] hover:text-[#f5eed2]",
+              "transition-[background-color] duration-150",
               "[@media(max-height:620px)]:px-[26px] [@media(max-height:620px)]:py-[12px]",
               "[@media(max-height:620px)]:text-[24px]",
             )}

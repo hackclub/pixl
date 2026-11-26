@@ -93,6 +93,33 @@ describe("fetchCommits (github, unaffected by the SSRF guard - fixed api.github.
     expect(r).toEqual({ repo: null, commits: [], error: null });
   });
 
+  test("cached commits do not share project-specific tracking or stats", async () => {
+    const url = "https://github.com/cache-isolation-test/unique-repo";
+    const calls = routeFetch({
+      "https://api.github.com/repos/cache-isolation-test/unique-repo/commits?per_page=100": {
+        json: [{
+          sha: "abcd1234",
+          commit: { message: "initial", author: { name: "Maker", email: "maker@example.com", date: "2026-09-01T10:00:00Z" } },
+          html_url: "https://github.com/cache-isolation-test/unique-repo/commit/abcd1234",
+        }],
+      },
+    });
+
+    const first = await fetchCommits(url);
+    expect(first.error).toBeNull();
+    first.commits[0].tracked = 42;
+    first.commits[0].additions = 1000;
+
+    const second = await fetchCommits(url);
+    expect(second.commits[0].tracked).toBeUndefined();
+    expect(second.commits[0].additions).toBeUndefined();
+    second.commits[0].tracked = 99;
+
+    const third = await fetchCommits(url);
+    expect(third.commits[0].tracked).toBeUndefined();
+    expect(calls).toHaveLength(1);
+  });
+
   test("a non-repo url is rejected before any request", async () => {
     const calls = routeFetch({});
     const r = await fetchCommits("javascript:alert(1)");

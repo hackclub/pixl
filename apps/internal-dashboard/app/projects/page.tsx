@@ -1,6 +1,5 @@
 import { Suspense } from "react";
 import { requirePage, can } from "@/lib/guard";
-import { getLiveMode } from "@/lib/liveModeServer";
 import { listProjects, collaboratorsByProject, db } from "@/lib/db";
 import { sendMissingToAirtable } from "@/app/actions";
 import { builderNameFor, redactBuilderUser } from "@/lib/reviewAccess";
@@ -52,7 +51,6 @@ export default async function ProjectsPage({
   searchParams: Promise<{ q?: string; view?: string; ok?: string; error?: string }>;
 }) {
   const access = await requirePage("reviewer");
-  const live = await getLiveMode();
   // Admins see archived projects mixed into the main list; plain reviewers
   // only see active ones.
   const isAdmin = can(access, "owner");
@@ -66,11 +64,7 @@ export default async function ProjectsPage({
       includeArchived: !archived && isAdmin,
     })
   ).map((p) => ({ ...p, users: redactBuilderUser(access, p.users) }));
-  // Live mode shows no player names at all here (not even in-game ones) and
-  // no Hackatime projects, so the Slack handle lookup is skipped too.
-  const handles = live
-    ? Promise.resolve(new Map<string, string>())
-    : slackHandles(projects.map((p) => p.users?.slack_id));
+  const handles = slackHandles(projects.map((p) => p.users?.slack_id));
   const collaborators = await collaboratorsByProject(projects.map((p) => p.id));
   // Approved projects that never got an Airtable row (owners only).
   let missingAirtable = 0;
@@ -84,7 +78,7 @@ export default async function ProjectsPage({
     missingAirtable = (approved ?? []).filter((r: { airtable_record_id: string | null }) => !r.airtable_record_id).length;
   }
 
-  const headers = ["Project", "Status", "Owner", "Links", ...(live ? [] : ["Hackatime"]), "Created"];
+  const headers = ["Project", "Status", "Owner", "Links", "Hackatime", "Created"];
 
   return (
     <div>
@@ -151,16 +145,12 @@ export default async function ProjectsPage({
                 <td>
                   {p.users ? (
                     <TextLink href={`/players/${p.user_id}`} className="font-bold">
-                      {live ? (
-                        "Builder"
-                      ) : (
-                        <Suspense fallback={builderNameFor(access, p.users)}>
-                          <OwnerName access={access} user={p.users} handles={handles} />
-                        </Suspense>
-                      )}
+                      <Suspense fallback={builderNameFor(access, p.users)}>
+                        <OwnerName access={access} user={p.users} handles={handles} />
+                      </Suspense>
                     </TextLink>
                   ) : (
-                    <Muted>{live ? "Builder" : p.user_id}</Muted>
+                    <Muted>{p.user_id}</Muted>
                   )}
                   {collabCount > 0 && (
                     <div className="text-xs hc-muted">
@@ -183,11 +173,9 @@ export default async function ProjectsPage({
                     {!isSafeUrl(p.repo_url) && !isSafeUrl(p.demo_url) && <Muted>-</Muted>}
                   </div>
                 </td>
-                {!live && (
-                  <td className="text-sm">
-                    {p.hackatime_projects?.length ? p.hackatime_projects.join(", ") : <Muted>-</Muted>}
-                  </td>
-                )}
+                <td className="text-sm">
+                  {p.hackatime_projects?.length ? p.hackatime_projects.join(", ") : <Muted>-</Muted>}
+                </td>
                 <td>
                   <Muted>
                     <Mono>{formatDate(p.created_at)}</Mono>

@@ -4,17 +4,19 @@ import { useEffect, useState, useTransition, type FormEvent, type ReactNode } fr
 import { AiTimePanel } from "@/app/_components/AiTimePanel";
 import { ReadmePanel } from "@/app/_components/ReadmePanel";
 import type { CommitResult } from "@/lib/commits";
-import type { HackatimeReport } from "@/lib/hackatime";
+import type { HackatimePersonReport } from "@/lib/hackatime";
 import type { FraudyAiCheck } from "@/lib/fraudy";
 import type { JournalRow, ReviewAuditRow } from "@/lib/db";
 import type { YswsShip } from "@/lib/ysws";
 import { CommitList } from "@/app/_components/CommitList";
 import { renderMarkdown } from "@/lib/markdown";
 import { HackatimePanel } from "@/app/_components/HackatimePanel";
+import { FileTimeCard } from "@/app/_components/FileTimeCard";
 import { setJournalHours } from "@/app/actions";
-import { useLiveMode, useReviewerName } from "@/app/_components/LiveMode";
+import { staffName } from "@/lib/staffName";
 import { parseAuditNote, type AuditHeader } from "@/lib/auditNote";
 import { isSafeUrl } from "@/lib/safeUrl";
+import { reviewThreadUrl } from "@/lib/reviewThread";
 import { Badge, Button, Callout, Card, CountBadge, EmptyState, formatDate, formatDateTime, Input, Mono, Muted, Textarea, TextLink, type Tone } from "@/app/_ui/ui";
 import { actionErrorMessage } from "@/app/_ui/actionError";
 
@@ -166,8 +168,9 @@ export function ReviewDetailTabs({
   contributorNames,
   reviewAudits,
   yswsShips,
+  yswsArchiveStatus,
   yswsImport,
-  hackatime,
+  hackatimeReports,
   repoUrl,
   projectKind,
   usedAi,
@@ -183,22 +186,22 @@ export function ReviewDetailTabs({
   contributorNames: Record<string, string>;
   reviewAudits: ReviewAuditRow[];
   yswsShips: YswsShip[];
+  yswsArchiveStatus: "ready" | "loading" | "unavailable";
   yswsImport: YswsImport | null;
-  hackatime: HackatimeReport | null;
+  /** One report per contributor with linked Hackatime projects. */
+  hackatimeReports: HackatimePersonReport[];
   repoUrl: string | null;
   projectKind: string;
   usedAi: boolean;
   aiNotes: string | null;
-  /** Hackatime project name -> Fraudy's check-ai result. */
+  /** fraudyCheckKey(hackatime user id, project) -> Fraudy's check-ai result. */
   fraudyChecks: Record<string, FraudyAiCheck | null>;
   /** Owner or second-pass reviewer only - hidden from first-pass-only reviewers. */
   canViewAiTime: boolean;
 }) {
-  // Live mode keeps each past review's verdict and hours but drops its
-  // internal audit-note sections (technical features, deflation reason, ...).
-  const live = useLiveMode();
-  const reviewerName = useReviewerName();
   const [tab, setTab] = useState<TabKey>("commits");
+  const okReports = hackatimeReports.filter((r) => r.report.ok);
+  const linkedProjects = okReports.flatMap((r) => r.report.projects.filter((p) => p.linked));
   const [commitsState, setCommitsState] = useState(commits);
 
   useEffect(() => {
@@ -218,12 +221,12 @@ export function ReviewDetailTabs({
   // The page header links to #hackatime.
   useEffect(() => {
     const open = () => {
-      if (location.hash === "#hackatime" && hackatime) setTab("hackatime");
+      if (location.hash === "#hackatime" && okReports.length > 0) setTab("hackatime");
     };
     open();
     window.addEventListener("hashchange", open);
     return () => window.removeEventListener("hashchange", open);
-  }, [hackatime]);
+  }, [okReports.length]);
 
   const yswsMatches = yswsShips.filter((s) => s.urlMatch);
   const multipleContributors = Object.keys(contributorNames).length > 1;
@@ -236,8 +239,8 @@ export function ReviewDetailTabs({
     },
     ...(repoUrl ? [{ key: "readme" as const, label: "README" }] : []),
     { key: "journals", label: "Journals", count: journals.length },
-    ...(hackatime?.ok
-      ? [{ key: "hackatime" as const, label: "Hackatime", count: hackatime.projects.filter((p) => p.linked).length }]
+    ...(okReports.length > 0
+      ? [{ key: "hackatime" as const, label: "Hackatime", count: linkedProjects.length }]
       : []),
     { key: "reviews", label: "Past reviews", count: reviewAudits.length },
     { key: "ysws", label: "Other YSWS", count: yswsMatches.length + (yswsImport ? 1 : 0) },
@@ -249,7 +252,7 @@ export function ReviewDetailTabs({
   // it against each other ship's approval date (the archive has no start date,
   // so overlap can't be proven outright).
   const trackedRange = (() => {
-    const linked = (hackatime?.projects ?? []).filter((p) => p.linked);
+    const linked = linkedProjects;
     const firsts = linked.map((p) => p.firstActivity).filter((n): n is number => n != null);
     const lasts = linked.map((p) => p.lastActivity).filter((n): n is number => n != null);
     if (firsts.length === 0 || lasts.length === 0) return null;
@@ -301,9 +304,19 @@ export function ReviewDetailTabs({
         <ReadmePanel projectId={projectId} active={tab === "readme"} />
       </div>
 
-      {hackatime && (
+      {hackatimeReports.length > 0 && (
         <div role="tabpanel" hidden={tab !== "hackatime"}>
-          <HackatimePanel report={hackatime} />
+          {hackatimeReports.map(({ userId, report }) => (
+            <div key={userId}>
+              {multipleContributors && (
+                <p className="hc-eyebrow px-4 pt-4">{contributorNames[userId] ?? "Contributor"}</p>
+              )}
+              <HackatimePanel report={report} />
+            </div>
+          ))}
+          <div className="border-t border-[var(--border)]">
+            <FileTimeCard projectId={projectId} hasHackatime embedded />
+          </div>
         </div>
       )}
 
@@ -364,7 +377,15 @@ export function ReviewDetailTabs({
             </Callout>
           </div>
         )}
-        {yswsMatches.length === 0 ? (
+        {yswsArchiveStatus !== "ready" ? (
+          <div className="p-4">
+            <Callout tone="warning" icon="important">
+              {yswsArchiveStatus === "loading"
+                ? "Other YSWS evidence is still loading. Refresh this page to check for matching ships before making a final decision."
+                : "Other YSWS evidence is unavailable. Do not treat this as a clean duplicate check; try again later."}
+            </Callout>
+          </div>
+        ) : yswsMatches.length === 0 ? (
           <EmptyState title="No other YSWS ships" icon="checkmark">
             {yswsImport
               ? "The archive doesn't match this project's current repo or demo, so the links were edited since it was imported. The import record above still applies."
@@ -451,18 +472,19 @@ export function ReviewDetailTabs({
           <ul>
             {reviewAudits.map((v) => {
               const meta = VERDICT_LABEL[v.verdict] ?? { label: v.verdict.replaceAll("_", " "), tone: "neutral" as const };
-              const sections = v.audit_note && !live ? parseAuditNote(v.audit_note) : null;
+              const sections = v.audit_note ? parseAuditNote(v.audit_note) : null;
               const sectionKeys = sections
                 ? (Object.keys(SECTION_LABEL) as AuditHeader[]).filter((h) => sections[h]?.trim())
                 : [];
               const hasMore = sectionKeys.length > 0 || !!v.note?.trim();
+              const threadUrl = reviewThreadUrl(v.slack_thread_ts);
               return (
                 <li key={v.id} className="border-b border-[var(--border)] p-3 last:border-b-0">
                   <details className="hc-details">
                     <summary>
                       <Badge tone={meta.tone}>{meta.label}</Badge>
                       <span className="min-w-0 flex-1">
-                        {reviewerName(v.reviewer)}
+                        {staffName(v.reviewer)}
                         <Muted>
                           {v.approved_hours !== null && v.approved_hours !== v.claimed_hours
                             ? ` · ${v.claimed_hours}h → ${v.approved_hours}h credited`
@@ -478,7 +500,14 @@ export function ReviewDetailTabs({
                           {sections[h]}
                         </Section>
                       ))}
-                      {!hasMore && <p className="hc-caption text-sm">No additional notes.</p>}
+                      {threadUrl && (
+                        <div>
+                          <TextLink href={threadUrl} external>
+                            Open the thread in #pixl-checkpoint
+                          </TextLink>
+                        </div>
+                      )}
+                      {!hasMore && !threadUrl && <p className="hc-caption text-sm">No additional notes.</p>}
                     </div>
                   </details>
                 </li>
@@ -492,7 +521,8 @@ export function ReviewDetailTabs({
         <div role="tabpanel" hidden={tab !== "ai_time"}>
           <AiTimePanel
             commits={commitsState.commits}
-            hackatime={hackatime}
+            hackatimeReports={hackatimeReports}
+            contributorNames={multipleContributors ? contributorNames : null}
             usedAi={usedAi}
             aiNotes={aiNotes}
             fraudyChecks={fraudyChecks}

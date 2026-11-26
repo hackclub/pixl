@@ -32,8 +32,8 @@ export function UpvoteButton({ projectId, count, voted }: { projectId: number; c
         className={cn(
           voteBase,
           "cursor-px disabled:cursor-default",
-          state.hasUpvoted && "bg-[#ff8c37] [box-shadow:inset_0_calc(-2*var(--u))_#d96f1f]",
-          "enabled:hover:bg-[#ece0bd] enabled:hover:[box-shadow:inset_0_calc(-2*var(--u))_#dccb9c]",
+          "enabled:hover:bg-panel-deep",
+          state.hasUpvoted && "bg-gold text-btn-ink enabled:hover:bg-gold-soft",
         )}
         onClick={toggle}
         disabled={pending}
@@ -46,10 +46,7 @@ export function UpvoteButton({ projectId, count, voted }: { projectId: number; c
         <span>{state.upvotes}</span>
       </button>
       {err ? (
-        <span role="alert" className={cn(
-            "overflow-hidden font-sans text-[length:calc(9*var(--u))] leading-[1.2] font-semibold text-[#a3261a]",
-            "[--h:34] [--w:130] [--x:10] [--y:206]",
-          )}>
+        <span role="alert" className="text-[12.5px] leading-[1.3] font-semibold text-bad">
           {err}
         </span>
       ) : null}

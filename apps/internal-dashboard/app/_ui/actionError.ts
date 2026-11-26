@@ -16,7 +16,8 @@ export function isStaleDeployError(e: unknown): boolean {
 }
 const NETWORK = /failed to fetch|networkerror|load failed|network request failed|fetch failed/i;
 // Next strips thrown messages from server actions in production builds.
-const REDACTED = /omitted in production|server components render/i;
+// React's minified form of the same message is "Minified React error #441".
+const REDACTED = /omitted in production|server components render|minified react error #441/i;
 
 export function actionErrorMessage(e: unknown, what: string): string {
   unstable_rethrow(e);

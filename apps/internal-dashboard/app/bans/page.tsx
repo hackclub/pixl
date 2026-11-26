@@ -1,7 +1,4 @@
 import { requirePage, can } from "@/lib/guard";
-import { getLiveMode } from "@/lib/liveModeServer";
-import { LiveBlocked } from "@/app/_components/LiveBlocked";
-import { liveName } from "@/lib/liveMode";
 import { listBans, listBanLog, listBanProposals, banIsActive } from "@/lib/db";
 import { LiftBanForm } from "@/app/_components/Moderate";
 import { confirmBanProposal, rejectBanProposal } from "@/app/actions";
@@ -33,8 +30,6 @@ export default async function BansPage({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const access = await requirePage("owner");
-  const live = await getLiveMode();
-  if (live) return <LiveBlocked what="Bans" reason="This page is internal moderation data" />;
   const canConfirm = can(access, "owner");
   const { tab } = await searchParams;
   const active = tab === "logs" ? "logs" : tab === "proposed" ? "proposed" : "bans";
@@ -71,7 +66,7 @@ export default async function BansPage({
                 <tr key={b.id}>
                   <td>
                     <TextLink href={`/players/${b.user_id}`} className="font-bold">
-                      {liveName(live, b.users, b.users?.real_name || b.users?.display_name || b.user_id)}
+                      {b.users?.real_name || b.users?.display_name || b.user_id}
                     </TextLink>
                   </td>
                   <td className="max-w-64">
@@ -104,7 +99,7 @@ export default async function BansPage({
         {active === "proposed" && (
           <Table headers={["Player", "Reason", "Length", "Proposed", ""]}>
             {proposals.map((p) => {
-              const name = liveName(live, p.users, p.users?.real_name || p.users?.display_name || p.user_id);
+              const name = p.users?.real_name || p.users?.display_name || p.user_id;
               return (
                 <tr key={p.id}>
                   <td>

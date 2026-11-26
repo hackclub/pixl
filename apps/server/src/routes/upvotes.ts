@@ -70,12 +70,11 @@ router.post("/api/projects/:id/upvote", validate({ query: v.noQuery, params: par
     return res.status(400).json({ ok: false, error: "own_project" });
 
   try {
-    // A lock scoped to this (project, voter) pair serializes the
-    // insert-then-grant sequence below against a double-click racing itself
-    // (the insert is already idempotent via ON CONFLICT, but this keeps the
-    // count read and the collectible grant consistent with it).
+    // The collectible threshold counts votes across *all* the owner's
+    // projects. Lock by owner to prevent two simultaneous votes on different
+    // projects from both missing the threshold.
     const result = await withLock(
-      `project_vote:${id}:${session.userId}`,
+      `project_collectibles:${project.user_id}`,
       async (tx) => {
         await tx`insert into project_upvotes (project_id, voter_id) values (${id}, ${session.userId}) on conflict do nothing`;
         const [{ n }] =
@@ -102,8 +101,10 @@ router.delete("/api/projects/:id/upvote", validate({ query: v.noQuery, params: p
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ ok: false, error: "bad_id" });
 
+  const { data: project } = await db.from("projects").select("user_id").eq("id", id).maybeSingle();
+  if (!project) return res.status(404).json({ ok: false, error: "not_found" });
   try {
-    const result = await withLock(`project_vote:${id}:${session.userId}`, async (tx) => {
+    const result = await withLock(`project_collectibles:${project.user_id}`, async (tx) => {
       await tx`delete from project_upvotes where project_id = ${id} and voter_id = ${session.userId}`;
       const [{ n }] =
         await tx`select count(*)::int as n from project_upvotes where project_id = ${id}`;

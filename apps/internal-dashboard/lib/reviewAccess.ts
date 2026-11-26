@@ -61,9 +61,10 @@ export type ProposedBanDecision =
 export function proposedBanDecision(
   viewer: ReviewViewer,
   verdict: string,
-  opts: { own: boolean; proposedBy: string; actor: string },
+  opts: { own: boolean; owner?: boolean; proposedBy: string; actor: string },
 ): ProposedBanDecision {
-  if (opts.own) return { kind: "deny", reason: "You can't decide on a project you own or collaborate on." };
+  if (opts.own && !opts.owner)
+    return { kind: "deny", reason: "You can't decide on a project you collaborate on." };
   if (!viewer.canSecondPass && !viewer.isOwner)
     return { kind: "deny", reason: "You don't have second-pass review access." };
   // By Slack id: the same person under a renamed display name is still the
@@ -179,4 +180,17 @@ export function builderDetailsView(
     country: raw.country || "-",
     address: isFinalStage ? raw.address || "-" : null,
   };
+}
+
+
+// Same visibility policy as the reviewer detail page: evidence endpoints and
+// search must not disclose out-of-queue projects or restricted review stages.
+export function canReadReviewEvidence(
+  viewer: { reviewQueues: ReviewQueueScope; canFraudReview: boolean },
+  project: { kind: string | null | undefined; status: string | null | undefined },
+): boolean {
+  if (!queueAllows(viewer.reviewQueues, project.kind)) return false;
+  if ((project.status === "fraud_review" || project.status === "second_review") && !viewer.canFraudReview)
+    return false;
+  return true;
 }

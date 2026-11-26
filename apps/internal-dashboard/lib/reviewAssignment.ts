@@ -11,14 +11,12 @@
 // - The clock starts when the maker re-ships: the assignee has 3 days to review
 //   it. After that the project goes back to the common queue and the held
 //   pixel is forfeited.
-// - A plain reviewer sees the whole queue but can only open the first page of
-//   it (owners are exempt), so nobody cherry-picks from the end.
+// - Every reviewer can open every project in the queue. The only lock is the
+//   reservation above: a project assigned to someone else, inside their window.
 
 export const ASSIGNMENT_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
 /** The assignee gets a DM this long after the maker re-ships. */
 export const ASSIGNMENT_REMIND_AFTER_MS = 24 * 60 * 60 * 1000;
-/** Rows per queue page, and so how many projects a plain reviewer can open. */
-export const QUEUE_OPEN_COUNT = 15;
 
 export interface AssignmentFields {
   status?: string | null;
@@ -89,49 +87,30 @@ export interface QueueRowLike extends AssignmentFields {
   hold_at?: string | null;
   own?: boolean;
   claimedBy?: string | null;
+  reviewing_by?: string | null;
 }
 
-// The ids a viewer may open. `rows` must be in the queue's own order (longest
-// wait first), never a viewer-chosen sort, or changing the sort would change
-// what is open. Owners can open everything. A plain reviewer gets the first
-// `count` projects they could actually review, plus anything assigned to them,
-// wherever it sits. A row that is held, their own, or being reviewed by someone
-// else can't be started on, so it doesn't take a slot, but it stays openable to
-// look at (as it always was). Only a project reserved for another reviewer, or
-// past the first page, is locked.
+// The ids a viewer may open. Everything in the queue, except a project reserved
+// for another reviewer (assigned to them and still inside their window). Owners
+// can open everything. Held, own and claimed rows stay openable to look at; the
+// review page itself decides whether the viewer may start on them.
 export function openableQueueIds(
   rows: readonly QueueRowLike[],
   viewerSlackId: string,
   isOwner: boolean,
   nowMs: number,
-  count: number = QUEUE_OPEN_COUNT,
 ): Set<number> {
-  if (isOwner) return new Set(rows.map((r) => Number(r.id)));
   const open = new Set<number>();
-  let free = 0;
   for (const r of rows) {
-    if (assigneeOf(r) === viewerSlackId && !isAssignmentOverdue(r, nowMs)) {
-      open.add(Number(r.id));
-      continue;
-    }
     if (lockedForViewer(r, viewerSlackId, isOwner, nowMs)) continue;
-    if (r.hold_at || r.own || r.claimedBy) {
-      open.add(Number(r.id));
-      continue;
-    }
-    if (free < count) {
-      open.add(Number(r.id));
-      free++;
-    }
+    open.add(Number(r.id));
   }
   return open;
 }
 
 // Why a queue row can't be opened, for the table to grey it out and say so.
 // Plain data: it crosses from the server page to the client table.
-export type QueueLock =
-  | { reason: "assigned"; assignee: string | null; until: string | null }
-  | { reason: "page" };
+export type QueueLock = { reason: "assigned"; assignee: string | null; until: string | null };
 
 export interface PayoutRowLike {
   verdict?: string | null;

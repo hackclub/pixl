@@ -82,6 +82,9 @@ export interface OrderInput {
   grantFaceUsd?: number | null;
   grantProjectId?: number | null;
   duplicateGrant?: boolean;
+  // The order was moved onto the normal item flow after an unfulfill, so it
+  // counts at its pixel budget/supplier cost, never at a grant face value.
+  itemFlow?: boolean;
 }
 
 export interface LedgerEntry {
@@ -219,7 +222,7 @@ export interface EligibilityResult {
 
 const fmt = (cents: number): string => `$${(cents / 100).toFixed(2)}`;
 
-const CLAIMED_STATES = new Set(["ordered", "credited", "shipped", "done"]);
+const CLAIMED_STATES = new Set(["claimed", "ordered", "credited", "shipped", "done"]);
 
 export const toCents = (usd: number): number => Math.round(usd * 100);
 export const fromCents = (cents: number): number => cents / 100;
@@ -228,13 +231,15 @@ const round1 = (n: number): number => Math.round(n * 10) / 10;
 export function orderAmount(order: OrderInput, policy: EligibilityPolicy, pixelValueUsd: number): OrderAmount {
   const qty = Math.max(1, Math.floor(order.quantity) || 1);
   const budgetCents = toCents(order.pricePx * pixelValueUsd);
-  const rule = faceValueRule(policy, order.itemName);
+  const rule = order.itemFlow === true ? null : faceValueRule(policy, order.itemName);
   const faceCents =
-    order.grantFaceUsd != null && order.grantFaceUsd > 0
-      ? toCents(order.grantFaceUsd)
-      : rule
-        ? toCents(rule.faceValueUsd) * qty
-        : null;
+    order.itemFlow === true
+      ? null
+      : order.grantFaceUsd != null && order.grantFaceUsd > 0
+        ? toCents(order.grantFaceUsd)
+        : rule
+          ? toCents(rule.faceValueUsd) * qty
+          : null;
   const actualCents = order.actualCostUsd != null && Number.isFinite(order.actualCostUsd) ? toCents(order.actualCostUsd) : null;
   if (order.status === "cancelled") {
     return { cents: 0, basis: "budget", budgetCents, faceCents, actualCents, pixels: order.pricePx };

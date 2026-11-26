@@ -40,6 +40,16 @@ export interface ThreadMessage {
   isBot: boolean;
 }
 
+export async function countOpenTickets(): Promise<number> {
+  try {
+    const { count } = await db.from("tickets").select("id", { count: "exact", head: true }).eq("status", "open");
+    return count ?? 0;
+  } catch (e) {
+    console.error("countOpenTickets", (e as Error).message);
+    return 0;
+  }
+}
+
 export async function ticketStats(): Promise<TicketStats> {
   try {
     const [{ count: total }, { count: open }, { count: resolved }] = await Promise.all([

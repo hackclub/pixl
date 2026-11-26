@@ -40,10 +40,22 @@ export async function GET(req: Request) {
     req,
   );
 
-  const queue = (await listShippedProjects(undefined, undefined, { includeClaimed: true })).slice(0, limit);
+  // `limit` counts projects that can still take a draft, not queue positions,
+  // so the ones already drafted don't use up the budget.
+  const waiting = (await listShippedProjects(undefined, undefined, { includeClaimed: true })).map((p) => Number(p.id));
+  const { data: states } = await db.from("projects").select("id, review_draft, review_draft_by").in("id", waiting);
+  const stateOf = new Map((states ?? []).map((s) => [Number(s.id), s]));
+  const queue = waiting
+    .filter((id) => {
+      const s = stateOf.get(id);
+      return !!s && mayWriteAiDraft(s, overwrite);
+    })
+    .slice(0, limit);
   const saved: number[] = [];
   const skipped: number[] = [];
   const failed: { id: number; error: string }[] = [];
+  // Projects whose own text looks aimed at an AI (see lib/aiPromptSafety.ts).
+  const suspicious: number[] = [];
 
   const work = async (id: number) => {
     try {
@@ -57,6 +69,23 @@ export async function GET(req: Request) {
         return;
       }
       const draft = await generateAiReviewDraft(await buildAiReviewInput(id));
+      // Never pre-fill a write-up the model may have been steered into: it would
+      // sit in the reviewer's box without the flag. The reviewer can still press
+      // "Generate AI draft", which shows the flag first.
+      if (draft.injectionSignals.length > 0) {
+        suspicious.push(id);
+        await audit(
+          {
+            action: "cron.ai-drafts.suspicious",
+            result: "ok",
+            actorType: "service",
+            actorId: "cron",
+            meta: { projectId: id, signals: draft.injectionSignals.length },
+          },
+          req,
+        );
+        return;
+      }
       const text = draft.technicalFeatures.trim();
       if (text.length < MIN_TEXT) throw new Error(`draft too short (${text.length})`);
       // Guarded on the draft owner still being the one we read, so a reviewer
@@ -78,12 +107,12 @@ export async function GET(req: Request) {
     }
   };
 
-  const pool = queue.map((p) => Number(p.id));
+  const pool = [...queue];
   await Promise.all(
     Array.from({ length: CONCURRENCY }, async () => {
       while (pool.length > 0) await work(pool.shift() as number);
     }),
   );
 
-  return NextResponse.json({ ok: true, processed: queue.length, saved, skipped, failed });
+  return NextResponse.json({ ok: true, processed: queue.length, saved, skipped, suspicious, failed });
 }

@@ -2,8 +2,6 @@ import { requirePage, requireGuidelinesAck } from "@/lib/guard";
 import { listRobertReviews, listSecondReviewProjects, type RobertReviewRow } from "@/lib/db";
 import { slackHandles } from "@/lib/slack";
 import { listBlackoutQueueProjectIds } from "@/lib/operations";
-import { getLiveMode, getHideReviewers } from "@/lib/liveModeServer";
-import { reviewerName } from "@/lib/liveMode";
 import { bulkRobertAction } from "@/app/actions";
 import { TelescreenReviewTable } from "../TelescreenReviewTable";
 import { FRAUD_SCORE_THRESHOLD } from "@/lib/robertOutcome";
@@ -52,28 +50,14 @@ export default async function FraudReviewsPage({
 
   const viewer = access.session.slackId;
   const canBulk = access.canSecondPass || access.isOwner;
-  const [live, hideReviewers] = await Promise.all([getLiveMode(), getHideReviewers()]);
   // A reviewer restricted to one queue only sees that queue's projects.
   const kind = access.reviewQueues === "both" ? undefined : access.reviewQueues;
-  // Live mode hides the "Awaiting Robert" list: it's read-only and names the
-  // fraud pipeline, nothing to show on stream.
-  const [rows, awaitingAll, blackoutIds] = await Promise.all([
+  const [rows, awaiting, blackoutIds] = await Promise.all([
     listRobertReviews(),
-    live ? Promise.resolve([]) : listSecondReviewProjects(viewer, kind, { includeClaimed: true }),
+    listSecondReviewProjects(viewer, kind, { includeClaimed: true }),
     listBlackoutQueueProjectIds(),
   ]);
-  // While reviewer names are hidden, other reviewers' names never leave the
-  // server: claims aren't resolved to a handle and first_pass_by is masked.
-  const awaiting = hideReviewers
-    ? awaitingAll.map((p) =>
-        p.first_pass_by && reviewerName(p.first_pass_by, viewer, true) === "Reviewer"
-          ? { ...p, first_pass_by: "Reviewer" }
-          : p,
-      )
-    : awaitingAll;
-  const handles = await slackHandles(
-    awaitingAll.flatMap((p) => [p.users?.slack_id, hideReviewers && p.claimedBy !== viewer ? null : p.claimedBy]),
-  );
+  const handles = await slackHandles(awaiting.flatMap((p) => [p.users?.slack_id, p.claimedBy]));
   const days = new Map<string, RobertReviewRow[]>();
   for (const r of rows) {
     const key = dayKey(r.robert_reviewed_at);

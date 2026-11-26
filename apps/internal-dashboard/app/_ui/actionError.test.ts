@@ -26,3 +26,14 @@ describe("stale deploy errors", () => {
     expect(text).not.toContain("nextjs.org");
   });
 });
+
+describe("redacted server errors", () => {
+  test("the minified React #441 text becomes the generic message, not the raw error", () => {
+    const text = actionErrorMessage(
+      new Error("Minified React error #441; visit https://react.dev/errors/441 for the full message"),
+      "generate a draft",
+    );
+    expect(text).toContain("the server hit an error part way through");
+    expect(text).not.toContain("react.dev");
+  });
+});

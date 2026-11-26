@@ -3,10 +3,12 @@ import { dmOrEmail } from "@/lib/notify";
 import { dmUser } from "@/lib/slack";
 import { pixorpheusUrl } from "@/lib/pixo";
 import { callPixo } from "@/lib/pixoCall";
+import { SLACK_TS_RE } from "@/lib/reviewThread";
 import { config } from "@/app/_generated/config";
 
-// Review verdicts (approved / changes requested) are announced publicly in the
-// review channel by Pixo instead of being DMed. Bans still use DMs.
+// Every review verdict (changes requested, first pass and final approval) is
+// announced publicly in the review channel by Pixo instead of being DMed.
+// Bans still use DMs.
 // The post is made by Pixorpheus (POST /api/external/review-post), which only
 // ever posts to the one fixed review channel.
 
@@ -16,6 +18,10 @@ const PROJECT_PAGE_URL = `${config.urls.site}/projects`;
 const SLACK_ID_RE = /^[UW][A-Z0-9]{5,20}$/;
 
 export type ReviewAnnouncementKind = "changes" | "first_pass" | "final";
+
+export function shouldPostReviewAnnouncement(_kind: ReviewAnnouncementKind): boolean {
+  return true;
+}
 
 export interface ReviewMessageInput {
   kind: ReviewAnnouncementKind;
@@ -33,6 +39,10 @@ export interface ReviewMessageInput {
   creditNote?: string;
   /** Project tier (1-4) the final approval was credited at, named in the post when set. */
   tier?: number;
+  /** Changes only: when the player can resubmit, around the submission deadline (see resubmitNotice). */
+  resubmitNote?: string | null;
+  /** Changes only: this was the final resubmit, so the project is rejected for good. */
+  finalRejection?: boolean;
 }
 
 export function escapeMrkdwn(text: string): string {
@@ -53,10 +63,18 @@ export function buildReviewMessage(input: ReviewMessageInput): string {
   const reviewer = input.reviewerSlackId ? `<@${input.reviewerSlackId}>` : "a reviewer";
   const thread = "please discuss in this thread for any questions/feedback and keep in mind an answer could take a few hours.";
 
+  if (input.kind === "changes" && input.finalRejection) {
+    return (
+      `${hello} The Pixl village council took a look at your final resubmit of ${project} but it still doesn't meet the standards, so it was permanently rejected:\n\n` +
+      `${quote(input.note)}\n\n` +
+      `This was decided by ${reviewer}, ${thread}`
+    );
+  }
   if (input.kind === "changes") {
+    const resubmit = input.resubmitNote ? `\n\n*${escapeMrkdwn(input.resubmitNote)}*` : "";
     return (
       `${hello} The Pixl village council had fun taking a look at your amazing project ${project} but it needs a few changes before we give you your pixels:\n\n` +
-      `${quote(input.note)}\n\n` +
+      `${quote(input.note)}${resubmit}\n\n` +
       `The changes were especially requested by ${reviewer}, ${thread}`
     );
   }
@@ -91,16 +109,49 @@ export function ccReply(reviewerSlackId: string | null): string | null {
   return reviewerSlackId ? null : `cc <@${GABIN_SLACK_ID}>`;
 }
 
-async function postToReviewChannel(message: string, reply: string | null): Promise<boolean> {
+/** The review_audits verdict a posted announcement belongs to. */
+const AUDIT_VERDICT_FOR_KIND: Record<ReviewAnnouncementKind, string> = {
+  changes: "needs_changes",
+  first_pass: "first_pass_approved",
+  final: "approved",
+};
+
+/** Returns the Slack ts of the post, "" when it posted but the ts is unknown, null when it failed. */
+async function postToReviewChannel(message: string, reply: string | null): Promise<string | null> {
   const key = process.env.EXTERNAL_API_KEY;
-  if (!key) return false;
+  if (!key) return null;
   // Never throws; when Pixo is offline the caller falls back to DMs/email.
   const r = await callPixo("review-post", `${pixorpheusUrl()}/api/external/review-post`, {
     method: "POST",
     headers: { "x-api-key": key, "Content-Type": "application/json" },
     body: JSON.stringify(reply ? { message, reply } : { message }),
   });
-  return r.ok;
+  if (!r.ok) return null;
+  try {
+    const body = (await r.res?.json()) as { ts?: unknown } | undefined;
+    return typeof body?.ts === "string" ? body.ts : "";
+  } catch {
+    return "";
+  }
+}
+
+/** Remembers the post on the newest matching audit row so the review page can link to its thread. Best effort. */
+async function saveThreadTs(projectId: number, kind: ReviewAnnouncementKind, ts: string): Promise<void> {
+  if (!SLACK_TS_RE.test(ts)) return;
+  try {
+    const { data } = await db
+      .from("review_audits")
+      .select("id")
+      .eq("project_id", projectId)
+      .eq("verdict", AUDIT_VERDICT_FOR_KIND[kind])
+      .is("slack_thread_ts", null)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    const id = (data as { id: number }[] | null)?.[0]?.id;
+    if (id !== undefined) await db.from("review_audits").update({ slack_thread_ts: ts }).eq("id", id);
+  } catch (e) {
+    console.error("announceReview: could not save the thread link", (e as Error).message);
+  }
 }
 
 export interface ReviewAnnouncement {
@@ -115,6 +166,8 @@ export interface ReviewAnnouncement {
   pixels?: number;
   creditNote?: string;
   tier?: number;
+  resubmitNote?: string | null;
+  finalRejection?: boolean;
   /** What each player used to get by DM, sent only if the public post fails. */
   fallback: { userId: string; title: string; body: string }[];
 }
@@ -152,8 +205,18 @@ export async function announceReview(a: ReviewAnnouncement): Promise<boolean> {
         pixels: a.pixels,
         creditNote: a.creditNote,
         tier: a.tier,
+        resubmitNote: a.resubmitNote,
+        finalRejection: a.finalRejection,
       });
-      if (await postToReviewChannel(message, ccReply(reviewer))) return true;
+      if (!shouldPostReviewAnnouncement(a.kind)) {
+        for (const f of a.fallback) await dmOrEmail(f.userId, f.title, f.body);
+        return false;
+      }
+      const postedTs = await postToReviewChannel(message, ccReply(reviewer));
+      if (postedTs !== null) {
+        if (postedTs) await saveThreadTs(a.projectId, a.kind, postedTs);
+        return true;
+      }
       failure = "Pixorpheus could not post it";
     }
   } catch (e) {

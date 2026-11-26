@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { serverApi } from "@/lib/server-api";
 import { economy } from "../calc/economy";
 import { loadTrials } from "./data";
+import { HackatimeReturnNotice } from "./_components/hackatime-notice";
 import { activeTrial, type TourTrial } from "./_tour/steps";
 import { TourProvider } from "./_tour/tour-provider";
 
@@ -30,6 +31,7 @@ export default async function ProjectsLayout({ children }: { children: ReactNode
       trial={trial}
       basePxPerHour={Math.round(economy.basePayoutUsd / economy.pixelValueUsd)}
     >
+      <HackatimeReturnNotice />
       {children}
     </TourProvider>
   );

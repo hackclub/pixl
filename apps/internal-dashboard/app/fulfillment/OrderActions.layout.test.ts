@@ -1,0 +1,75 @@
+import { describe, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+
+const actions = readFileSync(new URL("./OrderActions.tsx", import.meta.url), "utf8");
+const serverActions = readFileSync(new URL("../actions.ts", import.meta.url), "utf8");
+const detail = readFileSync(new URL("./OrderDetail.tsx", import.meta.url), "utf8");
+const css = readFileSync(new URL("../_ui/admin.css", import.meta.url), "utf8");
+
+describe("fulfillment action layout", () => {
+  test("the one fulfillment form keeps its fields and submit button in separate rows", () => {
+    const fulfilled = actions.slice(actions.indexOf("// Claimed items, and legacy ordered/credited orders"));
+    expect(fulfilled).toContain('className="fw-order-action-form"');
+    expect(fulfilled).toContain('className="fw-order-action-fields"');
+    expect(fulfilled).toContain('className="fw-order-action-buttons"');
+    expect(fulfilled).toContain('className="fw-order-action-field-wide"');
+    expect(fulfilled.indexOf("</form>")).toBeLessThan(fulfilled.indexOf("{cancelForm}"));
+    for (const field of ["hcbLink", "actualCostUsd", "sourceUrl", "tracking"]) {
+      expect(fulfilled).toContain(`name="${field}"`);
+    }
+  });
+
+  test("the only claim button reserves first; fulfillment is one later step", () => {
+    const pending = actions.slice(
+      actions.indexOf('if (o.status === "pending")'),
+      actions.indexOf('if (o.status === "claimed")'),
+    );
+    expect(pending).toContain("<form action={claimOrder}>");
+    expect(pending).toContain("Claim order");
+    expect(pending).not.toContain("Place order &amp; claim");
+    expect(pending).not.toContain("reserveOrder");
+    expect(pending.split("<form action={claimOrder}>")).toHaveLength(2);
+    expect(actions).toContain("<form action={fulfillOrder}");
+    expect(actions).toContain("Fulfill order");
+    expect(actions).not.toContain("Mark order placed");
+
+    const claim = serverActions.slice(
+      serverActions.indexOf('export const claimOrder = guardedAction('),
+      serverActions.indexOf("// Over budget: the cheapest the fulfiller"),
+    );
+    expect(claim).toContain("reserveOnly: true");
+    expect(claim).not.toContain('status: "ordered"');
+    expect(serverActions).not.toContain("export const reserveOrder =");
+  });
+  test("actions occupy a separate full-width panel below the info grid", () => {
+    const grid = detail.indexOf('<div className="fw-cols">');
+    const actionsPanel = detail.indexOf('<Panel title="Actions" icon="bolt">');
+    const funding = detail.indexOf("<FundingDisclosure");
+    expect(grid).toBeGreaterThan(-1);
+    expect(actionsPanel).toBeGreaterThan(grid);
+    expect(actionsPanel).toBeLessThan(funding);
+    // Grants show a "Grant recipient" panel in the same slot instead.
+    expect(detail.slice(grid, actionsPanel)).toContain('title={grant ? "Grant recipient" : "Shipping info"}');
+  });
+
+  test("forms use shrinkable columns and responsive wrapping", () => {
+    expect(css).toContain(".fw-order-action-fields {");
+    expect(css).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
+    expect(css).toContain(".fw-order-action-field-wide { grid-column: 1 / -1; }");
+    expect(css).toContain("@media (max-width: 680px)");
+    expect(css).toContain(".fw-order-action-buttons .hc-btn");
+    expect(css).toContain("white-space: normal;");
+  });
+
+  test("unfulfilling asks for a required reason and is owner-gated", () => {
+    const control = actions.slice(
+      actions.indexOf("export function UnfulfillControls"),
+      actions.indexOf("export function OrderActions"),
+    );
+    expect(control).toContain('name="reason"');
+    expect(control).toContain("required");
+    expect(control).toContain('name="flow"');
+    expect(control).toContain("already paid are kept");
+    expect(detail).toContain("visible.unfulfill && <UnfulfillControls");
+  });
+});

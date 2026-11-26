@@ -65,9 +65,14 @@ function page(message: string): string {
   );
 }
 
-function back(redirect: string, outcome: "connected" | "failed"): string {
+// Why a connect failed, for the player's own notice. Coarse on purpose: no
+// Slack IDs or Hackatime responses go back in the URL.
+export type ConnectFailReason = "account_mismatch" | "no_slack_id";
+
+export function back(redirect: string, outcome: "connected" | "failed", reason?: ConnectFailReason): string {
   const dest = new URL(redirect);
   dest.searchParams.set("hackatime", outcome);
+  if (reason) dest.searchParams.set("hackatime_reason", reason);
   return dest.toString();
 }
 
@@ -112,7 +117,8 @@ router.get(
       return res.status(400).send(page("Connection failed: invalid request."));
     }
     const { userId, redirect } = pending;
-    const done = (result: "ok" | "error", reason?: string) =>
+    const done = (result: "ok" | "error", reason?: string) => {
+      if (result === "error") console.warn("[hackatime] connect failed", { userId, reason });
       audit({
         ...requestActor(req),
         actorType: "player",
@@ -122,6 +128,7 @@ router.get(
         result,
         ...(reason ? { meta: { reason } } : {}),
       });
+    };
 
     try {
       const tokenRes = await fetch(`${BASE}/oauth/token`, {
@@ -164,6 +171,8 @@ router.get(
       const expectedSlackId = (owner as { slack_id?: string | null } | null)?.slack_id ?? null;
       const tokenSlackId = await fetchHackatimeSlackId(data.access_token);
       if (!expectedSlackId || !tokenSlackId || tokenSlackId !== expectedSlackId) {
+        const reason = tokenSlackId ? "different_account" : "identity_unknown";
+        console.warn("[hackatime] connect failed", { userId, reason });
         audit({
           ...requestActor(req),
           actorType: "player",
@@ -171,9 +180,9 @@ router.get(
           action: "hackatime.identity_mismatch",
           target: `user:${userId}`,
           result: "denied",
-          meta: { reason: tokenSlackId ? "different_account" : "identity_unknown" },
+          meta: { reason },
         });
-        return res.redirect(back(redirect, "failed"));
+        return res.redirect(back(redirect, "failed", tokenSlackId ? "account_mismatch" : "no_slack_id"));
       }
 
       const { data: updated, error } = await db

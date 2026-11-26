@@ -39,10 +39,19 @@ describe("H2 fulfillment", () => {
     expect(label).toContain("canViewLabel(order, access)");
     expect(label).toContain('"fulfillment.label_view"');
   });
+  test("grant export funding uses the same live Airtable check as the order detail", () => {
+    expect(src("lib/grantExportData.ts")).toContain("liveAirtable: true");
+  });
+  test("selected grant downloads are owner-only and filtered server-side", () => {
+    const route = src("app/api/fulfillment/grants/export/route.ts");
+    expect(route).toContain('guardedRoute("api.fulfillment.grants_export", "owner"');
+    expect(route).toContain('url.searchParams.getAll("ids")');
+    expect(route).toContain("selectGrantRows");
+    expect(route).not.toContain("export const POST");
+  });
   test("order actions refuse self-dealing and foreign flags", () => {
     expect(fnBody("app/actions.ts", "export const claimOrder")).toContain("isOwnOrder");
-    expect(fnBody("app/actions.ts", "export const shipOrder")).toContain("isOwnOrder");
-    expect(fnBody("app/actions.ts", "export const markOrderCredited")).toContain("isOwnOrder");
+    expect(fnBody("app/actions.ts", "export const fulfillOrder")).toContain("isOwnOrder");
     expect(fnBody("app/actions.ts", "export const flagOrderOverBudget")).toContain("canFlagOrder");
   });
 });
@@ -91,24 +100,28 @@ describe("M1/M2 reviewer actions", () => {
     const page = src("app/review/[id]/page.tsx");
     expect(page).toContain('c.status === "pending"');
   });
-  test("self-review applies to owners too", () => {
+  test("project owners can self-review while collaborators still cannot", () => {
     const s = src("app/actions.ts");
     const authz = s.slice(s.indexOf("async function authorizeProjectAction"), s.indexOf("async function hasSelfReviewException"));
     expect(authz).toContain("isOwnProject(access, row.user_id, projectId)");
-    expect(authz).not.toContain("access.isOwner");
+    expect(authz).toContain("isCollaboratorProject(access, row.user_id, projectId)");
     const review = fnBody("app/actions.ts", "export const reviewProject");
-    expect(review).toContain('stage === "second_review" && own');
-    expect(review).not.toMatch(/stage === "shipped" &&\s*!access\.isOwner/);
+    expect(review).toContain("collaborator");
+    expect(review).toContain("owner");
     const page = src("app/review/[id]/page.tsx");
-    expect(page).toContain("spotCheckStage && (access.isOwner || canSecondPass) && !isOwn");
-    expect(page).not.toMatch(/const isOwn =\s*!access\.isOwner/);
+    expect(page).toContain("const isCollaborator =");
+    expect(page).not.toContain("!isOwn || access.isOwner");
   });
 });
 
 describe("builder legal names (first-pass reviewers)", () => {
   test("queue rows never carry real_name to the client ReviewTable", () => {
     expect(src("app/_components/ReviewTable.tsx")).not.toMatch(/\.real_name/);
-    expect(src("lib/db.ts")).toContain('const QUEUE_SELECT = "*, users(id, display_name, slack_id)"');
+    const db = src("lib/db.ts");
+    expect(db).toContain("const QUEUE_SELECT = `${QUEUE_FIELDS.join(\", \")}, users(id, display_name, slack_id)`");
+    const fields = db.slice(db.indexOf("const QUEUE_FIELDS"), db.indexOf("const QUEUE_SELECT"));
+    expect(fields).not.toContain("real_name");
+    expect(fields).not.toContain("*");
     for (const fn of [
       "listShippedProjects",
       "listSecondReviewProjects",
@@ -154,13 +167,19 @@ describe("routes", () => {
     expect(g).not.toMatch(/\.message/);
     expect(g).toContain("errorCode(e)");
   });
-  test("oauth state, live-mode and session cookies are Secure", () => {
+  test("oauth state and session cookies are Secure", () => {
     expect(src("app/api/auth/login/route.ts")).toMatch(/secure: true/);
-    const a = src("app/actions.ts");
-    expect(a).toMatch(/LIVE_MODE_COOKIE, on \? "1" : "0", \{ httpOnly: true, secure: true/);
-    expect(a).toMatch(/LIVE_SHOW_REVIEWERS_COOKIE, "1", \{ httpOnly: true, secure: true/);
     expect(src("lib/session.ts")).toContain("secure: secureCookies()");
   });
+  test("dashboard headers restrict external scripts and sensitive referrers", () => {
+    const config = src("next.config.ts");
+    expect(config).toContain("script-src 'self'");
+    expect(config).toContain("object-src 'none'");
+    expect(config).toContain("base-uri 'self'");
+    expect(config).toContain("form-action 'self'");
+    expect(config).toContain("Referrer-Policy");
+  });
+
   test("shop image URL fetch is pinned and capped", () => {
     const body = fnBody("app/actions.ts", "async function uploadShopImageFromUrl");
     expect(body).toContain("safeBinaryGet(");

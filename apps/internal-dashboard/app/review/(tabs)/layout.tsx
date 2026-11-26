@@ -1,12 +1,31 @@
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { requirePage, landingFor } from "@/lib/guard";
-import { countPendingReviews, countSpotCheckProjects, countProposedBanProjects } from "@/lib/db";
+import { countReviewTabs } from "@/lib/db";
 import { ReviewTabs } from "@/app/_components/ReviewTabs";
-import { ShowReviewerNames } from "@/app/_components/ShowReviewerNames";
-import { getLiveMode, getHideReviewers } from "@/lib/liveModeServer";
 import { PageHeader } from "@/app/_ui/ui";
 
 export const dynamic = "force-dynamic";
+
+type TabProps = React.ComponentProps<typeof ReviewTabs>;
+
+// Streams badges
+async function ReviewTabsWithCounts({
+  wants,
+  ...tabProps
+}: Omit<TabProps, "pending" | "spotCheckCount" | "proposedBanCount"> & {
+  wants: { pending: boolean; spotCheck: boolean; proposedBans: boolean } | null;
+}) {
+  const counts = wants ? await countReviewTabs() : null;
+  return (
+    <ReviewTabs
+      {...tabProps}
+      pending={wants?.pending ? counts?.pending : undefined}
+      spotCheckCount={wants?.spotCheck ? counts?.spotCheck : undefined}
+      proposedBanCount={wants?.proposedBans ? counts?.proposedBans : undefined}
+    />
+  );
+}
 
 // Shared chrome for every /review/* tab. Keeping the tab bar (and its badge
 // count queries) in the layout means it stays mounted across tab clicks, and
@@ -19,33 +38,24 @@ export default async function ReviewLayout({ children }: { children: React.React
   const fraudOnly = !access.isReviewer && !access.isOwner;
   // Spot check is worked by owners and final reviewers (second_pass).
   const canSpotCheck = access.isOwner || access.canSecondPass;
-  // "Needs review" is first-pass ("shipped") work only, for every viewer.
-  const [pending, spotCheckCount, proposedBanCount, live, hideReviewers] = await Promise.all([
-    fraudOnly ? Promise.resolve(undefined) : countPendingReviews({ viewer: access.session.slackId }),
-    canSpotCheck ? countSpotCheckProjects() : Promise.resolve(undefined),
-    access.isOwner ? countProposedBanProjects() : Promise.resolve(undefined),
-    getLiveMode(),
-    getHideReviewers(),
-  ]);
+  const tabProps = {
+    isSuper: access.isOwner,
+    canSpotCheck,
+    canFraudReview: access.canFraudReview,
+    fraudOnly,
+  };
+  const countsNeeded = !fraudOnly || canSpotCheck || access.isOwner;
+  const wants = { pending: !fraudOnly, spotCheck: canSpotCheck, proposedBans: access.isOwner };
 
   return (
     <div>
       <PageHeader
         title="Review"
         description={fraudOnly ? "Robert's fraud scores." : "Ship queue, verdict history and reviewer stats."}
-        // While live, other reviewers' names are hidden on every review tab;
-        // this reveals (or re-hides) them.
-        actions={live ? <ShowReviewerNames hidden={hideReviewers} /> : undefined}
       />
-      <ReviewTabs
-        isSuper={access.isOwner}
-        canSpotCheck={canSpotCheck}
-        canFraudReview={access.canFraudReview}
-        fraudOnly={fraudOnly}
-        pending={pending}
-        spotCheckCount={spotCheckCount}
-        proposedBanCount={proposedBanCount}
-      />
+      <Suspense fallback={<ReviewTabs {...tabProps} />}>
+        <ReviewTabsWithCounts {...tabProps} wants={countsNeeded ? wants : null} />
+      </Suspense>
       {children}
     </div>
   );

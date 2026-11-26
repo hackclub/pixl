@@ -67,7 +67,7 @@ export default async function DocPage({
 
   return (
     <>
-      <main className="px-[60px] pt-[46px] pb-[100px] max-[820px]:px-[20px] max-[820px]:pt-[30px] max-[820px]:pb-[72px]">
+      <main className="px-[60px] pt-[100px] pb-[100px] max-[820px]:px-[20px] max-[820px]:pt-[30px] max-[820px]:pb-[72px]">
         <article>
           {/* the landing's "01" step badge: a filled block, not tinted text */}
           <div className="mb-[14px] inline-block border-2 border-stroke bg-accent px-[9px] py-[3px] font-pixel text-[12px] font-semibold uppercase tracking-[1px] text-panel-deep">

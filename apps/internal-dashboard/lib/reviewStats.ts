@@ -45,12 +45,15 @@ export function reviewWeekStartMs(nowMs: number): number {
   return dayStart - daysSinceSaturday * DAY_MS;
 }
 
-// Reviews logged since `since` (a UTC ms timestamp): outcome verdicts only, the
-// same ones the verdict chart counts, so an unship or revert doesn't add to it.
+// Reviews logged since `since` (a UTC ms timestamp): the outcome verdicts the
+// chart counts, plus first_pass_banned. A first-pass ban proposal is real
+// review work that counts toward the weekly minimum, it's only left out of the
+// chart buckets so the final ban on the same project isn't counted twice there.
+// An unship or revert still doesn't add to it.
 export function countReviewsSince(audits: readonly AuditLike[], since: number): number {
   let n = 0;
   for (const a of audits) {
-    if (bucketFor(a.verdict) === null) continue;
+    if (bucketFor(a.verdict) === null && a.verdict !== "first_pass_banned") continue;
     if (new Date(a.created_at).getTime() >= since) n++;
   }
   return n;
@@ -73,8 +76,7 @@ function displayName(label: string): string {
 
 // `audits` is expected newest first (as the stats page queries it), so the
 // first label seen for a Slack id is that reviewer's most recent name.
-// `nameFor` turns the full "Name (SlackID)" label into what's shown (the
-// stats page passes live mode's reviewerName so others can be hidden).
+// `nameFor` turns the full "Name (SlackID)" label into what's shown.
 export function summarizeWindow(
   audits: AuditLike[],
   since: number | null,

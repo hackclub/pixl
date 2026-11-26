@@ -11,7 +11,7 @@ import {
   loadTrials,
   loadWalletRe,
 } from "../data";
-import { serverGet } from "@/lib/server-api";
+import { serverFetch } from "@/lib/server-api";
 import { projectEstimate, usdPerHourFor } from "../../calc/estimates";
 import { projectCutoffMs, statsPath } from "../format";
 import { isInReview } from "../types";
@@ -35,7 +35,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   // project gets the read-only public view (the same fields Explore shows).
   const project = (await loadProjects()).find((p) => p.id === id);
   if (!project) {
-    const pub = await serverGet<PublicProject>(`/api/explore/projects/${id}`);
+    // The endpoint is public and only uses a session for has_upvoted, which
+    // this view doesn't render. serverGet would answer a synthetic 401 for any
+    // visitor without a login, so call it without a token.
+    const pub = await serverFetch<PublicProject>(`/api/explore/projects/${id}`);
     if (pub.ok) return <PublicView data={pub.data} />;
     if (pub.status === 404 || pub.status === 400) notFound();
     throw new Error(`project ${id} could not be loaded (${pub.status})`);

@@ -1,6 +1,4 @@
 import { requirePage } from "@/lib/guard";
-import { getLiveMode } from "@/lib/liveModeServer";
-import { liveName } from "@/lib/liveMode";
 import { listIdeas } from "@/lib/db";
 import { IdeaBanForm, IdeaUnbanForm } from "@/app/_components/Moderate";
 import {
@@ -24,7 +22,6 @@ export default async function IdeasPage({
   searchParams: Promise<{ q?: string; error?: string }>;
 }) {
   await requirePage("owner");
-  const live = await getLiveMode();
   const { q, error } = await searchParams;
   const ideas = await listIdeas(q);
 
@@ -54,7 +51,7 @@ export default async function IdeasPage({
                 </td>
                 <td>
                   <TextLink href={`/players/${idea.user_id}`} className="font-bold">
-                    {liveName(live, idea.users, idea.users?.real_name || idea.users?.display_name || idea.user_id)}
+                    {idea.users?.real_name || idea.users?.display_name || idea.user_id}
                   </TextLink>
                 </td>
                 <td>

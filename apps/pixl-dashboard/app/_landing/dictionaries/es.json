@@ -30,6 +30,20 @@
     "enterGame": "entrar al juego",
     "openDash": "abrir panel"
   },
+  "ended": {
+    "heroTitle": "Pixl terminó el 20 de noviembre de 2026",
+    "heroBody": "Gracias a todos los que construyeron algo.",
+    "bandTitle": "Pixl en números",
+    "labels": {
+      "users": "jugadores registrados",
+      "projectsCreated": "proyectos creados",
+      "projectsShipped": "proyectos enviados",
+      "hoursShipped": "horas enviadas",
+      "rewardsUsd": "en recompensas de la tienda"
+    },
+    "shopLine": "{rewardsUsd} en recompensas pedidas por nuestros jugadores",
+    "questLine": "{projectsShipped} proyectos enviados, {hoursShipped} horas construyendo"
+  },
   "description": {
     "title": "¿Qué es Pixl?",
     "body": "Hace siglos, Origin fue la mayor civilización digital jamás construida, hasta que el Gran Static la rompió en islas perdidas en el Vacío. Su gente cruzó universos y encontró a los Hack Clubbers, que ayudaron a reconstruirla con un nuevo nombre: Pixl. Un YSWS con temática de píxeles donde cada proyecto real que entregas repara el mundo y desbloquea recompensas reales.",
@@ -149,12 +163,6 @@
     "min": "min",
     "sec": "seg"
   },
-  "mapPreview": {
-    "badge": "El mundo",
-    "title": "Cada región es diferente",
-    "subtitle": "Una captura real del motor del juego. Arrástrala y échale un vistazo.",
-    "hint": "Arrastra para explorar"
-  },
   "sidequests": {
     "badge": "Ejemplos",
     "title": "Pruebas y recompensas",
@@ -273,7 +281,7 @@
   "shop": {
     "badge": "Gasta tus píxeles",
     "title": "La tienda",
-    "description": "1 hora de trabajo = 57 píxeles.",
+    "description": "Ganas entre 40 y 60 píxeles por hora aprobada, según tu Energía de Restauración.",
     "moreComing": "...¡y aún más por venir!",
     "hoursRate": "{lo} h a {loRate}/h → {hi} h a {hiRate}/h",
     "items": [
@@ -307,7 +315,7 @@
       },
       {
         "name": "Crédito de dominio",
-        "description": "Un crédito acumulable de 12 $ para registrar un dominio para tu proyecto."
+        "description": "Un crédito acumulable de 10 $ para registrar un dominio para tu proyecto."
       },
       {
         "name": "Crédito de hosting",
@@ -545,11 +553,11 @@
       },
       {
         "question": "¿Cuánto puedo ganar?",
-        "answer": "Ganas píxeles por cada hora de trabajo entregado: 1 hora = 57 píxeles, unos 4,00 $ para empezar. A medida que sube de nivel tu Energía de Restauración, tu tasa aumenta, hasta unos 6 $/h. Gasta tus píxeles en la tienda en premios reales, desde pegatinas hasta un MacBook Air."
+        "answer": "Ganas píxeles por cada hora de trabajo entregado: 1 hora = 40 píxeles, unos 4,00 $ para empezar. A medida que sube de nivel tu Energía de Restauración, tu tasa aumenta, hasta unos 6 $/h. Gasta tus píxeles en la tienda en premios reales, desde pegatinas hasta un MacBook Air."
       },
       {
         "question": "¿Qué es la Energía de Restauración?",
-        "answer": "Es el número del que depende todo. Cada entrega gana Energía de Restauración según cuántas horas dedicas Y lo complejo que sea el proyecto (los revisores le asignan un nivel del 1 al 4), así que los proyectos más grandes y difíciles ganan más. Tu ER fija tu tasa de pago, que sube de 57 px/h a unos 86 px/h a medida que entregas, y tu nivel muestra la ER que has acumulado. La Energía de Restauración de toda la comunidad también desbloquea objetivos comunitarios, como nuevas skins para tu casa en el juego."
+        "answer": "Es el número del que depende todo. Cada entrega gana Energía de Restauración según cuántas horas dedicas Y lo complejo que sea el proyecto (los revisores le asignan un nivel del 1 al 4), así que los proyectos más grandes y difíciles ganan más. Tu ER fija tu tasa de pago, que sube de 40 px/h a unos 60 px/h a medida que entregas, y tu nivel muestra la ER que has acumulado. La Energía de Restauración de toda la comunidad también desbloquea objetivos comunitarios, como nuevas skins para tu casa en el juego."
       },
       {
         "question": "¡Tengo más preguntas!",

@@ -1,9 +1,8 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/guard";
-import { getLiveMode } from "@/lib/liveModeServer";
 import { banIsActive, getPlayer, listReportsAgainst } from "@/lib/db";
-import { slackHandle } from "@/lib/slack";
+import { slackDmLink, slackHandle } from "@/lib/slack";
 import { isSafeUrl } from "@/lib/safeUrl";
 import {
   BanForm,
@@ -50,7 +49,6 @@ async function SlackHandle({ id }: { id: string | null | undefined }) {
 
 export default async function PlayerPage({ params }: { params: Promise<{ id: string }> }) {
   const access = await requirePage("owner");
-  const live = await getLiveMode();
   // Every player action (warn, ban, notify, edit, delete) is owner-only.
   const owner = access.isOwner;
   const { id } = await params;
@@ -78,7 +76,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
       <PageHeader
         title={
           <>
-            <span className="break-words">{live ? user.display_name : user.real_name || user.display_name}</span>
+            <span className="break-words">{user.real_name || user.display_name}</span>
             {activeBan && (
               <Badge tone="danger" icon="private">
                 Banned {activeBan.expires_at ? `until ${formatDate(activeBan.expires_at)}` : "forever"}
@@ -88,7 +86,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
         }
         description={
           <>
-            {!live && user.real_name && user.display_name && user.real_name !== user.display_name && (
+            {user.real_name && user.display_name && user.real_name !== user.display_name && (
               <>In-game: {user.display_name}. </>
             )}
             <Suspense fallback={null}>
@@ -97,6 +95,13 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
             {user.slack_id ? <Mono>{user.slack_id}</Mono> : <span>no Slack id, can&apos;t DM</span>}, joined{" "}
             {formatDate(user.created_at)}
           </>
+        }
+        actions={
+          user.slack_id ? (
+            <ButtonLink href={slackDmLink(user.slack_id)} external variant="outline" size="sm" icon="slack-fill">
+              Message on Slack
+            </ButtonLink>
+          ) : undefined
         }
       />
 
@@ -133,17 +138,15 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
           </Card>
 
           <div className="flex flex-col gap-6">
-            {!live && (
-              <Card>
-                <CardHeader title="Player info" icon="person-card" />
-                <EditInfoForm
-                  userId={user.id}
-                  displayName={user.display_name}
-                  realName={user.real_name}
-                  email={user.email ?? ""}
-                />
-              </Card>
-            )}
+            <Card>
+              <CardHeader title="Player info" icon="person-card" />
+              <EditInfoForm
+                userId={user.id}
+                displayName={user.display_name}
+                realName={user.real_name}
+                email={user.email ?? ""}
+              />
+            </Card>
             <Card>
               <CardHeader title="Danger zone" icon="delete" />
               <p className="hc-caption mb-3 text-sm">

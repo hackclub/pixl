@@ -54,7 +54,7 @@ export function Menu() {
       <div className="flex gap-2 sm:gap-3 mr-3 lg:mr-6">
         <Link
           href="/docs"
-          className="font-pixel h-min text-center border-t-0 px-3 py-1.5 text-lg sm:text-xl lg:text-2xl bg-[#ff8c37] text-[#F5EED2] cursor-pointer border-black border-r-4 border-l-2 border-b-4 hover:border-b-8 transition-all hover:pt-15"
+          className="font-pixel h-min text-center border-t-0 px-3 py-1.5 text-lg sm:text-xl lg:text-2xl bg-[#ff8c37] hover:bg-[#ffa45c] text-[#F5EED2] cursor-pointer border-black border-r-4 border-l-2 border-b-4 transition-colors"
         >
           {dict.menu.openDocs}
         </Link>

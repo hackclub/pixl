@@ -33,6 +33,11 @@ describe("fulfiller self-dealing", () => {
     expect(isOwnOrder({ player_slack: null }, "UF1")).toBe(false);
     expect(isOwnOrder({ player_slack: "" }, "")).toBe(false);
   });
+  test("owners may fulfil their own order, regular fulfillers still may not", () => {
+    expect(isOwnOrder({ player_slack: "UO" }, "UO", true)).toBe(false);
+    expect(isOwnOrder({ player_slack: "UF1" }, "UF1", false)).toBe(true);
+    expect(isOwnOrder({ player_slack: "UF1" }, "UF1")).toBe(true);
+  });
   test("flagging only by the claimer or an owner", () => {
     expect(canFlagOrder({ claimed_by_slack: "" }, fulfiller("UF1"))).toBe(false);
     expect(canFlagOrder({ claimed_by_slack: "UF2" }, fulfiller("UF1"))).toBe(false);
@@ -71,17 +76,32 @@ describe("fulfillment tabs and the actions panel", () => {
     expect(panel("cancelled", true).any).toBe(false);
     expect(panel("cancelled", false).any).toBe(false);
   });
-  test("done orders only offer the owner an edit", () => {
-    expect(panel("done", false).any).toBe(false);
-    expect(panel("done", true)).toMatchObject({ primary: false, edit: true, any: true });
+  test("done orders offer messaging the buyer and an owner edit", () => {
+    expect(panel("done", false)).toMatchObject({ primary: false, contact: true, edit: false, any: true });
+    expect(panel("done", true)).toMatchObject({ primary: false, contact: true, edit: true, any: true });
+    expect(panel("done", false, { hasBuyerSlack: false }).any).toBe(false);
   });
   test("pending: claim is offered, edit is not", () => {
     expect(panel("pending", false, { mine: false })).toMatchObject({ primary: true, edit: false });
   });
-  test("shipped: only owners can close it", () => {
-    expect(panel("shipped", false).primary).toBe(false);
-    expect(panel("shipped", true).primary).toBe(true);
-    expect(panel("shipped", false).flag).toBe(false);
+  test("claimed: belongs to the fulfiller, but is not yet placed or paid", () => {
+    expect(panel("claimed", false)).toMatchObject({ primary: true, edit: false, flag: true });
+    expect(panel("claimed", false, { mine: false, hasBuyerSlack: false }).any).toBe(false);
+    expect(panel("claimed", true, { mine: false }).primary).toBe(true);
+  });
+  test("shipped is terminal: no primary action, but the buyer can still be messaged", () => {
+    expect(panel("shipped", false)).toMatchObject({ primary: false, contact: true, any: true });
+    expect(panel("shipped", false, { hasBuyerSlack: false }).any).toBe(false);
+    expect(panel("shipped", true)).toMatchObject({ primary: false, contact: true, edit: true });
+  });
+  test("only owners can unfulfill a completed order", () => {
+    expect(panel("done", false).unfulfill).toBe(false);
+    expect(panel("done", true).unfulfill).toBe(true);
+    expect(panel("shipped", false).unfulfill).toBe(false);
+    expect(panel("shipped", true).unfulfill).toBe(true);
+    for (const status of ["pending", "claimed", "credited", "cancelled"]) {
+      expect(panel(status, true).unfulfill).toBe(false);
+    }
   });
   test("someone else's claimed order is read-only for a fulfiller", () => {
     const p = panel("ordered", false, { mine: false, hasBuyerSlack: false });

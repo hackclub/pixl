@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requirePage, can, landingFor } from "@/lib/guard";
-import { getLiveMode } from "@/lib/liveModeServer";
-import { liveName } from "@/lib/liveMode";
 import {
   getStats,
   getGrowthSeries,
@@ -48,15 +46,11 @@ export default async function Overview({
   searchParams: Promise<{ range?: string }>;
 }) {
   const access = await requirePage("staff");
-  const live = await getLiveMode();
   // Only owners get the full overview. Reviewers land on their own stats,
   // helpers and fulfillers on their own queue.
   if (!access.isOwner) redirect(access.isReviewer ? "/review/stats" : landingFor(access));
-  // Live mode hides everything internal from a screen share: moderation
-  // (violations, bans) and the pixel economy, including their entries in the
-  // activity feed below.
-  const showModeration = can(access, "owner") && !live;
-  const showPixels = access.isOwner && !live;
+  const showModeration = can(access, "owner");
+  const showPixels = access.isOwner;
   const { range } = await searchParams;
   const days = RANGES.includes(Number(range)) ? Number(range) : 30;
   const [stats, growth, pixelFlow, recent, feed] = await Promise.all([
@@ -71,8 +65,6 @@ export default async function Overview({
       pixels: showPixels,
       payouts: showPixels,
       limit: 8,
-      // Live mode: no staff or player names in the feed (yours still shows).
-      maskNames: live ? { viewer: access.session.slackId } : undefined,
     }),
   ]);
 
@@ -207,7 +199,7 @@ export default async function Overview({
                       <Badge tone={v.kind === "chat" ? "warning" : "danger"}>{v.kind}</Badge>
                       <div className="min-w-0">
                         <TextLink href={`/players/${v.user_id}`} className="font-bold">
-                          {liveName(live, v.users, v.users?.real_name || v.users?.display_name || v.user_id)}
+                          {v.users?.real_name || v.users?.display_name || v.user_id}
                         </TextLink>
                         <div className="truncate text-sm hc-muted">&ldquo;{v.content}&rdquo;</div>
                       </div>

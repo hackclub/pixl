@@ -8,9 +8,9 @@ import { decryptPII } from "@/lib/crypto";
 import { builderDetailsView, builderNameFor, canSeeBuilderPII } from "@/lib/reviewAccess";
 import {
   getProject,
-  listShippedProjects,
+  listShippedQueueCached,
   listSecondReviewProjects,
-  claimReview,
+  REVIEW_LOCK_MS,
   firstPassAccess,
   turnedNineteenSinceShipping,
   listCollaboratorsForProject,
@@ -21,11 +21,18 @@ import {
 import { parseAuditNote } from "@/lib/auditNote";
 import { fetchCommits, attachCommitStats } from "@/lib/commits";
 import { fetchBomRows } from "@/lib/bom";
-import { fetchUserSpans, attachTrackedTime, fetchTrustFactor, fetchHackatimeReport } from "@/lib/hackatime";
-import { yswsShipsFor } from "@/lib/ysws";
+import {
+  fetchUserSpans,
+  attachTrackedTime,
+  fetchTrustFactor,
+  fetchHackatimeReport,
+  type HackatimePersonReport,
+} from "@/lib/hackatime";
+import { yswsShipsForReview } from "@/lib/ysws";
 import { renderMarkdown } from "@/lib/markdown";
 import { computeClaimedHours, round1 } from "@/lib/hours";
 import { isSafeUrl } from "@/lib/safeUrl";
+import { githubRepoOwnerProfile } from "@/lib/githubRepoOwner";
 import { db } from "@/lib/db";
 import { ReviewForm, type BountyOption } from "@/app/_components/ReviewForm";
 import { FRAUD_SCORE_THRESHOLD as ROBERT_FRAUD_THRESHOLD } from "@/lib/robertOutcome";
@@ -36,9 +43,12 @@ import { getBlackoutEntry } from "@/lib/operations";
 import { isBlackoutReviewable } from "@/lib/operationsReview";
 import {
   banProject,
+  beginReviewClaim,
+  endReviewClaim,
   setProjectLevel,
   extendHoursCutoff,
   sendBackToFirstPass,
+  removeFirstPassPayout,
   unshipProject,
   toggleProjectPeak,
   holdReview,
@@ -48,24 +58,22 @@ import {
   submitHardwareToRobert,
   resendToRobert,
 } from "@/app/actions";
-import { DoubleDipBanner } from "@/app/_components/DoubleDipBanner";
-import { ReviewPipelineSteps } from "@/app/_components/ReviewPipelineSteps";
+import { DoubleDipBanner } from "@/app/_components/DoubleDipBanner";import { ReviewPipelineSteps } from "@/app/_components/ReviewPipelineSteps";
 import { SecondPassChecklist } from "@/app/_components/SecondPassChecklist";
-import { hackatimeCutoffUnix, hackatimeCutoffLabel } from "@/app/_generated/config";
+import { hackatimeCutoffUnix, hackatimeCutoffLabel, submissionDeadline } from "@/app/_generated/config";
 import { ReviewDetailTabs } from "@/app/_components/ReviewDetailTabs";
 import { ReviewSplit } from "./ReviewSplit";
 import { ReviewShortcuts } from "./ReviewShortcuts";
 import { getStaffSettings } from "@/lib/db";
 import { ReviewHeartbeat } from "@/app/_components/ReviewHeartbeat";
+import { activeReviewClaim } from "@/lib/reviewClaimState";
 import { ProjectNotes } from "@/app/_components/ProjectNotes";
 import { LevelBadge, TypeBadge, ShipBadges, StatusBadge, BeaconBadge, FundingBadge } from "@/app/_components/ProjectBadges";
 import { FraudyAiSummary } from "@/app/_components/FraudyAiSummary";
-import { fraudyCheckAi, type FraudyAiCheck } from "@/lib/fraudy";
+import { fraudyCheckAi, fraudyCheckKey, type FraudyAiCheck } from "@/lib/fraudy";
 import { CardSkeleton } from "@/app/_components/Loading";
 import { slackHandle } from "@/lib/slack";
-import { getLiveMode, getHideReviewers } from "@/lib/liveModeServer";
-import { ShowReviewerNames } from "@/app/_components/ShowReviewerNames";
-import { liveAlias, redactBuilderDetails, reviewerName } from "@/lib/liveMode";
+import { staffName } from "@/lib/staffName";
 import { unshipWarning } from "@/lib/unship";
 import {
   ActionButton,
@@ -176,7 +184,8 @@ export default async function ReviewDetail({
   searchParams: Promise<{ error?: string }>;
 }) {
   const access = await requirePage("reviewer");
-  await requireGuidelinesAck(access);
+  const guidelinesAck = requireGuidelinesAck(access);
+  guidelinesAck.catch(() => {});
   const viewer = access.session.slackId;
   const canSecondPass = access.canSecondPass;
   // Only admins (ban perm) may permanently ban a project from the review page.
@@ -187,17 +196,10 @@ export default async function ReviewDetail({
   const { error } = await searchParams;
   const projectId = Number(id);
   if (!Number.isFinite(projectId)) notFound();
-  // Live mode (screen-share safe): builder identity is swapped out here on the
-  // server, so none of it reaches the browser. See lib/liveMode.ts.
-  const live = await getLiveMode();
-  // While live, other reviewers' names are "Reviewer" unless revealed with
-  // the Show reviewer names button (the viewer's own name always shows).
-  const hideReviewers = await getHideReviewers();
-  const staffSettings = await getStaffSettings(access.session.slackId);
-  const rn = (label: string | null | undefined, fallback?: string) =>
-    reviewerName(label, viewer, hideReviewers, fallback);
 
-  const [data, allCollaborators, blackoutEntry, notes] = await Promise.all([
+  const [, staffSettings, data, allCollaborators, blackoutEntry, notes] = await Promise.all([
+    guidelinesAck,
+    getStaffSettings(access.session.slackId),
     getProject(projectId),
     listCollaboratorsForProject(projectId),
     getBlackoutEntry(projectId),
@@ -212,9 +214,9 @@ export default async function ReviewDetail({
   // reviewers and owners. A normal reviewer gets the same "not found" as a
   // missing project, so Robert's score and notes never reach them.
   if ((p.status === "fraud_review" || p.status === "second_review") && !access.canFraudReview) notFound();
-  // First pass: a plain reviewer can only open the first page of the queue and
-  // the projects assigned to them (owners and full_queue reviewers exempt). The queue greys the rest
-  // out, this covers someone typing the URL. See lib/reviewAssignment.ts.
+  // First pass: a project reserved for another reviewer can't be opened (owners
+  // and full_queue reviewers exempt). The queue greys it out, this covers
+  // someone typing the URL. See lib/reviewAssignment.ts.
   if (p.status === "shipped" && !access.canOpenFullQueue) {
     const gate = await firstPassAccess(projectId, viewer, false);
     if (!gate.ok) redirect(`/review?error=${encodeURIComponent(gate.message)}`);
@@ -247,14 +249,13 @@ export default async function ReviewDetail({
   // carrying second_pass_verdict "not_fraud" with it (see robertSync.ts), so
   // the spot check is the only thing isFinalStage can mean besides a proposed ban.
   const spotCheckStage = isFinalStage && p.second_pass_verdict === "not_fraud";
-  // Owner of the project, or a collaborator on it, pending invites included
-  // (all are paid on approval, so none may review it, owners included).
-  // Mirrors isOwnProject in app/actions.ts.
-  const isOwn =
-    (!!p.users?.slack_id && p.users.slack_id === viewer) ||
-    allCollaborators.some(
-      (c) => (c.status === "accepted" || c.status === "pending") && !!c.users?.slack_id && c.users.slack_id === viewer,
-    );
+  // The project owner may review their own work; collaborators still cannot.
+  // Mirrors isOwnProject / isCollaboratorProject in app/actions.ts.
+  const isProjectOwner = !!p.users?.slack_id && p.users.slack_id === viewer;
+  const isCollaborator = !isProjectOwner && allCollaborators.some(
+    (c) => (c.status === "accepted" || c.status === "pending") && !!c.users?.slack_id && c.users.slack_id === viewer,
+  );
+  const isOwn = isProjectOwner || isCollaborator;
   const isHeld = !!p.hold_at;
   // hold_by is stored as "Name (SlackID)" (see holdReview in app/actions.ts).
   // Only the reviewer who set it (or an owner) may release it.
@@ -262,23 +263,45 @@ export default async function ReviewDetail({
   const canReview =
     !isHeld &&
     !p.banned_at &&
-    ((p.status === "shipped" && !isOwn) ||
-      (isProposedBan && canSecondPass && !isOwn) ||
-      (spotCheckStage && (access.isOwner || canSecondPass) && !isOwn));
+    ((p.status === "shipped" && !isCollaborator) ||
+      (isProposedBan && canSecondPass && !isCollaborator) ||
+      (spotCheckStage && (access.isOwner || canSecondPass) && !isCollaborator));
   // Reviewer-side unship (see unshipProject): available to final reviewers at
   // second pass or fraud review regardless of who could submit a verdict, and
   // never on your own project or while a hold is set.
-  const unshipNote = canSecondPass && !isOwn && !isHeld ? unshipWarning(p.status) : null;
+  const unshipNote = canSecondPass && !isCollaborator && !isHeld ? unshipWarning(p.status) : null;
   const shippedAt = (p as { shipped_at?: string | null }).shipped_at ?? null;
+  // Shipped again after the deadline: this is the one resubmit a post-deadline
+  // "changes requested" earns (same test as reviewProject's final rejection).
+  const isFinalResubmit =
+    !!(p as { first_shipped_at?: string | null }).first_shipped_at &&
+    !!shippedAt &&
+    new Date(shippedAt) > submissionDeadline;
+  // Viewing must never reserve a project; only an explicit POST may claim it.
+  const currentClaim = activeReviewClaim(p, Date.now(), REVIEW_LOCK_MS);
+  const hasActiveClaim = currentClaim === viewer;
+  const claimedByOther = currentClaim && currentClaim !== viewer ? currentClaim : null;
 
-  const [claim, playerReBefore, firstPassAuditNote, bountyEventsResult] = await Promise.all([
-    canReview ? claimReview(projectId, viewer) : Promise.resolve({ ok: true as const, by: undefined }),
+  const [playerReBefore, firstPassAuditNote, firstPassPayoutResult, bountyEventsResult] = await Promise.all([
     // The RE the player already holds, excluding this project. It sets the
     // rate they'll be paid at, so the reviewer sees it before deciding.
     lifetimeRe(p.user_id, projectId),
     // So the final reviewer starts from what the first reviewer already wrote
     // instead of a blank form. They can still edit or overturn any of it.
     isFinalStage && p.first_pass_by ? getFirstPassAuditNote(projectId) : Promise.resolve(null),
+    // The paid first-pass payout, if any, so the final reviewer can take it
+    // back with one click when the first review was bad.
+    isFinalStage && canSecondPass
+      ? db
+          .from("review_payouts")
+          .select("paid_pixels")
+          .eq("project_id", projectId)
+          .eq("verdict", "first_pass_approved")
+          .eq("status", "paid")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
     shippedAt
       ? db
           .from("events")
@@ -290,63 +313,99 @@ export default async function ReviewDetail({
       : Promise.resolve({ data: [] as { id: number; name: string; config: Record<string, unknown> }[] }),
   ]);
 
+  const firstPassPayoutPx = Number(firstPassPayoutResult.data?.paid_pixels) || 0;
+
   // ---- Slow external lookups. Started here, never awaited by the page itself:
   // each one streams into its own <Suspense> boundary below, so GitHub,
   // Hackatime, the YSWS archive and Slack can't hold up the reviewer's view.
   const hackatimeProjects = p.hackatime_projects ?? [];
+  // Everyone who tracked time on this ship: the owner plus each accepted
+  // collaborator, each with their own Slack id and linked Hackatime projects.
+  // Collaborators log against their own Hackatime account, so every lookup
+  // below runs once per person, never just for the owner.
+  const hackatimeSources = [
+    { userId: p.user_id, slackId: p.users?.slack_id, projects: hackatimeProjects },
+    ...allCollaborators
+      .filter((c) => c.status === "accepted")
+      .map((c) => ({ userId: c.user_id, slackId: c.users?.slack_id, projects: c.hackatime_projects ?? [] })),
+  ].filter((s) => s.projects.length > 0);
   // Promise.resolve turns the query builder's thenable into a real promise,
-  // so the token query runs once even though two lookups await it.
-  const tokenPromise: Promise<string | null> = hackatimeProjects.length
+  // so the token query runs once even though several lookups await it.
+  const tokensPromise: Promise<Map<string, string | null>> = hackatimeSources.length
     ? Promise.resolve(
         db
           .from("users")
-          .select("hackatime_token")
-          .eq("id", p.user_id)
-          .single()
-          .then((r) => (r.data as { hackatime_token?: string } | null)?.hackatime_token ?? null),
+          .select("id, hackatime_token")
+          .in(
+            "id",
+            hackatimeSources.map((s) => s.userId),
+          )
+          .then((r) => {
+            const rows = (r.data ?? []) as { id: string; hackatime_token?: string | null }[];
+            return new Map(rows.map((u) => [u.id, u.hackatime_token ?? null] as const));
+          }),
       )
-    : Promise.resolve(null);
-  // Commit stats and tracked time both mutate the same result, so they run as
-  // one chain alongside everything else.
+    : Promise.resolve(new Map<string, string | null>());
+  // Commit stats and tracked time fill independent fields. Start both once
+  // the commit list arrives rather than waiting for one before the other.
   const commitsPromise = (async () => {
     const commits = await fetchCommits(p.repo_url);
-    await attachCommitStats(commits);
-    if (commits.commits.length > 0 && hackatimeProjects.length > 0) {
-      const spans = await fetchUserSpans(p.users?.slack_id, await tokenPromise, hackatimeProjects);
-      if (spans) attachTrackedTime(commits.commits, spans);
-    }
+    const spansPromise = (async () => {
+      if (commits.commits.length === 0 || hackatimeSources.length === 0) return;
+      const tokens = await tokensPromise;
+      const spanSets = await Promise.all(
+        hackatimeSources.map((s) => fetchUserSpans(s.slackId, tokens.get(s.userId) ?? null, s.projects)),
+      );
+      const spans = spanSets.flatMap((set) => set ?? []).sort((a, b) => a.start - b.start);
+      if (spans.length > 0) attachTrackedTime(commits.commits, spans);
+    })();
+    await Promise.all([attachCommitStats(commits), spansPromise]);
     return commits;
   })();
-  const hackatimeReportPromise = hackatimeProjects.length
-    ? tokenPromise.then((tok) => fetchHackatimeReport(p.users?.slack_id, tok, hackatimeProjects))
-    : Promise.resolve(null);
-  // Fraudy's own human/AI split per linked Hackatime project, for the AI time
-  // tab. Skipped in live mode (no real Hackatime id to send) and for viewers
-  // who can't see that tab anyway, since every call is logged under the
-  // Fraudy key's owner.
+  const hackatimeReportsPromise: Promise<HackatimePersonReport[]> = tokensPromise.then((tokens) =>
+    Promise.all(
+      hackatimeSources.map(async (s) => ({
+        userId: s.userId,
+        report: await fetchHackatimeReport(s.slackId, tokens.get(s.userId) ?? null, s.projects),
+      })),
+    ),
+  );
+  // Fraudy's own human/AI split per person per linked Hackatime project, for
+  // the AI time tab. Skipped for viewers who can't see that tab anyway, since
+  // every call is logged under the Fraudy key's owner. Keyed by
+  // fraudyCheckKey so two people's same-named projects can't collide.
   const fraudyChecksPromise: Promise<Record<string, FraudyAiCheck | null>> =
-    !live && canViewAiTime
-      ? hackatimeReportPromise.then(async (report) => {
-          if (!report?.ok || !report.hackatimeUserId) return {};
-          const linked = report.projects.filter((hp) => hp.linked);
+    canViewAiTime
+      ? hackatimeReportsPromise.then(async (people) => {
           const entries = await Promise.all(
-            linked.map(async (hp) => [hp.name, await fraudyCheckAi(report.hackatimeUserId, hp.name)] as const),
+            people.flatMap(({ report }) =>
+              !report.ok || !report.hackatimeUserId
+                ? []
+                : report.projects
+                    .filter((hp) => hp.linked)
+                    .map(
+                      async (hp) =>
+                        [
+                          fraudyCheckKey(report.hackatimeUserId, hp.name),
+                          await fraudyCheckAi(report.hackatimeUserId, hp.name),
+                        ] as const,
+                    ),
+            ),
           );
           return Object.fromEntries(entries);
         })
       : Promise.resolve({});
   const trustPromise = fetchTrustFactor(p.users?.slack_id);
-  const yswsPromise = yswsShipsFor(p.users?.slack_id, p.repo_url, p.demo_url);
+  const yswsPromise = yswsShipsForReview(p.users?.slack_id, p.repo_url, p.demo_url);
   const ownerHandlePromise = slackHandle(p.users?.slack_id);
   const bomPromise = p.needs_funding && p.bom_url ? fetchBomRows(p.bom_url) : null;
-  const claimByShown = !claim.ok && !!claim.by && rn(claim.by) !== "Reviewer";
-  const claimHandlePromise = claimByShown ? slackHandle(claim.by) : null;
+  const claimHandlePromise = claimedByOther ? slackHandle(claimedByOther) : null;
   // includeClaimed so prev/next and the "Submission N of M" counter walk the
   // same queue the list page shows. nextReviewId (the auto-advance after a
   // verdict) deliberately keeps excluding them, since it picks work for you.
   const queuePromise = isFinalStage
     ? listSecondReviewProjects(viewer, undefined, { includeClaimed: true })
-    : listShippedProjects(viewer, undefined, { includeClaimed: true });
+    : listShippedQueueCached(viewer, undefined);
 
   // approved_hours is a reviewer's per-entry deflation set from the Journals
   // tab (see setJournalHours in app/actions.ts). null means "use the player's
@@ -382,9 +441,6 @@ export default async function ReviewDetail({
   const ownerJournalHoursOnly = sumHours(ownerJournals, true);
 
   const acceptedCollaborators = allCollaborators.filter((c) => c.status === "accepted");
-  const collaboratorIds = acceptedCollaborators.map((c) => c.user_id);
-  const displayName = (userId: string, real: string): string =>
-    live ? liveAlias(userId, p.user_id, collaboratorIds) : real;
   const collaboratorHours = acceptedCollaborators.map((c) => {
     const cJournalHours = sumHours(
       journals.filter((j) => j.user_id === c.user_id),
@@ -394,7 +450,7 @@ export default async function ReviewDetail({
     return {
       id: c.id,
       userId: c.user_id,
-      name: displayName(c.user_id, builderNameFor(access, c.users, { fallback: c.user_id })),
+      name: builderNameFor(access, c.users, { fallback: c.user_id }),
       hackatimeHours: cHackatimeHours,
       journalHours: cJournalHours,
       claimedHours: cHackatimeHours > 0 ? cHackatimeHours : cJournalHours,
@@ -402,8 +458,7 @@ export default async function ReviewDetail({
   });
   // Legal name for owners/final reviewers only (builderNameFor); a first-pass
   // reviewer sees the Slack handle or display name.
-  const ownerNameFor = (handle: string | null) =>
-    displayName(p.user_id, builderNameFor(access, p.users, { handle, fallback: p.user_id }));
+  const ownerNameFor = (handle: string | null) => builderNameFor(access, p.users, { handle, fallback: p.user_id });
   const contributorsFor = (ownerName: string) => [
     { userId: p.user_id, name: ownerName, hackatimeHours, journalHours: ownerJournalHoursOnly },
     ...collaboratorHours,
@@ -435,7 +490,7 @@ export default async function ReviewDetail({
           people: blackoutEntry.contributors.map((c) => ({
             userId: c.userId,
             // Legal name for owners/final reviewers only.
-            name: displayName(c.userId, canSeeBuilderPII(access) ? c.name : (c.publicName ?? "player")),
+            name: canSeeBuilderPII(access) ? c.name : (c.publicName ?? "player"),
             role: c.role,
             hackatimeBaseSeconds: c.hackatimeBaseSeconds,
             journalBaseSeconds: c.journalBaseSeconds,
@@ -476,7 +531,6 @@ export default async function ReviewDetail({
 
   // ---- Builder details for the eligibility check.
   // PII is encrypted at rest; decryptPII also passes legacy plaintext through.
-  // In live mode nothing is decrypted at all (see redactBuilderDetails).
   // Name/email/birth date/address are for final reviewers and owners only
   // (canSeeBuilderPII); a first-pass reviewer gets the age plus "on file" /
   // "missing" per field, and for them only the birthday is even decrypted.
@@ -497,8 +551,8 @@ export default async function ReviewDetail({
     | null
     | undefined;
   const privileged = canSeeBuilderPII(access);
-  const dec = (v: string | null | undefined) => (live ? "" : decryptPII(v) || "");
-  const present = (v: string | null | undefined) => (live ? "" : v ? "x" : "");
+  const dec = (v: string | null | undefined) => decryptPII(v) || "";
+  const present = (v: string | null | undefined) => (v ? "x" : "");
   const pii = privileged ? dec : present;
   const birthday = dec(u?.birthday);
   const country = pii(u?.address_country);
@@ -514,24 +568,18 @@ export default async function ReviewDetail({
       .filter(Boolean)
       .join(", "),
   });
-  const builderDetails = redactBuilderDetails(live, {
-    fullName: builderView.fullName,
-    email: builderView.email,
-    ageLabel: builderView.ageLabel,
-    country: builderView.country,
-    address: builderView.address ?? "",
-  });
 
   // One day before the global cutoff, for the extend-hours date input's max.
   const maxExtendDateStr = new Date((hackatimeCutoffUnix - 86_400) * 1000).toISOString().slice(0, 10);
   const repoUrl = isSafeUrl(p.repo_url) ? p.repo_url : null;
+  const githubOwnerProfile = githubRepoOwnerProfile(repoUrl);
   const demoUrl = isSafeUrl(p.demo_url) ? p.demo_url : null;
   const cartScreenshots = p.cart_screenshot_urls ?? [];
   const returnTo = `/review/${p.id}`;
 
   const claimCallout = (handle: string | null) => (
     <Callout tone="warning" icon="private">
-      Heads up: {handle ?? (claimByShown ? claim.by : "another reviewer")} is already reviewing this submission.
+      Heads up: <span className="break-all">{handle ?? claimedByOther ?? "another reviewer"}</span> is already reviewing this submission.
       Avoid double-grading it.
     </Callout>
   );
@@ -548,6 +596,11 @@ export default async function ReviewDetail({
             <ButtonLink href={repoUrl} external variant="outline" icon="github">
               Repo
             </ButtonLink>
+            {githubOwnerProfile && (
+              <ButtonLink href={githubOwnerProfile} external variant="outline" icon="view">
+                GitHub profile
+              </ButtonLink>
+            )}
             <ButtonLink href={`${repoUrl.replace(/\/$/, "")}#readme`} external variant="outline" icon="docs">
               README
             </ButtonLink>
@@ -570,35 +623,41 @@ export default async function ReviewDetail({
           AI-written code. One button per linked Hackatime project so
           ?project= opens that project, or a single unscoped link to the
           user when none is linked. */}
-      {!live && isFinalStage && (
+      {isFinalStage && (
         <Suspense fallback={null}>
-          <Await promise={hackatimeReportPromise}>
-            {(report) => {
-              if (!report?.hackatimeUserId) return null;
-              const fraudyUrl = (projectName?: string) => {
-                const url = new URL(`https://fraudy.hackclub.com/users/${encodeURIComponent(String(report.hackatimeUserId))}`);
-                if (projectName) url.searchParams.set("project", projectName);
-                return url.toString();
-              };
-              const linked = report.projects.filter((hp) => hp.linked);
-              if (linked.length === 0) {
-                return (
-                  <ButtonLink href={fraudyUrl()} external icon="view">
-                    froud frad fraudy! is it ai?
-                  </ButtonLink>
-                );
-              }
-              return linked.map((hp) => (
-                <Fragment key={hp.name}>
-                  <ButtonLink href={fraudyUrl(hp.name)} external icon="view">
-                    froud frad fraudy! is it ai? {hp.name}
-                  </ButtonLink>
-                  <Suspense fallback={null}>
-                    <FraudyAiSummary hackatimeId={report.hackatimeUserId} project={hp.name} />
-                  </Suspense>
-                </Fragment>
-              ));
-            }}
+          <Await promise={hackatimeReportsPromise}>
+            {(people) =>
+              people.map(({ userId, report }) => {
+                if (!report.hackatimeUserId) return null;
+                // The owner's buttons stay unlabelled; a collaborator's are
+                // tagged with their name so it's clear whose time it is.
+                const who = collaboratorHours.find((c) => c.userId === userId)?.name;
+                const fraudyUrl = (projectName?: string) => {
+                  const url = new URL(`https://fraudy.hackclub.com/users/${encodeURIComponent(String(report.hackatimeUserId))}`);
+                  if (projectName) url.searchParams.set("project", projectName);
+                  return url.toString();
+                };
+                const linked = report.projects.filter((hp) => hp.linked);
+                if (linked.length === 0) {
+                  return (
+                    <ButtonLink key={userId} href={fraudyUrl()} external icon="view">
+                      froud frad fraudy! is it ai?{who ? ` (${who})` : ""}
+                    </ButtonLink>
+                  );
+                }
+                return linked.map((hp) => (
+                  <Fragment key={`${userId}:${hp.name}`}>
+                    <ButtonLink href={fraudyUrl(hp.name)} external icon="view">
+                      froud frad fraudy! is it ai? {hp.name}
+                      {who ? ` (${who})` : ""}
+                    </ButtonLink>
+                    <Suspense fallback={null}>
+                      <FraudyAiSummary hackatimeId={report.hackatimeUserId} project={hp.name} />
+                    </Suspense>
+                  </Fragment>
+                ));
+              })
+            }
           </Await>
         </Suspense>
       )}
@@ -616,7 +675,7 @@ export default async function ReviewDetail({
               {ownerName}
             </TextLink>
             <div className="text-sm">
-              {!live && p.users?.slack_id && (
+              {p.users?.slack_id && (
                 <TextLink
                   href={`https://hackclub.slack.com/team/${p.users.slack_id}`}
                   external
@@ -628,17 +687,24 @@ export default async function ReviewDetail({
               )}
               {acceptedCollaborators.length > 0 && (
                 <Muted>
-                  {!live && p.users?.slack_id ? " · " : ""}with {collaboratorHours.map((c) => c.name).join(", ")}
+                  {p.users?.slack_id ? " · " : ""}with {collaboratorHours.map((c) => c.name).join(", ")}
                 </Muted>
               )}
             </div>
+            {isFinalResubmit && (
+              <div className="mt-1">
+                <Badge tone="danger">
+                  Final resubmit: approve it or ban it. Requesting changes again rejects it for good.
+                </Badge>
+              </div>
+            )}
             <p className="hc-caption mt-1 text-sm">
               Submitted {ago(p.shipped_at)} · {fmtHM(hours)} logged
-              {hackatimeProjects.length > 0 && (
+              {hackatimeSources.length > 0 && (
                 <>
                   {" · "}
                   <a href="#hackatime" className="hc-link">
-                    Hackatime: {hackatimeProjects.join(", ")}
+                    Hackatime: {[...new Set(hackatimeSources.flatMap((s) => s.projects))].join(", ")}
                   </a>
                 </>
               )}
@@ -678,12 +744,12 @@ export default async function ReviewDetail({
           </p>
           <DescriptionList
             items={[
-              ["Name", builderDetails.fullName],
-              ["Email", builderDetails.email],
-              ["Age", builderDetails.ageLabel],
-              ["Country", builderDetails.country],
+              ["Name", builderView.fullName],
+              ["Email", builderView.email],
+              ["Age", builderView.ageLabel],
+              ["Country", builderView.country],
               ...(builderView.address !== null
-                ? ([["Address", builderDetails.address]] as [ReactNode, ReactNode][])
+                ? ([["Address", builderView.address]] as [ReactNode, ReactNode][])
                 : []),
             ]}
           />
@@ -796,7 +862,14 @@ export default async function ReviewDetail({
                   ? "The real final verdict, after Robert's fraud review. Approving credits pixels at the player's level rate ($4-6/hr in px) and ships it. Every verdict needs a note. You can only lower the credited hours."
                   : "Every verdict needs a note. Approving sends this to Robert for fraud review before pixels are credited, so even with final-reviewer rights your first look is still a proposal. You can only lower the credited hours."}
             </p>
-            <ReviewForm
+            {hasActiveClaim ? (
+              <>
+                <form action={endReviewClaim} className="mb-3 flex items-center justify-between gap-2 border-b border-[var(--border)] pb-3">
+                  <input type="hidden" name="projectId" value={p.id} />
+                  <p className="hc-caption text-xs">Review claimed by you · saved notes are retained if you stop.</p>
+                  <ActionButton variant="outline" size="sm" pendingLabel="Releasing...">Stop reviewing</ActionButton>
+                </form>
+                <ReviewForm
               projectId={p.id}
               repoUrl={p.repo_url}
               demoUrl={p.demo_url}
@@ -820,6 +893,8 @@ export default async function ReviewDetail({
               currentImageUrl={p.image_url}
               defaultRevealName={staffSettings.reviewRevealName}
               defaultNotifyOnResubmit={staffSettings.reviewNotifyOnResubmit}
+              initialReviewMacros={staffSettings.reviewMacros}
+              initialMacroPromptDismissed={staffSettings.reviewMacroPromptDismissed}
               firstPass={
                 firstPassAudit
                   ? {
@@ -834,7 +909,24 @@ export default async function ReviewDetail({
               serverDraft={
                 p.review_draft ? { draft: p.review_draft, by: p.review_draft_by, at: p.review_draft_at } : undefined
               }
-            />
+                />
+              </>
+            ) : (
+              <div className="flex flex-col items-start gap-3 rounded-lg border border-[var(--border)] bg-[var(--sunken)] p-4">
+                <p className="font-bold text-sm">Preview mode — you're not reviewing this yet</p>
+                <p className="hc-caption text-sm">
+                  You can inspect the project and its evidence without claiming it. Start reviewing only when you're ready
+                  to write a verdict; that reserves this project for 30 minutes and keeps the claim alive while you work.
+                </p>
+                <form action={beginReviewClaim}>
+                  <input type="hidden" name="projectId" value={p.id} />
+                  <ActionButton icon="view" pendingLabel="Claiming...">Start reviewing</ActionButton>
+                </form>
+                {claimedByOther && (
+                  <p className="hc-caption text-xs">Another reviewer currently has the claim. You'll be able to claim it when they finish or it expires.</p>
+                )}
+              </div>
+            )}
           </Card>
         </>
       ) : p.banned_at ? (
@@ -1128,7 +1220,7 @@ export default async function ReviewDetail({
               : p.first_pass_verdict === "needs_changes"
                 ? "Changes proposed by "
                 : "Passed by "}
-            <strong>{rn(p.first_pass_by, "a reviewer")}</strong>
+            <strong>{staffName(p.first_pass_by, "a reviewer")}</strong>
             {p.first_pass_at && (
               <>
                 {" "}
@@ -1155,6 +1247,18 @@ export default async function ReviewDetail({
               <p className="hc-eyebrow mb-1">Their note</p>
               <p className="whitespace-pre-wrap break-words text-sm">{p.first_pass_note}</p>
             </div>
+          )}
+          {firstPassPayoutPx > 0 && (
+            <form action={removeFirstPassPayout} className="mt-3">
+              <input type="hidden" name="projectId" value={p.id} />
+              <ActionButton
+                variant="cream"
+                pendingLabel="Removing..."
+                confirm={`Take ${firstPassPayoutPx} pixels back from the first-pass reviewer and remove the review from the leaderboard?`}
+              >
+                Bad review, remove {firstPassPayoutPx} px
+              </ActionButton>
+            </form>
           )}
         </Card>
       )}
@@ -1204,7 +1308,7 @@ export default async function ReviewDetail({
 
   return (
     <div className="hc-review flex flex-col gap-6">
-      {claim.ok && canReview && <ReviewHeartbeat projectId={projectId} />}
+      {hasActiveClaim && canReview && <ReviewHeartbeat projectId={projectId} />}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ButtonLink href="/review" variant="ghost" size="sm" icon="view-back">
@@ -1214,14 +1318,13 @@ export default async function ReviewDetail({
           <ButtonLink href={`/projects/${p.id}`} variant="outline" size="sm">
             Open in project view
           </ButtonLink>
-          {live && <ShowReviewerNames hidden={hideReviewers} />}
         </div>
       </div>
 
-      {(error || !claim.ok) && (
+      {(error || claimedByOther) && (
         <div className="flex flex-col gap-3">
           <Flash error={error} />
-          {!claim.ok &&
+          {claimedByOther &&
             (claimHandlePromise ? (
               <Suspense fallback={claimCallout(null)}>
                 <Await promise={claimHandlePromise}>{(handle) => claimCallout(handle)}</Await>
@@ -1460,12 +1563,12 @@ export default async function ReviewDetail({
               promise={Promise.all([
                 commitsPromise,
                 yswsPromise,
-                hackatimeReportPromise,
+                hackatimeReportsPromise,
                 ownerHandlePromise,
                 fraudyChecksPromise,
               ])}
             >
-              {([commits, yswsShips, hackatimeReport, ownerHandle, fraudyChecks]) => (
+              {([commits, yswsArchive, hackatimeReports, ownerHandle, fraudyChecks]) => (
                 <ReviewDetailTabs
                   projectId={p.id}
                   commits={commits}
@@ -1473,14 +1576,9 @@ export default async function ReviewDetail({
                   contributorNames={Object.fromEntries(
                     contributorsFor(ownerNameFor(ownerHandle)).map((c) => [c.userId, c.name]),
                   )}
-                  reviewAudits={
-                    // Masked on the server so hidden reviewers' names never
-                    // reach the client props.
-                    hideReviewers
-                      ? reviewAudits.map((a) => (rn(a.reviewer) === "Reviewer" ? { ...a, reviewer: "Reviewer" } : a))
-                      : reviewAudits
-                  }
-                  yswsShips={yswsShips}
+                  reviewAudits={reviewAudits}
+                  yswsShips={yswsArchive.ships}
+                  yswsArchiveStatus={yswsArchive.status}
                   yswsImport={
                     p.imported_from_ysws
                       ? {
@@ -1490,7 +1588,7 @@ export default async function ReviewDetail({
                         }
                       : null
                   }
-                  hackatime={live && hackatimeReport ? { ...hackatimeReport, hackatimeUserId: "" } : hackatimeReport}
+                  hackatimeReports={hackatimeReports}
                   repoUrl={p.repo_url ?? null}
                   projectKind={p.kind}
                   usedAi={!!p.used_ai}
@@ -1511,7 +1609,7 @@ export default async function ReviewDetail({
               <p className="font-bold">On hold, can&apos;t be reviewed right now</p>
               <p className="mt-1">{p.hold_reason || "No reason given."}</p>
               <p className="hc-caption mt-1 text-xs">
-                Held by {rn(p.hold_by, "an owner")}
+                Held by {staffName(p.hold_by, "an owner")}
                 {p.hold_at ? ` on ${formatDateTime(p.hold_at)}` : ""}.
               </p>
               {(access.isOwner || heldByMe) && (
@@ -1533,7 +1631,7 @@ export default async function ReviewDetail({
 
           {spotCheckStage && p.second_pass_note && (
             <Card padding="compact">
-              <p className="hc-heading text-sm">Fraud triage note ({rn(p.second_pass_by, "a reviewer")})</p>
+              <p className="hc-heading text-sm">Fraud triage note ({staffName(p.second_pass_by, "a reviewer")})</p>
               <p className="hc-caption mt-1 whitespace-pre-wrap text-sm">{p.second_pass_note}</p>
             </Card>
           )}
@@ -1555,12 +1653,12 @@ export default async function ReviewDetail({
             </Callout>
           )}
 
-          {isOwn && p.status === "shipped" && (
+          {isCollaborator && p.status === "shipped" && (
             <Callout tone="warning" icon="private">
               This is your own submission. Another reviewer has to do the first pass.
             </Callout>
           )}
-          {isOwn && isFinalStage && (
+          {isCollaborator && isFinalStage && (
             <Callout tone="warning" icon="private">
               Your own submission. Another owner has to give the final verdict.
             </Callout>

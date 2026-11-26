@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { guardedRoute } from "@/lib/guard";
 import { csvCell } from "@/lib/csv";
-import { getLiveMode } from "@/lib/liveModeServer";
 import { db } from "@/lib/db";
 import { parseAuditNote } from "@/lib/auditNote";
 import { decryptPII } from "@/lib/crypto";
@@ -13,8 +12,6 @@ export const dynamic = "force-dynamic";
 // access) is a small diff rather than a redesign. Interim/manual export until
 // then , see the "ysws-submission-fields" migration.
 export const GET = guardedRoute("api.projects.export", "owner", async (): Promise<NextResponse> => {
-  if (await getLiveMode()) return new NextResponse("Disabled in live mode", { status: 403 });
-
   const { data: projects, error } = await db
     .from("projects")
     .select(

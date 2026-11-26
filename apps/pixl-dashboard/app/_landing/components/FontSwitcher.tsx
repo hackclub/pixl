@@ -44,8 +44,8 @@ export function FontSwitcher() {
         onClick={toggle}
         aria-pressed={phantom}
         title={dict.menu.font}
-        className={`flex cursor-pointer items-center border-black border-b-4 border-l-2 border-r-4 border-t-2 px-3 py-1.5 font-pixel text-base transition-all hover:border-b-6 sm:px-6 sm:py-2 sm:text-lg lg:text-xl ${
-          phantom ? "bg-black text-[#F5EED2]" : "bg-[#F5EED2] text-black"
+        className={`flex cursor-pointer items-center border-black border-b-4 border-l-2 border-r-4 border-t-2 px-3 py-1.5 font-pixel text-base transition-colors sm:px-6 sm:py-2 sm:text-lg lg:text-xl ${
+          phantom ? "bg-black text-[#F5EED2] hover:bg-[#2b2b33]" : "bg-[#F5EED2] text-black hover:bg-[#e6dcb8]"
         }`}
       >
         Phantom Sans

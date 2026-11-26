@@ -34,7 +34,7 @@ export function DocToc({ headings }: { headings: { id: string; text: string }[] 
     // Dropped below 1080px, before the content column gets squeezed.
     <aside
       className={cn(
-        "sticky top-0 h-screen overflow-y-auto pt-[52px] pr-[18px] pb-[40px] pl-[6px] max-[1080px]:hidden",
+        "sticky top-[54px] h-[calc(100vh-54px)] overflow-y-auto pt-[46px] pr-[18px] pb-[40px] pl-[6px] max-[1080px]:hidden",
         headings.length < 2 && "invisible",
       )}
     >
