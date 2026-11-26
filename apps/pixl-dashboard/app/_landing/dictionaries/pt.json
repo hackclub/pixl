@@ -30,6 +30,20 @@
     "enterGame": "entrar no jogo",
     "openDash": "abrir painel"
   },
+  "ended": {
+    "heroTitle": "O Pixl terminou em 20 de novembro de 2026",
+    "heroBody": "Obrigado a todos que construíram algo.",
+    "bandTitle": "Pixl em números",
+    "labels": {
+      "users": "jogadores inscritos",
+      "projectsCreated": "projetos criados",
+      "projectsShipped": "projetos enviados",
+      "hoursShipped": "horas enviadas",
+      "rewardsUsd": "em recompensas da loja"
+    },
+    "shopLine": "{rewardsUsd} em recompensas pedidas pelos nossos jogadores",
+    "questLine": "{projectsShipped} projetos enviados, {hoursShipped} horas de construção"
+  },
   "description": {
     "title": "O que é Pixl?",
     "body": "Séculos atrás, Origin foi a maior civilização digital já construída, até que o Grande Static a estilhaçou em ilhas perdidas no Vazio. Seu povo cruzou universos e encontrou os Hack Clubbers, que ajudaram a reconstruí-la sob um novo nome: Pixl. Um YSWS com tema de pixel onde cada projeto real que você entrega repara o mundo e desbloqueia recompensas reais.",
@@ -301,7 +315,7 @@
       },
       {
         "name": "Crédito de domínio",
-        "description": "Um crédito acumulável de US$ 12 para registrar um domínio para seu projeto."
+        "description": "Um crédito acumulável de US$ 10 para registrar um domínio para seu projeto."
       },
       {
         "name": "Crédito de hospedagem",

@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
-import type { BuyerDetails, OrderStatus, ShopOrderRow } from "@/lib/db";
-import { ORDER_STAGES } from "@/lib/db";
+import type { BuyerDetails, OrderStatus, OrderUnfulfillmentRow, ShopOrderRow } from "@/lib/db";
 import { visibleOrderActions } from "@/lib/fulfillmentAccess";
 import { GRANT_STAGES, GRANT_STAGE_HINT, GRANT_STAGE_LABEL, isGrantOrder, usesGrantFlow } from "@/lib/fulfillmentGrant";
 import {
@@ -12,24 +11,32 @@ import {
   Mono,
   Muted,
   TextLink,
+  Timeline,
   formatDate,
   formatDateTime,
 } from "@/app/_ui/ui";
 import type { EligibilityResult } from "@/lib/eligibility/engine";
 import { SlackHandle } from "./SlackHandle";
+import { CopyEmail } from "./CopyEmail";
 import { FundingDisclosure } from "./Funding";
 import { ELIGIBILITY_HINT } from "@/lib/eligibility/format";
-import { EditFulfillmentInfo, FlagControls, OrderActions } from "./OrderActions";
+import { slackDmLink } from "@/lib/slack";
+import { EditFulfillmentInfo, FlagControls, OrderActions, UnfulfillControls } from "./OrderActions";
 import { ItemThumb, TypeBadge } from "./OrderList";
-import { STAGE_HINT, STAGE_LABEL, STAGE_TONE, SafeLink, slackLink, usdBudget } from "./shared";
+import { ORDER_STEPS, STAGE_HINT, STAGE_LABEL, STAGE_TONE, SafeLink, orderBudgetUsd, stageIndex } from "./shared";
 
 // These two ship in a plain envelope with no carrier tracking of their own,
 // so a printable address label (app/fulfillment/label/[id]) is how the
 // fulfiller actually gets it to the right mailbox.
-const LABEL_ELIGIBLE_ITEMS = new Set(["Random Desk Object", "Signed Org Photo"]);
+const LABEL_ELIGIBLE_ITEMS = new Set(["Random Desk Object", "Signed Org Photo", "Community Meme Pack (5-Pack)"]);
 
 function stageStamp(o: ShopOrderRow, s: OrderStatus): string | null {
-  const v = { pending: o.created_at, claimed: o.claimed_at, ordered: o.ordered_at, credited: o.credited_at, shipped: o.shipped_at, done: o.done_at, cancelled: null }[s];
+  const v =
+    s === "pending"
+      ? o.created_at
+      : s === "claimed"
+        ? (o.claimed_at ?? o.ordered_at ?? o.credited_at)
+        : (o.done_at ?? o.shipped_at ?? o.fulfilled_at);
   return v ? formatDate(v) : null;
 }
 
@@ -62,10 +69,10 @@ function Stepper({ order: o }: { order: ShopOrderRow }) {
       </ol>
     );
   }
-  const idx = ORDER_STAGES.indexOf(o.status);
+  const idx = stageIndex(o.status);
   return (
     <ol className="fw-steps" aria-label="Order progress">
-      {ORDER_STAGES.map((s, i) => (
+      {ORDER_STEPS.map((s, i) => (
         <li
           key={s}
           className="fw-step"
@@ -82,7 +89,7 @@ function Stepper({ order: o }: { order: ShopOrderRow }) {
   );
 }
 
-function Panel({ title, icon, children, aside }: { title: string; icon: "message" | "pin" | "person" | "link" | "bolt"; children: ReactNode; aside?: ReactNode }) {
+function Panel({ title, icon, children, aside }: { title: string; icon: "message" | "pin" | "person" | "link" | "bolt" | "history"; children: ReactNode; aside?: ReactNode }) {
   return (
     <section className="fw-panel">
       <header className="fw-panel-head">
@@ -116,7 +123,7 @@ function ShippingPanel({ order: o, buyer, country }: { order: ShopOrderRow; buye
       <DescriptionList
         items={[
           ["Name", <OnFile key="n" value={buyer.name} />],
-          ["Email", <OnFile key="e" value={buyer.email && <TextLink href={`mailto:${buyer.email}`} external>{buyer.email}</TextLink>} />],
+          ["Email", <OnFile key="e" value={buyer.email && <CopyEmail email={buyer.email} />} />],
         ]}
       />
     );
@@ -134,7 +141,7 @@ function ShippingPanel({ order: o, buyer, country }: { order: ShopOrderRow; buye
       <DescriptionList
         items={[
           ["Name", <OnFile key="n" value={buyer.name} />],
-          ["Email", <OnFile key="e" value={buyer.email && <TextLink href={`mailto:${buyer.email}`} external>{buyer.email}</TextLink>} />],
+          ["Email", <OnFile key="e" value={buyer.email && <CopyEmail email={buyer.email} />} />],
           ["Phone", <OnFile key="p" value={buyer.phone} />],
           [
             "Address",
@@ -165,6 +172,7 @@ export function OrderDetail({
   ownOrder,
   canManage,
   eligibility,
+  history,
 }: {
   order: ShopOrderRow;
   buyer?: BuyerDetails;
@@ -174,9 +182,10 @@ export function OrderDetail({
   ownOrder: boolean;
   canManage: boolean;
   eligibility: EligibilityResult | null;
+  history: OrderUnfulfillmentRow[];
 }) {
-  const actionable = o.status !== "done" && o.status !== "cancelled";
-  const budget = usdBudget(o.price);
+  const actionable = o.status !== "done" && o.status !== "shipped" && o.status !== "cancelled";
+  const budget = orderBudgetUsd(o);
   const visible = visibleOrderActions({
     status: o.status,
     flagged: Boolean(o.flagged_at),
@@ -228,7 +237,7 @@ export function OrderDetail({
             {o.player_slack && (
               <>
                 {" · "}
-                <TextLink href={slackLink(o.player_slack)} external>
+                <TextLink href={slackDmLink(o.player_slack)} external>
                   <SlackHandle id={o.player_slack} />
                 </TextLink>
               </>
@@ -240,6 +249,12 @@ export function OrderDetail({
             <Badge tone={STAGE_TONE[o.status] ?? "neutral"}>{STAGE_LABEL[o.status] ?? o.status}</Badge>
             {o.option && <Badge>{o.option}</Badge>}
             {o.is_grant && o.item_category !== "grants" && <Badge tone="cyan" outline>Converted to grant</Badge>}
+            {o.item_flow && !o.is_grant && <Badge tone="cyan" outline>Fulfilling as item</Badge>}
+            {history.length > 0 && (
+              <Badge tone="yellow" outline>
+                Reopened {history.length === 1 ? "once" : `${history.length}x`}
+              </Badge>
+            )}
             {o.item_beacon_locked && (
               <Badge tone="yellow" icon="rep">
                 Beacon reward
@@ -315,7 +330,7 @@ export function OrderDetail({
                 [
                   "Slack",
                   o.player_slack ? (
-                    <TextLink key="s" href={slackLink(o.player_slack)} external>
+                    <TextLink key="s" href={slackDmLink(o.player_slack)} external>
                       <SlackHandle id={o.player_slack} />
                     </TextLink>
                   ) : null,
@@ -353,6 +368,45 @@ export function OrderDetail({
         </div>
       </div>
 
+      {history.length > 0 && (
+        <Panel title="Previous fulfillments" icon="history">
+          <Timeline
+            entries={history.map((h) => {
+              const cost = h.actual_cost_usd == null ? null : Number(h.actual_cost_usd);
+              return {
+                key: h.id,
+                title: (
+                  <>
+                    <strong>Fulfilled by {h.fulfilled_by || "a fulfiller"}</strong>
+                    <Muted>· {formatDateTime(h.fulfilled_at ?? h.unfulfilled_at)}</Muted>
+                    <Badge tone="cyan" outline>{h.fulfillment_kind === "grant" ? "Grant" : "Item"}</Badge>
+                    {h.pixels_paid > 0 && <Badge tone="success" outline>{h.pixels_paid} px paid</Badge>}
+                  </>
+                ),
+                body: (
+                  <div className="flex flex-col gap-1 text-sm">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                      {h.hcb_link && (
+                        <span>
+                          HCB <SafeLink url={h.hcb_link} />
+                        </span>
+                      )}
+                      {cost !== null && <span>Cost ${cost.toFixed(2)}</span>}
+                      {h.tracking && h.tracking !== h.hcb_link && <span>Tracking <Mono>{h.tracking}</Mono></span>}
+                    </div>
+                    <Callout tone="warning" icon="back">
+                      <strong>Reopened by {h.unfulfilled_by || "an owner"}</strong>{" "}
+                      <Muted>· {formatDateTime(h.unfulfilled_at)}</Muted>
+                      <p className="mt-1 whitespace-pre-line">{h.reason}</p>
+                    </Callout>
+                  </div>
+                ),
+              };
+            })}
+          />
+        </Panel>
+      )}
+
       {visible.any && (
         <Panel title="Actions" icon="bolt">
           <div className="flex flex-col gap-3">
@@ -360,12 +414,13 @@ export function OrderDetail({
             {visible.flag && <FlagControls order={o} canManage={canManage} budget={budget} />}
             {visible.contact && o.player_slack && (
               <div>
-                <ButtonLink href={slackLink(o.player_slack)} external variant="outline" size="sm" icon="message">
-                  Contact buyer
+                <ButtonLink href={slackDmLink(o.player_slack)} external variant="outline" size="sm" icon="slack-fill">
+                  Message on Slack
                 </ButtonLink>
               </div>
             )}
             {visible.edit && <EditFulfillmentInfo order={o} />}
+            {visible.unfulfill && <UnfulfillControls order={o} />}
           </div>
         </Panel>
       )}

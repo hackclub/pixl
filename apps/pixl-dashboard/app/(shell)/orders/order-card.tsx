@@ -22,10 +22,7 @@ export interface Order {
 const STAGES: [string, string][] = [
   ["pending", "NEW"],
   ["claimed", "CLAIMED"],
-  ["ordered", "ORDERED"],
-  ["credited", "PAID"],
-  ["shipped", "SHIPPED"],
-  ["done", "DONE"],
+  ["done", "FULFILLED"],
 ];
 
 // Grants skip the shipping stages: New, Claimed, then the grant is sent.
@@ -43,11 +40,19 @@ const BADGE: Record<string, [string, BadgeTone]> = {
   ordered: ["ORDERED", "gold"],
   credited: ["PAID", "gold"],
   shipped: ["SHIPPED", "teal"],
-  done: ["DELIVERED", "green"],
+  done: ["FULFILLED", "green"],
   cancelled: ["CANCELLED · REFUNDED", "red"],
 };
 
 const meta = "flex flex-wrap items-center gap-[6px] text-[13px] text-dim";
+
+// ordered/credited/shipped are legacy item-pipeline states; today an item goes
+// pending -> claimed -> done.
+function itemStageOf(status: string): string {
+  if (status === "ordered" || status === "credited") return "claimed";
+  if (status === "shipped") return "done";
+  return status;
+}
 
 function Tracker({ status, stages = STAGES }: { status: string; stages?: [string, string][] }) {
   const idx = stages.findIndex(([s]) => s === status);
@@ -112,7 +117,7 @@ export function OrderCard({ order: o }: { order: Order }) {
         <div className="text-[14px] text-dim">Refunded to your wallet.{o.note ? ` ${o.note}` : ""}</div>
       ) : (
         <>
-          <Tracker status={o.status} stages={grantFlow ? GRANT_STAGES : STAGES} />
+          <Tracker status={grantFlow ? o.status : itemStageOf(o.status)} stages={grantFlow ? GRANT_STAGES : STAGES} />
           {o.status === "pending" && o.queue_position ? (
             <div className={meta}>
               #{o.queue_position}

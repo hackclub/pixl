@@ -11,10 +11,12 @@ import type { YswsShip } from "@/lib/ysws";
 import { CommitList } from "@/app/_components/CommitList";
 import { renderMarkdown } from "@/lib/markdown";
 import { HackatimePanel } from "@/app/_components/HackatimePanel";
+import { FileTimeCard } from "@/app/_components/FileTimeCard";
 import { setJournalHours } from "@/app/actions";
 import { staffName } from "@/lib/staffName";
 import { parseAuditNote, type AuditHeader } from "@/lib/auditNote";
 import { isSafeUrl } from "@/lib/safeUrl";
+import { reviewThreadUrl } from "@/lib/reviewThread";
 import { Badge, Button, Callout, Card, CountBadge, EmptyState, formatDate, formatDateTime, Input, Mono, Muted, Textarea, TextLink, type Tone } from "@/app/_ui/ui";
 import { actionErrorMessage } from "@/app/_ui/actionError";
 
@@ -312,6 +314,9 @@ export function ReviewDetailTabs({
               <HackatimePanel report={report} />
             </div>
           ))}
+          <div className="border-t border-[var(--border)]">
+            <FileTimeCard projectId={projectId} hasHackatime embedded />
+          </div>
         </div>
       )}
 
@@ -472,6 +477,7 @@ export function ReviewDetailTabs({
                 ? (Object.keys(SECTION_LABEL) as AuditHeader[]).filter((h) => sections[h]?.trim())
                 : [];
               const hasMore = sectionKeys.length > 0 || !!v.note?.trim();
+              const threadUrl = reviewThreadUrl(v.slack_thread_ts);
               return (
                 <li key={v.id} className="border-b border-[var(--border)] p-3 last:border-b-0">
                   <details className="hc-details">
@@ -494,7 +500,14 @@ export function ReviewDetailTabs({
                           {sections[h]}
                         </Section>
                       ))}
-                      {!hasMore && <p className="hc-caption text-sm">No additional notes.</p>}
+                      {threadUrl && (
+                        <div>
+                          <TextLink href={threadUrl} external>
+                            Open the thread in #pixl-checkpoint
+                          </TextLink>
+                        </div>
+                      )}
+                      {!hasMore && !threadUrl && <p className="hc-caption text-sm">No additional notes.</p>}
                     </div>
                   </details>
                 </li>

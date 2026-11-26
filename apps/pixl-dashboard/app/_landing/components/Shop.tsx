@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { useLocale } from "./LocaleProvider";
 import { Marquee } from "./Marquee";
+import { EndedLine } from "./StatsBand";
 
 const ITEM_IMAGES = [
   "/shop/signed-photo.webp",
@@ -136,6 +137,7 @@ export function Shop() {
         >
           {t.description}
         </motion.p>
+        <EndedLine line="shopLine" />
       </div>
 
       <Marquee duration={75} className="pt-4 items-end">

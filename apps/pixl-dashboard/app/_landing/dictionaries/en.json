@@ -30,6 +30,20 @@
     "enterGame": "enter the game",
     "openDash": "open dashboard"
   },
+  "ended": {
+    "heroTitle": "Pixl ended on November 20th, 2026",
+    "heroBody": "Thank you to everyone who built something.",
+    "bandTitle": "Pixl by the numbers",
+    "labels": {
+      "users": "players signed up",
+      "projectsCreated": "projects created",
+      "projectsShipped": "projects shipped",
+      "hoursShipped": "hours shipped",
+      "rewardsUsd": "in shop rewards"
+    },
+    "shopLine": "{rewardsUsd} in rewards ordered by our players",
+    "questLine": "{projectsShipped} projects shipped, {hoursShipped} hours of building"
+  },
   "description": {
     "title": "What is Pixl?",
     "body": "Centuries ago, Origin was the greatest digital civilization ever built, until the Great Static shattered it into islands lost in the Void. Its people crossed universes and found Hack Clubbers, who helped rebuild it under a new name: Pixl. A pixel-themed YSWS where every real project you ship repairs the world and unlocks real-world rewards.",
@@ -301,7 +315,7 @@
       },
       {
         "name": "Domain Grant",
-        "description": "A stackable $12 grant to register a domain for your project."
+        "description": "A stackable $10 grant to register a domain for your project."
       },
       {
         "name": "Hosting Grant",

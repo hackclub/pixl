@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { submissionsClosedFor } from "../submissionDeadline.js";
+import { projectCreationClosed, submissionsClosedFor } from "../submissionDeadline.js";
+import { submissionDeadline } from "../config.generated.js";
 import { db } from "../db/client.js";
 import { runPrecheck, shouldPrecheck } from "../precheck/run.js";
 import { checkReadmeLength } from "../precheck/readmeLength.js";
@@ -516,6 +517,7 @@ router.post("/api/projects", validate({ query: v.noQuery, body: projectBody }), 
   const session = req.session;
   if (!session) return res.status(401).json({ ok: false });
 
+  if (projectCreationClosed()) return res.status(403).json({ ok: false, error: "project_creation_closed" });
   const parsed = parseProjectBody(req.body);
   if (parsed.error !== undefined)
     return res.status(400).json({ ok: false, error: parsed.error });
@@ -652,12 +654,31 @@ router.post("/api/projects/:id/ship", validate({ query: v.noQuery, params: param
     return res.status(400).json({ ok: false, error: "project_banned" });
 
   // Submissions closed on config.submissionDeadline; the only ship still
-  // allowed is the one resubmit a needs_changes project earns.
-  if (submissionsClosedFor(project))
+  // allowed is the one resubmit a project earns from a request for changes:
+  // made in the 24h before the deadline -> until deadline + 48h; made after
+  // the deadline -> within 24h of the request. The request time is the newest
+  // needs_changes review_audits row, looked up only when it can matter.
+  let changesRequestedAt: string | null = null;
+  if (new Date() > submissionDeadline && project.status === "needs_changes") {
+    const { data: audit, error: auditLookupError } = await db
+      .from("review_audits")
+      .select("created_at")
+      .eq("project_id", id)
+      .eq("verdict", "needs_changes")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (auditLookupError) {
+      console.error("[projects] changes-requested lookup failed", auditLookupError.message);
+      return res.status(500).json({ ok: false });
+    }
+    changesRequestedAt = (audit?.created_at as string | undefined) ?? null;
+  }
+  if (submissionsClosedFor(project, new Date(), submissionDeadline, changesRequestedAt))
     return res.status(403).json({
       ok: false,
       error: "submissions_closed",
-      message: "Submissions have closed. Only projects where a reviewer requested changes can be resubmitted, once.",
+      message: "Submissions have closed. A project where a reviewer requested changes can be resubmitted once: until 48 hours after the deadline if the changes were requested in the last 24 hours before it, or within 24 hours of the request if they were requested after the deadline.",
     });
 
   const shippable = ["draft", "needs_changes", "approved"];

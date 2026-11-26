@@ -65,19 +65,28 @@ export interface VisibleOrderActions {
   flag: boolean;
   contact: boolean;
   edit: boolean;
+  unfulfill: boolean;
   any: boolean;
 }
 
 export function visibleOrderActions(c: OrderActionContext): VisibleOrderActions {
-  const actionable = c.status !== "done" && c.status !== "cancelled";
+  // shipped is a legacy terminal state (tracking sent, payout paid) and done is
+  // terminal: neither has a queue action left. Only pending, claimed and legacy
+  // ordered/credited orders can still be worked.
+  const actionable = c.status !== "shipped" && c.status !== "done" && c.status !== "cancelled";
   let primary = false;
   if (actionable) {
-    if (c.status === "shipped") primary = c.canManage;
-    else if (!c.mine && c.status !== "pending") primary = c.canManage;
+    if (!c.mine && c.status !== "pending") primary = c.canManage;
     else primary = true;
   }
-  const flag = actionable && c.status !== "shipped" && (c.mine || c.canManage) && (!c.flagged || c.canManage);
-  const contact = actionable && c.hasBuyerSlack;
+  const flag = actionable && (c.mine || c.canManage) && (!c.flagged || c.canManage);
+  // Messaging the buyer stays useful after an order closes (a tracking or
+  // delivery question), so fulfilled orders keep this action too. Cancelled
+  // orders are the only ones with nothing to ask about.
+  const contact = c.hasBuyerSlack && c.status !== "cancelled";
   const edit = c.canManage && c.status !== "pending" && c.status !== "claimed" && c.status !== "cancelled";
-  return { primary, flag, contact, edit, any: primary || flag || contact || edit };
+  // Undoing a finished fulfillment rewrites a closed record (and the payout is
+  // deliberately kept), so it is an owner correction like edit/cancel.
+  const unfulfill = c.canManage && (c.status === "done" || c.status === "shipped");
+  return { primary, flag, contact, edit, unfulfill, any: primary || flag || contact || edit || unfulfill };
 }

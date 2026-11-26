@@ -39,10 +39,19 @@ describe("H2 fulfillment", () => {
     expect(label).toContain("canViewLabel(order, access)");
     expect(label).toContain('"fulfillment.label_view"');
   });
+  test("grant export funding uses the same live Airtable check as the order detail", () => {
+    expect(src("lib/grantExportData.ts")).toContain("liveAirtable: true");
+  });
+  test("selected grant downloads are owner-only and filtered server-side", () => {
+    const route = src("app/api/fulfillment/grants/export/route.ts");
+    expect(route).toContain('guardedRoute("api.fulfillment.grants_export", "owner"');
+    expect(route).toContain('url.searchParams.getAll("ids")');
+    expect(route).toContain("selectGrantRows");
+    expect(route).not.toContain("export const POST");
+  });
   test("order actions refuse self-dealing and foreign flags", () => {
     expect(fnBody("app/actions.ts", "export const claimOrder")).toContain("isOwnOrder");
-    expect(fnBody("app/actions.ts", "export const shipOrder")).toContain("isOwnOrder");
-    expect(fnBody("app/actions.ts", "export const markOrderCredited")).toContain("isOwnOrder");
+    expect(fnBody("app/actions.ts", "export const fulfillOrder")).toContain("isOwnOrder");
     expect(fnBody("app/actions.ts", "export const flagOrderOverBudget")).toContain("canFlagOrder");
   });
 });

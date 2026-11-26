@@ -1,7 +1,7 @@
 "use server";
 
 import { claimOrderWithFunding, refreshCommitmentAmount } from "@/lib/eligibility/commit";
-import { settleGrant, settleShipment } from "@/lib/fulfillmentShip";
+import { releaseOrderClaim, settleGrant, settleItemFulfillment, unfulfillOrder as unfulfillOrderInDb } from "@/lib/fulfillmentShip";
 import { fulfillmentPayoutPixels, isGrantOrder, GRANT_FULFILLMENT_PAYOUT_PIXELS } from "@/lib/fulfillmentGrant";
 import { manualShipsRefresh, shipsProvider } from "@/lib/eligibility/ships";
 import { FUNDING_ORDER_PREFIX } from "@/lib/eligibility/policy";
@@ -19,8 +19,10 @@ import {
   projectPayoutPx,
   hackatimeCutoffUnix,
   hackatimeCutoffLabel,
+  submissionDeadline,
 } from "./_generated/config";
 import { orValue } from "@/lib/pgCompat";
+import { resubmitNotice } from "@/lib/resubmitNotice";
 import {
   notifyShopInsert,
   notifyShopDelete,
@@ -39,6 +41,7 @@ import {
   revokeProjectPixels,
   projectPixelTotal,
   lifetimeRe,
+  listProposedBanProjects,
   creditReviewerPixels,
   debitReviewerPixels,
   type CreditReviewerResult,
@@ -79,9 +82,11 @@ import { slackHandle, dmUser, slackAvatars, DM_EXCLUDED_SLACK_IDS } from "@/lib/
 import { fetchHackatimeReport, fetchTrackedSecondsSince } from "@/lib/hackatime";
 import { AiProviderError, aiProviderMessage, generateAiReviewDraft, type AiReviewDraft } from "@/lib/aiReview";
 import { buildAiReviewInput } from "@/lib/aiReviewRun";
+import { fetchFileTime, type FileTimeReport } from "@/lib/hackatimeFiles";
 import { serializeGroups } from "@/lib/shopOptions";
 import { SHOP_REGIONS, type ShopRegion } from "@/lib/shopRegions";
 import { SHOP_CATEGORIES, type ShopCategory } from "@/lib/shopCategories";
+import { parseSaleEndsInput } from "@/lib/shopSale";
 import { closeVaultChapter, kickOnlinePlayer, uploadSubmissionImage, uploadImageBuffer } from "@/lib/gameServer";
 import { sniffFormat } from "@/lib/imageSniff";
 import { dmOrEmail } from "@/lib/notify";
@@ -148,8 +153,15 @@ async function nextReviewPath(
   by: string,
   stage: string,
   justReviewedId: number,
+  fromProposedBans = false,
 ): Promise<string> {
   try {
+    // A verdict on a proposed ban keeps the reviewer in that queue: next
+    // proposed ban, or the Proposed bans list when none are left.
+    if (fromProposedBans) {
+      const remaining = (await listProposedBanProjects()).filter((p) => p.id !== justReviewedId);
+      return remaining[0] ? `/review/${remaining[0].id}` : "/review/proposed-bans";
+    }
     const nextId = await nextReviewId({
       viewer: access.session.slackId,
       by,
@@ -167,7 +179,7 @@ async function nextReviewPath(
     });
     return nextId ? `/review/${nextId}` : "/review";
   } catch {
-    return "/review";
+    return fromProposedBans ? "/review/proposed-bans" : "/review";
   }
 }
 
@@ -1030,6 +1042,55 @@ export const generateAiReviewDraftAction = guardedAction("generateAiReviewDraftA
   }
 });
 
+// Time per file for a project's linked Hackatime projects (lib/hackatimeFiles.ts),
+// for the "Time by file" card on the review page. On demand only: one request
+// per coding day, so it is never loaded with the page. Read-only; the maker's
+// Hackatime token stays on the server and only repo-relative paths come back.
+export type ProjectFileTime =
+  | { ok: true; people: { name: string; report: FileTimeReport }[] }
+  | { ok: false; error: string };
+
+export const loadProjectFileTime = guardedAction("loadProjectFileTime", "reviewer", async (access, rawProjectId: number | string): Promise<ProjectFileTime> => {
+  // bigint ids reach the client as strings, so normalize before checking.
+  const projectId = Number(rawProjectId);
+  if (!Number.isInteger(projectId) || projectId <= 0) return { ok: false, error: "Missing project id." };
+  const project = await authorizeProjectAction(access, projectId, null, { allowOwn: true });
+  const { data: row } = await db.from("projects").select("hackatime_projects").eq("id", projectId).maybeSingle();
+  const { data: collabs } = await db
+    .from("project_collaborators")
+    .select("user_id, hackatime_projects")
+    .eq("project_id", projectId)
+    .eq("status", "accepted");
+  const sources = [
+    { userId: project.user_id, projects: ((row?.hackatime_projects as string[] | null) ?? []) },
+    ...((collabs ?? []) as { user_id: string; hackatime_projects: string[] | null }[]).map((c) => ({
+      userId: c.user_id,
+      projects: c.hackatime_projects ?? [],
+    })),
+  ].filter((s) => s.projects.length > 0);
+  if (sources.length === 0) return { ok: false, error: "No Hackatime project is linked." };
+
+  const { data: users } = await db
+    .from("users")
+    .select("id, display_name, slack_id, hackatime_token")
+    .in("id", sources.map((s) => s.userId));
+  const byId = new Map(
+    ((users ?? []) as { id: string; display_name: string | null; slack_id: string | null; hackatime_token: string | null }[]).map(
+      (u) => [u.id, u] as const,
+    ),
+  );
+  const people: { name: string; report: FileTimeReport }[] = [];
+  let lastError = "";
+  for (const s of sources) {
+    const u = byId.get(s.userId);
+    const result = await fetchFileTime(u?.slack_id, u?.hackatime_token ?? null, s.projects);
+    if (result.ok) people.push({ name: u?.display_name ?? "Player", report: result.report });
+    else lastError = result.error;
+  }
+  if (people.length === 0) return { ok: false, error: lastError || "No data." };
+  return { ok: true, people };
+});
+
 // Two-pass review. A shipped project always gets a first pass from *some*
 // reviewer , even a final reviewer's first look on a fresh 'shipped' project is
 // only a proposal, same as anyone else's. It moves to 'second_review' and needs
@@ -1363,7 +1424,7 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
     await logModAction(project.user_id, "project_first_pass", `${project.name}: proposed ${proposedKey.replace("_", " ")} , ${note}`, by);
     if (proposedKey === "approved" && !skipRobertForHardware) await afterResponse(() => submitToRobert(projectId), "submitToRobert");
     await flagReviewReward(rewardPx);
-    const nextPath = await nextReviewPath(access, by, stage, projectId);
+    const nextPath = await nextReviewPath(access, by, stage, projectId, isProposedBan);
     revalidatePath("/review");
     redirect(nextPath);
   }
@@ -1404,10 +1465,20 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
     const notifySlack = takesAssignment
       ? access.session.slackId
       : activeAssignee || (formData.get("notifyOnResubmit") === "1" ? access.session.slackId : "");
+    // A project shipped after the deadline is the one post-deadline resubmit
+    // (the server refuses any other ship), so another request for changes on it
+    // is final: the project is rejected for good instead of bounced back.
+    const finalRejection = !!current.shipped_at && new Date(current.shipped_at as string) > submissionDeadline;
+    // When the player can resubmit (48h after the deadline if asked in the last
+    // 24h before it, 24h from now if asked after it); nothing on a final rejection.
+    const resubmitNote = finalRejection ? null : resubmitNotice(new Date(), submissionDeadline);
     const { data: project, error } = await db
       .from("projects")
       .update({
         status: "needs_changes",
+        ...(finalRejection
+          ? { rejected_at: new Date().toISOString(), reject_reason: `Still needed changes after the final resubmit: ${note}`.slice(0, 1000), reject_by: reviewer }
+          : {}),
         review_note: note,
         review_note_by: reviewer,
         reviewing_by: "",
@@ -1469,8 +1540,12 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
         await dmChangesHeld(access.session.slackId, project.name, 0);
       }
     }
-    const changesOwnerBody = `"${project.name}" needs changes before it can be approved , ${playerFacingReviewer}:\n\n${note}\n\nUpdate your project and ship it again.`;
-    const changesCollabBody = `"${project.name}" needs changes before it can be approved , ${playerFacingReviewer}:\n\n${note}`;
+    const changesOwnerBody = finalRejection
+      ? `"${project.name}" still doesn't meet the standards after your final resubmit, so it was permanently rejected , ${playerFacingReviewer}:\n\n${note}\n\nSubmissions are closed, so it can't be shipped again.`
+      : `"${project.name}" needs changes before it can be approved , ${playerFacingReviewer}:\n\n${note}\n\nUpdate your project and ship it again.${resubmitNote ? `\n\n${resubmitNote}` : ""}`;
+    const changesCollabBody = finalRejection
+      ? `"${project.name}" still doesn't meet the standards after the final resubmit, so it was permanently rejected , ${playerFacingReviewer}:\n\n${note}`
+      : `"${project.name}" needs changes before it can be approved , ${playerFacingReviewer}:\n\n${note}${resubmitNote ? `\n\n${resubmitNote}` : ""}`;
     const changesCollaboratorIds = await acceptedCollaboratorUserIds(projectId);
     await notifyInApp(project.user_id, "Changes requested", changesOwnerBody);
     for (const collaboratorId of changesCollaboratorIds)
@@ -1484,6 +1559,8 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
       note,
       reviewerSlackId: access.session.slackId,
       revealName,
+      resubmitNote,
+      finalRejection,
       fallback: [
         { userId: project.user_id, title: "Changes requested", body: changesOwnerBody },
         ...changesCollaboratorIds.map((userId) => ({ userId, title: "Changes requested", body: changesCollabBody })),
@@ -1491,7 +1568,7 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
     }), "announceReview changes");
     await logModAction(project.user_id, "project_needs_changes", `${project.name}: ${note}`, by);
     await flagReviewReward(rewardPx);
-    const nextPath = await nextReviewPath(access, by, stage, projectId);
+    const nextPath = await nextReviewPath(access, by, stage, projectId, isProposedBan);
     revalidatePath("/review");
     redirect(nextPath);
   }
@@ -1538,7 +1615,7 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
     }
     await logModAction(project.user_id, "project_banned", `${project.name}: ${note}`, by);
     await flagReviewReward(rewardPx);
-    const nextPath = await nextReviewPath(access, by, stage, projectId);
+    const nextPath = await nextReviewPath(access, by, stage, projectId, isProposedBan);
     revalidatePath("/review");
     revalidatePath("/", "layout");
     redirect(nextPath);
@@ -1919,7 +1996,7 @@ export const reviewProject = guardedAction("reviewProject", "reviewer", async (a
     console.error(`reviewProject: Airtable push threw for project ${projectId}`, (err as Error).message);
   }
   await flagReviewReward(rewardPx);
-  const nextPath = await nextReviewPath(access, by, stage, projectId);
+  const nextPath = await nextReviewPath(access, by, stage, projectId, isProposedBan);
   revalidatePath("/review");
   redirect(nextPath);
 });
@@ -3131,21 +3208,6 @@ export const sendMissingToAirtable = guardedAction("sendMissingToAirtable", "own
   redirect(failed.length ? `/projects?error=${encodeURIComponent(summary)}` : `/projects?ok=${encodeURIComponent(summary)}`);
 });
 
-// For hour increases, keep the existing unbonused repricing behavior. The
-// correction below is specifically for excessive bonus clawbacks when
-// previously approved hours are REDUCED.
-async function repriceForHours(
-  userId: string,
-  projectId: number,
-  hours: number,
-  tier: number,
-): Promise<number> {
-  const xpBefore = await lifetimeRe(userId, projectId);
-  const projectRe = reForHours(hours, tier);
-  const rate = pxPerHourOver(xpBefore, xpBefore + projectRe);
-  return Math.round(hours * rate);
-}
-
 // Read the actual payout ledger, not a newly calculated hourly rate. A
 // project may have been paid with a one-time referral boost or a community goal
 // multiplier. The hours-correction path must preserve that original rate on
@@ -3168,7 +3230,8 @@ async function creditedPixelsForHoursCorrection(projectId: number, userId: strin
 // (including referral boosts, community-goal bonuses and their RE rate) by
 // scaling the actual ledger payout for HOUR REDUCTIONS, NOT recalculating
 // an unbonused rate. Repeated deflations stay consistent without re-awarding
-// either bonus; hour increases retain the earlier base-rate calculation.
+// either bonus. Hour increases scale the same way, so raising hours never
+// pays less than the earlier payout.
 // creditProjectPixels adjusts only the delta; pending orders may be clawed
 // back by 0164_clawback_pending_orders.sql when there is a shortfall.
 // Owners/super-admins only: this DMs the player(s) and can cancel their
@@ -3236,13 +3299,12 @@ export const deflateProjectHours = guardedAction("deflateProjectHours", "owner",
       `${back}?error=${encodeURIComponent("Fill in the new hours for at least one person, each a number of 0 or more that differs from their current hours.")}`,
     );
 
-  const tier = Number(project.level) || 1;
   // Pre-read ledgers for HOUR REDUCTIONS before touching balances or hours:
   // an invalid lookup must not leave a partially corrected project.
   const correctedPayouts = new Map(
     await Promise.all(
       [
-        ...(deflateOwner && (ownerNewHours as number) < oldHours
+        ...(deflateOwner
           ? [{
               userId: project.user_id as string,
               before: oldHours,
@@ -3250,7 +3312,7 @@ export const deflateProjectHours = guardedAction("deflateProjectHours", "owner",
               fundingPx: Number(project.funding_deducted_px) || 0,
             }]
           : []),
-        ...collabTargets.filter((c) => c.cNewHours < c.cOldHours).map((c) => ({
+        ...collabTargets.map((c) => ({
           userId: c.user_id,
           before: c.cOldHours,
           after: c.cNewHours,
@@ -3275,20 +3337,12 @@ export const deflateProjectHours = guardedAction("deflateProjectHours", "owner",
     "If this left you without enough pixels to cover an order you'd already placed, that order was automatically cancelled and any leftover pixels refunded.";
 
   if (deflateOwner) {
-    const newOwnerPx = ownerNewHours < oldHours
-      ? correctedPayouts.get(project.user_id)!
-      : Math.max(
-          (await repriceForHours(project.user_id, projectId, ownerNewHours, tier)) -
-            (Number(project.funding_deducted_px) || 0),
-          0,
-        );
+    const newOwnerPx = correctedPayouts.get(project.user_id)!;
     await creditProjectPixels(project.user_id, projectId, newOwnerPx, ownerNewHours, by);
   }
 
   for (const c of collabTargets) {
-    const cNewPx = c.cNewHours < c.cOldHours
-      ? correctedPayouts.get(c.user_id)!
-      : await repriceForHours(c.user_id, projectId, c.cNewHours, tier);
+    const cNewPx = correctedPayouts.get(c.user_id)!;
     await creditProjectPixels(c.user_id, projectId, cNewPx, c.cNewHours, by);
     await db.from("project_collaborators").update({ approved_hours: c.cNewHours }).eq("id", c.id);
 
@@ -3515,6 +3569,38 @@ export const rejectProject = guardedAction("rejectProject", "owner", async (acce
   if (notifyError) console.error("reject notification failed", notifyError.message);
 
   await dmOrEmail(project.user_id, "Project rejected", body);
+  revalidatePath("/", "layout");
+});
+
+export const extendProjectSubmission = guardedAction("extendProjectSubmission", "owner", async (access, formData: FormData): Promise<void> => {
+  const by = actorName(access);
+  const projectId = Number(formData.get("projectId") ?? 0);
+  if (!projectId) return;
+  const { data: target } = await db.from("projects").select("user_id").eq("id", projectId).single();
+  if (target && (await isOwnProject(access, target.user_id, projectId))) return;
+
+  // 24 hours from now, once. The server lets the project ship until then even though submissions closed.
+  const until = new Date(Date.now() + 24 * 3_600_000).toISOString();
+  const { data: project, error } = await db
+    .from("projects")
+    .update({ submission_extended_until: until })
+    .eq("id", projectId)
+    .is("rejected_at", null)
+    .select("id, name, user_id")
+    .single();
+  if (error || !project) {
+    console.error("extendProjectSubmission failed", error?.message);
+    return;
+  }
+  await logModAction(project.user_id, "project_submission_extended", `${project.name}: until ${until}`, by);
+
+  const body = `Your project "${project.name}" got a 24 hour extension: you can ship it again until ${new Date(until).toLocaleString("en-GB", { timeZone: "UTC", dateStyle: "medium", timeStyle: "short" })} UTC, even though submissions have closed.`;
+  const { error: notifyError } = await db.from("notifications").insert({
+    user_id: project.user_id,
+    title: "Submission extended",
+    body,
+  });
+  if (notifyError) console.error("extension notification failed", notifyError.message);
   revalidatePath("/", "layout");
 });
 
@@ -4812,6 +4898,14 @@ function readRegion(raw: string): ShopRegion {
   return (SHOP_REGIONS as readonly string[]).includes(raw) ? (raw as ShopRegion) : "US";
 }
 
+// A sale is a percentage off a single shop_items row, and a row is one region's
+// copy of an item - so clamping every write here is what lets two regions run
+// different sales, with buy_shop_item applying the same rounding the UI shows.
+function readDiscountPercent(raw: FormDataEntryValue | null): number {
+  if (raw === null) return 0;
+  return Math.max(0, Math.min(100, Math.round(Number(raw) || 0)));
+}
+
 function readCategory(raw: string): ShopCategory {
   return (SHOP_CATEGORIES as readonly string[]).includes(raw) ? (raw as ShopCategory) : "other";
 }
@@ -4843,7 +4937,9 @@ function readOptions(raw: string): string[] {
 // comma-separated list from the form (falls back to the single `region`
 // field so old bookmarked/scripted submits with just that field still work);
 // each region can override the shared `price` via a `price_<REGION>` field,
-// e.g. `price_INDIA`, a region with no such field just uses `price`.
+// e.g. `price_INDIA`, and its sale via `discount_<REGION>`. `discount_percent`
+// and `discount_ends_at` are the shared defaults for every selected region. A
+// region with no such field just uses `price` / no sale.
 export const addShopItem = guardedAction("addShopItem", "owner", async (access, formData: FormData): Promise<void> => {
   const name = String(formData.get("name") ?? "").trim().slice(0, 60);
   const description = String(formData.get("description") ?? "").trim().slice(0, 300);
@@ -4876,6 +4972,16 @@ export const addShopItem = guardedAction("addShopItem", "owner", async (access, 
     const regionPriceRaw = formData.get(`price_${region}`);
     const price =
       regionPriceRaw != null ? Math.max(0, Math.round(Number(regionPriceRaw))) : basePrice;
+    // A sale typed next to a region overrides the shared default; the shared
+    // end time applies to every selected region (edit a single region later if
+    // they need different end dates).
+    const discountPercent = readDiscountPercent(
+      formData.get(`discount_${region}`) ?? formData.get("discount_percent"),
+    );
+    const discountEndsAt =
+      discountPercent > 0
+        ? parseSaleEndsInput(formData.get(`discount_ends_${region}`) ?? formData.get("discount_ends_at"))
+        : null;
 
     // Double-submit guard: an identical name+region created in the last
     // minute is the same click arriving twice, not a new item.
@@ -4908,6 +5014,8 @@ export const addShopItem = guardedAction("addShopItem", "owner", async (access, 
         region,
         category,
         config_options: configOptions,
+        discount_percent: discountPercent,
+        discount_ends_at: discountEndsAt,
         created_by: actorName(access),
       })
       .select("*")
@@ -4947,11 +5055,17 @@ export const updateShopItem = guardedAction("updateShopItem", "owner", async (ac
   // (see availableBeaconUnlocks in apps/server/src/routes/shop.ts).
   // Item-wide, mirrored below the same way the Trial gate/manual lock are.
   const beaconLocked = formData.get("beacon_locked") === "1";
-  // A single percentage off every price component (base + config choices),
-  // the same for every region - not a per-region price like /shop-detail.
-  // Item-wide, mirrored below the same way the other gates are. Clamped so a
-  // stray negative/huge value can't reach buy_shop_item's math.
-  const discountPercent = Math.max(0, Math.min(100, Math.round(Number(formData.get("discount_percent") ?? 0)) || 0));
+  // Sale percentage off every price component (base + config choices) for
+  // THIS region's row by default - a "sale" is region-scoped, so one region
+  // can be discounted while another isn't. "Apply this sale to every region"
+  // below mirrors it (and the end time) when the admin wants one sale
+  // everywhere. Clamped so a stray negative/huge value can't reach
+  // buy_shop_item's math.
+  const discountPercent = readDiscountPercent(formData.get("discount_percent"));
+  // An optional end time (UTC from the dashboard's datetime-local input). A
+  // sale with a 0% discount has no meaningful end date, so clear it.
+  const discountEndsAt =
+    discountPercent > 0 ? parseSaleEndsInput(formData.get("discount_ends_at")) : null;
   // Saving silently skips telling pixorpheus about this change (e.g. a typo
   // fix that isn't worth a Slack ping), see notifyShopUpdates below.
   const silent = formData.get("silent") === "1";
@@ -4974,6 +5088,7 @@ export const updateShopItem = guardedAction("updateShopItem", "owner", async (ac
     lock_note: lockNote,
     beacon_locked: beaconLocked,
     discount_percent: discountPercent,
+    discount_ends_at: discountEndsAt,
   };
   const image = formData.get("image");
   if (image instanceof File && image.size > 0) {
@@ -4985,18 +5100,24 @@ export const updateShopItem = guardedAction("updateShopItem", "owner", async (ac
   // its siblings. Match on the ORIGINAL name (the edit may rename it), and skip
   // trophies (unlock_xp > 0) since those aren't region-scoped.
   const applyAllRegions = String(formData.get("apply_all_regions") ?? "") === "1";
+  // One sale everywhere: mirrors the % and end time from this form onto every
+  // region row of the item, overwriting each region's own current sale.
+  const applySaleAllRegions = String(formData.get("apply_sale_all_regions") ?? "") === "1";
   const originalName = String(formData.get("original_name") ?? "").trim();
   const gateName = originalName || name;
 
   // Snapshot every row this call may touch BEFORE writing, so pixorpheus can be
   // handed an old → new diff. Every sibling region row always gets pulled in
   // here, not just when "apply_all_regions" is checked - the Trial gate,
-  // manual lock, Beacon lock, and discount are ALL mirrored item-wide below
-  // regardless of that checkbox (which only covers name/description/category),
-  // so leaving siblings out of the snapshot made an item-wide change that
-  // correctly reached all 8 regions get announced as if only one had. The
-  // sibling ids have to be resolved up front too: once the main row is
-  // renamed they no longer all share `gateName`.
+  // manual lock, and Beacon lock are ALL mirrored item-wide below regardless
+  // of that checkbox (which only covers name/description/category), so leaving
+  // siblings out of the snapshot made an item-wide change that correctly
+  // reached all 8 regions get announced as if only one had. The sibling ids
+  // have to be resolved up front too: once the main row is renamed they no
+  // longer all share `gateName`. A sale is region-scoped unless "apply this
+  // sale to every region" is ticked, but siblings stay in the snapshot either
+  // way so an "apply to all regions" rename is still announced once for every
+  // region.
   const affectedIds = [id];
   if (gateName) {
     const { data: siblings } = await db
@@ -5084,15 +5205,18 @@ export const updateShopItem = guardedAction("updateShopItem", "owner", async (ac
     .eq("unlock_xp", 0);
   if (beaconErr) console.error("updateShopItem (beacon lock)", beaconErr.message);
 
-  // Same for the discount , one percentage for every region, not a per-region
-  // price like /shop-detail.
-  const { error: discountErr } = await db
-    .from("shop_items")
-    .update({ discount_percent: discountPercent })
-    .eq("name", gateName)
-    .is("reserved_user_id", null)
-    .eq("unlock_xp", 0);
-  if (discountErr) console.error("updateShopItem (discount)", discountErr.message);
+  // By default the sale stays on this region's row (`patch` above already
+  // wrote it). Ticking "apply this sale to every region" copies the same
+  // percentage + end time to every sibling row instead.
+  if (applySaleAllRegions) {
+    const { error: saleErr } = await db
+      .from("shop_items")
+      .update({ discount_percent: discountPercent, discount_ends_at: discountEndsAt })
+      .eq("name", gateName)
+      .is("reserved_user_id", null)
+      .eq("unlock_xp", 0);
+    if (saleErr) console.error("updateShopItem (sale in every region)", saleErr.message);
+  }
 
   if (applyAllRegions && originalName) {
     const { error: propErr } = await db
@@ -5181,13 +5305,14 @@ export const updateShopItem = guardedAction("updateShopItem", "owner", async (ac
   revalidatePath("/shop");
 });
 
-// Reprices an item across every region in one save, so an admin doesn't have
-// to switch the region tab and reopen "Edit item" per region. Matched by name
-// (the same item is one row per region), same as apply_all_regions above.
-// A region with no price field submitted (shouldn't happen, the form always
-// renders all of SHOP_REGIONS) is left untouched; a region with no existing
-// row for this item is a no-op update, not an insert , stocking a brand new
-// region still goes through "Add an item" on that region's tab.
+// Reprices an item and sets each region's sale (% and optional end) across
+// every region in one save, so an admin doesn't have to switch the region tab
+// and reopen "Edit item" per region. Matched by name (the same item is one row
+// per region), same as apply_all_regions above. A region with no
+// price/discount field submitted (shouldn't happen, the form always renders
+// all of SHOP_REGIONS) is left untouched; a region with no existing row for
+// this item is a no-op update, not an insert , stocking a brand new region
+// still goes through "Add an item" on that region's tab.
 export const updateShopItemPrices = guardedAction("updateShopItemPrices", "owner", async (access, formData: FormData): Promise<void> => {
   const name = String(formData.get("item_name") ?? "").trim();
   if (!name) return;
@@ -5201,16 +5326,32 @@ export const updateShopItemPrices = guardedAction("updateShopItemPrices", "owner
 
   for (const r of SHOP_REGIONS) {
     const raw = formData.get(`price_${r}`);
-    if (raw === null) continue;
-    const price = Math.max(0, Math.round(Number(raw) || 0));
-    const patch: Record<string, unknown> = { price };
-    // Same configurator base_price sync as updateShopItem above - this
-    // repricer is region-scoped, so look up that region's own existing row.
-    const existingConfig = ((before ?? []).find(
-      (b) => (b as { region: string }).region === r,
-    ) as { config_options: { base_price?: number; reference_url?: string; groups?: unknown[] } | null } | undefined)
-      ?.config_options;
-    if (existingConfig) patch.config_options = { ...existingConfig, base_price: price };
+    const discountRaw = formData.get(`discount_${r}`);
+    const discountEndsRaw = formData.get(`discount_ends_${r}`);
+    if (raw === null && discountRaw === null && discountEndsRaw === null) continue;
+    const existingRow = (before ?? []).find((b) => (b as { region: string }).region === r) as
+      | {
+          discount_percent?: number;
+          config_options: { base_price?: number; reference_url?: string; groups?: unknown[] } | null;
+        }
+      | undefined;
+    const patch: Record<string, unknown> = {};
+    if (raw !== null) {
+      const price = Math.max(0, Math.round(Number(raw) || 0));
+      patch.price = price;
+      // Same configurator base_price sync as updateShopItem above - this
+      // repricer is region-scoped, so look up that region's own existing row.
+      if (existingRow?.config_options)
+        patch.config_options = { ...existingRow.config_options, base_price: price };
+    }
+    if (discountRaw !== null || discountEndsRaw !== null) {
+      const pct =
+        discountRaw !== null
+          ? readDiscountPercent(discountRaw)
+          : Number(existingRow?.discount_percent ?? 0);
+      patch.discount_percent = pct;
+      patch.discount_ends_at = pct > 0 ? parseSaleEndsInput(discountEndsRaw) : null;
+    }
     const { error } = await db
       .from("shop_items")
       .update(patch)
@@ -5236,10 +5377,11 @@ export const updateShopItemPrices = guardedAction("updateShopItemPrices", "owner
 });
 
 // Powers the /shop-detail page: one save per item that can touch every
-// region's price, its price-source link, and (for configurator items like the
-// Framework laptops/Huawei tablets) the config_options base price + reference
-// URL, all in one submit. Mirrors updateShopItemPrices's match-by-name
-// pattern; a region with no existing row for this item is a no-op.
+// region's price, sale (% and end time), price-source link, and (for
+// configurator items like the Framework laptops/Huawei tablets) the
+// config_options base price + reference URL, all in one submit. Mirrors
+// updateShopItemPrices's match-by-name pattern; a region with no existing row
+// for this item is a no-op.
 interface ParsedConfigChoice {
   label: string;
   price: number;
@@ -5332,12 +5474,29 @@ export const updateShopItemRegionDetails = guardedAction("updateShopItemRegionDe
     const priceRaw = formData.get(`price_${r}`);
     const sourceRaw = formData.get(`source_${r}`);
     const altRaw = formData.get(`alt_source_${r}`);
-    if (priceRaw === null && sourceRaw === null && altRaw === null) continue;
+    const discountRaw = formData.get(`discount_${r}`);
+    const discountEndsRaw = formData.get(`discount_ends_${r}`);
+    if (
+      priceRaw === null &&
+      sourceRaw === null &&
+      altRaw === null &&
+      discountRaw === null &&
+      discountEndsRaw === null
+    )
+      continue;
     const row = (before ?? []).find((b) => (b as { region: string }).region === r) as
-      | { config_options: unknown; price: number }
+      | { config_options: unknown; price: number; discount_percent?: number }
       | undefined;
     const patch: Record<string, unknown> = {};
     if (priceRaw !== null) patch.price = Math.max(0, Math.round(Number(priceRaw) || 0));
+    if (discountRaw !== null || discountEndsRaw !== null) {
+      const pct =
+        discountRaw !== null
+          ? readDiscountPercent(discountRaw)
+          : Number(row?.discount_percent ?? 0);
+      patch.discount_percent = pct;
+      patch.discount_ends_at = pct > 0 ? parseSaleEndsInput(discountEndsRaw) : null;
+    }
     if (sourceRaw !== null) patch.price_source_url = String(sourceRaw).trim().slice(0, 500);
     if (altRaw !== null) {
       const alt = String(altRaw).trim().slice(0, 500);
@@ -5729,6 +5888,42 @@ export const claimOrder = guardedAction("claimOrder", "fulfiller", async (access
   redirect(`/fulfillment?mine=1&order=${id}`);
 });
 
+// Undo a claim before anything was bought. The claimer or an owner can release
+// the order; releaseOrderClaim also deletes the fulfillment commitment in the
+// same transaction, so the player's funding is available for another order.
+export const unclaimOrder = guardedAction("unclaimOrder", "fulfiller", async (access, formData: FormData): Promise<void> => {
+  const id = Number(formData.get("id") ?? 0);
+  if (!Number.isSafeInteger(id) || id <= 0) return;
+  const { data: order } = await db
+    .from("shop_orders")
+    .select("user_id, item_name, status, claimed_by, claimed_by_slack")
+    .eq("id", id)
+    .maybeSingle();
+  if (!order || order.status !== "claimed") {
+    revalidatePath("/fulfillment");
+    revalidatePath("/fulfillment/grants");
+    return;
+  }
+  if (!access.isOwner && order.claimed_by_slack !== access.session.slackId) {
+    throw new Error("Only the fulfiller who claimed this order can unclaim it.");
+  }
+  const released = await releaseOrderClaim(id, access.session.slackId, access.isOwner);
+  if (!released) {
+    revalidatePath("/fulfillment");
+    revalidatePath("/fulfillment/grants");
+    return;
+  }
+  await logOrderAction(
+    id,
+    "order_unclaimed",
+    `released by ${actorName(access)}${order.claimed_by ? ` (was ${order.claimed_by})` : ""}`,
+    actorName(access),
+    order,
+  );
+  revalidatePath("/fulfillment");
+  revalidatePath("/fulfillment/grants");
+});
+
 // Over budget: the cheapest the fulfiller could find it for is more than the
 // player's pixels are worth. Nothing gets ordered , the flag parks it for an
 // owner to decide (source it anyway, talk to the player, or cancel & refund).
@@ -5820,60 +6015,41 @@ async function logOrderAction(
   await logModAction(userId, action, `order #${orderId} "${itemName}": ${detail}`, by);
 }
 
-// Claimed -> ordered: only now has the fulfiller actually purchased the item.
-// A claim-only reservation never sets ordered_at or sends an order-placed alert.
-export const markOrderPlaced = guardedAction("markOrderPlaced", "fulfiller", async (access, formData: FormData): Promise<void> => {
+// Flat pixel payout to whoever fulfils an order: 6 pixels for an item, 2 for a
+// grant (fulfillmentPayoutPixels in lib/fulfillmentGrant.ts). Credited by
+// settleItemFulfillment / settleGrant in lib/fulfillmentShip.ts.
+
+// Whether an order uses the grant flow and payout: its item is in the grants
+// category, or a fulfiller converted this one order (shop_orders.is_grant).
+// An order pushed onto the normal item flow by an unfulfill (item_flow) is not
+// a grant unless it was also converted, exactly like isGrantOrder.
+async function orderIsGrant(order: { item_id?: number | null; is_grant?: boolean | null; item_flow?: boolean | null }): Promise<boolean> {
+  if (order.is_grant === true) return true;
+  if (order.item_flow === true) return false;
+  if (order.item_id == null) return false;
+  const { data } = await db.from("shop_items").select("category").eq("id", order.item_id).maybeSingle();
+  return isGrantOrder({ item_category: (data?.category as string | null | undefined) ?? null });
+}
+
+// One terminal step for an item: the fulfiller bought it, recorded the HCB
+// transaction and real cost, and optionally the tracking number. Claimed (or
+// a legacy ordered/credited order) goes straight to done - there is no separate
+// placed/credited/shipped/done ceremony and no "mark delivered" click.
+// settleItemFulfillment closes the order and pays the fulfiller atomically.
+export const fulfillOrder = guardedAction("fulfillOrder", "fulfiller", async (access, formData: FormData): Promise<void> => {
   const id = Number(formData.get("id") ?? 0);
   if (!Number.isSafeInteger(id) || id <= 0) return;
-  const { data: order } = await db.from("shop_orders")
-    .select("user_id, item_name, status, claimed_by_slack").eq("id", id).maybeSingle();
-  if (!order || order.status !== "claimed" || !ownsOrder(access, order.claimed_by_slack as string)) {
-    revalidatePath("/fulfillment");
-    return;
-  }
-  if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId, access.isOwner)) {
-    throw new Error("You can't fulfill your own shop order.");
-  }
-  const { data: changed, error } = await db.from("shop_orders")
-    .update({ status: "ordered", ordered_at: new Date().toISOString() })
-    .eq("id", id)
-    .eq("status", "claimed")
-    .eq("claimed_by_slack", access.session.slackId)
-    .select("id").maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!changed) { revalidatePath("/fulfillment"); return; }
-  const placedBody = `Your "${order.item_name}" order has been placed and is being fulfilled. We'll let you know when it ships.`;
-  await db.from("notifications").insert({
-    user_id: order.user_id,
-    title: "Order placed! 📦",
-    body: placedBody,
-  });
-  await logOrderAction(id, "order_placed", "order placed after reservation", actorName(access), order);
-  revalidatePath("/fulfillment");
-});
-
-// HCB credited the card and the fulfiller uploaded the receipt: ordered ->
-// credited (paid, not shipped yet). Only the claiming fulfiller can advance it.
-// The HCB link and actual cost are required here, not at claim time - the
-// transaction doesn't exist yet when an order is merely claimed, it exists
-// once HCB has actually credited the card.
-export const markOrderCredited = guardedAction("markOrderCredited", "fulfiller", async (access, formData: FormData): Promise<void> => {
-  const id = Number(formData.get("id") ?? 0);
-  if (!id) return;
   // The transaction or grant this order was actually paid from - required so
-  // every fulfilled order has a paper trail back to real HCB spend. Same
-  // http(s)-only check the rest of the dashboard uses for a
-  // database-controlled URL it's about to render as a link (see isSafeUrl).
+  // every fulfilled order has a paper trail back to real HCB spend.
   const hcbLink = String(formData.get("hcbLink") ?? "").trim().slice(0, 300);
-  // What it actually cost, in real dollars - not just the pixel price /
-  // derived budget ceiling.
+  // What it actually cost, in real dollars - not just the pixel price / budget.
   const actualCostUsd = Math.round(Number(formData.get("actualCostUsd") ?? NaN) * 100) / 100;
-  // Optional: where this was actually bought from. Kept on the item itself
-  // (shop_items.price_source_url, via item_id) rather than just this order,
-  // so the next fulfiller sourcing the same item/region sees a link that's
-  // known to actually work instead of a stale one - see the fulfillment
-  // page's "keep replacing the URLs as we fulfil" note.
+  // Optional: where this was actually bought from. Kept on the item itself so
+  // the next fulfiller sourcing the same item/region sees a known-working link.
   const sourceUrl = String(formData.get("sourceUrl") ?? "").trim().slice(0, 500);
+  // Optional: shipping is not a separate stage. If there is a number, record
+  // and DM it; grants, software and hand-delivered items simply have none.
+  const tracking = String(formData.get("tracking") ?? "").trim().slice(0, 120);
   if (
     !hcbLink ||
     !isSafeUrl(hcbLink) ||
@@ -5886,34 +6062,34 @@ export const markOrderCredited = guardedAction("markOrderCredited", "fulfiller",
   }
   const { data: order } = await db
     .from("shop_orders")
-    .select("status, claimed_by_slack, item_id, user_id")
+    .select("user_id, item_name, status, claimed_by_slack, item_id, is_grant, item_flow")
     .eq("id", id)
     .maybeSingle();
-  if (!order || order.status !== "ordered" || !ownsOrder(access, order.claimed_by_slack)) {
+  const open = order?.status === "claimed" || order?.status === "ordered" || order?.status === "credited";
+  if (!order || !open || !ownsOrder(access, order.claimed_by_slack as string)) {
     revalidatePath("/fulfillment");
     return;
   }
-  // Self-dealing, same as claimOrder/shipOrder/reassignOrder: checked on every
-  // step, not just the claim, so no path (an old claim, a direct form post)
-  // lets someone credit their own order.
+  // A claimed grant has its own one-step form (send the HCB invite); a direct
+  // post must not silently treat it as an item purchase.
+  if (order.status === "claimed" && (await orderIsGrant(order))) {
+    throw new Error("This order is a grant. Send the HCB grant instead.");
+  }
+  // Owners may fulfil their own order (upstream policy); everyone else cannot.
   if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId, access.isOwner)) {
     throw new Error("You can't fulfill your own shop order.");
   }
-  const { data: changed, error } = await db
-    .from("shop_orders")
-    .update({
-      status: "credited",
-      credited_at: new Date().toISOString(),
-      hcb_link: hcbLink,
-      actual_cost_usd: actualCostUsd,
-    })
-    .eq("id", id)
-    .eq("status", "ordered")
-    .eq("claimed_by_slack", access.session.slackId)
-    .select("id")
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!changed) { revalidatePath("/fulfillment"); return; }
+  const payoutPixels = fulfillmentPayoutPixels({ is_grant: await orderIsGrant(order) });
+  const settled = await settleItemFulfillment(
+    id,
+    { tracking, hcbLink, actualCostUsd },
+    access.session.slackId,
+    actorName(access),
+    payoutPixels,
+    undefined,
+    access.isOwner,
+  );
+  if (!settled) { revalidatePath("/fulfillment"); return; }
   if ((await refreshCommitmentAmount(id, { ships: shipsProvider() })) === "failed") {
     await logOrderAction(id, "ledger_refresh_failed", "funding ledger amount could not be updated", actorName(access));
   }
@@ -5922,88 +6098,36 @@ export const markOrderCredited = guardedAction("markOrderCredited", "fulfiller",
       .from("shop_items")
       .update({ price_source_url: sourceUrl })
       .eq("id", order.item_id);
-    if (sourceErr) console.error("markOrderCredited (source url)", sourceErr.message);
+    if (sourceErr) console.error("fulfillOrder (source url)", sourceErr.message);
   }
-  await logOrderAction(id, "order_credited", "HCB credited the card", actorName(access));
-  revalidatePath("/fulfillment");
-});
 
-// Flat pixel payout to whoever fulfils an order: 6 pixels for an item, 2 for a
-// grant (fulfillmentPayoutPixels in lib/fulfillmentGrant.ts). Credited by
-// settleShipment / settleGrant in lib/fulfillmentShip.ts.
-
-// Whether an order uses the grant flow and payout: its item is in the grants
-// category, or a fulfiller converted this one order (shop_orders.is_grant).
-async function orderIsGrant(order: { item_id?: number | null; is_grant?: boolean | null }): Promise<boolean> {
-  if (order.is_grant === true) return true;
-  if (order.item_id == null) return false;
-  const { data } = await db.from("shop_items").select("category").eq("id", order.item_id).maybeSingle();
-  return isGrantOrder({ item_category: (data?.category as string | null | undefined) ?? null });
-}
-
-// The order shipped: credited -> shipped with a tracking number. The number is
-// DM'd to the buyer by Pixo and also lands as an in-game notification. Only the
-// claiming fulfiller can ship it, and tracking is required.
-export const shipOrder = guardedAction("shipOrder", "fulfiller", async (access, formData: FormData): Promise<void> => {
-  const id = Number(formData.get("id") ?? 0);
-  const tracking = String(formData.get("tracking") ?? "").trim().slice(0, 120);
-  if (!id) return;
-  if (!tracking) {
-    revalidatePath("/fulfillment");
-    return;
-  }
-  const { data: order } = await db
-    .from("shop_orders")
-    .select("user_id, item_name, status, claimed_by_slack, item_id, is_grant")
-    .eq("id", id)
-    .maybeSingle();
-  if (!order || order.status !== "credited" || !ownsOrder(access, order.claimed_by_slack)) {
-    revalidatePath("/fulfillment");
-    return;
-  }
-  // Self-dealing: shipping your own order would also pay you the fulfillment
-  // pixels on it. Refused even if it somehow got claimed/reassigned to you.
-  if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId, access.isOwner)) {
-    throw new Error("You can't fulfill your own shop order.");
-  }
-  // 6 pixels for an item, 2 for a grant that was already past "claimed" when
-  // the grant flow shipped (see fulfillmentPayoutPixels).
-  const payoutPixels = fulfillmentPayoutPixels({ is_grant: await orderIsGrant(order) });
-  // Database transaction rechecks ownership and credits the fulfiller
-  // atomically with the shipment status transition.
-  const settled = await settleShipment(
-    id, tracking, access.session.slackId, actorName(access), payoutPixels,
-    undefined, access.isOwner,
-  );
-  if (!settled) { revalidatePath("/fulfillment"); return; }
-
-  // Slack renders <#ID> as a channel link in the DM, but the in-app
-  // notification is plain text, so it names the channel instead.
   const showOffLine = "Show it off in <#C07UMRYJ1LH> when it arrives, we'd love to see it! 🎉";
   const showOffLineInApp = "Show it off in #treasure-cove when it arrives, we'd love to see it! 🎉";
   await db.from("notifications").insert({
     user_id: order.user_id,
-    title: "Order shipped! 📦",
-    body: `Your "${order.item_name}" order shipped. Tracking: ${tracking}\n\n${showOffLineInApp}`,
+    title: tracking ? "Order shipped! 📦" : "Order fulfilled! 📦",
+    body: tracking
+      ? `Your "${order.item_name}" order shipped. Tracking: ${tracking}\n\n${showOffLineInApp}`
+      : `Your "${order.item_name}" order is fulfilled.`,
   });
-  // DM the tracking number to the buyer through Pixo. Best-effort , a missing
-  // Slack link shouldn't block shipping, and the in-game notification still lands.
-  const { data: buyer } = await db
-    .from("users")
-    .select("slack_id")
-    .eq("id", order.user_id)
-    .maybeSingle();
-  if (buyer?.slack_id) {
-    try {
-      await dmUser(
-        buyer.slack_id,
-        `📦 Your "${order.item_name}" order shipped! Tracking number: ${tracking}\n\n${showOffLine}`,
-      );
-    } catch (err) {
-      console.error("shipOrder DM", err instanceof Error ? err.message : err);
+  if (tracking) {
+    const { data: buyer } = await db
+      .from("users")
+      .select("slack_id")
+      .eq("id", order.user_id)
+      .maybeSingle();
+    if (buyer?.slack_id) {
+      try {
+        await dmUser(
+          buyer.slack_id,
+          `📦 Your "${order.item_name}" order shipped! Tracking number: ${tracking}\n\n${showOffLine}`,
+        );
+      } catch (err) {
+        console.error("fulfillOrder DM", err instanceof Error ? err.message : err);
+      }
     }
   }
-  await logOrderAction(id, "order_shipped", `tracking ${tracking}`, actorName(access), order);
+  await logOrderAction(id, "order_fulfilled", tracking ? `tracking ${tracking}` : "fulfilled without tracking", actorName(access), order);
 
   try {
     await dmUser(
@@ -6011,48 +6135,38 @@ export const shipOrder = guardedAction("shipOrder", "fulfiller", async (access, 
       `You earned ${payoutPixels} pixels for fulfilling "${settled.itemName}". Thanks for keeping orders moving!`,
     );
   } catch (err) {
-    console.error("shipOrder (fulfillment payout DM)", err instanceof Error ? err.message : err);
+    console.error("fulfillOrder (fulfillment payout DM)", err instanceof Error ? err.message : err);
   }
   revalidatePath("/fulfillment");
 });
 
-// Grant flow: claimed -> done in one step. A grant is sent by email as an HCB
-// grant invite, so there is no purchase, receipt or tracking number to collect.
-// The fulfiller pastes the HCB grant link and the amount; settleGrant (one
-// transaction) closes the order and pays the grant payout (2 pixels). The
-// buyer gets an in-app notification and a Pixo DM saying to check their email.
-export const sendGrant = guardedAction("sendGrant", "fulfiller", async (access, formData: FormData): Promise<void> => {
-  const id = Number(formData.get("id") ?? 0);
-  if (!Number.isSafeInteger(id) || id <= 0) return;
-  const grantLink = String(formData.get("grantLink") ?? "").trim().slice(0, 300);
-  const actualCostUsd = Math.round(Number(formData.get("actualCostUsd") ?? NaN) * 100) / 100;
-  if (!grantLink || !isSafeUrl(grantLink) || !Number.isFinite(actualCostUsd) || actualCostUsd < 0) {
-    revalidatePath("/fulfillment");
-    return;
-  }
-  const { data: order } = await db
-    .from("shop_orders")
-    .select("user_id, item_name, status, claimed_by_slack, item_id, is_grant")
-    .eq("id", id)
-    .maybeSingle();
-  if (!order || order.status !== "claimed" || !ownsOrder(access, order.claimed_by_slack as string)) {
-    revalidatePath("/fulfillment");
-    return;
-  }
-  if (!(await orderIsGrant(order))) {
-    throw new Error("This order isn't a grant. Convert it to a grant first, or use the item flow.");
-  }
-  if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId, access.isOwner)) {
-    throw new Error("You can't fulfill your own shop order.");
-  }
+interface GrantOrderForSettlement {
+  id: number;
+  user_id: string;
+  item_name: string;
+}
+
+// Shared finish line for both the order page and the Grant CSV. settleGrant
+// closes the order and pays the grant payout (2 pixels) atomically; then the
+// buyer is told to check their email and the payout DM goes to the fulfiller.
+async function completeGrant(
+  access: AdminAccess,
+  order: GrantOrderForSettlement,
+  grantLink: string,
+  actualCostUsd: number,
+): Promise<boolean> {
   const settled = await settleGrant(
-    id, grantLink, actualCostUsd, access.session.slackId, actorName(access), GRANT_FULFILLMENT_PAYOUT_PIXELS,
+    order.id, grantLink, actualCostUsd, access.session.slackId, actorName(access), GRANT_FULFILLMENT_PAYOUT_PIXELS,
     undefined, access.isOwner,
   );
-  if (!settled) { revalidatePath("/fulfillment"); return; }
+  if (!settled) {
+    revalidatePath("/fulfillment");
+    revalidatePath("/fulfillment/grants");
+    return false;
+  }
 
-  if ((await refreshCommitmentAmount(id, { ships: shipsProvider() })) === "failed") {
-    await logOrderAction(id, "ledger_refresh_failed", "funding ledger amount could not be updated", actorName(access));
+  if ((await refreshCommitmentAmount(order.id, { ships: shipsProvider() })) === "failed") {
+    await logOrderAction(order.id, "ledger_refresh_failed", "funding ledger amount could not be updated", actorName(access));
   }
   await db.from("notifications").insert({
     user_id: order.user_id,
@@ -6070,7 +6184,7 @@ export const sendGrant = guardedAction("sendGrant", "fulfiller", async (access, 
       console.error("sendGrant DM", err instanceof Error ? err.message : err);
     }
   }
-  await logOrderAction(id, "grant_sent", `grant ${grantLink} , cost $${actualCostUsd}`, actorName(access), order);
+  await logOrderAction(order.id, "grant_sent", `grant ${grantLink} , cost $${actualCostUsd}`, actorName(access), order);
 
   try {
     await dmUser(
@@ -6081,6 +6195,100 @@ export const sendGrant = guardedAction("sendGrant", "fulfiller", async (access, 
     console.error("sendGrant (fulfillment payout DM)", err instanceof Error ? err.message : err);
   }
   revalidatePath("/fulfillment");
+  revalidatePath("/fulfillment/grants");
+  return true;
+}
+
+// Grant flow: claimed -> done in one step. A grant is sent by email as an HCB
+// grant invite, so there is no purchase, receipt or tracking number to collect.
+// The fulfiller pastes the HCB grant link and the amount; settleGrant (one
+// transaction) closes the order and pays the grant payout (2 pixels). The
+// buyer gets an in-app notification and a Pixo DM saying to check their email.
+export const sendGrant = guardedAction("sendGrant", "fulfiller", async (access, formData: FormData): Promise<void> => {
+  const id = Number(formData.get("id") ?? 0);
+  if (!Number.isSafeInteger(id) || id <= 0) return;
+  const grantLink = String(formData.get("grantLink") ?? "").trim().slice(0, 300);
+  const actualCostUsd = Math.round(Number(formData.get("actualCostUsd") ?? NaN) * 100) / 100;
+  if (!grantLink || !isSafeUrl(grantLink) || !Number.isFinite(actualCostUsd) || actualCostUsd < 0) {
+    revalidatePath("/fulfillment");
+    return;
+  }
+  const { data: order } = await db
+    .from("shop_orders")
+    .select("user_id, item_name, status, claimed_by_slack, item_id, is_grant, item_flow")
+    .eq("id", id)
+    .maybeSingle();
+  if (!order || order.status !== "claimed" || !ownsOrder(access, order.claimed_by_slack as string)) {
+    revalidatePath("/fulfillment");
+    return;
+  }
+  if (!(await orderIsGrant(order))) {
+    throw new Error("This order isn't a grant. Convert it to a grant first, or use the item flow.");
+  }
+  if (isOwnOrder({ player_slack: await buyerSlackFor(order.user_id as string) }, access.session.slackId, access.isOwner)) {
+    throw new Error("You can't fulfill your own shop order.");
+  }
+  await completeGrant(
+    access,
+    { id, user_id: order.user_id as string, item_name: order.item_name as string },
+    grantLink,
+    actualCostUsd,
+  );
+});
+
+// Owner follow-up to the Grant CSV: after uploading the file in HCB, paste the
+// grant link on that row and close the order here. A pending order is first
+// reserved for the owner through the same funding ledger as a normal claim,
+// then settled exactly like the order page's "Grant sent" form.
+export const markGrantSent = guardedAction("markGrantSent", "owner", async (access, formData: FormData): Promise<void> => {
+  const id = Number(formData.get("id") ?? 0);
+  if (!Number.isSafeInteger(id) || id <= 0) return;
+  const grantLink = String(formData.get("grantLink") ?? "").trim().slice(0, 300);
+  const actualCostUsd = Math.round(Number(formData.get("actualCostUsd") ?? NaN) * 100) / 100;
+  if (!grantLink || !isSafeUrl(grantLink) || !Number.isFinite(actualCostUsd) || actualCostUsd < 0) {
+    revalidatePath("/fulfillment/grants");
+    return;
+  }
+  const { data: order } = await db
+    .from("shop_orders")
+    .select("user_id, item_name, status, claimed_by_slack, item_id, is_grant, item_flow")
+    .eq("id", id)
+    .maybeSingle();
+  if (!order || (order.status !== "pending" && order.status !== "claimed")) {
+    revalidatePath("/fulfillment/grants");
+    return;
+  }
+  if (!(await orderIsGrant(order))) {
+    throw new Error("This order isn't a grant. Convert it to a grant first, or use the item flow.");
+  }
+  if (order.status === "claimed" && order.claimed_by_slack !== access.session.slackId) {
+    throw new Error("This grant is already claimed by someone else. Reassign it on the order page first.");
+  }
+
+  if (order.status === "pending") {
+    const outcome = await claimOrderWithFunding(
+      { orderId: id, by: actorName(access), bySlack: access.session.slackId },
+      { ships: shipsProvider(), reserveOnly: true },
+    );
+    if (outcome.kind === "refused") {
+      if (outcome.code === "not_pending" || outcome.code === "not_found") {
+        revalidatePath("/fulfillment/grants");
+        return;
+      }
+      throw new Error(outcome.message);
+    }
+    if (outcome.kind !== "claimed") throw new Error("Claim-only RPC is not installed.");
+    if (outcome.code === "claimed") {
+      await logOrderAction(id, "order_reserved", "assigned from the grant CSV", actorName(access), order);
+    }
+  }
+
+  await completeGrant(
+    access,
+    { id, user_id: order.user_id as string, item_name: order.item_name as string },
+    grantLink,
+    actualCostUsd,
+  );
 });
 
 // Turns one order into a grant order (shop_orders.is_grant) so it uses the
@@ -6093,7 +6301,7 @@ export const convertOrderToGrant = guardedAction("convertOrderToGrant", "fulfill
   if (!Number.isSafeInteger(id) || id <= 0) return;
   const { data: order } = await db
     .from("shop_orders")
-    .select("user_id, item_name, status, claimed_by_slack, item_id, is_grant")
+    .select("user_id, item_name, status, claimed_by_slack, item_id, is_grant, item_flow")
     .eq("id", id)
     .maybeSingle();
   if (!order || (order.status !== "pending" && order.status !== "claimed")) {
@@ -6112,7 +6320,7 @@ export const convertOrderToGrant = guardedAction("convertOrderToGrant", "fulfill
   }
   const { data: changed, error } = await db
     .from("shop_orders")
-    .update({ is_grant: true })
+    .update({ is_grant: true, item_flow: false })
     .eq("id", id)
     .in("status", ["pending", "claimed"])
     .eq("is_grant", false)
@@ -6124,29 +6332,13 @@ export const convertOrderToGrant = guardedAction("convertOrderToGrant", "fulfill
   revalidatePath("/fulfillment");
 });
 
-// Close a shipped order out: shipped -> done, once the buyer has it in hand.
-// Any super can mark it done (it's the final administrative close, not a queue
-// advance), and it's a no-op on anything that isn't shipped.
-export const markOrderDone = guardedAction("markOrderDone", "owner", async (access, formData: FormData): Promise<void> => {
-  const id = Number(formData.get("id") ?? 0);
-  if (!id) return;
-  const { error } = await db
-    .from("shop_orders")
-    .update({ status: "done", done_at: new Date().toISOString() })
-    .eq("id", id)
-    .eq("status", "shipped");
-  if (error) throw new Error(error.message);
-  await logOrderAction(id, "order_done", "closed out as delivered", actorName(access));
-  revalidatePath("/fulfillment");
-});
-
 // Corrects an already-claimed order's fulfillment paper trail - the HCB link,
 // actual cost, and tracking number - after the fact. Every other action here
 // only ever writes these once, at the stage they're first collected, and
 // stops being reachable once an order is done/cancelled; this is the one
 // escape hatch for fixing a typo'd link or a wrong cost after the fact,
 // deliberately not gated by status (works on ordered/credited/shipped/done
-// alike). Owner-level, same as reassign/cancel/mark done above - this rewrites
+// alike). Owner-level, same as reassign/cancel above - this rewrites
 // financial records, not just queue state.
 export const updateOrderFulfillmentInfo = guardedAction("updateOrderFulfillmentInfo", "owner", async (access, formData: FormData): Promise<void> => {
   const id = Number(formData.get("id") ?? 0);
@@ -6154,7 +6346,7 @@ export const updateOrderFulfillmentInfo = guardedAction("updateOrderFulfillmentI
   const hcbLink = String(formData.get("hcbLink") ?? "").trim().slice(0, 300);
   const actualCostUsd = Math.round(Number(formData.get("actualCostUsd") ?? NaN) * 100) / 100;
   const tracking = String(formData.get("tracking") ?? "").trim().slice(0, 120);
-  // Same optional item-source-url handling as markOrderCredited above - this
+  // Same optional item-source-url handling as fulfillOrder above - this
   // is the escape hatch for fixing/updating it after the fact too.
   const sourceUrl = String(formData.get("sourceUrl") ?? "").trim().slice(0, 500);
   if (
@@ -6266,6 +6458,58 @@ export const cancelOrder = guardedAction("cancelOrder", "owner", async (access, 
   );
   revalidatePath("/fulfillment");
   revalidatePath("/pixels");
+});
+
+// Owner escape hatch for a fulfillment that has to be undone after the fact,
+// e.g. a grant that HCB later cancelled and refunded. The order goes back to
+// its claimer's queue (or the New queue if it had none), the previous
+// fulfillment stays on file with the required reason, and the payout already
+// paid stays with the fulfiller. `flow` can move a grant-category order onto
+// the normal item flow for the retry when the replacement is bought directly.
+export const unfulfillOrder = guardedAction("unfulfillOrder", "owner", async (access, formData: FormData): Promise<void> => {
+  const id = Number(formData.get("id") ?? 0);
+  const reason = String(formData.get("reason") ?? "").trim().slice(0, 300);
+  const flowValue = String(formData.get("flow") ?? "");
+  const flow = flowValue === "grant" || flowValue === "item" ? flowValue : null;
+  if (!Number.isSafeInteger(id) || id <= 0 || !reason) {
+    revalidatePath("/fulfillment");
+    return;
+  }
+  const { data: order } = await db
+    .from("shop_orders")
+    .select("user_id, item_name, status")
+    .eq("id", id)
+    .maybeSingle();
+  if (!order || (order.status !== "done" && order.status !== "shipped")) {
+    revalidatePath("/fulfillment");
+    return;
+  }
+  const result = await unfulfillOrderInDb(id, reason, actorName(access), access.session.slackId, { flow });
+  if (!result) {
+    revalidatePath("/fulfillment");
+    revalidatePath("/fulfillment/grants");
+    return;
+  }
+  if ((await refreshCommitmentAmount(id, { ships: shipsProvider() })) === "failed") {
+    await logOrderAction(id, "ledger_refresh_failed", "funding ledger amount could not be updated", actorName(access));
+  }
+  // The reason is internal (it can mention refunds, vendors or mistakes), so
+  // the player only gets the useful part: this order is being redone.
+  await db.from("notifications").insert({
+    user_id: result.userId,
+    title: "Order reopened",
+    body: `Your "${result.itemName}" order is being fulfilled again. We'll let you know when it's on its way.`,
+  });
+  await logOrderAction(
+    id,
+    "order_unfulfilled",
+    `reopened: ${reason}${flow ? ` (now on the ${flow} flow)` : ""}; ${result.pixelsPaid} px payout kept`,
+    actorName(access),
+    { user_id: result.userId, item_name: result.itemName },
+  );
+  revalidatePath("/fulfillment");
+  revalidatePath("/fulfillment/grants");
+  redirect(result.status === "pending" ? `/fulfillment?order=${id}` : `/fulfillment?status=claimed&order=${id}`);
 });
 
 // Backfill player-card photos from Slack for everyone who has a slack_id but
