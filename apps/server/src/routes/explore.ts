@@ -4,7 +4,7 @@ import { sql } from "../db/pgCompat.js";
 import { activeEvents } from "../events.js";
 import { approvedHoursFor, lifetimeRe, levelForRe } from "../xp.js";
 import { REFERRAL_WINDOW_HOURS } from "./referral.js";
-import { IN_REVIEW_STATUSES, loadQueueStats } from "../queueStats.js";
+import { IN_REVIEW_STATUSES, cachedQueueStats } from "../queueStats.js";
 
 // Re-exported for the route tests and any route that wants the same aggregates.
 export { ACTIVITY_DAYS, queueActivity, queueCounts } from "../queueStats.js";
@@ -39,7 +39,7 @@ export const PUBLIC_PROJECT_COLUMNS =
 // queue clones cannot.
 router.get("/api/explore/queue", async (_req, res) => {
   try {
-    res.json({ ok: true, ...(await loadQueueStats()) });
+    res.json({ ok: true, ...(await cachedQueueStats()) });
   } catch (error) {
     console.error("[explore] queue stats failed", error);
     res.status(500).json({ ok: false });
