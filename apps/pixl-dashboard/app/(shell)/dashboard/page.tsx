@@ -4,6 +4,7 @@ import Link from "next/link";
 import { config } from "@/app/_generated/config";
 import { badgeVariants, buttonVariants, pageSub, pageTitle } from "@/components/ui/primitives";
 import { cn } from "@/lib/cn";
+import { publicQueueStats } from "@/lib/queue-stats";
 import { serverApi } from "@/lib/server-api";
 import {
   barTrial,
@@ -124,7 +125,7 @@ export default async function DashboardPage() {
     serverApi<{ stats: HackatimeStats | null }>("/api/hackatime/stats"),
     serverApi<{ quests: Trial[] }>("/api/sidequests"),
     serverApi<{ events: ActiveEvent[] }>("/api/events/active"),
-    serverApi<QueueSummary>("/api/explore/queue"),
+    publicQueueStats<QueueSummary>(),
   ]);
 
   const list = (projectsResp?.projects ?? []).filter((p) => p.is_owner !== false);
