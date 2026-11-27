@@ -2,6 +2,28 @@ import type { AirtableState, EligibilityResult, EligibilityStatus, UnifiedState,
 
 export const ELIGIBILITY_FILTERS: EligibilityStatus[] = ["covered", "insufficient", "unverified", "review_required", "restricted"];
 
+// Least risk of an unfulfillable grant first. Covered is safe; a policy
+// review might still pass; unverified has no established funding; restricted
+// is an explicit block; insufficient is a confirmed money shortfall.
+export const ELIGIBILITY_RISK: Record<EligibilityStatus, number> = {
+  covered: 0,
+  review_required: 1,
+  unverified: 2,
+  restricted: 3,
+  insufficient: 4,
+};
+
+// Same statuses as ELIGIBILITY_FILTERS, in risk order, for the grant CSV's
+// compact funding dropdown.
+export const ELIGIBILITY_RISK_FILTERS: EligibilityStatus[] = [...ELIGIBILITY_FILTERS].sort(
+  (a, b) => ELIGIBILITY_RISK[a] - ELIGIBILITY_RISK[b],
+);
+
+export function eligibilityRisk(status: EligibilityStatus | null | undefined): number {
+  // No evidence at all is unknown, so sort it after the known blockers.
+  return status ? ELIGIBILITY_RISK[status] : 5;
+}
+
 export const ELIGIBILITY_LABEL: Record<EligibilityStatus, string> = {
   covered: "Covered",
   insufficient: "Insufficient",

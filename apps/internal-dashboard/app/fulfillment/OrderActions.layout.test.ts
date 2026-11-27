@@ -7,33 +7,31 @@ const detail = readFileSync(new URL("./OrderDetail.tsx", import.meta.url), "utf8
 const css = readFileSync(new URL("../_ui/admin.css", import.meta.url), "utf8");
 
 describe("fulfillment action layout", () => {
-  test("order crediting keeps its fields and submit button in separate rows", () => {
-    const ordered = actions.slice(
-      actions.indexOf('if (o.status === "ordered")'),
-      actions.indexOf("// Credited -> shipped"),
-    );
-    expect(ordered).toContain('className="fw-order-action-form"');
-    expect(ordered).toContain('className="fw-order-action-fields"');
-    expect(ordered).toContain('className="fw-order-action-buttons"');
-    expect(ordered).toContain('className="fw-order-action-field-wide"');
-    expect(ordered.indexOf("</form>")).toBeLessThan(ordered.indexOf("{cancelForm}"));
-    for (const field of ["hcbLink", "actualCostUsd", "sourceUrl"]) {
-      expect(ordered).toContain(`name="${field}"`);
+  test("the one fulfillment form keeps its fields and submit button in separate rows", () => {
+    const fulfilled = actions.slice(actions.indexOf("// Claimed items, and legacy ordered/credited orders"));
+    expect(fulfilled).toContain('className="fw-order-action-form"');
+    expect(fulfilled).toContain('className="fw-order-action-fields"');
+    expect(fulfilled).toContain('className="fw-order-action-buttons"');
+    expect(fulfilled).toContain('className="fw-order-action-field-wide"');
+    expect(fulfilled.indexOf("</form>")).toBeLessThan(fulfilled.indexOf("{cancelForm}"));
+    for (const field of ["hcbLink", "actualCostUsd", "sourceUrl", "tracking"]) {
+      expect(fulfilled).toContain(`name="${field}"`);
     }
   });
 
-  test("the only claim button reserves first, with placing as the next step", () => {
+  test("the only claim button reserves first; fulfillment is one later step", () => {
     const pending = actions.slice(
       actions.indexOf('if (o.status === "pending")'),
       actions.indexOf('if (o.status === "claimed")'),
     );
-    expect(pending).toContain('<form action={claimOrder}>');
+    expect(pending).toContain("<form action={claimOrder}>");
     expect(pending).toContain("Claim order");
     expect(pending).not.toContain("Place order &amp; claim");
     expect(pending).not.toContain("reserveOrder");
     expect(pending.split("<form action={claimOrder}>")).toHaveLength(2);
-    expect(actions).toContain("<form action={markOrderPlaced}>");
-    expect(actions).toContain("Mark order placed");
+    expect(actions).toContain("<form action={fulfillOrder}");
+    expect(actions).toContain("Fulfill order");
+    expect(actions).not.toContain("Mark order placed");
 
     const claim = serverActions.slice(
       serverActions.indexOf('export const claimOrder = guardedAction('),
@@ -50,7 +48,8 @@ describe("fulfillment action layout", () => {
     expect(grid).toBeGreaterThan(-1);
     expect(actionsPanel).toBeGreaterThan(grid);
     expect(actionsPanel).toBeLessThan(funding);
-    expect(detail.slice(grid, actionsPanel)).toContain('<Panel title="Shipping info"');
+    // Grants show a "Grant recipient" panel in the same slot instead.
+    expect(detail.slice(grid, actionsPanel)).toContain('title={grant ? "Grant recipient" : "Shipping info"}');
   });
 
   test("forms use shrinkable columns and responsive wrapping", () => {
@@ -60,5 +59,17 @@ describe("fulfillment action layout", () => {
     expect(css).toContain("@media (max-width: 680px)");
     expect(css).toContain(".fw-order-action-buttons .hc-btn");
     expect(css).toContain("white-space: normal;");
+  });
+
+  test("unfulfilling asks for a required reason and is owner-gated", () => {
+    const control = actions.slice(
+      actions.indexOf("export function UnfulfillControls"),
+      actions.indexOf("export function OrderActions"),
+    );
+    expect(control).toContain('name="reason"');
+    expect(control).toContain("required");
+    expect(control).toContain('name="flow"');
+    expect(control).toContain("already paid are kept");
+    expect(detail).toContain("visible.unfulfill && <UnfulfillControls");
   });
 });

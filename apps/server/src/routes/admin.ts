@@ -4,6 +4,7 @@ import { listOnlinePlayers, kickPlayer, endUserSession } from "../ws/gameServer.
 import { forgetCachedRevocation, revokeUserSessions } from "../auth/revocation.js";
 import { refreshEntryEvidence } from "../operations/service.js";
 import { validate, v } from "../http/validate.js";
+import { cachedQueueStats } from "../queueStats.js";
 
 const router = Router();
 
@@ -14,6 +15,18 @@ const router = Router();
 
 router.get("/api/admin/online", (_req, res) => {
   res.json({ ok: true, players: listOnlinePlayers() });
+});
+
+// Aggregate review-queue stats for the public /queue page. The page renders
+// them server-side with the player dashboard's service key; they are never
+// exposed as a public API route.
+router.get("/api/admin/queue", async (_req, res) => {
+  try {
+    res.json({ ok: true, ...(await cachedQueueStats()) });
+  } catch (error) {
+    console.error("[admin] queue stats failed", error);
+    res.status(500).json({ ok: false });
+  }
 });
 
 router.post(

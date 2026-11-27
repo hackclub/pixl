@@ -18,7 +18,7 @@
 
 import { db } from "../db/client.js";
 import { audit } from "../audit.js";
-import { config } from "../config.generated.js";
+import { config, submissionDeadline } from "../config.generated.js";
 import { callPixo } from "../pixoCall.js";
 import { externalDmUrl } from "../pixoUrl.js";
 import { escapeMrkdwn } from "../slackEscape.js";
@@ -62,6 +62,7 @@ interface ProjectRow {
   user_id: string;
   status: string;
   is_update: boolean | null;
+  shipped_at: string | null;
   hackatime_seconds: number | null;
   ai_review_status: string;
   ai_review_started_at: string | null;
@@ -111,7 +112,7 @@ export async function runPrecheck(projectId: number, startedAt: string): Promise
     const { data } = await db
       .from("projects")
       .select(
-        "id, name, description, kind, finished_build, bom_url, repo_url, user_id, status, is_update, hackatime_seconds, ai_review_status, ai_review_started_at, ai_precheck_sendbacks, reviewing_by",
+        "id, name, description, kind, finished_build, bom_url, repo_url, user_id, status, is_update, shipped_at, hackatime_seconds, ai_review_status, ai_review_started_at, ai_precheck_sendbacks, reviewing_by",
       )
       .eq("id", projectId)
       .maybeSingle();
@@ -137,8 +138,11 @@ export async function runPrecheck(projectId: number, startedAt: string): Promise
     const sendbacks = Number(p.ai_precheck_sendbacks) || 0;
     // Someone already opened it from a direct link: leave it to them.
     const humanOnIt = !!p.reviewing_by;
+    // The one post-deadline resubmit is judged by a human: another request for
+    // changes on it is a final rejection, which the AI must not hand out.
+    const finalResubmit = !!p.shipped_at && new Date(p.shipped_at) > submissionDeadline;
     const sendBack =
-      findings.blocking.length > 0 && !p.is_update && sendbacks < MAX_AUTO_SENDBACKS && !humanOnIt;
+      findings.blocking.length > 0 && !p.is_update && sendbacks < MAX_AUTO_SENDBACKS && !humanOnIt && !finalResubmit;
     const common = {
       ai_review_summary: findings.summary,
       ai_review_findings: findingsJson(findings, sendBack),

@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/guard";
 import { banIsActive, getPlayer, listReportsAgainst } from "@/lib/db";
-import { slackHandle } from "@/lib/slack";
+import { slackDmLink, slackHandle } from "@/lib/slack";
 import { isSafeUrl } from "@/lib/safeUrl";
 import {
   BanForm,
@@ -95,6 +95,13 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
             {user.slack_id ? <Mono>{user.slack_id}</Mono> : <span>no Slack id, can&apos;t DM</span>}, joined{" "}
             {formatDate(user.created_at)}
           </>
+        }
+        actions={
+          user.slack_id ? (
+            <ButtonLink href={slackDmLink(user.slack_id)} external variant="outline" size="sm" icon="slack-fill">
+              Message on Slack
+            </ButtonLink>
+          ) : undefined
         }
       />
 

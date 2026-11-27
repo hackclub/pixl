@@ -166,6 +166,15 @@ describe("countReviewsSince", () => {
     expect(countReviewsSince(rows, monday)).toBe(1);
   });
 
+  test("a first-pass ban proposal counts toward the weekly minimum", () => {
+    const rows = [
+      row("Ada (U1)", "first_pass_banned", d("2026-10-20T09:00:00Z")),
+      row("Ada (U1)", "first_pass_approved", d("2026-10-20T10:00:00Z")),
+      row("Ada (U1)", "first_pass_banned", d("2026-10-18T23:00:00Z")),
+    ];
+    expect(countReviewsSince(rows, monday)).toBe(2);
+  });
+
   test("nothing this week is zero", () => {
     expect(countReviewsSince([], monday)).toBe(0);
   });

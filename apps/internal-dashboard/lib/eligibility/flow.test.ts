@@ -225,6 +225,49 @@ describe("evidence loading", () => {
     });
   });
 
+  describe("catalog grants use their round face value", () => {
+    const load = (tables: Tables) => loadPlayerEvidence([U1], { liveAirtable: false, sql: fakeSql(tables), verifier: confirming, now: NOW });
+    const eval1 = (ev: Awaited<ReturnType<typeof load>>, row: Record<string, unknown>) =>
+      evaluateFromEvidence(ev.get(U1)!, toOrderInput(row as never), POLICIES["2026-10-22.1"], NOW);
+    const aiGrant = (over: Record<string, unknown> = {}) =>
+      orderRow({
+        id: 5,
+        item_name: "AI Credits",
+        quantity: 2,
+        price: 222,
+        item_category: "grants",
+        item_description: "A $10 grant for AI credits for the provider of your choice.",
+        ...over,
+      });
+
+    test("2x AI Credits counts $20, not the $22.20 pixel budget", async () => {
+      const row = aiGrant();
+      const ev = await load({ owned: [proj()], orders: [row], payouts: [payout()] });
+      const r = eval1(ev, row);
+      expect(r.amount).toMatchObject({ cents: 2000, basis: "face", budgetCents: 2220 });
+      expect(r.status).toBe("covered");
+    });
+
+    test("a claimed grant order commits its face value, not the pixel ceiling", async () => {
+      const grant = aiGrant({ status: "claimed" });
+      const next = orderRow({ id: 6, price: 100 });
+      const ev = await load({ owned: [proj()], orders: [grant, next], payouts: [payout()] });
+      expect(eval1(ev, next).committedCents).toBe(2000);
+    });
+
+    test("a grant whose description and item name are unknown falls back to the pixel budget", async () => {
+      const row = aiGrant({ item_name: "Mystery Grant", item_description: "A grant for something." });
+      const ev = await load({ owned: [proj()], orders: [row], payouts: [payout()] });
+      expect(eval1(ev, row).amount).toMatchObject({ cents: 2220, basis: "budget" });
+    });
+
+    test("a known AI subscription with no readable description still counts $10", async () => {
+      const row = aiGrant({ item_name: "AI subscription/credits", item_description: "Pick any AI provider." });
+      const ev = await load({ owned: [proj()], orders: [row], payouts: [payout()] });
+      expect(eval1(ev, row).amount).toMatchObject({ cents: 2000, basis: "face", budgetCents: 2220 });
+    });
+  });
+
   test("bigint ids returned as strings by Postgres still key the results by number", async () => {
     const rows = [orderRow({ id: "11" }), orderRow({ id: "12", price: 50 })] as never[];
     const results = await evaluateOrders(rows, { liveAirtable: false, verifier: confirming, sql: fakeSql({ owned: [proj({ airtable_record_id: null })], orders: rows, payouts: [payout()] }) });
@@ -519,11 +562,25 @@ describe("authorization and existing actions", () => {
     expect(actions).toContain('export const cancelOrder = guardedAction("cancelOrder", "owner"');
   });
 
+  test("marking a grant sent from the CSV is owner-only and reuses the settlement", () => {
+    expect(actions).toContain('export const markGrantSent = guardedAction("markGrantSent", "owner"');
+    const action = actions.slice(actions.indexOf("export const markGrantSent"), actions.indexOf("export const previewGrantImport"));
+    expect(action).toContain("settleGrantForOwner(");
+
+    // The claim + complete grant work lives in the shared helper (also used by
+    // the HCB grants import), so assert it there rather than inside the form.
+    const helper = actions.slice(actions.indexOf("async function settleGrantForOwner"), actions.indexOf("export const markGrantSent"));
+    expect(helper).toContain("claimOrderWithFunding");
+    expect(helper).toContain("reserveOnly: true");
+    expect(helper).toContain("completeGrant(");
+    expect(helper).toContain("orderIsGrant");
+  });
+
   test("the fulfillment page still gates on the fulfiller role", () => {
     expect(read("app/fulfillment/page.tsx")).toContain('requirePage("fulfiller")');
   });
 
-  test("claimOrder reserves without purchase; placing notifies the buyer later", () => {
+  test("claimOrder reserves without purchase; the item is fulfilled in one later step", () => {
     const claim = actions.slice(actions.indexOf("export const claimOrder"), actions.indexOf("export const flagOrderOverBudget"));
     expect(claim).toContain("isOwnOrder");
     expect(claim).toContain('"order_reserved"');
@@ -532,16 +589,12 @@ describe("authorization and existing actions", () => {
     expect(claim).not.toContain('title: "Order placed!');
     expect(claim).not.toContain('status: "ordered"');
 
-    const placed = actions.slice(actions.indexOf("export const markOrderPlaced"), actions.indexOf("export const markOrderCredited"));
-    expect(placed).toContain('title: "Order placed!');
-    expect(placed).toContain('"order_placed"');
-  });
-
-  test("markOrderCredited still requires an HCB link and refreshes the commitment amount", () => {
-    const body = actions.slice(actions.indexOf("export const markOrderCredited"), actions.indexOf("export const shipOrder"));
-    expect(body).toContain("!hcbLink");
-    expect(body).toContain("isSafeUrl(hcbLink)");
-    expect(body).toContain("refreshCommitmentAmount");
+    const fulfilled = actions.slice(actions.indexOf("export const fulfillOrder"), actions.indexOf("export const sendGrant"));
+    expect(fulfilled).toContain("!hcbLink");
+    expect(fulfilled).toContain("isSafeUrl(hcbLink)");
+    expect(fulfilled).toContain("refreshCommitmentAmount");
+    expect(fulfilled).toContain("settleItemFulfillment(");
+    expect(fulfilled).toContain("isOwnOrder(");
   });
 
   test("the eligibility modules export no server actions and never mutate Airtable", () => {
@@ -565,7 +618,7 @@ describe("authorization and existing actions", () => {
     const dir = join(root, "lib/eligibility");
     for (const f of readdirSync(dir).filter((x) => x.endsWith(".ts") && !x.endsWith(".test.ts"))) {
       const src = readFileSync(join(dir, f), "utf8");
-      expect(src).not.toMatch(/cancel_shop_order|cancel_claimed_shop_order|markOrderCredited|shipOrder|markOrderDone/);
+      expect(src).not.toMatch(/cancel_shop_order|cancel_claimed_shop_order|fulfillOrder|settleItemFulfillment/);
     }
   });
 });

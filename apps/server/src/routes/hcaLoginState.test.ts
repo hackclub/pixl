@@ -1,8 +1,13 @@
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { afterAll, afterEach, beforeAll, describe, expect, setSystemTime, spyOn, test } from "bun:test";
 import { issueSessionToken, verifySessionToken } from "../auth/session.js";
 import { db } from "../db/pgCompat.js";
 import authRouter from "./auth.js";
 import projectsRouter from "./projects.js";
+
+// These tests log in and then ship, so they depend on the event submission
+// deadline. Pin the clock before it instead of breaking when the deadline passes.
+beforeAll(() => setSystemTime(new Date("2026-11-15T12:00:00.000Z")));
+afterAll(() => setSystemTime());
 
 type Row = Record<string, unknown>;
 

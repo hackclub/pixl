@@ -29,8 +29,8 @@ describe("project ban payout", () => {
     expect(body("reviewProject")).toContain('recordSettledPayout(projectId, access, "banned", project.name)');
   });
 
-  test("a ban pays a flat 2 pixels", () => {
-    expect(src).toContain("const BAN_PAYOUT_PIXELS = 2;");
+  test("a ban pays a flat 4 pixels", () => {
+    expect(src).toContain("const BAN_PAYOUT_PIXELS = 4;");
   });
 
   test("audit notes and justifications are only required for approvals, not bans", () => {

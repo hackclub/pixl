@@ -1,14 +1,17 @@
 import { activeReviewClaim } from "./reviewClaimState";
 import { projectNumber } from "./projectNumber";
-import { earnedProjectHours, EARNED_PROJECT_STATUSES } from "./earnedProject";
+import { earnedProjectHours, earnedCollaboratorHours, EARNED_PROJECT_STATUSES } from "./earnedProject";
+import { retryProjectPixelCredit } from "./pixelCreditRetry";
 import { pickStyleExamples, type StyleCandidate, type StyleExample } from "./styleExamples";
 import { queueWaitStartMs, type QueueWaitInput } from "./queueWait";
 import { DEFAULT_STAFF_SETTINGS, parseStaffSettings, type StaffSettings } from "./staffSettings";
 import { cache } from "react";
 import { randomBytes } from "node:crypto";
 import { decryptPII } from "./crypto";
-import { reForProject } from "@/app/_generated/config";
+import { reForHours, reForProject } from "@/app/_generated/config";
 import { parseAuditNote } from "./auditNote";
+import { FUNDING_ORDER_PREFIX } from "./eligibility/policy";
+import { isGrantOrder } from "./fulfillmentGrant";
 import { foldOrderCounts, type OrderCounts } from "./fulfillmentView";
 import { slackIdFromActorName } from "./reviewAccess";
 import { PRECHECK_HIDE_MS, isPrecheckRunning } from "./precheck";
@@ -996,14 +999,21 @@ export async function creditProjectPixels(
   hours: number,
   by: string,
 ): Promise<void> {
-  const { error } = await db.rpc("credit_project_pixels", {
-    p_user_id: userId,
-    p_project_id: projectId,
-    p_amount: amount,
-    p_hours: hours,
-    p_created_by: by,
-  });
-  if (error) console.error("creditProjectPixels", error.message);
+  try {
+    await retryProjectPixelCredit(() => db.rpc("credit_project_pixels", {
+      p_user_id: userId,
+      p_project_id: projectId,
+      p_amount: amount,
+      p_hours: hours,
+      p_created_by: by,
+    }));
+  } catch (e) {
+    // A failed credit must never be silently treated as a paid approval.
+    // This does not make review state + payout transactional; the approval
+    // reconciliation workflow must still handle any persistent failure.
+    console.error("creditProjectPixels", { projectId, error: (e as Error).message });
+    throw e;
+  }
 }
 
 // Claw back everything a project was credited (verdict reverted). Returns the
@@ -1335,6 +1345,8 @@ export interface ReviewAuditRow {
   demo_seconds: number;
   total_seconds: number;
   created_at: string;
+  /** Slack ts of the #pixl-checkpoint post that announced this verdict, when there is one. */
+  slack_thread_ts?: string | null;
   player_name: string;
   project_name: string;
 }
@@ -1665,7 +1677,7 @@ export async function debitReviewerPixels(slackId: string, amount: number): Prom
 }
 
 // Same shape as creditReviewerPixels above, for the flat fulfillment payout
-// (see shipOrder in app/actions.ts) - a separate function (not a shared one
+// (see fulfillOrder in app/actions.ts) - a separate function (not a shared one
 // with a reason param) matches how creditProjectPixels/creditReviewerPixels
 // are already kept distinct in this file, one per payout kind.
 export async function creditFulfillerPixels(
@@ -2407,7 +2419,7 @@ export interface FulfillerStats {
   avgShipSeconds: number;
   lastActivity: string | null;
   // Lifetime fulfillment_pixels_paid actually paid (see creditFulfillerPixels
-  // and shipOrder in app/actions.ts) - the leaderboard tab on /fulfillment
+  // and fulfillOrder in app/actions.ts) - the leaderboard tab on /fulfillment
   // sorts by this.
   pixelsEarned: number;
 }
@@ -2420,7 +2432,7 @@ export interface ShopEconomySummary {
   totalPx: number;
   // Real dollars actually spent fulfilling those same orders - only orders
   // that have reached "credited" or later carry an actual_cost_usd (see
-  // markOrderCredited in app/actions.ts), which is what defines the cohort.
+  // fulfillOrder in app/actions.ts), which is what defines the cohort.
   totalActualCostUsd: number;
   // How many orders both totals above are drawn from.
   ordersWithCost: number;
@@ -2555,11 +2567,14 @@ export interface ShopItemRow {
   // project (projects.is_peak) - see availableBeaconUnlocks in
   // apps/server/src/routes/shop.ts. Item-wide, propagated like manual_locked.
   beacon_locked: boolean;
-  // Item-wide percentage off every price component (base + config choices),
-  // 0 = no discount - see updateShopItem in app/actions.ts and buy_shop_item,
-  // which applies the exact same rounding so the displayed and charged price
-  // always match.
+  // Sale percentage off every price component (base + config choices) for
+  // this region's row, 0 = no sale - see updateShopItem / updateShopItemPrices
+  // in app/actions.ts and buy_shop_item, which applies the exact same rounding
+  // so the displayed and charged price always match.
   discount_percent: number;
+  // Optional end of the sale (timestamptz). Null = runs until cleared; once
+  // past, buy_shop_item charges full price and the shop hides the discount.
+  discount_ends_at: string | null;
   // Set on a personal item (created for one specific player, see
   // createPersonalShopItem in app/actions.ts and drizzle/0212). Those are kept
   // out of every normal catalog listing and managed from their own section.
@@ -2669,6 +2684,8 @@ export async function listPersonalShopItems(): Promise<PersonalShopItem[]> {
   }));
 }
 
+// The visible item pipeline is three steps (New -> Claimed -> Fulfilled); the
+// stored statuses still include the legacy ordered/credited/shipped states.
 export type OrderStatus =
   | "pending"
   | "claimed"
@@ -2677,9 +2694,6 @@ export type OrderStatus =
   | "shipped"
   | "done"
   | "cancelled";
-
-// The pipeline stages in order, for the stepper. 'cancelled' is off to the side.
-export const ORDER_STAGES: OrderStatus[] = ["pending", "claimed", "ordered", "credited", "shipped", "done"];
 
 export interface ShopOrderRow {
   id: number;
@@ -2710,10 +2724,12 @@ export interface ShopOrderRow {
   // paid from - required to claim an order (see claimOrder in
   // app/actions.ts), so every fulfilled order has a paper trail.
   hcb_link: string;
-  // Flat pixel payout to the fulfiller for actually shipping this order (see
-  // creditFulfillerPixels below and shipOrder in app/actions.ts). 0 = not yet
+  // Flat pixel payout to the fulfiller for actually fulfilling this order (see
+  // settleItemFulfillment in lib/fulfillmentShip.ts). 0 = not yet
   // paid - stores the exact amount, not just a boolean, so a future rate
-  // change never makes an already-paid order's history ambiguous.
+  // change never makes an already-paid order's history ambiguous. Unfulfilling
+  // an order keeps this (the payout is never clawed back) and a later
+  // fulfillment adds to it, so it is the running total across every attempt.
   fulfillment_pixels_paid: number;
   // What it actually cost, in real dollars - distinct from `price` (pixels)
   // and the derived USD "budget" (a ceiling, not the real spend). Null until
@@ -2732,18 +2748,29 @@ export interface ShopOrderRow {
   player_slack: string | null;
   // The item's own price_source_url (see shop_items, resolved via item_id) at
   // the time this order was listed - the last URL a fulfiller actually bought
-  // this item/region from, kept fresh by markOrderCredited/
+  // this item/region from, kept fresh by fulfillOrder/
   // updateOrderFulfillmentInfo in app/actions.ts so the next fulfiller has a
   // known-working link instead of hunting for one. Only populated by
   // listShopOrders (the fulfillment page's query); null elsewhere.
   item_source_url: string | null;
   item_alt_source_url?: string | null;
   item_image_url?: string | null;
+  // The shop item's description, used to read a grant's round dollar face
+  // value ("A stackable $10 grant..."). Only populated by listShopOrders.
+  item_description?: string | null;
   item_category?: ShopCategory | null;
   // The shop item is a Beacon reward, so this order spent one of the player's
   // Beacon unlocks. Fulfilment treats it like any other order; the badge is
   // just context for why the player could claim it.
   item_beacon_locked?: boolean | null;
+  // A fulfiller converted this one order to the grant flow (migration 0240).
+  // An order is a grant if this is set OR its item category is "grants": use
+  // isGrantOrder in lib/fulfillmentGrant.ts, never read this alone.
+  is_grant?: boolean | null;
+  // An unfulfilled order can be pushed back onto the normal item flow even
+  // when its item is in the grants category (migration 0245). is_grant still
+  // wins; use isGrantOrder rather than reading this directly.
+  item_flow?: boolean | null;
 }
 
 // Shop orders players placed with pixels, newest first. Player name + Slack are
@@ -2786,7 +2813,7 @@ export async function listShopOrders(
   const items = itemIds.length
     ? await db
         .from("shop_items")
-        .select("id, price_source_url, alt_source_url, image_url, category, beacon_locked")
+        .select("id, price_source_url, alt_source_url, image_url, category, beacon_locked, description")
         .in("id", itemIds)
     : { data: [] };
   const itemInfo = new Map(
@@ -2798,6 +2825,7 @@ export async function listShopOrders(
         image: (i.image_url as string | null) || null,
         category: (i.category as ShopCategory | null) ?? null,
         beaconLocked: Boolean(i.beacon_locked),
+        description: (i.description as string | null) ?? null,
       },
     ]),
   );
@@ -2811,8 +2839,80 @@ export async function listShopOrders(
     r.item_image_url = info?.image ?? null;
     r.item_category = info?.category ?? null;
     r.item_beacon_locked = info?.beaconLocked ?? false;
+    r.item_description = info?.description ?? null;
   }
   return rows;
+}
+
+// Orders that still need a real HCB card grant: grant-category or converted
+// grant orders, plus project hardware funding orders (item_id null, named with
+// FUNDING_ORDER_PREFIX). Used by /fulfillment/grants and its CSV download.
+// Buyer emails are NOT included here; they are decrypted separately, owner-only.
+export async function listGrantOrdersForExport(statuses: string[]): Promise<ShopOrderRow[]> {
+  const rows = await listShopOrders(undefined, 1000, { stages: statuses });
+  return rows
+    .filter((o) => isGrantOrder(o) || o.item_name.startsWith(FUNDING_ORDER_PREFIX))
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+}
+
+export interface OrderUnfulfillmentRow {
+  id: number;
+  order_id: number;
+  fulfillment_kind: "grant" | "item";
+  fulfilled_at: string | null;
+  fulfilled_by: string;
+  fulfilled_by_slack: string;
+  hcb_link: string;
+  tracking: string;
+  actual_cost_usd: number | string | null;
+  pixels_paid: number;
+  unfulfilled_at: string;
+  unfulfilled_by: string;
+  unfulfilled_by_slack: string;
+  reason: string;
+}
+
+// Previous, undone fulfillment attempts for one order, oldest first. Reads as
+// an empty list before migration 0245 is applied so the order page keeps
+// rendering; the unfulfill action itself still requires the table.
+export async function listOrderUnfulfillments(orderId: number): Promise<OrderUnfulfillmentRow[]> {
+  try {
+    const rows = await sql`
+      select id, order_id, fulfillment_kind, fulfilled_at, fulfilled_by,
+             fulfilled_by_slack, hcb_link, tracking, actual_cost_usd, pixels_paid,
+             unfulfilled_at, unfulfilled_by, unfulfilled_by_slack, reason
+        from shop_order_unfulfillments
+       where order_id = ${orderId}
+       order by unfulfilled_at asc, id asc`;
+    return rows.map((r) => ({
+      id: Number(r.id),
+      order_id: Number(r.order_id),
+      fulfillment_kind: r.fulfillment_kind === "grant" ? "grant" : "item",
+      fulfilled_at: r.fulfilled_at ? new Date(r.fulfilled_at as string).toISOString() : null,
+      fulfilled_by: String(r.fulfilled_by ?? ""),
+      fulfilled_by_slack: String(r.fulfilled_by_slack ?? ""),
+      hcb_link: String(r.hcb_link ?? ""),
+      tracking: String(r.tracking ?? ""),
+      actual_cost_usd: (r.actual_cost_usd as number | string | null) ?? null,
+      pixels_paid: Number(r.pixels_paid) || 0,
+      unfulfilled_at: new Date(r.unfulfilled_at as string).toISOString(),
+      unfulfilled_by: String(r.unfulfilled_by ?? ""),
+      unfulfilled_by_slack: String(r.unfulfilled_by_slack ?? ""),
+      reason: String(r.reason ?? ""),
+    }));
+  } catch (e) {
+    console.error("listOrderUnfulfillments", (e as Error).message);
+    return [];
+  }
+}
+
+// Every grant link already recorded on an order. The HCB grants import filters
+// these out before matching, so a grant that was already marked sent (possibly
+// on a different order) can never be recorded twice. Throws on a database
+// failure: silently returning an empty list would make duplicates possible.
+export async function listUsedHcbGrantLinks(): Promise<string[]> {
+  const rows = await sql`select hcb_link from shop_orders where hcb_link like '%/grants/%'`;
+  return rows.map((row) => String(row.hcb_link ?? "")).filter((link) => link !== "");
 }
 
 // A single order by id, for the shipping-label print page - same row shape
@@ -3747,6 +3847,62 @@ export async function getShopSalesSeries(days = 30): Promise<ShopSalesPoint[]> {
  * The DB column is `projects.level` but holds the tier (1-4); it predates the
  * player-facing 1-100 level and isn't worth a rename migration.
  */
+
+/** Mirrors the server's approved collaborator RE calculation. Project owner
+ * hours are separate; banked collaborators must still count after removal.
+ * Fetch parent projects separately (pgCompat doesn't support nested joins).
+ */
+async function dashboardBankedCollaborations(
+  userId: string,
+  excludeProjectId?: number,
+): Promise<Array<{ hours: number; tier: number }>> {
+  const { data: collaborations, error: collabError } = await db
+    .from("project_collaborators")
+    .select("project_id, user_id, approved_hours, prior_approved_hours")
+    .eq("user_id", userId)
+    .in("status", ["accepted", "removed"]);
+  if (collabError) throw new Error(`Failed reading approved collaborations: ${collabError.message}`);
+  const rows = (collaborations ?? []).filter((c) =>
+    !excludeProjectId || Number(c.project_id) !== excludeProjectId
+  );
+  if (rows.length === 0) return [];
+
+  const { data: projects, error: projectError } = await db
+    .from("projects")
+    .select("id, user_id, status, is_update, level")
+    .in("id", [...new Set(rows.map((c) => Number(c.project_id)))])
+    .in("status", EARNED_PROJECT_STATUSES)
+    .is("banned_at", null);
+  if (projectError) throw new Error(`Failed reading collaborator projects: ${projectError.message}`);
+  const byId = new Map((projects ?? []).map((p) => [Number(p.id), p]));
+  const banked: Array<{ hours: number; tier: number }> = [];
+  for (const c of rows) {
+    const p = byId.get(Number(c.project_id));
+    if (!p || p.user_id === c.user_id) continue;
+    const hours = earnedCollaboratorHours(
+      { status: String(p.status), is_update: p.is_update === true },
+      {
+        approved_hours: c.approved_hours == null ? null : Number(c.approved_hours),
+        prior_approved_hours: c.prior_approved_hours == null ? null : Number(c.prior_approved_hours),
+      },
+    );
+    if (hours !== null && hours > 0) banked.push({ hours, tier: Number(p.level) || 1 });
+  }
+  return banked;
+}
+
+/** Reviewer-side lifetime RE must include flat Vault awards just like the
+ * game wallet; otherwise the approval payout can use a lower hourly rate.
+ */
+async function dashboardBonusReFor(userId: string): Promise<number> {
+  const { data, error } = await db
+    .from("vault_chapter_awards")
+    .select("re_awarded")
+    .eq("user_id", userId);
+  if (error) throw new Error(`Failed reading Vault RE: ${error.message}`);
+  return (data ?? []).reduce((sum, award) => sum + (Number(award.re_awarded) || 0), 0);
+}
+
 export async function lifetimeRe(userId: string, excludeProjectId?: number): Promise<number> {
   let q = db
     .from("projects")
@@ -3755,15 +3911,18 @@ export async function lifetimeRe(userId: string, excludeProjectId?: number): Pro
     .in("status", EARNED_PROJECT_STATUSES)
     .is("banned_at", null);
   if (excludeProjectId) q = q.neq("id", excludeProjectId);
-  const { data } = await q;
-  return (
-    Math.round(
-      (data ?? []).reduce((s, p) => {
-        const h = earnedProjectHours(p);
-        return s + (h === null ? 0 : reForProject(h, Number(p.level) || 1, p.sidequest_id != null));
-      }, 0) * 10,
-    ) / 10
-  );
+  const [{ data, error }, collaborations, vaultBonusRe] = await Promise.all([
+    q,
+    dashboardBankedCollaborations(userId, excludeProjectId),
+    dashboardBonusReFor(userId),
+  ]);
+  if (error) throw new Error(`Failed reading owned approved projects: ${error.message}`);
+  const ownedRe = (data ?? []).reduce((s, p) => {
+    const h = earnedProjectHours(p);
+    return s + (h === null ? 0 : reForProject(h, Number(p.level) || 1, p.sidequest_id != null));
+  }, 0);
+  const collaboratorRe = collaborations.reduce((s, c) => s + reForHours(c.hours, c.tier), 0);
+  return Math.round((ownedRe + collaboratorRe + vaultBonusRe) * 10) / 10;
 }
 
 export interface ShowNTellRound {

@@ -2459,6 +2459,8 @@ html[data-density="compact"] .hc-main {
 .fw-pipeline-track { display: flex; height: 10px; width: 100%; overflow: hidden; border-radius: 99px; background: var(--sunken); }
 .fw-pipeline-track span { display: block; min-width: 0; height: 100%; }
 .fw-pipeline-track [data-stage="pending"] { background: var(--hc-orange); }
+.fw-pipeline-track [data-stage="claimed"] { background: var(--hc-cyan); }
+.fw-pipeline-track [data-stage="fulfilled"] { background: var(--hc-green); }
 .fw-pipeline-track [data-stage="ordered"] { background: var(--hc-cyan); }
 .fw-pipeline-track [data-stage="credited"] { background: #a76bda; }
 .fw-pipeline-track [data-stage="shipped"] { background: var(--primary); }

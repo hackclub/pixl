@@ -96,10 +96,10 @@ async function regionFor(userId: string): Promise<string> {
 
 // Base columns plus unlock_xp (trophies), region and category. unlock_xp/
 // config_options arrived with migration 0032/0058, region with 0063, category
-// with 0106 , fall back gracefully before each is applied so the catalog
-// keeps loading.
+// with 0106, discount_ends_at with 0246 , fall back gracefully before each is
+// applied so the catalog keeps loading.
 const ITEM_COLUMNS =
-  "id, name, description, price, image_url, options, unlock_xp, config_options, region, category, unlock_trial_ids, manual_locked, lock_note, beacon_locked, discount_percent, created_at, reserved_user_id, review_locked";
+  "id, name, description, price, image_url, options, unlock_xp, config_options, region, category, unlock_trial_ids, manual_locked, lock_note, beacon_locked, discount_percent, discount_ends_at, created_at, reserved_user_id, review_locked";
 const ITEM_COLUMNS_FALLBACK = "id, name, description, price, image_url, options";
 
 // How recently an item has to have been added to still be worth flagging as
@@ -194,6 +194,7 @@ async function fetchItems(filterIds?: number[], region?: string) {
         category: "other",
         unlock_trial_ids: [],
         discount_percent: 0,
+        discount_ends_at: null,
         created_at: null,
       })),
     };
@@ -251,6 +252,22 @@ async function attachBuyerCounts(items: Record<string, unknown>[]): Promise<void
   }
 }
 
+// Whether an item's sale is running right now. A sale with no end time runs
+// until cleared; one past its end time is over even though discount_percent is
+// still on the row (the dashboard shows it as ended). Mirrors the same check
+// in buy_shop_item (drizzle/0246).
+export function saleIsActive(
+  item: { discount_percent?: unknown; discount_ends_at?: unknown },
+  now: number = Date.now(),
+): boolean {
+  const pct = Number(item.discount_percent);
+  if (!Number.isFinite(pct) || pct <= 0) return false;
+  const ends = item.discount_ends_at;
+  if (ends == null || ends === "") return true;
+  const end = ends instanceof Date ? ends.getTime() : new Date(String(ends)).getTime();
+  return Number.isFinite(end) ? end > now : false;
+}
+
 // Applies each item's discount_percent to every price component it displays
 // (base price, and for a configurator item its base_price + each choice's
 // price), rounding each one exactly the way buy_shop_item does - so whatever
@@ -260,7 +277,11 @@ async function attachBuyerCounts(items: Record<string, unknown>[]): Promise<void
 function applyDiscount(items: Record<string, unknown>[]): void {
   const scale = (n: unknown, pct: number): number => Math.round((Number(n) || 0) * (100 - pct) / 100);
   for (const item of items) {
-    const pct = Math.max(0, Math.min(100, Number(item.discount_percent) || 0));
+    const pct = saleIsActive(item)
+      ? Math.max(0, Math.min(100, Number(item.discount_percent) || 0))
+      : 0;
+    // Don't leave a stale -x% badge on clients after the sale ends.
+    item.discount_percent = pct;
     if (pct <= 0) continue;
     item.original_price = item.price;
     item.price = scale(item.price, pct);
@@ -693,7 +714,12 @@ router.delete("/api/shop/save/:id", validate({ query: v.noQuery, params: params(
 // the fulfillment-pipeline columns (status/tracking/stage stamps) but falls back
 // to the base columns so it keeps working before migration 0052 is applied.
 const ORDER_COLUMNS =
-  "id, item_name, option, price, quantity, status, note, buyer_note, created_at, ordered_at, credited_at, shipped_at, done_at, tracking";
+  "id, item_id, item_name, option, price, quantity, status, note, buyer_note, created_at, ordered_at, credited_at, shipped_at, done_at, tracking, is_grant, item_flow";
+// Same set without the unfulfill column (migration 0245), so a server deploy
+// that lands before the migration keeps working instead of dropping tracking
+// and quantity via the very old fallback below.
+const ORDER_COLUMNS_WITHOUT_ITEM_FLOW =
+  "id, item_id, item_name, option, price, quantity, status, note, buyer_note, created_at, ordered_at, credited_at, shipped_at, done_at, tracking, is_grant";
 const ORDER_COLUMNS_FALLBACK =
   "id, item_name, option, price, status, note, created_at, fulfilled_at";
 
@@ -710,12 +736,41 @@ router.get("/api/shop/orders", async (req, res) => {
       .limit(100);
 
   let { data, error } = await build(ORDER_COLUMNS);
+  if (error) ({ data, error } = await build(ORDER_COLUMNS_WITHOUT_ITEM_FLOW));
   if (error) ({ data, error } = await build(ORDER_COLUMNS_FALLBACK));
   if (error) {
     console.error("[shop] orders failed", error);
     return res.status(500).json({ ok: false });
   }
-  const orders = (data ?? []) as { id: number; status: string }[];
+  const orders = (data ?? []) as {
+    id: number;
+    status: string;
+    item_id?: number | null;
+    is_grant?: boolean;
+    item_flow?: boolean;
+  }[];
+
+  // A grant is sent by email as an HCB grant, not shipped, so the Orders tab
+  // shows a grant timeline for it. An order is a grant when it was converted
+  // (is_grant) or its item is in the grants category. Both are absent on the
+  // pre-migration fallback columns, which just yields is_grant: false.
+  const itemIds = [...new Set(orders.map((o) => o.item_id).filter((x): x is number => typeof x === "number"))];
+  const grantItemIds = new Set<number>();
+  if (itemIds.length > 0) {
+    const { data: items, error: itemsError } = await db.from("shop_items").select("id, category").in("id", itemIds);
+    if (itemsError) console.error("[shop] orders grant lookup failed", itemsError);
+    for (const it of (items ?? []) as { id: number; category: string | null }[])
+      if (it.category === "grants") grantItemIds.add(it.id);
+  }
+  for (const o of orders) {
+    // A manual conversion to the grant flow always wins; item_flow only turns
+    // the category-derived grant flow off for a re-fulfilled order.
+    o.is_grant =
+      o.is_grant === true ||
+      (o.item_flow !== true && typeof o.item_id === "number" && grantItemIds.has(o.item_id));
+    delete o.item_id;
+    delete o.item_flow;
+  }
 
   // Queue position for any still-pending order: FIFO by created_at across
   // EVERY player's pending orders, same "New" queue fulfillers work off in
@@ -916,19 +971,25 @@ router.post("/api/shop/buy/:id", validate({ query: v.noQuery, params: params({ i
   // delay or fail a player's successful purchase.
   const orderId = Number(result.order_id);
   // "Nothing" ships nothing: it costs us $0, so it is marked done on the spot
-  // and never reaches a fulfiller. The alert below still goes out.
+  // and never enters the fulfillment flow (no queue, no fulfiller alert).
+  // Owner decision 2026-11-12, reversing #193.
   const isNothing = String(result.item_name ?? "").trim().toLowerCase() === "nothing";
+  let skipFulfillment = false;
   if (isNothing && Number.isSafeInteger(orderId) && orderId > 0) {
     const now = new Date().toISOString();
-    const { error: autoErr } = await db
+    const { data: closed, error: autoErr } = await db
       .from("shop_orders")
       .update({ status: "done", fulfilled_at: now, fulfilled_by: "auto", done_at: now, actual_cost_usd: 0 })
       .eq("id", orderId)
-      .eq("status", "pending");
+      .eq("status", "pending")
+      .select("id");
     if (autoErr) console.error("[shop] auto-fulfil failed:", autoErr.message);
-    else audit({ actorType: "service", actorId: "shop-auto-fulfil", action: "shop.auto_fulfil", target: String(orderId), result: "ok" });
+    else if ((closed ?? []).length > 0) {
+      skipFulfillment = true;
+      audit({ actorType: "service", actorId: "shop-auto-fulfil", action: "shop.auto_fulfil", target: String(orderId), result: "ok" });
+    }
   }
-  if (Number.isSafeInteger(orderId) && orderId > 0) {
+  if (!skipFulfillment && Number.isSafeInteger(orderId) && orderId > 0) {
     void callPixo(
       "shop-order-alert",
       `${pixorpheusUrl()}/api/external/shop-order-alert`,
@@ -947,7 +1008,7 @@ router.post("/api/shop/buy/:id", validate({ query: v.noQuery, params: params({ i
   void addNotification(
     session.userId,
     "Order placed! 🛍️",
-    isNothing
+    skipFulfillment
       ? `You bought ${qtyPrefix}"${result.item_name}". Nothing to ship, it's all yours.`
       : `You bought ${qtyPrefix}"${result.item_name}"${option ? ` (${option})` : ""}. The team will reach out about getting it to you.`,
   );

@@ -4,6 +4,12 @@ import { sql } from "../db/pgCompat.js";
 import { activeEvents } from "../events.js";
 import { approvedHoursFor, lifetimeRe, levelForRe } from "../xp.js";
 import { REFERRAL_WINDOW_HOURS } from "./referral.js";
+import { IN_REVIEW_STATUSES, cachedQueueStats } from "../queueStats.js";
+
+// Re-exported for the route tests and any route that wants the same aggregates.
+export { ACTIVITY_DAYS, queueActivity, queueCounts } from "../queueStats.js";
+export type { QueueActivity, QueueCounts } from "../queueStats.js";
+export { IN_REVIEW_STATUSES };
 
 const router = Router();
 
@@ -25,7 +31,20 @@ const LEADERBOARD_SIZE = 25;
 
 // #public-safe-only, no ban_reason/review_note/system_note/airtable_record_id etc
 export const PUBLIC_PROJECT_COLUMNS =
-  "id, user_id, name, description, project_type, level, status, image_url, repo_url, demo_url, shipped_at, created_at, hackatime_seconds, is_peak";
+  "id, user_id, name, description, project_type, level, status, image_url, repo_url, demo_url, shipped_at, first_shipped_at, created_at, hackatime_seconds, is_peak";
+
+// Session-gated (not in publicRoutes.ts). Only aggregate queue size and
+// review pace, never which projects are in it or where they sit - see
+// IN_REVIEW_STATUSES. The official logged-in dashboards use this; anonymous
+// queue clones cannot.
+router.get("/api/explore/queue", async (_req, res) => {
+  try {
+    res.json({ ok: true, ...(await cachedQueueStats()) });
+  } catch (error) {
+    console.error("[explore] queue stats failed", error);
+    res.status(500).json({ ok: false });
+  }
+});
 
 // #public, no session needed - fields already safe (no slack_id/email)
 router.get("/api/explore/players", async (req, res) => {
@@ -439,8 +458,11 @@ router.get("/api/explore/players/:id/public", async (req, res) => {
   });
 });
 
-// Browse everyone's projects (including drafts), newest first, with optional
-// search/tier/shipped filters.
+// Browse public projects (including drafts), newest first, with optional
+// search/tier/shipped filters. Anything in the review queue is excluded so the
+// shared queue's order/positions cannot be reconstructed (see
+// IN_REVIEW_STATUSES); callers can still read the queue size from
+// /api/explore/queue.
 // #public, token optional (just for has_upvoted)
 router.get("/api/explore/projects", async (req, res) => {
   const session = req.session;
@@ -453,6 +475,7 @@ router.get("/api/explore/projects", async (req, res) => {
   let query = db
     .from("projects")
     .select(PUBLIC_PROJECT_COLUMNS)
+    .not("status", "in", [...IN_REVIEW_STATUSES])
     .is("archived_at", null)
     .is("rejected_at", null)
     .is("banned_at", null)
@@ -504,7 +527,10 @@ router.get("/api/explore/projects", async (req, res) => {
   });
 });
 
-// #public, token optional (just for has_upvoted)
+// #public, token optional (just for has_upvoted). In-review projects 404 here
+// like deleted/archived ones: owners and collaborators still see them through
+// the authenticated project routes, but the public API never reveals queue
+// membership, ship timing or review history while they wait.
 router.get("/api/explore/projects/:id", async (req, res) => {
   const session = req.session;
 
@@ -515,6 +541,7 @@ router.get("/api/explore/projects/:id", async (req, res) => {
     .from("projects")
     .select(PUBLIC_PROJECT_COLUMNS)
     .eq("id", id)
+    .not("status", "in", [...IN_REVIEW_STATUSES])
     .is("archived_at", null)
     .is("rejected_at", null)
     .is("banned_at", null)

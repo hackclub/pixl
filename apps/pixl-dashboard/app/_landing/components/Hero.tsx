@@ -3,6 +3,7 @@ import { useLayoutEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { useLocale } from "./LocaleProvider";
 import { Crew } from "./Crew";
+import { useEnded } from "./EndedProvider";
 import { config } from "@/app/_generated/config";
 import { cn } from "@/lib/cn";
 
@@ -12,7 +13,9 @@ const DASH_URL = "/dashboard";
 
 export function Hero() {
   const { dict } = useLocale();
+  const { ended } = useEnded();
   const t = dict.hero;
+  const e = dict.ended;
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useLayoutEffect(() => {
@@ -73,7 +76,10 @@ export function Hero() {
       <div className="relative z-10 flex h-screen w-full items-center justify-center flex-col">
         <div className="flex flex-col items-center px-4">
           <motion.div
-            className="bg-[#fffaf7] border-2 border-black px-4 py-2 sm:px-5 sm:py-3 mb-4 sm:mb-6 max-w-[15rem] sm:max-w-sm mx-4 translate-y-4 sm:translate-y-6"
+            className={cn(
+              "bg-[#fffaf7] border-2 border-black px-4 py-2 sm:px-5 sm:py-3 mb-4 sm:mb-6 mx-4 translate-y-4 sm:translate-y-6",
+              ended ? "max-w-[19rem] sm:max-w-md" : "max-w-[15rem] sm:max-w-sm",
+            )}
             style={{ boxShadow: "4px 4px 0px #000", rotate: "-1.5deg" }}
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -84,9 +90,17 @@ export function Hero() {
             }}
           >
             <p className="font-sans font-bold text-xs sm:text-sm leading-snug text-center text-black">
-              <span className="text-[#ff8c37]">{t.youShip}</span>{" "}
-              {t.projectsInside}{" "}
-              <span className="text-[#ec3750]">{t.weShip}</span> {t.realPrizes}
+              {ended ? (
+                <>
+                  <span className="text-[#ec3750]">{e.heroTitle}</span> {e.heroBody}
+                </>
+              ) : (
+                <>
+                  <span className="text-[#ff8c37]">{t.youShip}</span>{" "}
+                  {t.projectsInside}{" "}
+                  <span className="text-[#ec3750]">{t.weShip}</span> {t.realPrizes}
+                </>
+              )}
             </p>
           </motion.div>
           <motion.p

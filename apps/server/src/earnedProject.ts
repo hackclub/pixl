@@ -21,3 +21,32 @@ export function earnedProjectHours(p: EarnedProjectRow): number | null {
   const h = Number(p.prior_approved_hours);
   return Number.isFinite(h) && h >= 0 ? h : null;
 }
+
+/**
+ * Approved hours must keep the tier and Trial link that originally banked RE.
+ * An update keeps its old hours in RE calculations while awaiting approval,
+ * including during needs_changes, so its payout terms must stay frozen.
+ */
+export function mustPreserveApprovedProjectTerms(
+  status: string | null | undefined,
+  isUpdate: boolean | null | undefined,
+): boolean {
+  return status === "approved" || isUpdate === true;
+}
+
+/**
+ * A collaborator only banks their OWN approved hours; owner hours or raw
+ * Hackatime time awaiting review must never be counted on their behalf.
+ */
+export function earnedCollaboratorHours(
+  project: Pick<EarnedProjectRow, "status" | "is_update">,
+  collaboration: Pick<EarnedProjectRow, "approved_hours" | "prior_approved_hours">,
+): number | null {
+  return earnedProjectHours({
+    status: project.status,
+    is_update: project.is_update,
+    approved_hours: collaboration.approved_hours,
+    prior_approved_hours: collaboration.prior_approved_hours,
+    hackatime_seconds: 0,
+  });
+}

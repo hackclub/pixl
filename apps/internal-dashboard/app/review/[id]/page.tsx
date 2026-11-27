@@ -48,6 +48,7 @@ import {
   setProjectLevel,
   extendHoursCutoff,
   sendBackToFirstPass,
+  removeFirstPassPayout,
   unshipProject,
   toggleProjectPeak,
   holdReview,
@@ -57,10 +58,9 @@ import {
   submitHardwareToRobert,
   resendToRobert,
 } from "@/app/actions";
-import { DoubleDipBanner } from "@/app/_components/DoubleDipBanner";
-import { ReviewPipelineSteps } from "@/app/_components/ReviewPipelineSteps";
+import { DoubleDipBanner } from "@/app/_components/DoubleDipBanner";import { ReviewPipelineSteps } from "@/app/_components/ReviewPipelineSteps";
 import { SecondPassChecklist } from "@/app/_components/SecondPassChecklist";
-import { hackatimeCutoffUnix, hackatimeCutoffLabel } from "@/app/_generated/config";
+import { hackatimeCutoffUnix, hackatimeCutoffLabel, submissionDeadline } from "@/app/_generated/config";
 import { ReviewDetailTabs } from "@/app/_components/ReviewDetailTabs";
 import { ReviewSplit } from "./ReviewSplit";
 import { ReviewShortcuts } from "./ReviewShortcuts";
@@ -249,14 +249,13 @@ export default async function ReviewDetail({
   // carrying second_pass_verdict "not_fraud" with it (see robertSync.ts), so
   // the spot check is the only thing isFinalStage can mean besides a proposed ban.
   const spotCheckStage = isFinalStage && p.second_pass_verdict === "not_fraud";
-  // Owner of the project, or a collaborator on it, pending invites included
-  // (all are paid on approval, so none may review it, owners included).
-  // Mirrors isOwnProject in app/actions.ts.
-  const isOwn =
-    (!!p.users?.slack_id && p.users.slack_id === viewer) ||
-    allCollaborators.some(
-      (c) => (c.status === "accepted" || c.status === "pending") && !!c.users?.slack_id && c.users.slack_id === viewer,
-    );
+  // The project owner may review their own work; collaborators still cannot.
+  // Mirrors isOwnProject / isCollaboratorProject in app/actions.ts.
+  const isProjectOwner = !!p.users?.slack_id && p.users.slack_id === viewer;
+  const isCollaborator = !isProjectOwner && allCollaborators.some(
+    (c) => (c.status === "accepted" || c.status === "pending") && !!c.users?.slack_id && c.users.slack_id === viewer,
+  );
+  const isOwn = isProjectOwner || isCollaborator;
   const isHeld = !!p.hold_at;
   // hold_by is stored as "Name (SlackID)" (see holdReview in app/actions.ts).
   // Only the reviewer who set it (or an owner) may release it.
@@ -264,26 +263,45 @@ export default async function ReviewDetail({
   const canReview =
     !isHeld &&
     !p.banned_at &&
-    ((p.status === "shipped" && !isOwn) ||
-      (isProposedBan && canSecondPass && !isOwn) ||
-      (spotCheckStage && (access.isOwner || canSecondPass) && !isOwn));
+    ((p.status === "shipped" && !isCollaborator) ||
+      (isProposedBan && canSecondPass && !isCollaborator) ||
+      (spotCheckStage && (access.isOwner || canSecondPass) && !isCollaborator));
   // Reviewer-side unship (see unshipProject): available to final reviewers at
   // second pass or fraud review regardless of who could submit a verdict, and
   // never on your own project or while a hold is set.
-  const unshipNote = canSecondPass && !isOwn && !isHeld ? unshipWarning(p.status) : null;
+  const unshipNote = canSecondPass && !isCollaborator && !isHeld ? unshipWarning(p.status) : null;
   const shippedAt = (p as { shipped_at?: string | null }).shipped_at ?? null;
+  // Shipped again after the deadline: this is the one resubmit a post-deadline
+  // "changes requested" earns (same test as reviewProject's final rejection).
+  const isFinalResubmit =
+    !!(p as { first_shipped_at?: string | null }).first_shipped_at &&
+    !!shippedAt &&
+    new Date(shippedAt) > submissionDeadline;
   // Viewing must never reserve a project; only an explicit POST may claim it.
   const currentClaim = activeReviewClaim(p, Date.now(), REVIEW_LOCK_MS);
   const hasActiveClaim = currentClaim === viewer;
   const claimedByOther = currentClaim && currentClaim !== viewer ? currentClaim : null;
 
-  const [playerReBefore, firstPassAuditNote, bountyEventsResult] = await Promise.all([
+  const [playerReBefore, firstPassAuditNote, firstPassPayoutResult, bountyEventsResult] = await Promise.all([
     // The RE the player already holds, excluding this project. It sets the
     // rate they'll be paid at, so the reviewer sees it before deciding.
     lifetimeRe(p.user_id, projectId),
     // So the final reviewer starts from what the first reviewer already wrote
     // instead of a blank form. They can still edit or overturn any of it.
     isFinalStage && p.first_pass_by ? getFirstPassAuditNote(projectId) : Promise.resolve(null),
+    // The paid first-pass payout, if any, so the final reviewer can take it
+    // back with one click when the first review was bad.
+    isFinalStage && canSecondPass
+      ? db
+          .from("review_payouts")
+          .select("paid_pixels")
+          .eq("project_id", projectId)
+          .eq("verdict", "first_pass_approved")
+          .eq("status", "paid")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
     shippedAt
       ? db
           .from("events")
@@ -294,6 +312,8 @@ export default async function ReviewDetail({
           .gt("ends_at", shippedAt)
       : Promise.resolve({ data: [] as { id: number; name: string; config: Record<string, unknown> }[] }),
   ]);
+
+  const firstPassPayoutPx = Number(firstPassPayoutResult.data?.paid_pixels) || 0;
 
   // ---- Slow external lookups. Started here, never awaited by the page itself:
   // each one streams into its own <Suspense> boundary below, so GitHub,
@@ -671,6 +691,13 @@ export default async function ReviewDetail({
                 </Muted>
               )}
             </div>
+            {isFinalResubmit && (
+              <div className="mt-1">
+                <Badge tone="danger">
+                  Final resubmit: approve it or ban it. Requesting changes again rejects it for good.
+                </Badge>
+              </div>
+            )}
             <p className="hc-caption mt-1 text-sm">
               Submitted {ago(p.shipped_at)} · {fmtHM(hours)} logged
               {hackatimeSources.length > 0 && (
@@ -1221,6 +1248,18 @@ export default async function ReviewDetail({
               <p className="whitespace-pre-wrap break-words text-sm">{p.first_pass_note}</p>
             </div>
           )}
+          {firstPassPayoutPx > 0 && (
+            <form action={removeFirstPassPayout} className="mt-3">
+              <input type="hidden" name="projectId" value={p.id} />
+              <ActionButton
+                variant="cream"
+                pendingLabel="Removing..."
+                confirm={`Take ${firstPassPayoutPx} pixels back from the first-pass reviewer and remove the review from the leaderboard?`}
+              >
+                Bad review, remove {firstPassPayoutPx} px
+              </ActionButton>
+            </form>
+          )}
         </Card>
       )}
 
@@ -1614,12 +1653,12 @@ export default async function ReviewDetail({
             </Callout>
           )}
 
-          {isOwn && p.status === "shipped" && (
+          {isCollaborator && p.status === "shipped" && (
             <Callout tone="warning" icon="private">
               This is your own submission. Another reviewer has to do the first pass.
             </Callout>
           )}
-          {isOwn && isFinalStage && (
+          {isCollaborator && isFinalStage && (
             <Callout tone="warning" icon="private">
               Your own submission. Another owner has to give the final verdict.
             </Callout>
