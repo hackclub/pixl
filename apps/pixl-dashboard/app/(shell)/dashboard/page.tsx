@@ -75,6 +75,10 @@ interface ActiveEvent {
   reward?: number;
 }
 
+interface QueueSummary {
+  queue?: { total?: number };
+}
+
 const STATUS_LABEL: Record<string, string> = {
   draft: "DRAFT",
   shipped: "IN REVIEW",
@@ -113,16 +117,21 @@ function timeAgo(iso: string): string {
 }
 
 export default async function DashboardPage() {
-  const [wallet, projectsResp, notifsResp, htResp, questsResp, eventsResp] = await Promise.all([
+  const [wallet, projectsResp, notifsResp, htResp, questsResp, eventsResp, queueResp] = await Promise.all([
     serverApi<Wallet>("/api/profile/wallet"),
     serverApi<{ projects: Project[] }>("/api/projects"),
     serverApi<{ notifications: Notification[] }>("/api/notifications"),
     serverApi<{ stats: HackatimeStats | null }>("/api/hackatime/stats"),
     serverApi<{ quests: Trial[] }>("/api/sidequests"),
     serverApi<{ events: ActiveEvent[] }>("/api/events/active"),
+    serverApi<QueueSummary>("/api/explore/queue"),
   ]);
 
   const list = (projectsResp?.projects ?? []).filter((p) => p.is_owner !== false);
+  const inReview = list.some(
+    (p) => p.status === "shipped" || p.status === "second_review" || p.status === "fraud_review",
+  );
+  const queueTotal = queueResp?.queue?.total ?? 0;
   const trials = (questsResp?.quests ?? []).filter((q) => q.unlocked && !q.completed);
   const htStats = htResp?.stats ?? null;
   const step = nextStep(list);
@@ -192,6 +201,11 @@ export default async function DashboardPage() {
                 </span>
                 <span className="mt-1 block break-words font-pixel text-[19px] leading-[1.25] tracking-[.2px] text-ink">{step.h}</span>
                 <span className="mt-2 block break-words text-[15px] leading-[1.45] text-dim">{step.s}</span>
+                {inReview && queueTotal > 0 ? (
+                  <span className="mt-1 block break-words text-[13.5px] leading-[1.45] text-faint">
+                    {queueTotal} project{queueTotal === 1 ? "" : "s"} in review right now.
+                  </span>
+                ) : null}
               </span>
               <span className="inline-flex shrink-0 border-2 border-stroke bg-gold px-4 py-[10px] font-pixel text-xs tracking-[.5px] text-[#16161e] uppercase group-hover:bg-gold-soft">
                 {step.b}

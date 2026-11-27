@@ -26,9 +26,6 @@ export const PUBLIC_ROUTES: readonly PublicRoute[] = Object.freeze([
   { method: "GET", pattern: "/api/shop/item/:id/public" },
   { method: "GET", pattern: "/api/explore/players" },
   { method: "GET", pattern: "/api/explore/players/:id/public" },
-  // Aggregate review-queue size only (routes/explore.ts). No project ids,
-  // names, ship dates or ordering, so positions cannot be derived.
-  { method: "GET", pattern: "/api/explore/queue" },
   // The project list and a single project's page, read-only. Both return only
   // PUBLIC_PROJECT_COLUMNS plus the owner's display name (routes/explore.ts);
   // a session, when there is one, only fills in has_upvoted.

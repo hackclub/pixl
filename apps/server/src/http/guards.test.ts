@@ -120,7 +120,6 @@ describe("public route list", () => {
       "GET /api/shop/item/:id/public",
       "GET /api/explore/players",
       "GET /api/explore/players/:id/public",
-      "GET /api/explore/queue",
       "GET /api/explore/projects",
       "GET /api/explore/projects/:id",
       "* /api/forms/*",
@@ -133,7 +132,6 @@ describe("public route list", () => {
     expect(isPublicRoute("POST", "/auth/exchange")).toBe(true);
     expect(isPublicRoute("GET", "/api/journals/public/12/abc")).toBe(true);
     expect(isPublicRoute("GET", "/api/explore/players/u1/public")).toBe(true);
-    expect(isPublicRoute("GET", "/api/explore/queue")).toBe(true);
     expect(isPublicRoute("GET", "/api/explore/projects")).toBe(true);
     expect(isPublicRoute("GET", "/api/explore/projects/644")).toBe(true);
     expect(isPublicRoute("POST", "/api/forms/review/submit")).toBe(true);
@@ -141,6 +139,8 @@ describe("public route list", () => {
 
     expect(isPublicRoute("POST", "/api/news")).toBe(false);
     expect(isPublicRoute("GET", "/api/explore/players/u1")).toBe(false);
+    // Aggregate review-queue size is for the official logged-in dashboards.
+    expect(isPublicRoute("GET", "/api/explore/queue")).toBe(false);
     // Reading a project is public; voting on one and its other sub-paths are not.
     expect(isPublicRoute("POST", "/api/explore/projects")).toBe(false);
     expect(isPublicRoute("GET", "/api/explore/projects/644/anything")).toBe(false);
