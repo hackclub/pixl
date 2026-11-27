@@ -71,10 +71,10 @@ function QueueFrame({ children }: { children: React.ReactNode }) {
     <main className={wrap}>
       <header className="mb-8 flex flex-wrap items-center justify-between gap-3">
         <Link
-          href="/"
+          href="/dashboard"
           className="font-pixel text-[16px] font-medium tracking-[1px] text-dim hover:text-ink"
         >
-          ← PIXL
+          ← DASHBOARD
         </Link>
         <nav className="flex flex-wrap gap-2">
           <Link href="/explore" className={buttonVariants({ variant: "ghost" })}>
