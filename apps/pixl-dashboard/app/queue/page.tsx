@@ -59,8 +59,8 @@ function QueueHeading() {
         </h1>
         <p className="mt-2 text-[13.5px] text-dim">Live count of what&apos;s in review.</p>
       </div>
-      <span className="inline-flex items-center gap-2 rounded-full border-2 border-stroke bg-panel-2 px-3 py-1.5 text-[11px] font-bold">
-        <span className="size-[8px] rounded-full bg-good" /> LIVE
+      <span className="inline-flex items-center gap-2 border-2 border-stroke bg-panel-2 px-3 py-1.5 text-[11px] font-bold">
+        <span className="size-[8px] bg-good" /> LIVE
       </span>
     </div>
   );
@@ -129,7 +129,7 @@ export default async function QueuePage() {
       <QueueHeading />
 
       <section
-        className={cn(panel, "rounded-[20px] border-4 p-5 shadow-drop sm:p-7")}
+        className={cn(panel, "border-4 p-5 shadow-drop sm:p-7")}
         aria-labelledby="pipeline-title"
       >
         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -147,7 +147,7 @@ export default async function QueuePage() {
         </div>
 
         <div
-          className="mt-4 flex h-[46px] overflow-hidden rounded-[10px] border-2 border-stroke bg-panel-2"
+          className="mt-4 flex h-[46px] overflow-hidden border-2 border-stroke bg-panel-2"
           role="img"
           aria-label={`${queue.waiting.total} first pass, ${queue.fraud_review.total} fraud review, ${queue.second_review.total} second pass`}
         >
@@ -167,7 +167,7 @@ export default async function QueuePage() {
           {stages.map((s) => (
             <span key={s.label} className="inline-flex items-center gap-1.5 text-[13px] font-semibold">
               <span
-                className="size-[12px] shrink-0 rounded-[4px] border border-black/30"
+                className="size-[12px] shrink-0 border border-black/30"
                 style={{ background: s.color }}
               />
               {s.label}
@@ -184,15 +184,15 @@ export default async function QueuePage() {
           </span>
         </div>
 
-        <div className="mt-3.5 rounded-[12px] border-2 border-stroke bg-panel-2 px-3.5 py-3">
+        <div className="mt-3.5 border-2 border-stroke bg-panel-2 px-3.5 py-3">
           <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
             <span className="text-[12px] font-bold text-ink">14-day verdict activity</span>
             <span className="inline-flex items-center gap-3 text-[11px] font-semibold text-faint">
               <span className="inline-flex items-center gap-1.5">
-                <span className="size-[9px] rounded-[2px]" style={{ background: APPROVED }} /> Approved
+                <span className="size-[9px]" style={{ background: APPROVED }} /> Approved
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <span className="size-[9px] rounded-[2px]" style={{ background: NEEDS_CHANGES }} /> Needs changes
+                <span className="size-[9px]" style={{ background: NEEDS_CHANGES }} /> Needs changes
               </span>
             </span>
           </div>
@@ -231,7 +231,6 @@ export default async function QueuePage() {
                       y={chartPad + plotH - appH}
                       width={barW}
                       height={Math.max(2, appH)}
-                      rx={d.needs_changes === 0 ? 3 : 0}
                       fill={APPROVED}
                     />
                   ) : null}
@@ -241,7 +240,6 @@ export default async function QueuePage() {
                       y={chartPad + plotH - appH - ncH}
                       width={barW}
                       height={Math.max(2, ncH)}
-                      rx={3}
                       fill={NEEDS_CHANGES}
                     />
                   ) : null}
@@ -251,7 +249,6 @@ export default async function QueuePage() {
                       y={chartPad + plotH - 2}
                       width={barW}
                       height={2}
-                      rx={1}
                       fill="rgba(0,0,0,.12)"
                     />
                   ) : null}
