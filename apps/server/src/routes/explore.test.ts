@@ -73,7 +73,7 @@ describe("PUBLIC_PROJECT_COLUMNS", () => {
     const clause = selectClauseFor(PUBLIC_PROJECT_COLUMNS);
     for (const field of [
       "id", "user_id", "name", "description", "project_type", "level", "status",
-      "image_url", "repo_url", "demo_url", "shipped_at", "first_shipped_at", "created_at",
+      "image_url", "repo_url", "demo_url", "shipped_at", "created_at",
       "hackatime_seconds", "is_peak",
     ]) {
       expect(clause).toContain(`"${field}"`);
@@ -141,6 +141,11 @@ describe("public read-only project discovery", () => {
       source.indexOf('router.get("/api/explore/projects/:id",'),
     );
     expect(list).toContain('.not("status", "in", [...IN_REVIEW_STATUSES])');
+  });
+
+  test("anonymous project links never return review history", () => {
+    const single = source.slice(source.indexOf('router.get("/api/explore/projects/:id",'));
+    expect(single).toMatch(/session\s*\?\s*db\s*\.from\("review_audits"\)/);
   });
 
   test("read-only project links and player lists do not require approval", () => {

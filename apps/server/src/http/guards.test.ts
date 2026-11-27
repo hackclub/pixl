@@ -9,6 +9,7 @@ import { ALLOWED_ORIGINS, isAllowedOrigin, originGuard } from "./origins.js";
 import { isPublicRoute, PUBLIC_ROUTES } from "./publicRoutes.js";
 import { adminServiceGate, matchServiceKey, MIN_SERVICE_KEY_LENGTH } from "./serviceKeys.js";
 import { authGate, auditApiRequests } from "./gate.js";
+import { blockQueueCrawlers, isQueueCrawlerUserAgent } from "./queueCrawlers.js";
 import { bearerToken } from "./bearer.js";
 import { validate, v, params } from "./validate.js";
 
@@ -34,6 +35,7 @@ const banned = new Set<string>();
 beforeAll(async () => {
   const app = express();
   app.use(originGuard());
+  app.use(blockQueueCrawlers());
   app.use(express.json({ limit: "256kb" }));
   app.use(auditApiRequests());
   app.use("/api/admin", adminServiceGate(keys));
@@ -105,6 +107,23 @@ describe("origin allowlist", () => {
   test("no Origin passes the origin layer (server-to-server) but still needs auth", async () => {
     expect((await fetch(`${base}/api/news`)).status).toBe(200);
     expect((await fetch(`${base}/api/me`)).status).toBe(401);
+  });
+});
+
+describe("queue crawler block", () => {
+  test("known tracker user agents are refused, normal browsers are not", async () => {
+    expect(isQueueCrawlerUserAgent("pixl-queue/1.0 (public review queue viewer)")).toBe(true);
+    expect(isQueueCrawlerUserAgent("ReviewQ/2")).toBe(true);
+    expect(isQueueCrawlerUserAgent("Mozilla/5.0 (Macintosh)")).toBe(false);
+
+    const blocked = await fetch(`${base}/api/news`, {
+      headers: { "User-Agent": "pixl-queue/1.0 (public review queue viewer)" },
+    });
+    expect(blocked.status).toBe(403);
+    expect(await blocked.json()).toEqual({ ok: false, error: "blocked_user_agent" });
+
+    const normal = await fetch(`${base}/api/news`, { headers: { "User-Agent": "Mozilla/5.0" } });
+    expect(normal.status).toBe(200);
   });
 });
 
