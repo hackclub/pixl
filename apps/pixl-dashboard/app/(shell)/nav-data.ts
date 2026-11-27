@@ -19,6 +19,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       link("dashboard", "OVERVIEW"),
       link("projects", "PROJECTS"),
+      link("queue", "QUEUE"),
       link("trials", "TRIALS"),
       link("docs", "DOCS", "/docs"),
     ],
@@ -26,7 +27,6 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "COMMUNITY",
     items: [
-      link("queue", "QUEUE"),
       link("explore", "EXPLORE"),
       link("leaderboard", "LEADERBOARD", "/explore/leaderboard"),
       link("ideas", "IDEAS"),
@@ -63,7 +63,8 @@ export const ICONS: Record<string, readonly Rect[]> = {
   shop: [[5, 1, 6, 2], [5, 3, 2, 2], [9, 3, 2, 2], [3, 5, 10, 9]],
   orders: [[3, 2, 10, 2], [3, 12, 10, 2], [3, 2, 2, 12], [11, 2, 2, 12], [6, 6, 4, 2], [6, 9, 4, 2]],
   projects: [[2, 3, 12, 2], [2, 5, 2, 8], [12, 5, 2, 8], [2, 11, 12, 2]],
-  queue: [[2, 3, 12, 2], [4, 6, 8, 2], [6, 9, 4, 2], [7, 12, 2, 2]],
+  // Bulleted list, not the old signal-strength triangle.
+  queue: [[2, 3, 2, 2], [6, 3, 8, 2], [2, 7, 2, 2], [6, 7, 8, 2], [2, 11, 2, 2], [6, 11, 8, 2]],
   report: [[3, 2, 2, 12], [5, 3, 8, 6]],
   account: [[5, 2, 6, 5], [3, 9, 10, 5]],
   trials: [[2, 3, 12, 2], [2, 11, 12, 2], [2, 3, 2, 10], [12, 3, 2, 10], [7, 5, 2, 1], [7, 7, 2, 1], [7, 9, 2, 1]],
