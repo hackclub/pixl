@@ -457,6 +457,10 @@ func _tx_reason(reason: String) -> String:
 			return "Adjusted by the Pixl team"
 		"manual_grant":
 			return "Granted by the Pixl team"
+		"transfer_out":
+			return "Transferred to another player"
+		"transfer_in":
+			return "Transferred from another player"
 	return reason
 
 func _tx_row(t: Dictionary) -> Control:

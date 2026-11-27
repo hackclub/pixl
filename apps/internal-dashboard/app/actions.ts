@@ -66,6 +66,7 @@ import {
   referralTierFor,
   turnedNineteenSinceShipping,
   type DashEventRow,
+  type UserRow,
   getReviewPayoutSettings,
   ensureJournalShareToken,
   listUsedHcbGrantLinks,
@@ -117,6 +118,7 @@ import {
 } from "@/lib/reviewAccess";
 import { vaultDeleteFailure } from "@/lib/vaultDelete";
 import { safeRedirectPath, isSafeUrl } from "@/lib/safeUrl";
+import { transferPixels } from "@/lib/pixelTransfer";
 import {
   guardedAction,
   ownerSlackIds,
@@ -154,6 +156,14 @@ const DASH_URL = process.env.BASE_URL ?? "https://dash.pixl.hackclub.com";
 
 function actorName(access: AdminAccess): string {
   return `${access.session.name} (${access.session.slackId})`;
+}
+
+// Adds a flash message to a same-app redirect target without dropping any
+// query it already carries.
+function flashPath(path: string, key: string, value: string): string {
+  const u = new URL(path, "https://pixl.invalid");
+  u.searchParams.set(key, value);
+  return u.pathname + u.search + u.hash;
 }
 
 // Where to send a reviewer after they finish a verdict: straight to the next
@@ -2773,18 +2783,21 @@ export const updateSecondPassChecklist = guardedAction("updateSecondPassChecklis
   redirect(back);
 });
 
-// Manual pixel correction from the Pixels tab. Deducts (or grants) whole
-// pixels with a mandatory reason; owners only, everything lands in the ledger.
+// Manual pixel correction from the Pixels tab or a player's own page. Deducts
+// (or grants) whole pixels with a mandatory reason; owners only, everything
+// lands in the ledger.
 export const adjustPixels = guardedAction("adjustPixels", "owner", async (access, formData: FormData): Promise<void> => {
   const by = actorName(access);
+  const back = safeRedirectPath(formData.get("back"), "/pixels");
+  const fail = (message: string): never => redirect(flashPath(back, "error", message));
   const userId = String(formData.get("userId") ?? "").trim();
   const amount = Math.round(Number(formData.get("amount") ?? 0));
   const deduct = formData.get("mode") !== "grant";
   const reason = String(formData.get("reason") ?? "").trim().slice(0, 300);
   if (!userId || !Number.isFinite(amount) || amount <= 0)
-    redirect(`/pixels?error=${encodeURIComponent("Pick a player and a whole number of pixels.")}`);
+    fail("Pick a player and a whole number of pixels.");
   if (!reason)
-    redirect(`/pixels?error=${encodeURIComponent("A reason is required for manual pixel changes.")}`);
+    fail("A reason is required for manual pixel changes.");
   const delta = deduct ? -amount : amount;
   const { error } = await db.rpc("adjust_user_pixels", {
     p_user_id: userId,
@@ -2794,7 +2807,7 @@ export const adjustPixels = guardedAction("adjustPixels", "owner", async (access
   });
   if (error) {
     console.error("adjustPixels failed", error.message);
-    redirect(`/pixels?error=${encodeURIComponent("Couldn't adjust pixels , try again.")}`);
+    fail("Couldn't adjust pixels , try again.");
   }
   await logModAction(
     userId,
@@ -2811,8 +2824,89 @@ export const adjustPixels = guardedAction("adjustPixels", "owner", async (access
 
   await dmOrEmail(userId, title, body);
   revalidatePath("/pixels");
-  redirect("/pixels?adjusted=1");
+  revalidatePath(`/players/${userId}`);
+  redirect(flashPath(back, "adjusted", "1"));
 });
+
+// Moves pixels between two players from a player's page. The balance change
+// and both ledger rows are atomic (lib/pixelTransfer.ts); notifications and
+// moderation log entries are best-effort after that.
+export const transferPlayerPixels = guardedAction(
+  "transferPlayerPixels",
+  "owner",
+  async (access, formData: FormData): Promise<void> => {
+    const by = actorName(access);
+    const back = safeRedirectPath(formData.get("back"), "/pixels");
+    const fail = (message: string): never => redirect(flashPath(back, "error", message));
+
+    const hereId = String(formData.get("here") ?? "").trim();
+    const otherId = String(formData.get("other") ?? "").trim();
+    const direction = formData.get("direction") === "in" ? "in" : "out";
+    const amount = Math.round(Number(formData.get("amount") ?? 0));
+    const reason = String(formData.get("reason") ?? "").trim().slice(0, 300);
+
+    if (!hereId || !otherId) fail("Pick the other player.");
+    if (hereId === otherId) fail("Pick a different player.");
+    if (!Number.isSafeInteger(amount) || amount <= 0) fail("Enter a whole number of pixels.");
+    if (!reason) fail("A reason is required for pixel transfers.");
+
+    const fromUserId = direction === "in" ? otherId : hereId;
+    const toUserId = direction === "in" ? hereId : otherId;
+
+    const { data, error } = await db
+      .from("users")
+      .select("id, display_name, real_name, pixels")
+      .in("id", [fromUserId, toUserId]);
+    if (error) {
+      console.error("transferPlayerPixels load", error.message);
+      fail("Couldn't load those players , try again.");
+    }
+    const players = (data ?? []) as Pick<UserRow, "id" | "display_name" | "real_name" | "pixels">[];
+    const from = players.find((p) => p.id === fromUserId);
+    const to = players.find((p) => p.id === toUserId);
+    if (!from || !to) fail("One of those players no longer exists.");
+    const fromName = playerLabel(from, fromUserId);
+    const toName = playerLabel(to, toUserId);
+
+    const result = await transferPixels({
+      fromUserId,
+      toUserId,
+      amount,
+      actor: by,
+      note: reason,
+    });
+    if (!result.ok) {
+      fail(
+        result.balance !== undefined
+          ? `${fromName} only has ${result.balance} pixels, so ${amount} can't be transferred.`
+          : result.error,
+      );
+    }
+
+    const fromBody = `${amount} pixels were moved from your balance to ${toName} by the Pixl team.\n\nReason: ${reason}\n\nIf you think this is a mistake, contact the Pixl team.`;
+    const toBody = `${amount} pixels were transferred to your account from ${fromName} by the Pixl team.\n\nReason: ${reason}\n\nIf you think this is a mistake, contact the Pixl team.`;
+    const { error: notifyError } = await db.from("notifications").insert([
+      { user_id: fromUserId, title: "Pixels transferred", body: fromBody },
+      { user_id: toUserId, title: "Pixels transferred", body: toBody },
+    ]);
+    if (notifyError) console.error("transferPlayerPixels notification failed", notifyError.message);
+
+    await Promise.all([
+      dmOrEmail(fromUserId, "Pixels transferred", fromBody),
+      dmOrEmail(toUserId, "Pixels transferred", toBody),
+    ]);
+    await Promise.all([
+      logModAction(fromUserId, "pixels_transferred_out", `${amount} pixels to ${toName} , ${reason}`, by),
+      logModAction(toUserId, "pixels_transferred_in", `${amount} pixels from ${fromName} , ${reason}`, by),
+    ]);
+
+    revalidatePath("/pixels");
+    revalidatePath(`/players/${hereId}`);
+    if (fromUserId !== hereId) revalidatePath(`/players/${fromUserId}`);
+    if (toUserId !== hereId) revalidatePath(`/players/${toUserId}`);
+    redirect(flashPath(back, "transferred", `${amount} pixels moved from ${fromName} to ${toName}.`));
+  },
+);
 
 // One-click "that first-pass review was bad": takes back what the first-pass
 // reviewer was paid for approving this project (8 px at the current rate),
