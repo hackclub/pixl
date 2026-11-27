@@ -381,17 +381,24 @@ router.get("/api/explore/players/:id", async (req, res) => {
   const id = String(req.params.id);
   const userQuery = (fields: string) =>
     db.from("users").select(fields).eq("id", id).maybeSingle();
-  const [user, fallbackUser, projects, owned] = await Promise.all([
-    userQuery("id, display_name, skin, created_at, pixels, avatar_url, card_pixelate"),
-    userQuery("id, display_name, skin, created_at, pixels, avatar_url"),
-    db
+  // A player's own profile keeps their drafts and in-review projects. Other
+  // players only see finished/needs-changes work, so a signed-in scraper
+  // cannot rebuild the review queue from profile pages.
+  const profileProjects = () => {
+    let q = db
       .from("projects")
       .select(PUBLIC_PROJECT_COLUMNS)
       .eq("user_id", id)
       .is("archived_at", null)
       .is("rejected_at", null)
-    .is("banned_at", null)
-      .order("created_at", { ascending: false }),
+      .is("banned_at", null);
+    if (id !== session.userId) q = q.not("status", "in", [...IN_REVIEW_STATUSES]);
+    return q.order("created_at", { ascending: false });
+  };
+  const [user, fallbackUser, projects, owned] = await Promise.all([
+    userQuery("id, display_name, skin, created_at, pixels, avatar_url, card_pixelate"),
+    userQuery("id, display_name, skin, created_at, pixels, avatar_url"),
+    profileProjects(),
     db
       .from("collectible_purchases")
       .select("created_at, collectibles(id, name, description, image_url)")
