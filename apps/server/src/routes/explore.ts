@@ -4,7 +4,7 @@ import { sql } from "../db/pgCompat.js";
 import { activeEvents } from "../events.js";
 import { approvedHoursFor, lifetimeRe, levelForRe } from "../xp.js";
 import { REFERRAL_WINDOW_HOURS } from "./referral.js";
-import { IN_REVIEW_STATUSES, cachedQueueStats } from "../queueStats.js";
+import { IN_REVIEW_STATUSES } from "../queueStats.js";
 import { optionalSession } from "../http/requireSession.js";
 import { rateLimit } from "../rateLimit.js";
 
@@ -42,19 +42,6 @@ const projectReadLimiter = rateLimit({
 // #public-safe-only, no ban_reason/review_note/system_note/airtable_record_id etc
 export const PUBLIC_PROJECT_COLUMNS =
   "id, user_id, name, description, project_type, level, status, image_url, repo_url, demo_url, shipped_at, created_at, hackatime_seconds, is_peak";
-
-// Session-gated (not in publicRoutes.ts). Only aggregate queue size and
-// review pace, never which projects are in it or where they sit - see
-// IN_REVIEW_STATUSES. The official logged-in dashboards use this; anonymous
-// queue clones cannot.
-router.get("/api/explore/queue", async (_req, res) => {
-  try {
-    res.json({ ok: true, ...(await cachedQueueStats()) });
-  } catch (error) {
-    console.error("[explore] queue stats failed", error);
-    res.status(500).json({ ok: false });
-  }
-});
 
 // #public, no session needed - fields already safe (no slack_id/email)
 router.get("/api/explore/players", async (req, res) => {
@@ -478,8 +465,8 @@ router.get("/api/explore/players/:id/public", async (req, res) => {
 // Browse public projects (including drafts), newest first, with optional
 // search/tier/shipped filters. Anything in the review queue is excluded so the
 // shared queue's order/positions cannot be reconstructed (see
-// IN_REVIEW_STATUSES); callers can still read the queue size from
-// /api/explore/queue.
+// IN_REVIEW_STATUSES). Aggregate queue size is available only through the
+// service-key-gated /api/admin/queue for Pixl's own pages.
 // #public, token optional (just for has_upvoted)
 router.get("/api/explore/projects", optionalSession(), async (req, res) => {
   const session = req.session;

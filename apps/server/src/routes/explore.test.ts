@@ -119,8 +119,8 @@ describe("every public projects-table query in explore.ts uses the allowlist", (
 // PIXL intentionally exposes unfinished projects read-only in Explore, but
 // never the shared review queue: status + shipped_at + review history lets a
 // crawler rebuild the exact queue order (ReviewQ). The amount in the queue is
-// session-gated at /api/explore/queue for the official dashboards, without any
-// identity or ordering.
+// served only to Pixl's own pages through the service-key admin route, with no
+// identities or ordering.
 describe("public read-only project discovery", () => {
   const source = readFileSync(new URL("./explore.ts", import.meta.url), "utf-8");
 
@@ -175,21 +175,17 @@ describe("public read-only project discovery", () => {
     expect(directory).toMatch(/\.select\("user_id"\)\s*\.is\("archived_at"/);
   });
 
-  test("the queue endpoint exposes only aggregate counts", () => {
-    const queue = source.slice(
-      source.indexOf('router.get("/api/explore/queue",'),
-      source.indexOf('router.get("/api/explore/players",'),
-    );
-    expect(queue).toContain("cachedQueueStats()");
-    expect(queue).not.toContain("PUBLIC_PROJECT_COLUMNS");
-    expect(queue).not.toContain("owner_name");
-
+  test("the queue stats module only aggregates", () => {
     // The stats module fetches only status/type + verdict aggregates; raw
     // rows never leave it. See queueActivity tests below.
     const stats = readFileSync(new URL("../queueStats.ts", import.meta.url), "utf-8");
     expect(stats).toContain('.select("status, project_type")');
     expect(stats).not.toContain("PUBLIC_PROJECT_COLUMNS");
     expect(stats).not.toContain("owner_name");
+  });
+
+  test("there is no player-facing queue stats API", () => {
+    expect(source).not.toContain('router.get("/api/explore/queue"');
   });
 });
 
