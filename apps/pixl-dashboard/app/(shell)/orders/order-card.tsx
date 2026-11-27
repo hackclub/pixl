@@ -120,7 +120,7 @@ export function OrderCard({ order: o }: { order: Order }) {
           <Tracker status={grantFlow ? o.status : itemStageOf(o.status)} stages={grantFlow ? GRANT_STAGES : STAGES} />
           {o.status === "pending" && o.queue_total ? (
             <div className={meta}>
-              {o.queue_total} {o.queue_total === 1 ? "order" : "orders"} in line to be claimed by fulfillment
+              {o.queue_total} {o.queue_total === 1 ? "order" : "orders"} waiting for fulfillment
             </div>
           ) : null}
         </>
