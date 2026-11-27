@@ -182,7 +182,7 @@ export default async function QueuePage() {
           ) : null}
           {queue.final_checks.total > 0 ? (
             <div
-              className="h-full bg-accent"
+              className="h-full bg-good"
               style={{ width: `${(queue.final_checks.total / barTotal) * 100}%` }}
             />
           ) : null}
@@ -191,7 +191,7 @@ export default async function QueuePage() {
         <div className="mt-3 grid gap-2 sm:grid-cols-3">
           <Legend color="bg-teal" text="Software queue" value={queue.waiting.software} />
           <Legend color="bg-gold" text="Hardware queue" value={queue.waiting.hardware} />
-          <Legend color="bg-accent" text="Passed first review" value={queue.final_checks.total} />
+          <Legend color="bg-good" text="Passed first review" value={queue.final_checks.total} />
         </div>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
@@ -209,7 +209,7 @@ export default async function QueuePage() {
           <div className={metricBox}>
             <div className={metricLabel}>Median turnaround</div>
             <div className={metricValue}>
-              {activity.turnaround ? `~${activity.turnaround.median_days}d` : "—"}
+              {activity.turnaround ? `${activity.turnaround.median_days}d` : "—"}
             </div>
             <div className={metricSub}>
               {activity.turnaround
