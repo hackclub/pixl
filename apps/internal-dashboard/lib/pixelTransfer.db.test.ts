@@ -44,7 +44,7 @@ suite("player-to-player pixel transfers", () => {
     await db`delete from pixel_transactions`;
 
     const result = await transferPixels(
-      { fromUserId: alice, toUserId: bob, amount: 25, reason: "wrong account", createdBy: "staff , wrong account" },
+      { fromUserId: alice, toUserId: bob, amount: 25, actor: "staff", note: "wrong account" },
       db,
     );
 
@@ -70,7 +70,7 @@ suite("player-to-player pixel transfers", () => {
     await db`delete from pixel_transactions`;
 
     const result = await transferPixels(
-      { fromUserId: alice, toUserId: bob, amount: 10, reason: "test", createdBy: "staff , test" },
+      { fromUserId: alice, toUserId: bob, amount: 10, actor: "staff", note: "test" },
       db,
     );
 
@@ -83,19 +83,19 @@ suite("player-to-player pixel transfers", () => {
   test("rejects the same player, a missing player and a bad amount", async () => {
     expect(
       await transferPixels(
-        { fromUserId: alice, toUserId: alice, amount: 1, reason: "test", createdBy: "staff" },
+        { fromUserId: alice, toUserId: alice, amount: 1, actor: "staff", note: "test" },
         db,
       ),
     ).toMatchObject({ ok: false });
     expect(
       await transferPixels(
-        { fromUserId: alice, toUserId: carol, amount: 0, reason: "test", createdBy: "staff" },
+        { fromUserId: alice, toUserId: carol, amount: 0, actor: "staff", note: "test" },
         db,
       ),
     ).toMatchObject({ ok: false });
     expect(
       await transferPixels(
-        { fromUserId: alice, toUserId: "44444444-4444-4444-8444-444444444444", amount: 1, reason: "test", createdBy: "staff" },
+        { fromUserId: alice, toUserId: "44444444-4444-4444-8444-444444444444", amount: 1, actor: "staff", note: "test" },
         db,
       ),
     ).toMatchObject({ ok: false });

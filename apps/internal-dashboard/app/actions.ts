@@ -2872,8 +2872,8 @@ export const transferPlayerPixels = guardedAction(
       fromUserId,
       toUserId,
       amount,
-      reason,
-      createdBy: `${by} , ${reason}`,
+      actor: by,
+      note: reason,
     });
     if (!result.ok) {
       fail(

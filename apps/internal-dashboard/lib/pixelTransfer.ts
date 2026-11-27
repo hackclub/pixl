@@ -4,8 +4,10 @@ export interface TransferPixelsInput {
   fromUserId: string;
   toUserId: string;
   amount: number;
-  reason: string;
-  createdBy: string;
+  /** Who performed the transfer, e.g. "Name (USLACK)". */
+  actor: string;
+  /** Human note stored in the ledger next to the actor. */
+  note: string;
 }
 
 export type TransferPixelsResult =
@@ -62,7 +64,7 @@ export async function transferPixels(
 
     // Keep the note in created_by so the pixel log shows the reason next to
     // the transaction (same shape as manual grants/deductions).
-    const createdBy = `${input.createdBy} , ${input.reason}`;
+    const createdBy = `${input.actor} , ${input.note}`;
     await tx`insert into pixel_transactions (user_id, project_id, amount, hours, reason, created_by)
       values (${input.fromUserId}, null, ${-amount}, 0, 'transfer_out', ${createdBy})`;
     await tx`insert into pixel_transactions (user_id, project_id, amount, hours, reason, created_by)
