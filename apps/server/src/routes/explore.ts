@@ -31,7 +31,8 @@ export const PUBLIC_PROJECT_COLUMNS =
 // public project list and detail responses: ReviewQ-style tools rebuild the
 // queue order from status + shipped_at + review history, so publishing those
 // rows lets anyone derive a maker's position in the shared queue. The size of
-// the queue is still public, aggregate-only, at GET /api/explore/queue.
+// the queue stays aggregate-only and session-gated at GET /api/explore/queue,
+// for the official dashboards; it is deliberately not a public route.
 // needs_changes is NOT here: that is back with the maker, not waiting on us.
 export const IN_REVIEW_STATUSES = ["shipped", "fraud_review", "second_review"] as const;
 
@@ -67,8 +68,9 @@ export function queueCounts(
   return { total: waiting.total + final_checks.total, waiting, final_checks };
 }
 
-// #public, no session needed. Only the size of the review queue, never which
-// projects are in it or where they sit - see IN_REVIEW_STATUSES.
+// Session-gated (not in publicRoutes.ts). Only the size of the review queue,
+// never which projects are in it or where they sit - see IN_REVIEW_STATUSES.
+// The official logged-in dashboards use this; anonymous queue clones cannot.
 router.get("/api/explore/queue", async (_req, res) => {
   const { data, error } = await db
     .from("projects")

@@ -117,7 +117,8 @@ describe("every public projects-table query in explore.ts uses the allowlist", (
 // PIXL intentionally exposes unfinished projects read-only in Explore, but
 // never the shared review queue: status + shipped_at + review history lets a
 // crawler rebuild the exact queue order (ReviewQ). The amount in the queue is
-// still public through /api/explore/queue, without any identity or ordering.
+// session-gated at /api/explore/queue for the official dashboards, without any
+// identity or ordering.
 describe("public read-only project discovery", () => {
   const source = readFileSync(new URL("./explore.ts", import.meta.url), "utf-8");
 
@@ -158,7 +159,7 @@ describe("public read-only project discovery", () => {
     expect(directory).toMatch(/\.select\("user_id"\)\s*\.is\("archived_at"/);
   });
 
-  test("the public queue endpoint exposes only aggregate counts", () => {
+  test("the queue endpoint exposes only aggregate counts", () => {
     const queue = source.slice(
       source.indexOf('router.get("/api/explore/queue",'),
       source.indexOf('router.get("/api/explore/players",'),
