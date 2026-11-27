@@ -173,6 +173,20 @@ export function queueActivity(
   };
 }
 
+let statsCache: { at: number; stats: QueueStats } | null = null;
+
+/**
+ * Cached queue stats for the two read routes. The underlying numbers move on
+ * the order of minutes, and /queue is public, so a 30s cache keeps page traffic
+ * from turning into a query per visit.
+ */
+export async function cachedQueueStats(now = Date.now(), ttlMs = 30_000): Promise<QueueStats> {
+  if (statsCache && now - statsCache.at < ttlMs) return statsCache.stats;
+  const stats = await loadQueueStats(now);
+  statsCache = { at: now, stats };
+  return stats;
+}
+
 /** Load the aggregate queue + verdict stats. Throws on a database failure. */
 export async function loadQueueStats(now = Date.now()): Promise<QueueStats> {
   const since = new Date(now - ACTIVITY_DAYS * DAY_MS).toISOString();

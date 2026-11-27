@@ -4,7 +4,7 @@ import { listOnlinePlayers, kickPlayer, endUserSession } from "../ws/gameServer.
 import { forgetCachedRevocation, revokeUserSessions } from "../auth/revocation.js";
 import { refreshEntryEvidence } from "../operations/service.js";
 import { validate, v } from "../http/validate.js";
-import { loadQueueStats } from "../queueStats.js";
+import { cachedQueueStats } from "../queueStats.js";
 
 const router = Router();
 
@@ -22,7 +22,7 @@ router.get("/api/admin/online", (_req, res) => {
 // exposed as a public API route.
 router.get("/api/admin/queue", async (_req, res) => {
   try {
-    res.json({ ok: true, ...(await loadQueueStats()) });
+    res.json({ ok: true, ...(await cachedQueueStats()) });
   } catch (error) {
     console.error("[admin] queue stats failed", error);
     res.status(500).json({ ok: false });

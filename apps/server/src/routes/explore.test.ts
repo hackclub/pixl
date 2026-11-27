@@ -166,7 +166,7 @@ describe("public read-only project discovery", () => {
       source.indexOf('router.get("/api/explore/queue",'),
       source.indexOf('router.get("/api/explore/players",'),
     );
-    expect(queue).toContain("loadQueueStats()");
+    expect(queue).toContain("cachedQueueStats()");
     expect(queue).not.toContain("PUBLIC_PROJECT_COLUMNS");
     expect(queue).not.toContain("owner_name");
 
