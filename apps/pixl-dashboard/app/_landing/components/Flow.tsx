@@ -18,9 +18,9 @@ import {
 // goal, which sits in vault_levels and moves every chapter, so the copy talks
 // about filling the goal without naming it.
 const LADDER = [
-  { hours: 10, tier: 2, img: "/shop/blahaj.webp", price: 575 },
-  { hours: 35, tier: 3, img: "/shop/rpi.webp", price: 2000 },
-  { hours: 100, tier: 4, img: "/shop/ipad.webp", price: 5725 },
+  { hours: 10, tier: 2, img: "/shop/blahaj.webp", price: 400 },
+  { hours: 35, tier: 3, img: "/shop/rpi.webp", price: 1300 },
+  { hours: 100, tier: 4, img: "/shop/ipad.webp", price: 4700 },
 ];
 
 const fadeUp = {

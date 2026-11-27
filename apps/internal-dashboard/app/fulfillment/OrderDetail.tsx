@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import type { BuyerDetails, OrderStatus, ShopOrderRow } from "@/lib/db";
-import { ORDER_STAGES } from "@/lib/db";
+import type { BuyerDetails, OrderStatus, OrderUnfulfillmentRow, ShopOrderRow } from "@/lib/db";
 import { visibleOrderActions } from "@/lib/fulfillmentAccess";
+import { GRANT_STAGES, GRANT_STAGE_HINT, GRANT_STAGE_LABEL, isGrantOrder, usesGrantFlow } from "@/lib/fulfillmentGrant";
 import {
   Badge,
   ButtonLink,
@@ -11,23 +11,32 @@ import {
   Mono,
   Muted,
   TextLink,
+  Timeline,
   formatDate,
   formatDateTime,
 } from "@/app/_ui/ui";
 import type { EligibilityResult } from "@/lib/eligibility/engine";
 import { SlackHandle } from "./SlackHandle";
-import { FundingBreakdown } from "./Funding";
-import { EditFulfillmentInfo, FlagControls, OrderActions } from "./OrderActions";
+import { CopyEmail } from "./CopyEmail";
+import { FundingDisclosure } from "./Funding";
+import { ELIGIBILITY_HINT } from "@/lib/eligibility/format";
+import { slackDmLink } from "@/lib/slack";
+import { EditFulfillmentInfo, FlagControls, OrderActions, UnfulfillControls } from "./OrderActions";
 import { ItemThumb, TypeBadge } from "./OrderList";
-import { STAGE_HINT, STAGE_LABEL, STAGE_TONE, SafeLink, slackLink, usdBudget } from "./shared";
+import { ORDER_STEPS, STAGE_HINT, STAGE_LABEL, STAGE_TONE, SafeLink, orderBudgetUsd, stageIndex } from "./shared";
 
 // These two ship in a plain envelope with no carrier tracking of their own,
 // so a printable address label (app/fulfillment/label/[id]) is how the
 // fulfiller actually gets it to the right mailbox.
-const LABEL_ELIGIBLE_ITEMS = new Set(["Random Desk Object", "Signed Org Photo"]);
+const LABEL_ELIGIBLE_ITEMS = new Set(["Random Desk Object", "Signed Org Photo", "Community Meme Pack (5-Pack)"]);
 
 function stageStamp(o: ShopOrderRow, s: OrderStatus): string | null {
-  const v = { pending: o.created_at, ordered: o.ordered_at, credited: o.credited_at, shipped: o.shipped_at, done: o.done_at, cancelled: null }[s];
+  const v =
+    s === "pending"
+      ? o.created_at
+      : s === "claimed"
+        ? (o.claimed_at ?? o.ordered_at ?? o.credited_at)
+        : (o.done_at ?? o.shipped_at ?? o.fulfilled_at);
   return v ? formatDate(v) : null;
 }
 
@@ -39,10 +48,31 @@ function Stepper({ order: o }: { order: ShopOrderRow }) {
       </Callout>
     );
   }
-  const idx = ORDER_STAGES.indexOf(o.status);
+  // Grants: New -> Claimed -> Grant sent (no ordered/credited/shipped steps).
+  if (usesGrantFlow(o)) {
+    const gIdx = GRANT_STAGES.indexOf(o.status as (typeof GRANT_STAGES)[number]);
+    return (
+      <ol className="fw-steps" aria-label="Grant progress">
+        {GRANT_STAGES.map((s, i) => (
+          <li
+            key={s}
+            className="fw-step"
+            data-state={i < gIdx ? "done" : i === gIdx ? "current" : "todo"}
+            aria-current={i === gIdx ? "step" : undefined}
+          >
+            <span className="fw-step-dot">{i + 1}</span>
+            <span className="fw-step-label">{GRANT_STAGE_LABEL[s]}</span>
+            <span className="fw-step-hint">{GRANT_STAGE_HINT[s]}</span>
+            {i <= gIdx && stageStamp(o, s) && <span className="fw-step-hint">{stageStamp(o, s)}</span>}
+          </li>
+        ))}
+      </ol>
+    );
+  }
+  const idx = stageIndex(o.status);
   return (
     <ol className="fw-steps" aria-label="Order progress">
-      {ORDER_STAGES.map((s, i) => (
+      {ORDER_STEPS.map((s, i) => (
         <li
           key={s}
           className="fw-step"
@@ -59,7 +89,7 @@ function Stepper({ order: o }: { order: ShopOrderRow }) {
   );
 }
 
-function Panel({ title, icon, children, aside }: { title: string; icon: "message" | "pin" | "person" | "link" | "bolt"; children: ReactNode; aside?: ReactNode }) {
+function Panel({ title, icon, children, aside }: { title: string; icon: "message" | "pin" | "person" | "link" | "bolt" | "history"; children: ReactNode; aside?: ReactNode }) {
   return (
     <section className="fw-panel">
       <header className="fw-panel-head">
@@ -79,6 +109,25 @@ function OnFile({ value }: { value: ReactNode }) {
 }
 
 function ShippingPanel({ order: o, buyer, country }: { order: ShopOrderRow; buyer?: BuyerDetails; country?: string }) {
+  // A grant is an HCB grant invite sent by email: only the recipient's name and
+  // email matter, so no address, phone or shipping label.
+  if (isGrantOrder(o)) {
+    if (!buyer) {
+      return (
+        <p className="text-sm">
+          <Muted>The buyer&apos;s email appears once you claim the grant.</Muted>
+        </p>
+      );
+    }
+    return (
+      <DescriptionList
+        items={[
+          ["Name", <OnFile key="n" value={buyer.name} />],
+          ["Email", <OnFile key="e" value={buyer.email && <CopyEmail email={buyer.email} />} />],
+        ]}
+      />
+    );
+  }
   if (!buyer) {
     return (
       <p className="text-sm">
@@ -92,7 +141,7 @@ function ShippingPanel({ order: o, buyer, country }: { order: ShopOrderRow; buye
       <DescriptionList
         items={[
           ["Name", <OnFile key="n" value={buyer.name} />],
-          ["Email", <OnFile key="e" value={buyer.email && <TextLink href={`mailto:${buyer.email}`} external>{buyer.email}</TextLink>} />],
+          ["Email", <OnFile key="e" value={buyer.email && <CopyEmail email={buyer.email} />} />],
           ["Phone", <OnFile key="p" value={buyer.phone} />],
           [
             "Address",
@@ -123,6 +172,7 @@ export function OrderDetail({
   ownOrder,
   canManage,
   eligibility,
+  history,
 }: {
   order: ShopOrderRow;
   buyer?: BuyerDetails;
@@ -132,9 +182,10 @@ export function OrderDetail({
   ownOrder: boolean;
   canManage: boolean;
   eligibility: EligibilityResult | null;
+  history: OrderUnfulfillmentRow[];
 }) {
-  const actionable = o.status !== "done" && o.status !== "cancelled";
-  const budget = usdBudget(o.price);
+  const actionable = o.status !== "done" && o.status !== "shipped" && o.status !== "cancelled";
+  const budget = orderBudgetUsd(o);
   const visible = visibleOrderActions({
     status: o.status,
     flagged: Boolean(o.flagged_at),
@@ -161,10 +212,13 @@ export function OrderDetail({
   if (o.actual_cost_usd !== null) {
     facts.push(["Actual cost", <Badge key="c" tone={overBudget ? "danger" : "success"} outline>${Number(o.actual_cost_usd).toFixed(2)}</Badge>]);
   }
-  if ((o.status === "shipped" || o.status === "done") && o.tracking) {
+  const grant = isGrantOrder(o);
+  if (!grant && (o.status === "shipped" || o.status === "done") && o.tracking) {
     facts.push(["Tracking", <><Mono>{o.tracking}</Mono> <Muted>· DM&apos;d to buyer</Muted></>]);
   }
-  if (o.status !== "pending" && o.status !== "cancelled" && o.hcb_link) facts.push(["HCB", <SafeLink key="hcb" url={o.hcb_link} />]);
+  if (o.status !== "pending" && o.status !== "cancelled" && o.hcb_link) {
+    facts.push([grant && o.status === "done" ? "HCB grant" : "HCB", <SafeLink key="hcb" url={o.hcb_link} />]);
+  }
   if (o.status === "cancelled" && o.note) facts.push(["Note", o.note]);
 
   return (
@@ -183,7 +237,7 @@ export function OrderDetail({
             {o.player_slack && (
               <>
                 {" · "}
-                <TextLink href={slackLink(o.player_slack)} external>
+                <TextLink href={slackDmLink(o.player_slack)} external>
                   <SlackHandle id={o.player_slack} />
                 </TextLink>
               </>
@@ -194,6 +248,13 @@ export function OrderDetail({
           <div className="mt-1 flex flex-wrap gap-1.5">
             <Badge tone={STAGE_TONE[o.status] ?? "neutral"}>{STAGE_LABEL[o.status] ?? o.status}</Badge>
             {o.option && <Badge>{o.option}</Badge>}
+            {o.is_grant && o.item_category !== "grants" && <Badge tone="cyan" outline>Converted to grant</Badge>}
+            {o.item_flow && !o.is_grant && <Badge tone="cyan" outline>Fulfilling as item</Badge>}
+            {history.length > 0 && (
+              <Badge tone="yellow" outline>
+                Reopened {history.length === 1 ? "once" : `${history.length}x`}
+              </Badge>
+            )}
             {o.item_beacon_locked && (
               <Badge tone="yellow" icon="rep">
                 Beacon reward
@@ -220,6 +281,13 @@ export function OrderDetail({
         </div>
       )}
 
+      {grant && actionable && (
+        <Callout tone="info" icon="send">
+          <strong>Grant order.</strong> Nothing to buy or ship: claim it, send the HCB grant to the buyer&apos;s email,
+          then paste the grant link and mark it sent.
+        </Callout>
+      )}
+
       {o.flagged_at && (
         <Callout tone="danger" icon="important">
           <strong>Over budget:</strong> {o.flag_note}{" "}
@@ -227,18 +295,32 @@ export function OrderDetail({
         </Callout>
       )}
 
-      <Panel title="Funding breakdown" icon="bolt">
-        <FundingBreakdown result={eligibility} orderId={o.id} />
-      </Panel>
+      {actionable && eligibility?.status !== "covered" && (
+        <Callout tone={eligibility?.status === "restricted" ? "danger" : "warning"} icon="important">
+          <strong>Funding needs attention.</strong>{" "}
+          {eligibility ? ELIGIBILITY_HINT[eligibility.status] : "Eligibility evidence could not be loaded."}
+          {" "}Resolve this before proceeding with the order. The server rechecks eligibility on claim.
+        </Callout>
+      )}
 
       <div className="fw-cols">
         <div className="fw-col">
-          <Panel title="Buyer note" icon="message">
-            {o.buyer_note ? <p className="fw-note">{o.buyer_note}</p> : <Muted>The buyer left no note.</Muted>}
-          </Panel>
-          <Panel title="Shipping info" icon="pin">
+          <Panel title={grant ? "Grant recipient" : "Shipping info"} icon={grant ? "person" : "pin"}>
             <ShippingPanel order={o} buyer={buyer} country={country} />
           </Panel>
+          {o.buyer_note && (
+            <Panel title="Buyer note" icon="message">
+              <p className="fw-note">{o.buyer_note}</p>
+            </Panel>
+          )}
+
+          {actionable && /robux/i.test(o.item_name ?? "") && (
+            <TextLink href="https://www.roblox.com/fr/shopgiftcards?location=us&locale=us_us" external className="text-sm">
+              Buy Robux here
+            </TextLink>
+          )}
+
+
         </div>
         <div className="fw-col">
           <Panel title="Requester" icon="person">
@@ -248,7 +330,7 @@ export function OrderDetail({
                 [
                   "Slack",
                   o.player_slack ? (
-                    <TextLink key="s" href={slackLink(o.player_slack)} external>
+                    <TextLink key="s" href={slackDmLink(o.player_slack)} external>
                       <SlackHandle id={o.player_slack} />
                     </TextLink>
                   ) : null,
@@ -257,7 +339,7 @@ export function OrderDetail({
               ]}
             />
           </Panel>
-          <Panel title="Previous source / vendor" icon="link">
+          {!grant && <Panel title="Previous source / vendor" icon="link">
             {o.item_source_url ? (
               <>
                 <p className="hc-caption text-xs">Last bought from</p>
@@ -277,7 +359,7 @@ export function OrderDetail({
                 </p>
               </>
             )}
-          </Panel>
+          </Panel>}
           {facts.length > 0 && (
             <Panel title="Fulfillment" icon="bolt">
               <DescriptionList items={facts} />
@@ -286,10 +368,43 @@ export function OrderDetail({
         </div>
       </div>
 
-      {actionable && /robux/i.test(o.item_name ?? "") && (
-        <TextLink href="https://www.roblox.com/fr/shopgiftcards?location=us&locale=us_us" external className="text-sm">
-          Buy Robux here
-        </TextLink>
+      {history.length > 0 && (
+        <Panel title="Previous fulfillments" icon="history">
+          <Timeline
+            entries={history.map((h) => {
+              const cost = h.actual_cost_usd == null ? null : Number(h.actual_cost_usd);
+              return {
+                key: h.id,
+                title: (
+                  <>
+                    <strong>Fulfilled by {h.fulfilled_by || "a fulfiller"}</strong>
+                    <Muted>· {formatDateTime(h.fulfilled_at ?? h.unfulfilled_at)}</Muted>
+                    <Badge tone="cyan" outline>{h.fulfillment_kind === "grant" ? "Grant" : "Item"}</Badge>
+                    {h.pixels_paid > 0 && <Badge tone="success" outline>{h.pixels_paid} px paid</Badge>}
+                  </>
+                ),
+                body: (
+                  <div className="flex flex-col gap-1 text-sm">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                      {h.hcb_link && (
+                        <span>
+                          HCB <SafeLink url={h.hcb_link} />
+                        </span>
+                      )}
+                      {cost !== null && <span>Cost ${cost.toFixed(2)}</span>}
+                      {h.tracking && h.tracking !== h.hcb_link && <span>Tracking <Mono>{h.tracking}</Mono></span>}
+                    </div>
+                    <Callout tone="warning" icon="back">
+                      <strong>Reopened by {h.unfulfilled_by || "an owner"}</strong>{" "}
+                      <Muted>· {formatDateTime(h.unfulfilled_at)}</Muted>
+                      <p className="mt-1 whitespace-pre-line">{h.reason}</p>
+                    </Callout>
+                  </div>
+                ),
+              };
+            })}
+          />
+        </Panel>
       )}
 
       {visible.any && (
@@ -299,15 +414,18 @@ export function OrderDetail({
             {visible.flag && <FlagControls order={o} canManage={canManage} budget={budget} />}
             {visible.contact && o.player_slack && (
               <div>
-                <ButtonLink href={slackLink(o.player_slack)} external variant="outline" size="sm" icon="message">
-                  Contact buyer
+                <ButtonLink href={slackDmLink(o.player_slack)} external variant="outline" size="sm" icon="slack-fill">
+                  Message on Slack
                 </ButtonLink>
               </div>
             )}
             {visible.edit && <EditFulfillmentInfo order={o} />}
+            {visible.unfulfill && <UnfulfillControls order={o} />}
           </div>
         </Panel>
       )}
+
+      <FundingDisclosure key={o.id} result={eligibility} orderId={o.id} />
     </article>
   );
 }

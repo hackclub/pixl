@@ -30,6 +30,7 @@ export function ReviewTabs({
         { href: "/review", label: "Needs review", count: pending },
         { href: "/review/reviewed", label: "Reviewed" },
         { href: "/review/stats", label: "Stats" },
+        { href: "/review/ending-score", label: "Pixl ending score" },
       ];
   if (canFraudReview) {
     // Every score Robert's fraud reviewer has given, newest first, including

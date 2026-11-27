@@ -1,8 +1,18 @@
+import { KNOWN_ITEM_FACE_VALUES } from "../grantValue";
+
 export interface ItemValueRule {
   match: RegExp;
   basis: "face";
   faceValueUsd: number;
 }
+
+// The same explicit catalog face values the grant CSV uses, so a $10 AI
+// subscription (whose description has no single dollar amount) is counted at
+// $10 by both the export and the funding engine.
+const CATALOG_FACE_VALUE_RULES: ItemValueRule[] = KNOWN_ITEM_FACE_VALUES.map((r) => ({
+  ...r,
+  basis: "face",
+}));
 
 export interface EligibilityPolicy {
   version: string;
@@ -28,7 +38,7 @@ export const POLICIES: Record<string, EligibilityPolicy> = {
     allowUnledgeredClaim: false,
     fundingBasis: "flat_rate",
     maxRateUsd: 6,
-    itemValueRules: [{ match: /^hardware grant$/i, basis: "face", faceValueUsd: 10 }],
+    itemValueRules: CATALOG_FACE_VALUE_RULES,
   },
   "2026-10-22.2": {
     version: "2026-10-22.2",
@@ -40,7 +50,7 @@ export const POLICIES: Record<string, EligibilityPolicy> = {
     allowUnledgeredClaim: false,
     fundingBasis: "flat_rate",
     maxRateUsd: 6,
-    itemValueRules: [{ match: /^hardware grant$/i, basis: "face", faceValueUsd: 10 }],
+    itemValueRules: CATALOG_FACE_VALUE_RULES,
   },
   "2026-10-22.3": {
     version: "2026-10-22.3",
@@ -52,7 +62,7 @@ export const POLICIES: Record<string, EligibilityPolicy> = {
     allowUnledgeredClaim: false,
     fundingBasis: "payout_history",
     maxRateUsd: 6,
-    itemValueRules: [{ match: /^hardware grant$/i, basis: "face", faceValueUsd: 10 }],
+    itemValueRules: CATALOG_FACE_VALUE_RULES,
   },
 };
 

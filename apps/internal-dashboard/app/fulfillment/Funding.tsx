@@ -21,25 +21,62 @@ export function VerificationBadge({ label }: { label: keyof typeof VERIFICATION_
   );
 }
 
-export function ShipsSyncBar({ view }: { view: ShipsView }) {
+export function ShipsSyncBar({ view, compact = false }: { view: ShipsView; compact?: boolean }) {
   const snap = view.snapshot;
-  const ok = !!snap && !view.error;
+  const ok = !!snap && view.fresh && !view.error;
+  const source = snap?.source === "airbridge" ? "Unified / Airbridge" : "Ships";
   return (
-    <div className="fw-sync" data-state={ok ? "ok" : snap ? "stale" : "down"} role="status">
+    <div className={compact ? "fw-sync fw-sync-compact" : "fw-sync"} data-state={ok ? "ok" : snap ? "stale" : "down"} role="status">
       <span>
-        {snap ? (
+        {compact ? (
+          snap ? (
+            <>
+              <strong>{source}</strong> · {ok ? "Synced" : "Stale"} {syncAgeText(view.ageMs)}
+              <span className="fw-sync-compact-meta"> · {snap.pixlCount} PIXL entries</span>
+              {snap.source === "airbridge" && snap.syncHealth && (
+                <span className="fw-sync-compact-meta">
+                  {" · "}{snap.syncHealth.current}/{snap.syncHealth.total} current
+                  {" · "}{snap.syncHealth.unsynced} unsynced
+                  {" · "}{snap.syncHealth.stale} stale
+                  {" · "}{snap.syncHealth.errors} errors
+                  {" · "}{snap.syncHealth.identityReview} identity reviews
+                </span>
+              )}
+              {snap.invalidCount + snap.duplicateCount > 0 && (
+                <span className="fw-sync-compact-meta"> · {snap.invalidCount + snap.duplicateCount} unusable</span>
+              )}
+              {view.error && <Muted> · {view.error}</Muted>}
+            </>
+          ) : (
+            <>Verification not synced. Project approvals cannot be verified. Reviewer payout funding may still be available.</>
+          )
+        ) : snap ? (
           <>
-            Ships synced <strong>{syncAgeText(view.ageMs)}</strong> · {snap.pixlCount} PIXL entries
-            {snap.invalidCount + snap.duplicateCount > 0 && ` (${snap.invalidCount + snap.duplicateCount} unusable)`}
+            {snap.source === "airbridge" && snap.syncHealth ? (
+              <>
+                {source}: <strong>{snap.syncHealth.current}/{snap.syncHealth.total} current</strong>
+                {" · "}{snap.syncHealth.unsynced} unsynced
+                {" · "}{snap.syncHealth.stale} stale
+                {" · "}{snap.syncHealth.errors} errors
+                {" · "}{snap.syncHealth.identityReview} identity reviews
+                {" · "}{snap.pixlCount} approved entries
+                {" · "}latest approval {syncAgeText(view.ageMs)}
+              </>
+            ) : (
+              <>
+                {source} synced <strong>{syncAgeText(view.ageMs)}</strong> · {snap.pixlCount} PIXL entries
+                {snap.invalidCount + snap.duplicateCount > 0 && ` (${snap.invalidCount + snap.duplicateCount} unusable)`}
+              </>
+            )}
           </>
         ) : (
-          <>Ships has not been reached. Project hours cannot be verified; reviewer payout ledger funding can still cover orders.</>
+          <>Approval verification has not been synchronized. Project hours cannot be verified; reviewer payout ledger funding can still cover orders.</>
         )}
-        {view.error && <Muted> · last refresh failed: {view.error}</Muted>}
+        {view.error && <Muted> · {view.error}</Muted>}
       </span>
       <form action={refreshShipsSnapshot}>
         <ActionButton variant="outline" pendingLabel="Refreshing...">
-          Refresh Ships
+          {compact ? "Refresh" : "Refresh verification"}
         </ActionButton>
       </form>
     </div>
@@ -74,6 +111,62 @@ function signedPixelsText(pixels: number): string {
   return `${pixels < 0 ? "−" : ""}${Math.abs(pixels).toLocaleString(undefined, { maximumFractionDigits: 2 })} px`;
 }
 
+/**
+ * Collapsed by default: the whole summary (including the meter) toggles the
+ * underlying evidence without any client-side state or extra data requests.
+ */
+export function FundingDisclosure({ result, orderId }: { result: EligibilityResult | null; orderId: number }) {
+  const balance = result?.remainingCents ?? 0;
+  const cost = result?.amount.cents ?? 0;
+  const after = result?.afterCents ?? 0;
+  const percent = result
+    ? cost > 0 ? Math.min(100, Math.max(0, Math.round((Math.max(0, balance) / cost) * 100))) : 100
+    : 0;
+  const covered = result?.status === "covered" && after >= 0;
+
+  return (
+    <details className="fw-funding-disclosure" data-state={!result ? "unknown" : covered ? "covered" : "check"}>
+      <summary className="fw-funding-disclosure-trigger">
+        <span className="fw-funding-disclosure-top">
+          <span className="fw-funding-disclosure-title">Funding check</span>
+          <span className="fw-funding-disclosure-badges">
+            {result ? (
+              <>
+                <VerificationBadge label={result.verification} />
+                <FundingBadge status={result.status} short />
+              </>
+            ) : <FundingBadge status={null} />}
+          </span>
+          <span className="fw-funding-disclosure-chevron" aria-hidden="true">⌄</span>
+        </span>
+        {result ? (
+          <>
+            <span className="fw-funding-disclosure-totals">
+              <span>Verified balance <strong>{usd(balance)}</strong></span>
+              <span>Order <strong>{usd(cost)}</strong></span>
+              <span>{after >= 0 ? "After order" : "Shortfall"} <strong>{usd(after >= 0 ? after : -after)}</strong></span>
+            </span>
+            <span className="fw-funding-disclosure-meter" aria-hidden="true">
+              <span style={{ width: `${percent}%` }} />
+            </span>
+            {!covered && (
+              <span className="fw-funding-disclosure-warning">
+                {result.status === "restricted" ? "Restricted — do not fulfill without resolving the restriction." : "Check funding and eligibility before fulfilling."}
+              </span>
+            )}
+          </>
+        ) : (
+          <span className="fw-funding-disclosure-warning">Eligibility evidence unavailable — verify manually before claiming.</span>
+        )}
+        <span className="fw-funding-disclosure-hint">View funding breakdown and evidence</span>
+      </summary>
+      <div className="fw-funding-disclosure-content">
+        <FundingBreakdown result={result} orderId={orderId} />
+      </div>
+    </details>
+  );
+}
+
 export function FundingBreakdown({ result, orderId }: { result: EligibilityResult | null; orderId: number }) {
   if (!result) {
     return (
@@ -87,6 +180,9 @@ export function FundingBreakdown({ result, orderId }: { result: EligibilityResul
     .filter((p) => p.counted === "verified" && p.ships?.state === "approved")
     .reduce((sum, p) => sum + p.countedHours, 0);
   const otherVerifiedProjectHours = Math.max(0, r.verifiedHours - shipsVerifiedHours);
+  const coveragePercent = r.amount.cents > 0
+    ? Math.min(100, Math.max(0, Math.round((Math.max(0, r.remainingCents) / r.amount.cents) * 100)))
+    : 100;
   return (
     <div className="fw-funding">
       {r.projects.length > 0 ? (
@@ -110,6 +206,48 @@ export function FundingBreakdown({ result, orderId }: { result: EligibilityResul
         </ul>
       )}
 
+      <section className="fw-funding-summary" aria-label="Funding available for this order">
+        <div className="fw-funding-metrics">
+          <div><span>Verified earned</span><strong>{usd(r.verifiedFundingCents)}</strong></div>
+          <div><span>Already committed</span><strong>{usd(r.committedCents)}</strong></div>
+          <div><span>Verified balance</span><strong>{usd(r.remainingCents)}</strong></div>
+          <div><span>This order</span><strong>{usd(r.amount.cents)}</strong></div>
+        </div>
+        <div className="fw-funding-coverage">
+          <div className="fw-funding-coverage-head">
+            <span>Verified balance vs. order cost</span>
+            <strong>{coveragePercent}% of cost</strong>
+          </div>
+          <div
+            className="fw-funding-meter"
+            role="progressbar"
+            aria-label="Verified available funding compared with order cost"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={coveragePercent}
+          >
+            <span data-coverage={r.afterCents >= 0 ? "enough" : "short"} style={{ width: `${coveragePercent}%` }} />
+          </div>
+          <div className="fw-funding-outcome" data-state={r.afterCents >= 0 ? "enough" : "short"}>
+            <span>{r.afterCents >= 0 ? "Projected balance after order" : "Shortfall against verified balance"}</span>
+            <strong>{usd(Math.abs(r.afterCents))}</strong>
+          </div>
+        </div>
+        {r.unverifiedProjectFundingCents > 0 && (
+          <p className="fw-funding-caveat">
+            {usd(r.unverifiedProjectFundingCents)} in unverified project funding is <strong>not counted</strong> as available.
+          </p>
+        )}
+        {r.status !== "covered" && (
+          <p className="fw-funding-caveat">
+            Funding coverage alone does not authorize fulfillment. Resolve the verification or policy issue above first.
+          </p>
+        )}
+      </section>
+
+      <details className="fw-funding-evidence">
+        <summary>View evidence: projects, previous orders and reviewer payouts</summary>
+        <div className="fw-funding-evidence-body">
       <div className="fw-funding-scroll">
       <table className="fw-funding-table">
         <caption className="sr-only">Projects counted toward funding</caption>
@@ -259,6 +397,8 @@ export function FundingBreakdown({ result, orderId }: { result: EligibilityResul
         {r.integrations.unified ? "readable" : "unavailable"}. Ships{" "}
         {r.ships.fetchedAt == null ? "never synced" : `synced ${ageText(r.ships.ageMs ?? 0)}${r.ships.stale ? " (stale)" : ""}`}. Order #{orderId}.
       </p>
+        </div>
+      </details>
     </div>
   );
 }

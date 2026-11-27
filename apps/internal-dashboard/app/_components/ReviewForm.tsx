@@ -9,7 +9,8 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { REVIEW_MACROS, expandMacro, hasUnfilledMacroPlaceholder } from "@/lib/reviewMacros";
+import { REVIEW_MACROS, MAX_REVIEW_NOTE_LENGTH, expandMacro, hasUnfilledMacroPlaceholder, showReviewMacroPrompt, type CustomReviewMacro } from "@/lib/reviewMacros";
+import { dismissReviewerMacroPrompt } from "@/app/actions";
 import {
   reviewProject,
   applySubmissionEdits,
@@ -29,7 +30,7 @@ import {
 } from "@/app/_generated/config";
 import { TECHNICAL_FEATURES_MIN } from "@/lib/auditNote";
 import { BlackoutReviewSection, type BlackoutReviewData } from "@/app/_components/BlackoutReviewSection";
-import { Badge, Button, Callout, Checkbox, Details, Field, formatDateTime, Input, NativeSelect, Textarea } from "@/app/_ui/ui";
+import { Badge, Button, ButtonLink, Callout, Checkbox, Details, Field, formatDateTime, Input, NativeSelect, Textarea } from "@/app/_ui/ui";
 import { actionErrorMessage, isStaleDeployError } from "@/app/_ui/actionError";
 import { round1 } from "@/lib/hours";
 
@@ -484,6 +485,8 @@ export function ReviewForm({
   canEditSubmission = false,
   defaultRevealName = true,
   defaultNotifyOnResubmit = false,
+  initialReviewMacros = [],
+  initialMacroPromptDismissed = false,
   serverDraft,
 }: {
   projectId: number;
@@ -529,6 +532,9 @@ export function ReviewForm({
   defaultRevealName?: boolean;
   /** Default for the "Notify on resubmit" checkbox. */
   defaultNotifyOnResubmit?: boolean;
+  /** Personal text macros saved on this reviewer\'s account. */
+  initialReviewMacros?: CustomReviewMacro[];
+  initialMacroPromptDismissed?: boolean;
   /** The shared server-side draft (saveReviewDraft). Used only when this
    * browser has no local draft of its own to restore. */
   serverDraft?: {
@@ -537,6 +543,23 @@ export function ReviewForm({
     at: string | null;
   };
 }) {
+  const [customMacros] = useState<CustomReviewMacro[]>(initialReviewMacros);
+  const [macroPromptDismissed, setMacroPromptDismissed] = useState(initialMacroPromptDismissed);
+  const [macroPromptSaving, setMacroPromptSaving] = useState(false);
+  const [macroPromptError, setMacroPromptError] = useState(false);
+  const dismissMacroInvite = async () => {
+    setMacroPromptSaving(true);
+    setMacroPromptError(false);
+    try {
+      const result = await dismissReviewerMacroPrompt();
+      if (result.ok) setMacroPromptDismissed(true);
+      else setMacroPromptError(true);
+    } catch {
+      setMacroPromptError(true);
+    } finally {
+      setMacroPromptSaving(false);
+    }
+  };
   const formRef = useRef<HTMLFormElement>(null);
   const repoOpened = useRef<HTMLInputElement>(null);
   const demoOpened = useRef<HTMLInputElement>(null);
@@ -1252,11 +1275,12 @@ export function ReviewForm({
           <p className="hc-eyebrow">Verdict</p>
           <Field
             label="Note to the player"
-            hint={`Required. Be nice and personal, show their work is good. Macros: ${REVIEW_MACROS.map((m) => `${m.trigger} = ${m.label}`).join(", ")}`}
+            hint={`Required. Be nice and personal, show their work is good. Built-in shortcuts: ${REVIEW_MACROS.map((m) => m.trigger).join(", ")}. Your custom shortcuts work here too.`}
           >
             <AuditTextarea
               name="note"
               required
+              maxLength={MAX_REVIEW_NOTE_LENGTH}
               ref={noteRef}
               onChange={(e) => {
                 // Macros (lib/reviewMacros.ts): typing /ai swaps in the canned
@@ -1264,7 +1288,7 @@ export function ReviewForm({
                 // back down to "/ai" never expands it.
                 const input = e.currentTarget;
                 if ((e.nativeEvent as InputEvent).inputType?.startsWith("insert")) {
-                  const expanded = expandMacro(input.value, input.selectionStart ?? input.value.length);
+                  const expanded = expandMacro(input.value, input.selectionStart ?? input.value.length, [...REVIEW_MACROS, ...customMacros]);
                   if (expanded) {
                     input.value = expanded.value;
                     input.setSelectionRange(expanded.caret, expanded.caret);
@@ -1278,6 +1302,23 @@ export function ReviewForm({
               rows={4}
             />
           </Field>
+          {showReviewMacroPrompt(customMacros, macroPromptDismissed) && (
+            <div className="rounded-lg border border-[var(--border)] bg-[var(--sunken)] p-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold">Want your own review shortcuts?</p>
+                  <p className="hc-muted text-xs">Optional: create a personal /macro in Settings. This invitation disappears once you save one or dismiss it.</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <ButtonLink href="/settings#review" variant="outline" size="sm">Set up macros</ButtonLink>
+                  <Button type="button" size="sm" variant="ghost" disabled={macroPromptSaving} onClick={() => { void dismissMacroInvite(); }}>
+                    {macroPromptSaving ? "Dismissing..." : "Not now"}
+                  </Button>
+                </div>
+              </div>
+              {macroPromptError && <p className="mt-2 text-xs text-[var(--hc-red)]" role="alert">Could not dismiss the invitation. Try again.</p>}
+            </div>
+          )}
           <Checkbox
             name="revealName"
             value="1"

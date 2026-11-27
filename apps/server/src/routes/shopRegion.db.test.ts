@@ -168,6 +168,35 @@ if (!adminUrl) {
       expect(res.body.ok).toBe(true);
     });
 
+    test("Nothing purchases are closed on the spot and never reach the fulfillment queue", async () => {
+      for (const itemName of ["Nothing", "nOtHiNg"]) {
+        const user = await createUser({ country: "US" });
+        const itemId = await createItem(itemName, "US");
+        const res = await buy(user, itemId);
+        expect(res.status).toBe(200);
+        expect(res.body.ok).toBe(true);
+
+        const [order] = await db<{
+          status: string;
+          fulfilled_at: Date | null;
+          done_at: Date | null;
+          fulfilled_by: string;
+          actual_cost_usd: string | null;
+          fulfillment_pixels_paid: number;
+        }[]>`
+          select status, fulfilled_at, done_at, fulfilled_by, actual_cost_usd,
+                 fulfillment_pixels_paid
+          from shop_orders where user_id = ${user}
+        `;
+        expect(order?.status).toBe("done");
+        expect(order?.fulfilled_at).not.toBeNull();
+        expect(order?.done_at).not.toBeNull();
+        expect(order?.fulfilled_by).toBe("auto");
+        expect(Number(order?.actual_cost_usd)).toBe(0);
+        expect(order?.fulfillment_pixels_paid).toBe(0);
+      }
+    });
+
     test("trying every item id against a US address only ever buys the US item", async () => {
       const user = await createUser({ country: "US", region: "BANGLADESH", regionAuto: false });
       const results: Record<string, number> = {};
@@ -191,6 +220,42 @@ if (!adminUrl) {
       const res = await buy(user, itemIds.us);
       expect(res.status).toBe(400);
       expect(res.body.error).toBe("address_required");
+    });
+  });
+
+  describe("per-region sales", () => {
+    test("each region's sale discounts that region's row, not the item everywhere", async () => {
+      // The same item is one shop_items row per region, so a sale is just that
+      // row's discount_percent. The dashboard's "Edit price in every region"
+      // form writes them independently; this locks in that the buy RPC charges
+      // each row's own sale.
+      const usItem = await createItem("Sale Widget", "US");
+      const euItem = await createItem("Sale Widget", "EUROPE");
+      await db`update shop_items set discount_percent = 50 where id = ${usItem}`;
+      await db`update shop_items set discount_percent = 25 where id = ${euItem}`;
+
+      const usUser = await createUser({ country: "US" });
+      const euUser = await createUser({ country: "DE" });
+      expect((await buy(usUser, usItem)).status).toBe(200);
+      expect((await buy(euUser, euItem)).status).toBe(200);
+      expect(await pixels(usUser)).toBe(100000 - 50);
+      expect(await pixels(euUser)).toBe(100000 - 75);
+    });
+
+    test("a sale past its end time charges full price", async () => {
+      const ended = await createItem("Ended Sale Widget", "US");
+      const running = await createItem("Running Sale Widget", "US");
+      await db`update shop_items set discount_percent = 50,
+        discount_ends_at = now() - interval '1 minute' where id = ${ended}`;
+      await db`update shop_items set discount_percent = 50,
+        discount_ends_at = now() + interval '1 hour' where id = ${running}`;
+
+      const endedUser = await createUser({ country: "US" });
+      const runningUser = await createUser({ country: "US" });
+      expect((await buy(endedUser, ended)).status).toBe(200);
+      expect((await buy(runningUser, running)).status).toBe(200);
+      expect(await pixels(endedUser)).toBe(100000 - 100);
+      expect(await pixels(runningUser)).toBe(100000 - 50);
     });
   });
 
