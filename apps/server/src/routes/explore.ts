@@ -27,6 +27,66 @@ const LEADERBOARD_SIZE = 25;
 export const PUBLIC_PROJECT_COLUMNS =
   "id, user_id, name, description, project_type, level, status, image_url, repo_url, demo_url, shipped_at, first_shipped_at, created_at, hackatime_seconds, is_peak";
 
+// Projects sitting in the review queue. They are deliberately absent from the
+// public project list and detail responses: ReviewQ-style tools rebuild the
+// queue order from status + shipped_at + review history, so publishing those
+// rows lets anyone derive a maker's position in the shared queue. The size of
+// the queue is still public, aggregate-only, at GET /api/explore/queue.
+// needs_changes is NOT here: that is back with the maker, not waiting on us.
+export const IN_REVIEW_STATUSES = ["shipped", "fraud_review", "second_review"] as const;
+
+const HARDWARE_PROJECT_TYPES = new Set(["hardware", "cad"]);
+
+export interface QueueCounts {
+  /** Everything currently in review (first pass + final checks). */
+  total: number;
+  /** Waiting for their first review. */
+  waiting: { total: number; software: number; hardware: number };
+  /** Passed first review, waiting on the fraud check or spot check. */
+  final_checks: { total: number; software: number; hardware: number };
+}
+
+/** Aggregate queue counts from project status/type rows. No identities. */
+export function queueCounts(
+  rows: { status?: string | null; project_type?: string | null }[],
+): QueueCounts {
+  const waiting = { total: 0, software: 0, hardware: 0 };
+  const final_checks = { total: 0, software: 0, hardware: 0 };
+  for (const row of rows) {
+    const bucket =
+      row.status === "shipped"
+        ? waiting
+        : row.status === "fraud_review" || row.status === "second_review"
+          ? final_checks
+          : null;
+    if (!bucket) continue;
+    bucket.total += 1;
+    if (row.project_type && HARDWARE_PROJECT_TYPES.has(row.project_type)) bucket.hardware += 1;
+    else bucket.software += 1;
+  }
+  return { total: waiting.total + final_checks.total, waiting, final_checks };
+}
+
+// #public, no session needed. Only the size of the review queue, never which
+// projects are in it or where they sit - see IN_REVIEW_STATUSES.
+router.get("/api/explore/queue", async (_req, res) => {
+  const { data, error } = await db
+    .from("projects")
+    .select("status, project_type")
+    .in("status", [...IN_REVIEW_STATUSES])
+    .is("archived_at", null)
+    .is("rejected_at", null)
+    .is("banned_at", null);
+  if (error) {
+    console.error("[explore] queue counts failed", error);
+    return res.status(500).json({ ok: false });
+  }
+  res.json({
+    ok: true,
+    queue: queueCounts((data ?? []) as { status: string; project_type: string | null }[]),
+  });
+});
+
 // #public, no session needed - fields already safe (no slack_id/email)
 router.get("/api/explore/players", async (req, res) => {
   const q = searchText(req.query.q);
@@ -439,8 +499,11 @@ router.get("/api/explore/players/:id/public", async (req, res) => {
   });
 });
 
-// Browse everyone's projects (including drafts), newest first, with optional
-// search/tier/shipped filters.
+// Browse public projects (including drafts), newest first, with optional
+// search/tier/shipped filters. Anything in the review queue is excluded so the
+// shared queue's order/positions cannot be reconstructed (see
+// IN_REVIEW_STATUSES); callers can still read the queue size from
+// /api/explore/queue.
 // #public, token optional (just for has_upvoted)
 router.get("/api/explore/projects", async (req, res) => {
   const session = req.session;
@@ -453,6 +516,7 @@ router.get("/api/explore/projects", async (req, res) => {
   let query = db
     .from("projects")
     .select(PUBLIC_PROJECT_COLUMNS)
+    .not("status", "in", [...IN_REVIEW_STATUSES])
     .is("archived_at", null)
     .is("rejected_at", null)
     .is("banned_at", null)
@@ -504,7 +568,10 @@ router.get("/api/explore/projects", async (req, res) => {
   });
 });
 
-// #public, token optional (just for has_upvoted)
+// #public, token optional (just for has_upvoted). In-review projects 404 here
+// like deleted/archived ones: owners and collaborators still see them through
+// the authenticated project routes, but the public API never reveals queue
+// membership, ship timing or review history while they wait.
 router.get("/api/explore/projects/:id", async (req, res) => {
   const session = req.session;
 
@@ -515,6 +582,7 @@ router.get("/api/explore/projects/:id", async (req, res) => {
     .from("projects")
     .select(PUBLIC_PROJECT_COLUMNS)
     .eq("id", id)
+    .not("status", "in", [...IN_REVIEW_STATUSES])
     .is("archived_at", null)
     .is("rejected_at", null)
     .is("banned_at", null)
