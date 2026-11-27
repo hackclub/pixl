@@ -748,6 +748,7 @@ router.get("/api/shop/orders", async (req, res) => {
     item_id?: number | null;
     is_grant?: boolean;
     item_flow?: boolean;
+    queue_total?: number;
   }[];
 
   // A grant is sent by email as an HCB grant, not shipped, so the Orders tab
@@ -772,29 +773,21 @@ router.get("/api/shop/orders", async (req, res) => {
     delete o.item_flow;
   }
 
-  // Queue position for any still-pending order: FIFO by created_at across
-  // EVERY player's pending orders, same "New" queue fulfillers work off in
-  // the dashboard - not scoped to this player, the whole point is showing
-  // how many orders (anyone's) are ahead of theirs.
-  const pendingIds = new Set(orders.filter((o) => o.status === "pending").map((o) => o.id));
-  if (pendingIds.size > 0) {
-    const { data: queue, error: queueError } = await db
+  // How many orders are waiting in the "New" queue right now: FIFO across
+  // EVERY player's pending orders, the same queue fulfillers work off in the
+  // dashboard. The player-facing API only gets the size of that queue, never
+  // an order's position in it - the queue is shared, so a position would leak
+  // other players' order activity.
+  if (orders.some((o) => o.status === "pending")) {
+    const { count, error: queueError } = await db
       .from("shop_orders")
-      .select("id, created_at")
-      .eq("status", "pending")
-      .order("created_at", { ascending: true });
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending");
     if (queueError) {
-      console.error("[shop] orders queue position failed", queueError);
+      console.error("[shop] orders queue total failed", queueError);
     } else {
-      const positionById = new Map((queue ?? []).map((o, i) => [o.id as number, i + 1]));
-      for (const o of orders as (typeof orders[number] & {
-        queue_position?: number;
-        queue_total?: number;
-      })[]) {
-        if (pendingIds.has(o.id)) {
-          o.queue_position = positionById.get(o.id);
-          o.queue_total = queue?.length ?? undefined;
-        }
+      for (const o of orders) {
+        if (o.status === "pending") o.queue_total = count ?? 0;
       }
     }
   }
