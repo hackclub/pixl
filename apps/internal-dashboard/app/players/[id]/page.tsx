@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/guard";
-import { banIsActive, getPlayer, listReportsAgainst } from "@/lib/db";
+import { banIsActive, getPlayer, listReportsAgainst, playerLabel } from "@/lib/db";
 import { slackDmLink, slackHandle } from "@/lib/slack";
 import { isSafeUrl } from "@/lib/safeUrl";
 import {
@@ -21,6 +21,7 @@ import {
   Details,
   EmptyRow,
   EmptyState,
+  Flash,
   Mono,
   Muted,
   PageHeader,
@@ -32,6 +33,8 @@ import {
   formatDate,
   formatDateTime,
 } from "@/app/_ui/ui";
+import { PixelAdjustForm } from "@/app/_components/PixelAdjustForm";
+import { PixelTransferForm } from "@/app/_components/PixelTransferForm";
 
 export const dynamic = "force-dynamic";
 
@@ -47,17 +50,25 @@ async function SlackHandle({ id }: { id: string | null | undefined }) {
   return handle ? <>{handle}, </> : null;
 }
 
-export default async function PlayerPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PlayerPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string; adjusted?: string; transferred?: string }>;
+}) {
   const access = await requirePage("owner");
   // Every player action (warn, ban, notify, edit, delete) is owner-only.
   const owner = access.isOwner;
   const { id } = await params;
+  const { error, adjusted, transferred } = await searchParams;
   const data = await getPlayer(id);
   if (!data) notFound();
   const { user, states, projects, violations, bans, actions } = data;
   const activeBan = bans.find(banIsActive) ?? null;
   const reports = owner ? await listReportsAgainst(id) : [];
   const openReports = reports.filter((r) => r.status === "open").length;
+  const label = playerLabel(user, user.id);
 
   const pixels = Math.round((Number(user.pixels) || 0) * 100) / 100;
   const approvedHours =
@@ -76,7 +87,7 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
       <PageHeader
         title={
           <>
-            <span className="break-words">{user.real_name || user.display_name}</span>
+            <span className="break-words">{label}</span>
             {activeBan && (
               <Badge tone="danger" icon="private">
                 Banned {activeBan.expires_at ? `until ${formatDate(activeBan.expires_at)}` : "forever"}
@@ -105,6 +116,8 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
         }
       />
 
+      <Flash error={error} ok={adjusted ? "Balance adjusted. It's in the pixel log." : transferred} />
+
       <StatGrid>
         <Stat label="Pixels" value={fmt(pixels)} icon="purse-fill" tone="warning" href={`/pixels?user=${user.id}`} />
         <Stat label="Approved hours" value={`${fmt(approvedHours)}h`} icon="clock" />
@@ -121,6 +134,28 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
           />
         )}
       </StatGrid>
+
+      {owner && (
+        <Card>
+          <CardHeader
+            title="Pixels"
+            icon="purse-fill"
+            action={
+              <ButtonLink href={`/pixels?user=${user.id}`} variant="ghost" size="sm" icon="history">
+                Pixel log
+              </ButtonLink>
+            }
+          />
+          <p className="hc-caption mb-4 text-sm">
+            {label} has <strong>{fmt(pixels)} pixels</strong>. Adjustments and player-to-player transfers are written
+            to the pixel log with a reason, and both sides are notified.
+          </p>
+          <div className="flex flex-col gap-3">
+            <PixelAdjustForm player={{ id: user.id, name: label }} back={`/players/${user.id}`} />
+            <PixelTransferForm player={{ id: user.id, name: label }} balance={pixels} back={`/players/${user.id}`} />
+          </div>
+        </Card>
+      )}
 
       {owner && (
         <div className="grid gap-6 lg:grid-cols-2">

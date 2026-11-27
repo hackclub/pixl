@@ -1,103 +1,42 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { adjustPixels, searchPlayers, type PlayerHit } from "@/app/actions";
+import { useState } from "react";
+import { adjustPixels } from "@/app/actions";
 import { config } from "@/app/_generated/config";
 import { ActionButton, Details, Field, Input, Textarea } from "@/app/_ui/ui";
+import { PlayerPicker } from "./PlayerPicker";
 
 // Matches the rate everywhere else pixels get converted to dollars (see
 // actions.ts, lib/db.ts).
 const PX_PER_DOLLAR = 1 / config.economy.pixelValueUsd;
 
 // Owner-only manual pixel correction: pick a player, deduct or grant whole
-// pixels with a mandatory reason. Everything lands in the ledger.
-export function PixelAdjustForm() {
-  const [player, setPlayer] = useState("");
-  const [selected, setSelected] = useState<PlayerHit | null>(null);
-  const [hits, setHits] = useState<PlayerHit[]>([]);
-  const [open, setOpen] = useState(false);
-  const [searching, setSearching] = useState(false);
+// pixels with a mandatory reason. Everything lands in the ledger. On a
+// player's own page the player is fixed, so the search box is hidden.
+export function PixelAdjustForm({
+  player,
+  back,
+}: {
+  player?: { id: string; name: string };
+  back?: string;
+}) {
   const [mode, setMode] = useState<"deduct" | "grant">("deduct");
   const [amount, setAmount] = useState("");
   const [dollars, setDollars] = useState("");
-  const boxRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (selected && player === selected.name) {
-      setOpen(false);
-      return;
-    }
-    const q = player.trim();
-    if (q.length < 2) {
-      setHits([]);
-      setOpen(false);
-      setSearching(false);
-      return;
-    }
-    setSearching(true);
-    setOpen(true);
-    const t = setTimeout(async () => {
-      try {
-        setHits(await searchPlayers(q));
-      } catch {
-        setHits([]);
-      } finally {
-        setSearching(false);
-      }
-    }, 220);
-    return () => clearTimeout(t);
-  }, [player, selected]);
-
-  useEffect(() => {
-    const onDown = (e: MouseEvent) => {
-      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, []);
 
   return (
-    <Details summary="Adjust a player's pixels (owners only)">
+    <Details summary={player ? "Add or deduct pixels" : "Adjust a player's pixels (owners only)"}>
       <form action={adjustPixels} className="flex flex-col gap-4">
-        <div className="grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
-          <Field label="Player">
-            <div ref={boxRef} className="relative">
-              {selected && <input type="hidden" name="userId" value={selected.id} />}
-              <Input
-                autoComplete="off"
-                value={player}
-                onChange={(e) => {
-                  setPlayer(e.target.value);
-                  setSelected(null);
-                }}
-                onFocus={() => hits.length > 0 && setOpen(true)}
-                placeholder="Search player"
-                required
-                className="w-full"
-              />
-              {open && (
-                <ul className="hc-select-menu">
-                  {searching && hits.length === 0 && <li className="hc-select-option hc-muted">Searching...</li>}
-                  {hits.map((h) => (
-                    <li key={h.id}>
-                      <button
-                        type="button"
-                        className="hc-select-option"
-                        onClick={() => {
-                          setSelected(h);
-                          setPlayer(h.name);
-                          setOpen(false);
-                        }}
-                      >
-                        <span className="truncate">{h.name}</span>
-                      </button>
-                    </li>
-                  ))}
-                  {!searching && hits.length === 0 && <li className="hc-select-option hc-muted">No players found.</li>}
-                </ul>
-              )}
-            </div>
-          </Field>
+        {player && <input type="hidden" name="userId" value={player.id} />}
+        {back && <input type="hidden" name="back" value={back} />}
+        <div
+          className={
+            player
+              ? "grid items-end gap-3 sm:grid-cols-[auto_auto]"
+              : "grid items-end gap-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]"
+          }
+        >
+          {!player && <PlayerPicker />}
 
           <div className="hc-segmented" role="tablist" aria-label="Direction">
             <input type="hidden" name="mode" value={mode} />

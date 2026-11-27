@@ -30,18 +30,21 @@ const REASON_LABEL: Record<string, string> = {
   operation_blackout_reverted: "Blackout reverted",
   manual_deduction: "Manual deduction",
   manual_grant: "Manual grant",
+  transfer_out: "Transfer sent",
+  transfer_in: "Transfer received",
 };
 
-const MANUAL_REASONS = new Set(["manual_grant", "manual_deduction"]);
+const NOTE_REASONS = new Set(["manual_grant", "manual_deduction", "transfer_out", "transfer_in"]);
 
-// Manual grants/deductions pack their justification into created_by as
-// "actor , note" (adjustPixels in app/actions.ts). Older rows used an em dash
-// as the separator, so both are split. The note names the transaction and the
-// By column shows just who did it.
+// Manual grants, deductions and player-to-player transfers pack their
+// justification into created_by as "actor , note" (adjustPixels and
+// transferPlayerPixels in app/actions.ts). Older rows used an em dash as the
+// separator, so both are split. The note names the transaction and the By
+// column shows just who did it.
 const BY_SEPARATORS = [" , ", ` ${String.fromCharCode(0x2014)} `];
 
 function splitBy(reason: string, createdBy: string): { actor: string; note: string } {
-  if (MANUAL_REASONS.has(reason)) {
+  if (NOTE_REASONS.has(reason)) {
     for (const sep of BY_SEPARATORS) {
       const i = createdBy.indexOf(sep);
       if (i !== -1) return { actor: createdBy.slice(0, i), note: createdBy.slice(i + sep.length) };
