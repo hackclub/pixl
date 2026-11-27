@@ -158,6 +158,15 @@ describe("public read-only project discovery", () => {
     expect(listing).toMatch(/\.select\(PUBLIC_PROJECT_COLUMNS\)\s*\.eq\("user_id", id\)\s*\.is\("archived_at"/);
   });
 
+  test("other players' authenticated profiles hide in-review projects", () => {
+    const profile = source.slice(
+      source.indexOf('router.get("/api/explore/players/:id",'),
+      source.indexOf('router.get("/api/explore/players/:id/public",'),
+    );
+    expect(profile).toContain("id !== session.userId");
+    expect(profile).toContain('.not("status", "in", [...IN_REVIEW_STATUSES])');
+  });
+
   test("public project counts include unfinished projects", () => {
     const directory = source.slice(
       source.indexOf('router.get("/api/explore/players",'),
