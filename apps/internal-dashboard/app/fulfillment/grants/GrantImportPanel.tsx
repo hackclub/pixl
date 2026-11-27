@@ -172,9 +172,10 @@ export function GrantImportPanel({ scope }: { scope: GrantScope }) {
                 {copied ? "Copied!" : "Copy bookmarklet"}
               </Button>
               <Muted className="text-xs">
-                Downloads <Mono>hcb-grants.csv</Mono> with every grant&apos;s link, name, amount, item
-                and email when visible. Read-only: it stays in your browser. Tip: filter HCB to{" "}
-                <strong>Invited</strong> first to keep the export short.
+                Downloads <Mono>hcb-grants.csv</Mono> with each grant&apos;s link, name, amount, item
+                and email when visible. It asks how many grants back from the top (default 30; 0 =
+                all) and an optional day limit. Read-only: it stays in your browser. Tip: filter HCB
+                to <strong>Invited</strong> first to keep the export short.
               </Muted>
             </div>
             <Details summary="Show the bookmarklet code (for the console)">
@@ -187,10 +188,11 @@ export function GrantImportPanel({ scope }: { scope: GrantScope }) {
               </p>
             </Details>
             <p>
-              It exports the table and tries to include each grant page&apos;s email. If HCB hides the
-              email, the row still imports and the dash matches by HCB name + exact amount + item;
-              anything ambiguous is flagged. If it says no usable grants, make sure you&apos;re on the
-              live Card grants list, not a saved HTML file.
+              It walks the table from the top and exports up to the number you choose, optionally
+              limited to the last N days (inclusive of today). It tries to include each grant
+              page&apos;s email. If HCB hides the email, the row still imports and the dash matches by
+              HCB name + exact amount + item; anything ambiguous is flagged. If it says no usable
+              grants, make sure you&apos;re on the live Card grants list, not a saved HTML file.
             </p>
           </div>
         </Details>
