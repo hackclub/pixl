@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Notice, buttonVariants, panel, wrap } from "@/components/ui/primitives";
 import { cn } from "@/lib/cn";
 import { publicQueueStats } from "@/lib/queue-stats";
+import { QueueBackLink } from "./back-link";
 
 export const metadata: Metadata = {
   title: "Queue",
@@ -70,12 +71,7 @@ function QueueFrame({ children }: { children: React.ReactNode }) {
   return (
     <main className={wrap}>
       <header className="mb-8 flex flex-wrap items-center justify-between gap-3">
-        <Link
-          href="/dashboard"
-          className="font-pixel text-[16px] font-medium tracking-[1px] text-dim hover:text-ink"
-        >
-          ← DASHBOARD
-        </Link>
+        <QueueBackLink />
         <nav className="flex flex-wrap gap-2">
           <Link href="/explore" className={buttonVariants({ variant: "ghost" })}>
             EXPLORE
