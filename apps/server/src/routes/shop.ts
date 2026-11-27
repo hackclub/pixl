@@ -748,6 +748,7 @@ router.get("/api/shop/orders", async (req, res) => {
     item_id?: number | null;
     is_grant?: boolean;
     item_flow?: boolean;
+    queue_total?: number;
   }[];
 
   // A grant is sent by email as an HCB grant, not shipped, so the Orders tab
@@ -770,6 +771,25 @@ router.get("/api/shop/orders", async (req, res) => {
       (o.item_flow !== true && typeof o.item_id === "number" && grantItemIds.has(o.item_id));
     delete o.item_id;
     delete o.item_flow;
+  }
+
+  // How many orders are waiting in the "New" queue right now: FIFO across
+  // EVERY player's pending orders, the same queue fulfillers work off in the
+  // dashboard. The player-facing API only gets the size of that queue, never
+  // an order's position in it - the queue is shared, so a position would leak
+  // other players' order activity.
+  if (orders.some((o) => o.status === "pending")) {
+    const { count, error: queueError } = await db
+      .from("shop_orders")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending");
+    if (queueError) {
+      console.error("[shop] orders queue total failed", queueError);
+    } else {
+      for (const o of orders) {
+        if (o.status === "pending") o.queue_total = count ?? 0;
+      }
+    }
   }
 
   res.json({ ok: true, orders });
