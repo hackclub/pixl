@@ -1,10 +1,18 @@
 import { markGrantSent, unclaimOrder } from "@/app/actions";
+import { GrantFundingFilter } from "./GrantFundingFilter";
 import { GrantImportPanel } from "./GrantImportPanel";
 import { GrantSelectionToolbar } from "./GrantSelectionToolbar";
 import { requirePage } from "@/lib/guard";
 import { GRANT_SCOPE_LABEL, loadGrantExportPage, parseGrantScope } from "@/lib/grantExportData";
 import { GRANT_STAGE_LABEL } from "@/lib/fulfillmentGrant";
-import { ELIGIBILITY_HINT, ELIGIBILITY_LABEL, ELIGIBILITY_SHORT, ELIGIBILITY_TONE } from "@/lib/eligibility/format";
+import {
+  ELIGIBILITY_HINT,
+  ELIGIBILITY_LABEL,
+  ELIGIBILITY_SHORT,
+  ELIGIBILITY_TONE,
+  eligibilityRisk,
+  parseEligibilityFilter,
+} from "@/lib/eligibility/format";
 import {
   ActionButton,
   Badge,
@@ -38,14 +46,45 @@ const usd = (cents: number) =>
 export default async function GrantExportPage({
   searchParams,
 }: {
-  searchParams: Promise<{ scope?: string }>;
+  searchParams: Promise<{ scope?: string; funding?: string }>;
 }) {
   const access = await requirePage("owner");
 
-  const { scope: rawScope } = await searchParams;
+  const { scope: rawScope, funding: rawFunding } = await searchParams;
   const scope = parseGrantScope(rawScope);
+  const fundingParam = typeof rawFunding === "string" ? rawFunding : "";
+  const fundingFilter = parseEligibilityFilter(fundingParam);
+  const showNotLoaded = fundingParam === "not_loaded";
+  const fundingValue = fundingFilter ?? (showNotLoaded ? "not_loaded" : "all");
   const { data, funding } = await loadGrantExportPage(scope);
   const { rows, problems, totalCents } = data;
+
+  // Least risky first: Covered -> Review -> Unverified -> Restricted ->
+  // Insufficient -> no evidence. Within a band keep the existing oldest-first
+  // order so the next order to work is at the top.
+  const visibleRows = rows
+    .filter((row) => {
+      if (showNotLoaded) return !funding.get(row.orderId);
+      if (fundingFilter) return funding.get(row.orderId)?.status === fundingFilter;
+      return true;
+    })
+    .sort((a, b) =>
+      eligibilityRisk(funding.get(a.orderId)?.status) -
+        eligibilityRisk(funding.get(b.orderId)?.status) ||
+      (a.createdAt || "").localeCompare(b.createdAt || "") ||
+      a.orderId - b.orderId,
+    );
+
+  const scopeHref = (next: "pending" | "open") => {
+    const params = new URLSearchParams();
+    if (next === "open") params.set("scope", "open");
+    if (fundingValue !== "all") params.set("funding", fundingValue);
+    const query = params.toString();
+    return `/fulfillment/grants${query ? `?${query}` : ""}`;
+  };
+  const downloadHref = `/api/fulfillment/grants/export?scope=${scope}${
+    fundingValue !== "all" ? `&funding=${encodeURIComponent(fundingValue)}` : ""
+  }`;
 
   const covered = rows.filter((row) => funding.get(row.orderId)?.status === "covered").length;
   const uncovered = rows.filter((row) => {
@@ -76,7 +115,7 @@ export default async function GrantExportPage({
 
       <div className="flex flex-wrap items-center gap-2">
         <ButtonLink
-          href="/fulfillment/grants"
+          href={scopeHref("pending")}
           variant={scope === "pending" ? "primary" : "outline"}
           size="sm"
           icon="list"
@@ -84,13 +123,14 @@ export default async function GrantExportPage({
           Unclaimed
         </ButtonLink>
         <ButtonLink
-          href="/fulfillment/grants?scope=open"
+          href={scopeHref("open")}
           variant={scope === "open" ? "primary" : "outline"}
           size="sm"
           icon="list"
         >
           Unclaimed + claimed
         </ButtonLink>
+        <GrantFundingFilter scope={scope} funding={fundingValue} />
         <Muted className="text-xs">
           {scope === "pending"
             ? "Nobody has claimed these, so no grant can have been sent yet."
@@ -132,7 +172,9 @@ export default async function GrantExportPage({
       {uncovered.length > 0 && (
         <Callout tone="warning" icon="important">
           <strong>{uncovered.length.toLocaleString("en-US")} row{uncovered.length === 1 ? " isn't" : "s aren't"} covered by verified funding.</strong>{" "}
-          They are still in the CSV so nothing is hidden, but resolve or skip them before uploading:
+          {fundingValue === "all"
+            ? "They are still in the CSV so nothing is hidden, but resolve or skip them before uploading:"
+            : "This filter downloads only the selected funding band; switch to All to include them. Resolve or skip them before uploading:"}
           <ul className="mt-1.5 list-inside list-disc">
             {uncovered.map((row) => {
               const result = funding.get(row.orderId)!;
@@ -176,10 +218,10 @@ export default async function GrantExportPage({
           <div className="flex flex-wrap items-center gap-3">
             <a
               className={buttonClass("primary")}
-              href={`/api/fulfillment/grants/export?scope=${scope}`}
+              href={downloadHref}
               download
             >
-              Download CSV ({rows.length})
+              Download CSV ({visibleRows.length})
             </a>
             <Muted className="text-xs">
               Upload in HCB → Cards → Bulk send card grants. Amounts come from each item&apos;s known face value,
@@ -190,7 +232,15 @@ export default async function GrantExportPage({
           <GrantImportPanel scope={scope} />
 
           <Card padding="flush">
-            <CardHeader title="Grants in this file" icon="payment" count={rows.length} />
+            <CardHeader
+              title={
+                visibleRows.length === rows.length
+                  ? "Grants in this file"
+                  : `Grants in this file — ${visibleRows.length} of ${rows.length}`
+              }
+              icon="payment"
+              count={visibleRows.length}
+            />
             <form
               id="grant-download-form"
               method="get"
@@ -200,9 +250,14 @@ export default async function GrantExportPage({
               <input type="hidden" name="scope" value={scope} />
               <GrantSelectionToolbar />
             </form>
-            <div id="grant-rows">
+            {visibleRows.length === 0 ? (
+              <div className="p-4">
+                <EmptyState title="No grants match this funding filter" icon="package" />
+              </div>
+            ) : (
+              <div id="grant-rows">
               <Table headers={["", "Order", "Player", "Email", "Grant", "Qty", "Amount", "Funding", "Status & send"]}>
-                {rows.map((row) => {
+                {visibleRows.map((row) => {
                   const result = funding.get(row.orderId);
                   const claimedBySomeoneElse =
                     row.status === "claimed" && row.claimedBySlack !== access.session.slackId;
@@ -229,8 +284,10 @@ export default async function GrantExportPage({
                     <td>
                       <Mono>{row.email}</Mono>
                     </td>
-                    <td>
-                      {row.itemName} {row.quantity > 1 && <Badge>{row.quantity}x</Badge>}
+                    <td className="max-w-[170px]">
+                      <span className="block truncate" title={row.itemName}>
+                        {row.itemName}
+                      </span>
                     </td>
                     <td className="tabular-nums">{row.quantity}</td>
                     <td className="tabular-nums font-bold">{usd(row.amountCents)}</td>
@@ -313,7 +370,8 @@ export default async function GrantExportPage({
                 );
                 })}
               </Table>
-            </div>
+              </div>
+            )}
           </Card>
         </>
       )}

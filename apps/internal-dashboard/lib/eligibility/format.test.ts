@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { EligibilityResult, EligibilityStatus } from "./engine";
-import { listSummary } from "./format";
+import { ELIGIBILITY_RISK_FILTERS, eligibilityRisk, listSummary } from "./format";
 
 const result = (status: EligibilityStatus, afterCents: number): EligibilityResult => ({
   status,
@@ -23,5 +23,23 @@ describe("fulfillment list summaries", () => {
   test("keeps verified shortfalls and balances visible", () => {
     expect(listSummary(result("insufficient", -250))).toBe("12.9h · short $2.50");
     expect(listSummary(result("covered", 779))).toBe("12.9h · $7.79 left");
+  });
+});
+
+describe("grant funding risk order", () => {
+  test("puts covered first and the confirmed shortfall last", () => {
+    expect(ELIGIBILITY_RISK_FILTERS).toEqual([
+      "covered",
+      "review_required",
+      "unverified",
+      "restricted",
+      "insufficient",
+    ]);
+  });
+
+  test("missing evidence sorts after the known statuses", () => {
+    expect(eligibilityRisk("covered")).toBe(0);
+    expect(eligibilityRisk("insufficient")).toBe(4);
+    expect(eligibilityRisk(undefined)).toBe(5);
   });
 });

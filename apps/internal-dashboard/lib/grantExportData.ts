@@ -2,6 +2,7 @@ import { buyerDetailsByUserId, listGrantOrdersForExport, type ShopOrderRow } fro
 import { buildGrantExport, type GrantExport } from "./grantExport";
 import { evaluateOrders } from "./eligibility/evidence";
 import type { EligibilityResult } from "./eligibility/engine";
+import { eligibilityRisk, parseEligibilityFilter } from "./eligibility/format";
 import { shipsProvider } from "./eligibility/ships";
 
 // Two views of "needs a grant":
@@ -64,4 +65,35 @@ export async function loadGrantExportPage(scope: GrantScope): Promise<GrantExpor
   const data = buildGrantExport(orders, buyers);
   const funding = await loadGrantFunding(orders);
   return { data, funding };
+}
+
+// The download follows the page's funding dropdown: same filter, same
+// least-risk-first order. The CSV's `totalCents` is recalculated for the
+// filtered rows; problems are unchanged because they were never in the file.
+export async function loadGrantExportFiltered(
+  scope: GrantScope,
+  fundingParam: string | null | undefined,
+): Promise<GrantExport> {
+  const { data, funding } = await loadGrantExportPage(scope);
+  const filter = parseEligibilityFilter(fundingParam ?? "");
+  const notLoaded = fundingParam === "not_loaded";
+
+  const rows = data.rows
+    .filter((row) => {
+      if (notLoaded) return !funding.get(row.orderId);
+      if (filter) return funding.get(row.orderId)?.status === filter;
+      return true;
+    })
+    .sort((a, b) =>
+      eligibilityRisk(funding.get(a.orderId)?.status) -
+        eligibilityRisk(funding.get(b.orderId)?.status) ||
+      (a.createdAt || "").localeCompare(b.createdAt || "") ||
+      a.orderId - b.orderId,
+    );
+
+  return {
+    ...data,
+    rows,
+    totalCents: rows.reduce((sum, row) => sum + row.amountCents, 0),
+  };
 }

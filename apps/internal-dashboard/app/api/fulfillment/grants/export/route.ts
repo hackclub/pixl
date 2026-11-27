@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { guardedRoute } from "@/lib/guard";
 import { grantCsv, selectGrantRows, type GrantExportRow } from "@/lib/grantExport";
-import { loadGrantExport, parseGrantScope } from "@/lib/grantExportData";
+import { loadGrantExportFiltered, parseGrantScope } from "@/lib/grantExportData";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +32,7 @@ export const GET = guardedRoute("api.fulfillment.grants_export", "owner", async 
     if (Number.isSafeInteger(id) && id > 0) ids.add(id);
   }
 
-  const { rows } = await loadGrantExport(scope);
+  const { rows } = await loadGrantExportFiltered(scope, url.searchParams.get("funding"));
   if (rows.length === 0) return new NextResponse("No grant rows to export.", { status: 409 });
 
   const selected = ids.size > 0 ? selectGrantRows(rows, ids) : rows;
