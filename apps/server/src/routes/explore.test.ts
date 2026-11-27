@@ -2,11 +2,13 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { db } from "../db/pgCompat.js";
 import exploreRouter, {
+  ACTIVITY_DAYS,
   EARNING_REASONS,
   IN_REVIEW_STATUSES,
   leaderboardDeps,
   MAX_SEARCH_LENGTH,
   PUBLIC_PROJECT_COLUMNS,
+  queueActivity,
   queueCounts,
   searchText,
 } from "./explore.js";
@@ -164,9 +166,16 @@ describe("public read-only project discovery", () => {
       source.indexOf('router.get("/api/explore/queue",'),
       source.indexOf('router.get("/api/explore/players",'),
     );
-    expect(queue).toContain('.select("status, project_type")');
+    expect(queue).toContain("loadQueueStats()");
     expect(queue).not.toContain("PUBLIC_PROJECT_COLUMNS");
-    expect(queue).not.toContain("shipped_at");
+    expect(queue).not.toContain("owner_name");
+
+    // The stats module fetches only status/type + verdict aggregates; raw
+    // rows never leave it. See queueActivity tests below.
+    const stats = readFileSync(new URL("../queueStats.ts", import.meta.url), "utf-8");
+    expect(stats).toContain('.select("status, project_type")');
+    expect(stats).not.toContain("PUBLIC_PROJECT_COLUMNS");
+    expect(stats).not.toContain("owner_name");
   });
 });
 
@@ -203,6 +212,79 @@ describe("queueCounts", () => {
 
   test("the in-review list matches the statuses the queue is built from", () => {
     expect([...IN_REVIEW_STATUSES]).toEqual(["shipped", "fraud_review", "second_review"]);
+  });
+});
+
+describe("queueActivity", () => {
+  const counts = {
+    total: 15,
+    waiting: { total: 12, software: 10, hardware: 2 },
+    final_checks: { total: 3, software: 3, hardware: 0 },
+  };
+  const now = Date.parse("2026-11-27T12:00:00Z");
+  const activity = queueActivity(
+    [
+      { verdict: "approved", created_at: "2026-11-27T10:00:00Z", project_type: "web" },
+      { verdict: "needs_changes", created_at: "2026-11-24T12:00:00Z", project_type: "web" },
+      { verdict: "approved", created_at: "2026-11-20T12:00:00Z", project_type: "hardware" },
+      { verdict: "first_pass_approved", created_at: "2026-11-27T11:00:00Z", project_type: "web" },
+      { verdict: "approved", created_at: "2026-11-01T12:00:00Z", project_type: "web" },
+    ],
+    counts,
+    [
+      { first_shipped_at: "2026-11-01T00:00:00Z", first_verdict: "2026-11-11T00:00:00Z" },
+      { first_shipped_at: "2026-11-01T00:00:00Z", first_verdict: "2026-11-21T00:00:00Z" },
+      { first_shipped_at: "2026-11-20T00:00:00Z", first_verdict: "2026-11-10T00:00:00Z" },
+    ],
+    now,
+  );
+
+  test("counts only final player-facing verdicts", () => {
+    expect(activity.reviewed_24h).toEqual({ approved: 1, needs_changes: 0 });
+    expect(activity.reviewed_7d).toEqual({ approved: 2, needs_changes: 1, approval_rate: 66.7 });
+  });
+
+  test("builds a dense 14-day window, oldest first", () => {
+    expect(activity.daily).toHaveLength(ACTIVITY_DAYS);
+    expect(activity.daily[0].date).toBe("2026-11-14");
+    expect(activity.daily.at(-1)).toEqual({
+      date: "2026-11-27",
+      approved: 1,
+      needs_changes: 0,
+    });
+    expect(activity.daily.find((d) => d.date === "2026-11-24")).toEqual({
+      date: "2026-11-24",
+      approved: 0,
+      needs_changes: 1,
+    });
+  });
+
+  test("derives momentum, pace and turnaround", () => {
+    expect(activity.momentum).toEqual({
+      verdicts_24h: 1,
+      avg_per_day_7d: 0.4,
+      state: "moving_fast",
+    });
+    expect(activity.pace).toEqual({
+      software: { reviews_per_day: 0.3, eta_days: 33.3 },
+      hardware: { reviews_per_day: 0.1, eta_days: 20 },
+    });
+    expect(activity.turnaround).toEqual({ median_days: 15, sample_size: 2 });
+  });
+
+  test("no reviews means no ETA or approval rate", () => {
+    const empty = queueActivity(
+      [],
+      { total: 2, waiting: { total: 2, software: 1, hardware: 1 }, final_checks: { total: 0, software: 0, hardware: 0 } },
+      [],
+      now,
+    );
+    expect(empty.reviewed_7d.approval_rate).toBeNull();
+    expect(empty.pace.software.eta_days).toBeNull();
+    expect(empty.pace.hardware.eta_days).toBeNull();
+    expect(empty.turnaround).toBeNull();
+    expect(empty.momentum.state).toBe("stalled");
+    expect(empty.daily).toHaveLength(ACTIVITY_DAYS);
   });
 });
 

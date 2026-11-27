@@ -90,9 +90,16 @@ export function requireServiceKey(
 // only when Pixo actually starts using it.
 export const PIXO_ADMIN_ROUTES: ReadonlySet<string> = new Set<string>();
 
+// Routes the player-facing dashboard is allowed to call with its own service
+// key. Currently just the aggregate review-queue stats it renders on /queue.
+export const PIXL_DASHBOARD_ADMIN_ROUTES: ReadonlySet<string> = new Set<string>(["GET /queue"]);
+
 export function adminCallers(req: Request): readonly ServiceName[] {
   const route = `${req.method.toUpperCase()} ${req.path.toLowerCase().replace(/\/+$/, "")}`;
-  return PIXO_ADMIN_ROUTES.has(route) ? ["internal-dashboard", "pixo"] : ["internal-dashboard"];
+  const callers: ServiceName[] = ["internal-dashboard"];
+  if (PIXL_DASHBOARD_ADMIN_ROUTES.has(route)) callers.push("pixl-dashboard");
+  if (PIXO_ADMIN_ROUTES.has(route)) callers.push("pixo");
+  return callers;
 }
 
 // Mounted with app.use("/api/admin", ...) so it shares Express's own

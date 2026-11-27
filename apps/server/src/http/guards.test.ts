@@ -53,6 +53,7 @@ beforeAll(async () => {
     (req, res) => res.json({ ok: true, body: req.body, id: req.params.id }),
   );
   app.get("/api/admin/online", (req, res) => res.json({ ok: true, service: req.service }));
+  app.get("/api/admin/queue", (req, res) => res.json({ ok: true, service: req.service }));
   server = createServer(app);
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -233,6 +234,17 @@ describe("service keys", () => {
     await flush();
     expect(audits.some((a) => a.action === "auth.service_key_rejected")).toBe(true);
     expect(audits.some((a) => a.action === "http.get" && a.actor_type === "service" && a.target === "/api/admin/online")).toBe(true);
+  });
+
+  test("the player dashboard key can read only the queue stats route", async () => {
+    const call = (key: string) =>
+      fetch(`${base}/api/admin/queue`, { headers: { "x-pixl-service-key": key } });
+    const ok = await call(DASH_KEY);
+    expect(ok.status).toBe(200);
+    expect(((await ok.json()) as { service: string }).service).toBe("pixl-dashboard");
+    expect((await call(INTERNAL_KEY)).status).toBe(200);
+    expect((await call(PIXO_KEY)).status).toBe(403);
+    expect((await fetch(`${base}/api/admin/queue`)).status).toBe(401);
   });
 });
 
