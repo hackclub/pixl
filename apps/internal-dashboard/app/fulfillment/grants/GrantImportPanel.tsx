@@ -18,7 +18,7 @@ import {
 } from "@/app/_ui/ui";
 import { markImportedGrants, previewGrantImport } from "@/app/actions";
 import { HCB_GRANTS_BOOKMARKLET } from "@/lib/hcbGrantBookmarklet";
-import type { GrantImportPreview } from "@/lib/grantImport";
+import { grantLinkFromId, type GrantImportPreview } from "@/lib/grantImport";
 
 type GrantScope = "pending" | "open";
 
@@ -83,7 +83,9 @@ export function GrantImportPanel({ scope }: { scope: GrantScope }) {
           return;
         }
         setPreview(out.preview);
-        setSelected(new Set(out.preview.matches.map((row) => row.orderId)));
+        // Duplicate/ambiguous rows start unchecked; the warning above lists
+        // every grant so the owner has to choose which one is real.
+        setSelected(new Set(out.preview.matches.filter((row) => !row.note).map((row) => row.orderId)));
         setResult(null);
         setError("");
       } catch (e) {
@@ -278,6 +280,18 @@ export function GrantImportPanel({ scope }: { scope: GrantScope }) {
             {preview.warnings.map((warning) => (
               <Callout key={warning.orderIds.join(",")} tone="warning" icon="important">
                 <strong>Orders {warning.orderIds.map((id) => `#${id}`).join(", ")}:</strong> {warning.reason}
+                {warning.grantIds && warning.grantIds.length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                    {warning.grantIds.map((id) => {
+                      const link = grantLinkFromId(id);
+                      return link ? (
+                        <TextLink key={id} href={link} external>
+                          <Mono>{id}</Mono>
+                        </TextLink>
+                      ) : null;
+                    })}
+                  </div>
+                )}
               </Callout>
             ))}
 

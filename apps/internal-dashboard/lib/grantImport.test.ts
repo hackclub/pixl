@@ -237,6 +237,22 @@ describe("matchGrantsToOrders", () => {
     expect(preview.matches).toHaveLength(1);
   });
 
+  test("flags two grants for one order instead of silently dropping one", () => {
+    const preview = matchGrantsToOrders(
+      [order()],
+      [
+        grant({ id: "cdg_a", hash: "a" }),
+        grant({ id: "cdg_b", hash: "b" }),
+      ],
+    );
+    expect(preview.matches).toHaveLength(1);
+    expect(preview.matches[0]?.note).not.toBe("");
+    expect(preview.warnings).toHaveLength(1);
+    expect(preview.warnings[0]?.grantIds).toEqual(["cdg_a", "cdg_b"]);
+    expect(preview.warnings[0]?.reason).toContain("more grants than orders");
+    expect(preview.unusedGrants.map((g) => g.grantId)).toEqual(["cdg_b"]);
+  });
+
   test("never reuses a grant already recorded on another order", () => {
     const preview = matchGrantsToOrders(
       [order()],

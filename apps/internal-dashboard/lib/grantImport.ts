@@ -73,6 +73,8 @@ export interface GrantImportMatch {
 
 export interface GrantImportWarning {
   orderIds: number[];
+  /** Grants in the ambiguous group, so the owner can open each one. */
+  grantIds?: string[];
   reason: string;
 }
 
@@ -620,6 +622,7 @@ function matchNameGrants(orders: GrantImportOrder[], grants: HcbGrant[]): NamePa
     if (named.length > 0) {
       warnings.push({
         orderIds: named.map((candidate) => candidate.order.orderId),
+        grantIds: [grant.id],
         reason: `HCB grant ${grant.id} matches ${named.length} remaining order(s) by name and amount. Pick one by hand.`,
       });
     } else {
@@ -627,6 +630,7 @@ function matchNameGrants(orders: GrantImportOrder[], grants: HcbGrant[]): NamePa
       if (byItem.length > 0) {
         warnings.push({
           orderIds: byItem.map((candidate) => candidate.order.orderId),
+          grantIds: [grant.id],
           reason: `HCB grant ${grant.id} has no name match but ${byItem.length === 1 ? "one remaining order matches" : `${byItem.length} remaining orders match`} its amount/item. Pick one by hand.`,
         });
       }
@@ -800,7 +804,12 @@ export function matchGrantsToOrders(
     if (groupOrders.length > 1 || groupGrants.length > 1) {
       warnings.push({
         orderIds: groupOrders.map((order) => order.orderId),
-        reason: `${groupOrders.length} order(s) and ${groupGrants.length} grant(s) share the same buyer email and amount. They were paired oldest-first; check each link before marking.`,
+        grantIds: groupGrants.map((grant) => grant.id),
+        reason:
+          `${groupOrders.length} order(s) and ${groupGrants.length} grant(s) share the same buyer email and amount.` +
+          (groupGrants.length > groupOrders.length
+            ? " There are more grants than orders — check which grant is real before marking."
+            : " They were paired oldest-first; check each link before marking."),
       });
     }
   }
