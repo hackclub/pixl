@@ -120,6 +120,7 @@ describe("public route list", () => {
       "GET /api/shop/item/:id/public",
       "GET /api/explore/players",
       "GET /api/explore/players/:id/public",
+      "GET /api/explore/queue",
       "GET /api/explore/projects",
       "GET /api/explore/projects/:id",
       "* /api/forms/*",
@@ -132,6 +133,7 @@ describe("public route list", () => {
     expect(isPublicRoute("POST", "/auth/exchange")).toBe(true);
     expect(isPublicRoute("GET", "/api/journals/public/12/abc")).toBe(true);
     expect(isPublicRoute("GET", "/api/explore/players/u1/public")).toBe(true);
+    expect(isPublicRoute("GET", "/api/explore/queue")).toBe(true);
     expect(isPublicRoute("GET", "/api/explore/projects")).toBe(true);
     expect(isPublicRoute("GET", "/api/explore/projects/644")).toBe(true);
     expect(isPublicRoute("POST", "/api/forms/review/submit")).toBe(true);

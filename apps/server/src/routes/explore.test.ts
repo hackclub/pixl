@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { db } from "../db/pgCompat.js";
-import exploreRouter, { EARNING_REASONS, leaderboardDeps, MAX_SEARCH_LENGTH, PUBLIC_PROJECT_COLUMNS, searchText } from "./explore.js";
+import exploreRouter, {
+  EARNING_REASONS,
+  IN_REVIEW_STATUSES,
+  leaderboardDeps,
+  MAX_SEARCH_LENGTH,
+  PUBLIC_PROJECT_COLUMNS,
+  queueCounts,
+  searchText,
+} from "./explore.js";
 
 // Same catalog projects.ts's toPlayerProject keeps off player-facing
 // responses - reviewer identity/notes, ban/hold, Robert/fraud, internal IDs,
@@ -106,9 +114,10 @@ describe("every public projects-table query in explore.ts uses the allowlist", (
   });
 });
 
-// PIXL intentionally exposes unfinished projects read-only in Explore.
-// Keep the public column allowlist above: discoverability must not expose
-// reviewer, fraud, or other internal fields.
+// PIXL intentionally exposes unfinished projects read-only in Explore, but
+// never the shared review queue: status + shipped_at + review history lets a
+// crawler rebuild the exact queue order (ReviewQ). The amount in the queue is
+// still public through /api/explore/queue, without any identity or ordering.
 describe("public read-only project discovery", () => {
   const source = readFileSync(new URL("./explore.ts", import.meta.url), "utf-8");
 
@@ -123,13 +132,21 @@ describe("public read-only project discovery", () => {
     expect(list).toContain('else if (shipped === "unshipped") query = query.neq("status", "approved")');
   });
 
+  test("the public project list hides every in-review status", () => {
+    const list = source.slice(
+      source.indexOf('router.get("/api/explore/projects",'),
+      source.indexOf('router.get("/api/explore/projects/:id",'),
+    );
+    expect(list).toContain('.not("status", "in", [...IN_REVIEW_STATUSES])');
+  });
+
   test("read-only project links and player lists do not require approval", () => {
     const single = source.slice(source.indexOf('router.get("/api/explore/projects/:id",'));
     const listing = source.slice(
       source.indexOf('router.get("/api/explore/players/:id",'),
       source.indexOf('router.get("/api/explore/players/:id/public",'),
     );
-    expect(single).toMatch(/\.select\(PUBLIC_PROJECT_COLUMNS\)\s*\.eq\("id", id\)\s*\.is\("archived_at"/);
+    expect(single).toMatch(/\.select\(PUBLIC_PROJECT_COLUMNS\)\s*\.eq\("id", id\)\s*\.not\("status", "in", \[\.\.\.IN_REVIEW_STATUSES\]\)\s*\.is\("archived_at"/);
     expect(listing).toMatch(/\.select\(PUBLIC_PROJECT_COLUMNS\)\s*\.eq\("user_id", id\)\s*\.is\("archived_at"/);
   });
 
@@ -139,6 +156,52 @@ describe("public read-only project discovery", () => {
       source.indexOf('router.get("/api/explore/leaderboard",'),
     );
     expect(directory).toMatch(/\.select\("user_id"\)\s*\.is\("archived_at"/);
+  });
+
+  test("the public queue endpoint exposes only aggregate counts", () => {
+    const queue = source.slice(
+      source.indexOf('router.get("/api/explore/queue",'),
+      source.indexOf('router.get("/api/explore/players",'),
+    );
+    expect(queue).toContain('.select("status, project_type")');
+    expect(queue).not.toContain("PUBLIC_PROJECT_COLUMNS");
+    expect(queue).not.toContain("shipped_at");
+  });
+});
+
+describe("queueCounts", () => {
+  test("splits first-pass and final checks by software/hardware", () => {
+    expect(
+      queueCounts([
+        { status: "shipped", project_type: "web" },
+        { status: "shipped", project_type: "cad" },
+        { status: "shipped", project_type: null },
+        { status: "fraud_review", project_type: "hardware" },
+        { status: "second_review", project_type: "python" },
+      ]),
+    ).toEqual({
+      total: 5,
+      waiting: { total: 3, software: 2, hardware: 1 },
+      final_checks: { total: 2, software: 1, hardware: 1 },
+    });
+  });
+
+  test("ignores statuses that are not waiting on review", () => {
+    expect(
+      queueCounts([
+        { status: "draft", project_type: "web" },
+        { status: "needs_changes", project_type: "web" },
+        { status: "approved", project_type: "web" },
+      ]),
+    ).toEqual({
+      total: 0,
+      waiting: { total: 0, software: 0, hardware: 0 },
+      final_checks: { total: 0, software: 0, hardware: 0 },
+    });
+  });
+
+  test("the in-review list matches the statuses the queue is built from", () => {
+    expect([...IN_REVIEW_STATUSES]).toEqual(["shipped", "fraud_review", "second_review"]);
   });
 });
 
