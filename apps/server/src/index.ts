@@ -36,6 +36,7 @@ import { rateLimit } from "./rateLimit.js";
 import { originGuard } from "./http/origins.js";
 import { adminServiceGate } from "./http/serviceKeys.js";
 import { auditApiRequests, authGate } from "./http/gate.js";
+import { blockQueueCrawlers } from "./http/queueCrawlers.js";
 import { rateLimitKeyFor } from "./http/clientKey.js";
 import { attachWebSocketServer } from "./ws/gameServer.js";
 import { startLittleGuyForwarder } from "./littleGuy.js";
@@ -52,6 +53,9 @@ app.set("trust proxy", 1);
 // Security headers + origin allowlist (http/origins.ts). Only
 // config.urls.site/play/dash get CORS; any other Origin is a 403.
 app.use(originGuard());
+// Known unofficial queue crawlers. Cheap to check, and it keeps them from
+// hammering the per-id probe path while the public data they used is gone.
+app.use(blockQueueCrawlers());
 
 // Keyed per player for authenticated calls, per client IP otherwise (see
 // http/clientKey.ts).

@@ -5,6 +5,8 @@ import { activeEvents } from "../events.js";
 import { approvedHoursFor, lifetimeRe, levelForRe } from "../xp.js";
 import { REFERRAL_WINDOW_HOURS } from "./referral.js";
 import { IN_REVIEW_STATUSES, cachedQueueStats } from "../queueStats.js";
+import { optionalSession } from "../http/requireSession.js";
+import { rateLimit } from "../rateLimit.js";
 
 // Re-exported for the route tests and any route that wants the same aggregates.
 export { ACTIVITY_DAYS, queueActivity, queueCounts } from "../queueStats.js";
@@ -29,9 +31,17 @@ export const leaderboardDeps = {
 };
 const LEADERBOARD_SIZE = 25;
 
+// A human opening shared project links will never hit this; a crawler probing
+// every project id at a few requests per second will.
+const projectReadLimiter = rateLimit({
+  windowMs: 60_000,
+  max: 60,
+  name: "explore_project_read",
+});
+
 // #public-safe-only, no ban_reason/review_note/system_note/airtable_record_id etc
 export const PUBLIC_PROJECT_COLUMNS =
-  "id, user_id, name, description, project_type, level, status, image_url, repo_url, demo_url, shipped_at, first_shipped_at, created_at, hackatime_seconds, is_peak";
+  "id, user_id, name, description, project_type, level, status, image_url, repo_url, demo_url, shipped_at, created_at, hackatime_seconds, is_peak";
 
 // Session-gated (not in publicRoutes.ts). Only aggregate queue size and
 // review pace, never which projects are in it or where they sit - see
@@ -464,7 +474,7 @@ router.get("/api/explore/players/:id/public", async (req, res) => {
 // IN_REVIEW_STATUSES); callers can still read the queue size from
 // /api/explore/queue.
 // #public, token optional (just for has_upvoted)
-router.get("/api/explore/projects", async (req, res) => {
+router.get("/api/explore/projects", optionalSession(), async (req, res) => {
   const session = req.session;
 
   const q = searchText(req.query.q);
@@ -531,7 +541,7 @@ router.get("/api/explore/projects", async (req, res) => {
 // like deleted/archived ones: owners and collaborators still see them through
 // the authenticated project routes, but the public API never reveals queue
 // membership, ship timing or review history while they wait.
-router.get("/api/explore/projects/:id", async (req, res) => {
+router.get("/api/explore/projects/:id", projectReadLimiter, optionalSession(), async (req, res) => {
   const session = req.session;
 
   const id = Number(req.params.id);
@@ -565,15 +575,17 @@ router.get("/api/explore/projects/:id", async (req, res) => {
       .select("voter_id")
       .eq("project_id", id),
     // Final player-facing verdicts only, with the same note and hours the
-    // owner sees on their own timeline. The reviewer identity and every
-    // intermediate verdict (first-pass proposals, ban proposals, fraud
-    // review) stay internal to the dashboard.
-    db
-      .from("review_audits")
-      .select("verdict, note, claimed_hours, approved_hours, created_at")
-      .eq("project_id", id)
-      .in("verdict", ["approved", "needs_changes"])
-      .order("created_at", { ascending: true }),
+    // owner sees on their own timeline. Anonymous visitors get no review
+    // history at all: those dates are exactly what unofficial queue trackers
+    // scrape to draw verdict activity. Signed-in players still see it.
+    session
+      ? db
+          .from("review_audits")
+          .select("verdict, note, claimed_hours, approved_hours, created_at")
+          .eq("project_id", id)
+          .in("verdict", ["approved", "needs_changes"])
+          .order("created_at", { ascending: true })
+      : Promise.resolve({ data: [] as Record<string, unknown>[], error: null }),
     db
       .from("projects")
       .select("approved_hours")

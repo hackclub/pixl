@@ -49,6 +49,17 @@ function rejectSession(req: Request, res: Response, reason: string): void {
   res.status(401).json({ ok: false, error: "unauthorized" });
 }
 
+function attachSession(req: Request, session: VerifiedSession): void {
+  req.session = {
+    userId: session.userId,
+    displayName: session.displayName,
+    client: session.client,
+    ...(session.slackId ? { slackId: session.slackId } : {}),
+    iat: session.iat,
+    ...(session.exp !== undefined ? { exp: session.exp } : {}),
+  };
+}
+
 export function verifyBearer(deps: RequireSessionDeps = {}): RequestHandler {
   const verify = deps.verify ?? verifySessionToken;
   return (req: Request, res: Response, next: NextFunction): void => {
@@ -56,14 +67,24 @@ export function verifyBearer(deps: RequireSessionDeps = {}): RequestHandler {
     if (!token) return rejectSession(req, res, "missing_token");
     const session = verify(token);
     if (!session) return rejectSession(req, res, "invalid_token");
-    req.session = {
-      userId: session.userId,
-      displayName: session.displayName,
-      client: session.client,
-      ...(session.slackId ? { slackId: session.slackId } : {}),
-      iat: session.iat,
-      ...(session.exp !== undefined ? { exp: session.exp } : {}),
-    };
+    attachSession(req, session);
+    next();
+  };
+}
+
+/**
+ * For public, read-only routes that personalize when a session is present but
+ * must keep working without one. Unlike requireSession, a missing or invalid
+ * token is simply anonymous; it does not run the revocation/ban lookups
+ * because the route is already safe for anyone.
+ */
+export function optionalSession(deps: RequireSessionDeps = {}): RequestHandler {
+  const verify = deps.verify ?? verifySessionToken;
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    const token = bearerToken(req);
+    if (!token) return next();
+    const session = verify(token);
+    if (session) attachSession(req, session);
     next();
   };
 }
