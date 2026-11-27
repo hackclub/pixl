@@ -192,6 +192,8 @@ describe("queueCounts", () => {
     ).toEqual({
       total: 5,
       waiting: { total: 3, software: 2, hardware: 1 },
+      fraud_review: { total: 1, software: 0, hardware: 1 },
+      second_review: { total: 1, software: 1, hardware: 0 },
       final_checks: { total: 2, software: 1, hardware: 1 },
     });
   });
@@ -206,6 +208,8 @@ describe("queueCounts", () => {
     ).toEqual({
       total: 0,
       waiting: { total: 0, software: 0, hardware: 0 },
+      fraud_review: { total: 0, software: 0, hardware: 0 },
+      second_review: { total: 0, software: 0, hardware: 0 },
       final_checks: { total: 0, software: 0, hardware: 0 },
     });
   });
@@ -219,6 +223,8 @@ describe("queueActivity", () => {
   const counts = {
     total: 15,
     waiting: { total: 12, software: 10, hardware: 2 },
+    fraud_review: { total: 3, software: 3, hardware: 0 },
+    second_review: { total: 0, software: 0, hardware: 0 },
     final_checks: { total: 3, software: 3, hardware: 0 },
   };
   const now = Date.parse("2026-11-27T12:00:00Z");
@@ -275,7 +281,13 @@ describe("queueActivity", () => {
   test("no reviews means no ETA or approval rate", () => {
     const empty = queueActivity(
       [],
-      { total: 2, waiting: { total: 2, software: 1, hardware: 1 }, final_checks: { total: 0, software: 0, hardware: 0 } },
+      {
+        total: 2,
+        waiting: { total: 2, software: 1, hardware: 1 },
+        fraud_review: { total: 0, software: 0, hardware: 0 },
+        second_review: { total: 0, software: 0, hardware: 0 },
+        final_checks: { total: 0, software: 0, hardware: 0 },
+      },
       [],
       now,
     );
