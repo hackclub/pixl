@@ -81,6 +81,8 @@ if (!adminUrl) {
       expect(stats.queue).toEqual({
         total: 3,
         waiting: { total: 2, software: 1, hardware: 1 },
+        fraud_review: { total: 0, software: 0, hardware: 0 },
+        second_review: { total: 1, software: 0, hardware: 1 },
         final_checks: { total: 1, software: 0, hardware: 1 },
       });
       expect(stats.activity.reviewed_24h).toEqual({ approved: 1, needs_changes: 0 });

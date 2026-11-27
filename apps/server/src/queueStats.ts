@@ -17,7 +17,11 @@ export interface QueueCounts {
   total: number;
   /** Waiting for their first review. */
   waiting: { total: number; software: number; hardware: number };
-  /** Passed first review, waiting on the fraud check or spot check. */
+  /** Waiting on the fraud review. */
+  fraud_review: { total: number; software: number; hardware: number };
+  /** Passed first review and waiting on the second/spot check. */
+  second_review: { total: number; software: number; hardware: number };
+  /** fraud_review + second_review, kept as one bucket for older clients. */
   final_checks: { total: number; software: number; hardware: number };
 }
 
@@ -49,20 +53,34 @@ export function queueCounts(
   rows: { status?: string | null; project_type?: string | null }[],
 ): QueueCounts {
   const waiting = { total: 0, software: 0, hardware: 0 };
-  const final_checks = { total: 0, software: 0, hardware: 0 };
+  const fraud_review = { total: 0, software: 0, hardware: 0 };
+  const second_review = { total: 0, software: 0, hardware: 0 };
   for (const row of rows) {
     const bucket =
       row.status === "shipped"
         ? waiting
-        : row.status === "fraud_review" || row.status === "second_review"
-          ? final_checks
-          : null;
+        : row.status === "fraud_review"
+          ? fraud_review
+          : row.status === "second_review"
+            ? second_review
+            : null;
     if (!bucket) continue;
     bucket.total += 1;
     if (row.project_type && HARDWARE_PROJECT_TYPES.has(row.project_type)) bucket.hardware += 1;
     else bucket.software += 1;
   }
-  return { total: waiting.total + final_checks.total, waiting, final_checks };
+  const final_checks = {
+    total: fraud_review.total + second_review.total,
+    software: fraud_review.software + second_review.software,
+    hardware: fraud_review.hardware + second_review.hardware,
+  };
+  return {
+    total: waiting.total + final_checks.total,
+    waiting,
+    fraud_review,
+    second_review,
+    final_checks,
+  };
 }
 
 function timeMs(value: string | Date | null | undefined): number | null {
