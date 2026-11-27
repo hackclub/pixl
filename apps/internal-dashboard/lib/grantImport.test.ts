@@ -26,12 +26,16 @@ const grant = (over: Partial<HcbGrant> = {}): HcbGrant => ({
   id: "cdg_abc",
   hash: "abc",
   email: "ada@example.com",
+  name: "",
   amountCents: 1000,
   purpose: "Hardware Grant",
   status: "active",
   createdAt: "2026-11-02T00:00:00.000Z",
   ...over,
 });
+
+const nameGrant = (over: Partial<HcbGrant> = {}): HcbGrant =>
+  grant({ email: "", name: "Ada L", ...over });
 
 const cliGrant = (over: Record<string, unknown> = {}) => ({
   id: "cdg_abc",
@@ -71,6 +75,7 @@ describe("parseHcbGrantsJson", () => {
         id: "cdg_abc",
         hash: "abc",
         email: "ada@example.com",
+        name: "",
         amountCents: 1000,
         purpose: "Hardware Grant",
         status: "active",
@@ -170,9 +175,25 @@ describe("parseHcbGrantsCsv", () => {
     expect(parsed.error).toContain("no grant_link");
   });
 
-  test("explains missing emails", () => {
+  test("accepts the bookmarklet's name-only rows", () => {
+    const csv = [
+      "email,amount_cents,purpose,grant_link,created_at,status,name",
+      ',3000,Hardware Grant,https://hcb.hackclub.com/grants/ellie,2026-11-27,Invited,Ellie',
+    ].join("\n");
+    const parsed = parseHcbGrantsCsv(csv);
+    expect(parsed.error).toBe("");
+    expect(parsed.grants[0]).toMatchObject({
+      id: "cdg_ellie",
+      email: "",
+      name: "Ellie",
+      amountCents: 3000,
+      purpose: "Hardware Grant",
+    });
+  });
+
+  test("requires an email or name column", () => {
     const parsed = parseHcbGrantsCsv("amount_cents,grant_link\n1000,https://hcb.hackclub.com/grants/a\n");
-    expect(parsed.error).toContain("no email");
+    expect(parsed.error).toContain("email or recipient name");
   });
 
   test("rejects JSON in the CSV path", () => {
@@ -294,6 +315,74 @@ describe("matchGrantsToOrders", () => {
     const extras = matchGrantsToOrders([order()], [grant({ id: "cdg_one", hash: "one" }), grant({ id: "cdg_two", hash: "two" })]);
     expect(extras.matches).toHaveLength(1);
     expect(extras.unusedGrants.map((g) => g.grantId)).toEqual(["cdg_two"]);
+  });
+
+  test("matches a bookmarklet row by HCB name + amount + item", () => {
+    const preview = matchGrantsToOrders(
+      [order({ orderId: 473, playerName: "Ellie Wen", amountCents: 3000, itemName: "Hardware Grant", createdAt: "2026-11-26T00:00:00.000Z" })],
+      [nameGrant({ id: "cdg_ellie", hash: "ellie", name: "Ellie", amountCents: 3000, purpose: "Hardware Grant", createdAt: "2026-11-27T00:00:00.000Z" })],
+    );
+    expect(preview.matches).toHaveLength(1);
+    expect(preview.matches[0]).toMatchObject({
+      orderId: 473,
+      grantId: "cdg_ellie",
+      grantLink: "https://hcb.hackclub.com/grants/ellie",
+      hcbName: "Ellie",
+    });
+    expect(preview.matches[0]?.note).toContain("HCB name");
+  });
+
+  test("matches a first name + last initial against the full name", () => {
+    const preview = matchGrantsToOrders(
+      [order({ playerName: "Dániel Tóth", amountCents: 1500, itemName: "Smolhaj" })],
+      [nameGrant({ name: "Dániel T", amountCents: 1500, purpose: "Smolhaj" })],
+    );
+    expect(preview.matches).toHaveLength(1);
+  });
+
+  test("matches a username that contains both name parts", () => {
+    const preview = matchGrantsToOrders(
+      [order({ playerName: "Suhani Sehrawat", amountCents: 1000, itemName: "Art Supply Grant" })],
+      [nameGrant({ name: "suhanisehrawatcute", amountCents: 1000, purpose: "Art Supply Grant" })],
+    );
+    expect(preview.matches).toHaveLength(1);
+  });
+
+  test("leaves two same-name orders ambiguous instead of guessing", () => {
+    const preview = matchGrantsToOrders(
+      [
+        order({ orderId: 1, playerName: "Ellie Wen", amountCents: 3000, itemName: "Hardware Grant" }),
+        order({ orderId: 2, playerName: "Ellie Wen", amountCents: 3000, itemName: "Hardware Grant" }),
+      ],
+      [nameGrant({ name: "Ellie", amountCents: 3000, purpose: "Hardware Grant" })],
+    );
+    expect(preview.matches).toEqual([]);
+    expect(preview.unusedGrants).toHaveLength(1);
+    expect(preview.warnings[0]?.orderIds).toEqual([1, 2]);
+  });
+
+  test("does not auto-pair on amount/item alone", () => {
+    const preview = matchGrantsToOrders(
+      [order({ playerName: "Ellie Wen", amountCents: 3000, itemName: "Hardware Grant" })],
+      [nameGrant({ name: "Unknown Person", amountCents: 3000, purpose: "Hardware Grant" })],
+    );
+    expect(preview.matches).toEqual([]);
+    expect(preview.unusedGrants).toHaveLength(1);
+    expect(preview.warnings[0]?.orderIds).toEqual([1]);
+    expect(preview.warnings[0]?.reason).toContain("amount/item");
+  });
+
+  test("does not guess when several orders share the amount and item", () => {
+    const preview = matchGrantsToOrders(
+      [
+        order({ orderId: 1, playerName: "Ellie Wen", amountCents: 3000, itemName: "Hardware Grant" }),
+        order({ orderId: 2, playerName: "Dániel Tóth", amountCents: 3000, itemName: "Hardware Grant" }),
+      ],
+      [nameGrant({ name: "Unknown Person", amountCents: 3000, purpose: "Hardware Grant" })],
+    );
+    expect(preview.matches).toEqual([]);
+    expect(preview.unusedGrants).toHaveLength(1);
+    expect(preview.warnings[0]?.orderIds).toEqual([1, 2]);
   });
 
   test("returns only safe fields for the client", () => {

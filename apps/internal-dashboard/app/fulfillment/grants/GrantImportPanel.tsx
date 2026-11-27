@@ -150,10 +150,10 @@ export function GrantImportPanel({ scope }: { scope: GrantScope }) {
       <CardHeader title="Import HCB grants" icon="payment" />
       <div className="flex flex-col gap-3 p-4">
         <p className="text-sm">
-          The bulk upload page only sends the grants; it never returns their links. The links show up
-          afterward on HCB&apos;s <strong>Card grants</strong> list. Option A reads that list for you;
-          Option B gets the same data from the CLI. Either file fills the link and amount here, then
-          you review and mark them sent in one click.
+          The bulk upload page only sends the grants; it never returns their links. The bookmarklet
+          below exports HCB&apos;s <strong>Card grants</strong> table — link, recipient name, amount and
+          item, plus the email when HCB shows it. This page matches by email first, then by HCB name +
+          amount + item. No CLI or OAuth app is required. Review the matches, then mark them sent.
         </p>
 
         <Details summary="Option A — no CLI: download the grants CSV with a bookmarklet">
@@ -172,8 +172,9 @@ export function GrantImportPanel({ scope }: { scope: GrantScope }) {
                 {copied ? "Copied!" : "Copy bookmarklet"}
               </Button>
               <Muted className="text-xs">
-                It asks how many days back to include, then downloads <Mono>hcb-grants.csv</Mono>.
-                Read-only: it stays in your browser and only reads pages you can already see.
+                Downloads <Mono>hcb-grants.csv</Mono> with every grant&apos;s link, name, amount, item
+                and email when visible. Read-only: it stays in your browser. Tip: filter HCB to{" "}
+                <strong>Invited</strong> first to keep the export short.
               </Muted>
             </div>
             <Details summary="Show the bookmarklet code (for the console)">
@@ -186,34 +187,23 @@ export function GrantImportPanel({ scope }: { scope: GrantScope }) {
               </p>
             </Details>
             <p>
-              Tip: filter HCB to <strong>Invited</strong> first, so it only fetches emails for grants
-              that haven&apos;t been used yet. The export uses the recipient email from each grant
-              page, matching the CLI. If it says no emails were visible, you&apos;re not signed in to
-              an account that can see the org&apos;s grants.
+              It exports the table and tries to include each grant page&apos;s email. If HCB hides the
+              email, the row still imports and the dash matches by HCB name + exact amount + item;
+              anything ambiguous is flagged. If it says no usable grants, make sure you&apos;re on the
+              live Card grants list, not a saved HTML file.
             </p>
           </div>
         </Details>
 
-        <Details summary="Option B — official HCB CLI (grants.json)">
+        <Details summary="Optional: if you already have the CLI's grants.json">
           <div className="flex flex-col gap-2 text-sm">
             <p>
-              Install the official HCB CLI once, sign in with your own HCB account, and export this
-              organization&apos;s grants:
+              A CLI export includes the recipient emails, so it matches even more safely. Drop it below
+              like the CSV. The CLI is read-only and needs no OAuth app.
             </p>
             <pre className="hc-code whitespace-pre-wrap">
-{`brew tap hackclub/hcb-cli-and-mcp https://github.com/hackclub/hcb-cli-and-mcp
-brew install hcb
-hcb login
-hcb orgs                              # confirms the org slug
-hcb grants --org ysws-pixl > grants.json`}
+{`hcb grants --org ysws-pixl > grants.json`}
             </pre>
-            <p>
-              The CLI is read-only and does not move money or need an OAuth app. Source and docs:{" "}
-              <TextLink href="https://github.com/hackclub/hcb-cli-and-mcp" external>
-                hackclub/hcb-cli-and-mcp
-              </TextLink>
-              .
-            </p>
           </div>
         </Details>
 
@@ -303,6 +293,35 @@ hcb grants --org ysws-pixl > grants.json`}
               </Callout>
             )}
 
+            {preview.unusedGrants.length > 0 && (
+              <Details summary={`Unmatched HCB grants (${preview.unusedGrants.length})`}>
+                <p className="text-xs">
+                  These grants had no confident order match. If one is obviously right, copy its link
+                  into that order&apos;s <strong>Mark sent</strong> form below, or check the HCB name and
+                  amount against the order page.
+                </p>
+                <Table headers={["Date", "Amount", "Item", "HCB name", "Grant"]}>
+                  {preview.unusedGrants.map((grant) => (
+                    <tr key={grant.grantId}>
+                      <td>
+                        {grant.createdAt
+                          ? new Date(grant.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                          : "—"}
+                      </td>
+                      <td className="tabular-nums font-bold">{usd(grant.amountCents)}</td>
+                      <td>{grant.purpose || "—"}</td>
+                      <td>{grant.hcbName || "—"}</td>
+                      <td>
+                        <TextLink href={grant.grantLink} external>
+                          <Mono>{grant.grantId}</Mono>
+                        </TextLink>
+                      </td>
+                    </tr>
+                  ))}
+                </Table>
+              </Details>
+            )}
+
             {preview.matches.length > 0 ? (
               <>
                 <Table
@@ -346,7 +365,12 @@ hcb grants --org ysws-pixl > grants.json`}
                           #{row.orderId}
                         </TextLink>
                       </td>
-                      <td>{row.playerName}</td>
+                      <td>
+                        {row.playerName}
+                        {row.hcbName && (
+                          <Muted className="block text-xs">HCB: {row.hcbName}</Muted>
+                        )}
+                      </td>
                       <td>
                         {row.itemName} {row.quantity > 1 && <Badge>{row.quantity}x</Badge>}
                       </td>
@@ -374,8 +398,9 @@ hcb grants --org ysws-pixl > grants.json`}
               </>
             ) : (
               <Callout tone="warning" icon="info">
-                No matches. Check that the file is from <strong>ysws-pixl</strong> and that the grants
-                were sent after these orders were created.
+                No confident matches. Check the unmatched HCB grants above against the order names and
+                amounts — the bookmarklet exports names, not emails, so unusual usernames need a manual
+                look.
               </Callout>
             )}
           </div>
